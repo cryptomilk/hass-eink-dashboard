@@ -3,7 +3,28 @@ from __future__ import annotations
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
-from .const import DOMAIN
+from .const import DEFAULT_HEIGHT, DEFAULT_WIDTH, DOMAIN
+
+
+class EinkLayoutView(HomeAssistantView):
+    url = "/api/eink_dashboard/{entry_id}/layout"
+    name = "api:eink_dashboard:layout"
+    requires_auth = True
+
+    async def get(self, request: web.Request, entry_id: str) -> web.Response:
+        hass = request.app["hass"]
+        entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+        if entry_data is None:
+            raise web.HTTPNotFound()
+
+        widgets = entry_data["widgets"]
+        entry = entry_data["entry"]
+        width = entry.options.get("width", DEFAULT_WIDTH)
+        height = entry.options.get("height", DEFAULT_HEIGHT)
+
+        return web.json_response(
+            {"widgets": widgets, "display": {"width": width, "height": height}}
+        )
 
 
 class EinkPublicImageView(HomeAssistantView):

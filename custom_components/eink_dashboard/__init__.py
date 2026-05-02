@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .http import EinkPublicImageView
+from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 
 PLATFORMS = ["image"]
+
+_FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -15,10 +19,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     store = EinkDashboardStore(hass, entry.entry_id)
     widgets = await store.async_load()
-    hass.data[DOMAIN][entry.entry_id] = {"store": store, "widgets": widgets}
+    hass.data[DOMAIN][entry.entry_id] = {
+        "store": store,
+        "widgets": widgets,
+        "entry": entry,
+    }
 
     if not hass.data[DOMAIN].get("_view_registered"):
         hass.http.register_view(EinkPublicImageView())
+        hass.http.register_view(EinkLayoutView())
+        hass.http.register_static_path(
+            "/eink_dashboard/frontend",
+            str(_FRONTEND_DIR),
+            cache_headers=False,
+        )
         hass.data[DOMAIN]["_view_registered"] = True
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

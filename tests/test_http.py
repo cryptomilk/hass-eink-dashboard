@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from aiohttp import web
 
+from custom_components.eink_dashboard.const import (
+    DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+)
 from custom_components.eink_dashboard.http import (
+    EinkLayoutView,
     EinkPublicImageView,
 )
 
@@ -119,3 +125,66 @@ class TestEinkPublicImageView:
 
         with pytest.raises(web.HTTPServiceUnavailable):
             await view.get(request, "test_entry")
+
+
+def _make_layout_request(
+    entry_id: str = "test_entry",
+    widgets: list | None = None,
+    options: dict | None = None,
+    *,
+    entry_missing: bool = False,
+) -> web.Request:
+    request = MagicMock(spec=web.Request)
+    hass = MagicMock()
+    if entry_missing:
+        hass.data = {}
+    else:
+        entry = MagicMock()
+        entry.options = options or {"width": 758, "height": 1024}
+        hass.data = {
+            "eink_dashboard": {
+                entry_id: {
+                    "widgets": widgets or [],
+                    "entry": entry,
+                },
+            },
+        }
+    request.app = {"hass": hass}
+    return request
+
+
+class TestEinkLayoutView:
+    def test_layout_view_attributes(self) -> None:
+        view = EinkLayoutView()
+        assert "eink_dashboard" in view.url
+        assert "layout" in view.url
+        assert view.requires_auth is True
+
+    async def test_returns_layout_json(self) -> None:
+        widgets = [{"type": "separator", "y": 50}]
+        view = EinkLayoutView()
+        request = _make_layout_request(widgets=widgets)
+
+        response = await view.get(request, "test_entry")
+
+        assert response.status == 200
+        body = json.loads(response.text)
+        assert body["widgets"] == widgets
+        assert body["display"] == {"width": 758, "height": 1024}
+
+    async def test_missing_entry_raises_404(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(entry_missing=True)
+
+        with pytest.raises(web.HTTPNotFound):
+            await view.get(request, "test_entry")
+
+    async def test_default_dimensions(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(options={})
+
+        response = await view.get(request, "test_entry")
+
+        body = json.loads(response.text)
+        assert body["display"]["width"] == DEFAULT_WIDTH
+        assert body["display"]["height"] == DEFAULT_HEIGHT
