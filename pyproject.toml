@@ -16,9 +16,13 @@ dev = [
 
 [tool.ruff]
 line-length = 79
+target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
