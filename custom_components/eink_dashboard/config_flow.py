@@ -19,10 +19,14 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_OPTIMIZE,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DOMAIN,
+    DEFAULT_CONTRAST,
+    DEFAULT_SHARPNESS,
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
@@ -207,6 +211,24 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                         "update_interval", DEFAULT_UPDATE_INTERVAL
                     ),
                 ): _POSITIVE_INT,
+                vol.Optional(
+                    "optimize",
+                    default=opts.get("optimize", DEFAULT_OPTIMIZE),
+                ): bool,
+                vol.Optional(
+                    "grayscale_levels",
+                    default=opts.get(
+                        "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+                    ),
+                ): vol.In([2, 4, 16, 256]),
+                vol.Optional(
+                    "sharpness",
+                    default=opts.get("sharpness", DEFAULT_SHARPNESS),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=10.0)),
+                vol.Optional(
+                    "contrast",
+                    default=opts.get("contrast", DEFAULT_CONTRAST),
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=10.0)),
             }
         )
         if user_input is not None:

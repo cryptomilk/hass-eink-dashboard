@@ -328,6 +328,34 @@ class TestEinkDashboardImage:
             await entity._async_refresh(None)
             MockTemplate.assert_not_called()
 
+    async def test_optimize_options_forwarded_to_render(self) -> None:
+        from custom_components.eink_dashboard.render import render_dashboard
+
+        hass = _make_hass()
+        entry = _make_entry(
+            {
+                "width": 200,
+                "height": 100,
+                "optimize": True,
+                "grayscale_levels": 4,
+                "sharpness": 2.0,
+                "contrast": 1.5,
+            }
+        )
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        with patch(
+            "custom_components.eink_dashboard.image.render_dashboard",
+            wraps=render_dashboard,
+        ) as mock_render:
+            await entity._async_refresh(None)
+            config = mock_render.call_args[0][1]
+            assert config["optimize"] is True
+            assert config["grayscale_levels"] == 4
+            assert config["sharpness"] == 2.0
+            assert config["contrast"] == 1.5
+
 
 class TestImagePlatformSetup:
     async def test_async_setup_entry(self) -> None:

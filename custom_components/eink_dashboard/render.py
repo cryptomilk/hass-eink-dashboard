@@ -19,6 +19,7 @@ from .const import (
     Align,
     WidgetType,
 )
+from .optimize import optimize_for_eink
 
 type Widget = dict[str, Any]
 type DisplayConfig = dict[str, Any]
@@ -588,6 +589,8 @@ def render_dashboard(
     rotation = config.get("rotation", 0)
     if rotation:
         img = img.rotate(rotation, expand=True)
+
+    img = optimize_for_eink(img, config)
 
     buf = io.BytesIO()
     img.save(buf, "PNG")

@@ -250,3 +250,41 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 1024
         assert result["data"]["update_interval"] == 120
         assert result["data"]["webhook_urls"] == []
+
+    async def test_settings_saves_optimize_values(self) -> None:
+        flow = _make_options_flow(
+            {"width": 800, "height": 480, "update_interval": 60}
+        )
+        result = await flow.async_step_settings(
+            {
+                "width": 800,
+                "height": 480,
+                "update_interval": 60,
+                "optimize": True,
+                "grayscale_levels": 2,
+                "sharpness": 2.0,
+                "contrast": 1.5,
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["optimize"] is True
+        assert result["data"]["grayscale_levels"] == 2
+        assert result["data"]["sharpness"] == 2.0
+        assert result["data"]["contrast"] == 1.5
+
+    async def test_settings_rejects_invalid_grayscale_levels(
+        self,
+    ) -> None:
+        flow = _make_options_flow(
+            {"width": 800, "height": 480, "update_interval": 60}
+        )
+        with pytest.raises(vol.Invalid):
+            await flow.async_step_settings(
+                {
+                    "width": 800,
+                    "height": 480,
+                    "update_interval": 60,
+                    "grayscale_levels": 7,
+                }
+            )

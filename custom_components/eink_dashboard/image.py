@@ -21,10 +21,14 @@ from homeassistant.helpers.template import Template, TemplateError
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_OPTIMIZE,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DOMAIN,
+    DEFAULT_CONTRAST,
+    DEFAULT_SHARPNESS,
     WidgetType,
 )
 from .push import async_push_image
@@ -112,6 +116,18 @@ class EinkDashboardImage(ImageEntity):
                 "width": self._entry.options.get("width", DEFAULT_WIDTH),
                 "height": self._entry.options.get("height", DEFAULT_HEIGHT),
                 "rotation": self._entry.options.get("rotation", 0),
+                "optimize": self._entry.options.get(
+                    "optimize", DEFAULT_OPTIMIZE
+                ),
+                "grayscale_levels": self._entry.options.get(
+                    "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+                ),
+                "sharpness": self._entry.options.get(
+                    "sharpness", DEFAULT_SHARPNESS
+                ),
+                "contrast": self._entry.options.get(
+                    "contrast", DEFAULT_CONTRAST
+                ),
                 "states": self._build_states(),
             }
             widgets = self._resolve_templates(self._widgets)

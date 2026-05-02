@@ -68,7 +68,17 @@
         "data": {
           "width": "Width (px)",
           "height": "Height (px)",
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "optimize": "E-ink optimization",
+          "grayscale_levels": "Grayscale levels",
+          "sharpness": "Sharpness",
+          "contrast": "Contrast"
+        },
+        "data_description": {
+          "optimize": "Apply autocontrast, sharpening, and quantization for e-ink displays",
+          "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
+          "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
+          "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
         }
       }
     },
