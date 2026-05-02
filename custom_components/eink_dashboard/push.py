@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+import logging
+
+import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_push_image(
+    session: aiohttp.ClientSession,
+    url: str,
+    image_bytes: bytes,
+) -> None:
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        async with session.post(
+            url,
+            data=image_bytes,
+            headers={"Content-Type": "image/png"},
+            timeout=timeout,
+        ) as resp:
+            if resp.status >= 400:
+                _LOGGER.warning(
+                    "Webhook push to %s returned HTTP %s",
+                    url,
+                    resp.status,
+                )
+    except Exception:
+        _LOGGER.warning("Webhook push to %s failed", url, exc_info=True)

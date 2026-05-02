@@ -22,6 +22,7 @@ _STEP_USER_SCHEMA = vol.Schema(
         vol.Required(
             "update_interval", default=DEFAULT_UPDATE_INTERVAL
         ): _POSITIVE_INT,
+        vol.Optional("webhook_url", default=""): str,
     }
 )
 
@@ -33,11 +34,12 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         if user_input is not None:
-            name = user_input["name"]
+            validated = _STEP_USER_SCHEMA(user_input)
+            name = validated["name"]
             return self.async_create_entry(
                 title=name,
                 data={},
-                options={k: v for k, v in user_input.items() if k != "name"},
+                options={k: v for k, v in validated.items() if k != "name"},
             )
         return self.async_show_form(
             step_id="user",

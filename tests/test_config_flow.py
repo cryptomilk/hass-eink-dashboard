@@ -32,4 +32,38 @@ class TestEinkDashboardConfigFlow:
             "width": 600,
             "height": 800,
             "update_interval": 120,
+            "webhook_url": "",
         }
+
+    async def test_step_user_stores_webhook_url(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {
+                "name": "TRMNL",
+                "width": 800,
+                "height": 480,
+                "update_interval": 60,
+                "webhook_url": "https://trmnl.com/api/custom_plugins/abc",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["options"]["webhook_url"] == (
+            "https://trmnl.com/api/custom_plugins/abc"
+        )
+
+    async def test_step_user_webhook_url_defaults_to_empty(
+        self,
+    ) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {
+                "name": "Kindle",
+                "width": 758,
+                "height": 1024,
+                "update_interval": 60,
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["options"]["webhook_url"] == ""

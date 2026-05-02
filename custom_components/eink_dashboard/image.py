@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
@@ -10,6 +11,9 @@ from typing import Any
 from homeassistant.components.image import ImageEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import (
+    async_get_clientsession,
+)
 from homeassistant.helpers.event import (
     async_track_time_interval,
 )
@@ -23,9 +27,12 @@ from .const import (
     DOMAIN,
     WidgetType,
 )
+from .push import async_push_image
 from .render import render_dashboard
 
 _LOGGER = logging.getLogger(__name__)
+
+PUSH_MIN_INTERVAL = 60
 
 
 async def async_setup_entry(
@@ -55,6 +62,7 @@ class EinkDashboardImage(ImageEntity):
         self._etag: str | None = None
         self._unsub: Callable[[], None] | None = None
         self._refresh_lock = asyncio.Lock()
+        self._last_push: float = 0.0
         self._attr_name = entry.title
         self._attr_unique_id = entry.entry_id
 
@@ -98,6 +106,7 @@ class EinkDashboardImage(ImageEntity):
         return resolved
 
     async def _async_refresh(self, _now: Any) -> None:
+        push_args: tuple | None = None
         async with self._refresh_lock:
             config = {
                 "width": self._entry.options.get("width", DEFAULT_WIDTH),
@@ -114,6 +123,14 @@ class EinkDashboardImage(ImageEntity):
                 self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
                 self._attr_image_last_updated = dt_util.utcnow()
                 self.async_write_ha_state()
+                webhook_url = self._entry.options.get("webhook_url", "")
+                now = time.monotonic()
+                if webhook_url and now - self._last_push >= PUSH_MIN_INTERVAL:
+                    self._last_push = now
+                    session = async_get_clientsession(self.hass)
+                    push_args = (session, webhook_url, new_bytes)
+        if push_args:
+            await async_push_image(*push_args)
 
     def _build_states(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

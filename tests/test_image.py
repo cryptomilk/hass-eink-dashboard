@@ -345,3 +345,124 @@ class TestImagePlatformSetup:
         assert isinstance(entities[0], EinkDashboardImage)
         assert hass.data[DOMAIN][entry.entry_id]["entity"] is entities[0]
         assert entities[0]._widgets == widgets
+
+
+class TestWebhookPush:
+    async def test_push_fires_on_image_change(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(
+            {
+                "width": 200,
+                "height": 100,
+                "webhook_url": "https://trmnl.com/api/x",
+            }
+        )
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        mock_session = MagicMock()
+        with (
+            patch(
+                "custom_components.eink_dashboard.image"
+                ".async_get_clientsession",
+                return_value=mock_session,
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
+            await entity._async_refresh(None)
+            mock_push.assert_called_once_with(
+                mock_session,
+                "https://trmnl.com/api/x",
+                entity._rendered,
+            )
+
+    async def test_push_does_not_fire_when_unchanged(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(
+            {
+                "width": 200,
+                "height": 100,
+                "webhook_url": "https://trmnl.com/api/x",
+            }
+        )
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image"
+                ".async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
+            await entity._async_refresh(None)
+            mock_push.reset_mock()
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+
+    async def test_push_does_not_fire_without_webhook_url(
+        self,
+    ) -> None:
+        hass = _make_hass()
+        entry = _make_entry({"width": 200, "height": 100})
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        with patch(
+            "custom_components.eink_dashboard.image.async_push_image",
+            new_callable=AsyncMock,
+        ) as mock_push:
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+
+    async def test_push_does_not_fire_with_empty_webhook_url(
+        self,
+    ) -> None:
+        hass = _make_hass()
+        entry = _make_entry({"width": 200, "height": 100, "webhook_url": ""})
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        with patch(
+            "custom_components.eink_dashboard.image.async_push_image",
+            new_callable=AsyncMock,
+        ) as mock_push:
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+
+    async def test_push_rate_limited(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(
+            {
+                "width": 200,
+                "height": 100,
+                "webhook_url": "https://trmnl.com/api/x",
+            }
+        )
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+        entity._last_push = 1.0
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image"
+                ".async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+            patch("custom_components.eink_dashboard.image.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 30.0
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+            assert entity._last_push == 1.0

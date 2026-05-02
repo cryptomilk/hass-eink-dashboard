@@ -7,7 +7,8 @@
           "name": "Name",
           "width": "Width (px)",
           "height": "Height (px)",
-          "update_interval": "Update interval (seconds)"
+          "update_interval": "Update interval (seconds)",
+          "webhook_url": "Webhook URL (optional, e.g. TRMNL)"
         }
       }
     },

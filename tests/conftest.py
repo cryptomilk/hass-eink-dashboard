@@ -19,6 +19,7 @@ _HA_MODULES = [
     "homeassistant.config_entries",
     "homeassistant.core",
     "homeassistant.helpers",
+    "homeassistant.helpers.aiohttp_client",
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.event",
     "homeassistant.helpers.storage",
@@ -96,6 +97,9 @@ config_entries.ConfigFlow = _StubConfigFlow  # type: ignore[attr-defined]
 
 core_mod = sys.modules["homeassistant.core"]
 core_mod.HomeAssistant = MagicMock  # type: ignore[attr-defined]
+
+aiohttp_client_mod = sys.modules["homeassistant.helpers.aiohttp_client"]
+aiohttp_client_mod.async_get_clientsession = MagicMock()  # type: ignore[attr-defined]
 
 event_mod = sys.modules["homeassistant.helpers.event"]
 event_mod.async_track_time_interval = MagicMock()  # type: ignore[attr-defined]
