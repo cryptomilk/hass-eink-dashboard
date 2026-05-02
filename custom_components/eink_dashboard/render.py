@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import io
-import math
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
@@ -26,6 +25,27 @@ type DisplayConfig = dict[str, Any]
 type RendererFn = Callable[[ImageDraw.ImageDraw, Widget, DisplayConfig], None]
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
+_ICONS_DIR = Path(__file__).parent / "icons"
+
+_KNOWN_CONDITIONS: frozenset[str] = frozenset(
+    {
+        "sunny",
+        "clear-night",
+        "cloudy",
+        "partlycloudy",
+        "fog",
+        "hail",
+        "lightning",
+        "lightning-rainy",
+        "pouring",
+        "rainy",
+        "snowy",
+        "snowy-rainy",
+        "windy",
+        "windy-variant",
+        "exceptional",
+    }
+)
 
 
 @functools.cache
@@ -34,6 +54,24 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
     return ImageFont.load_default(size)
+
+
+@functools.cache
+def _load_icon(
+    condition: str,
+    size: int,
+) -> tuple[Image.Image, Image.Image] | None:
+    if condition not in _KNOWN_CONDITIONS:
+        return None
+    path = _ICONS_DIR / f"{condition}.png"
+    if not path.exists():
+        return None
+    icon = Image.open(path).convert("RGBA")
+    if icon.size != (size, size):
+        icon = icon.resize((size, size), Image.Resampling.LANCZOS)
+    gray = icon.convert("L")
+    mask = icon.split()[3]
+    return (gray, mask)
 
 
 def render_text(
@@ -92,89 +130,19 @@ _DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
 def _draw_weather_icon(
+    img: Image.Image,
     draw: ImageDraw.ImageDraw,
     cx: int,
     cy: int,
-    radius: int,
+    size: int,
     condition: str,
 ) -> None:
-    if condition == "sunny":
-        draw.ellipse(
-            [cx - radius, cy - radius, cx + radius, cy + radius],
-            outline=COLOR_BLACK,
-            width=2,
-        )
-        ray_len = radius + 8
-        for angle_deg in range(0, 360, 45):
-            rad = math.radians(angle_deg)
-            x0 = cx + int((radius + 3) * math.cos(rad))
-            y0 = cy + int((radius + 3) * math.sin(rad))
-            x1 = cx + int(ray_len * math.cos(rad))
-            y1 = cy + int(ray_len * math.sin(rad))
-            draw.line(
-                [(x0, y0), (x1, y1)],
-                fill=COLOR_BLACK,
-                width=2,
-            )
-    elif condition in ("cloudy", "partlycloudy"):
-        draw.ellipse(
-            [cx - 18, cy - 8, cx + 6, cy + 12],
-            fill=COLOR_GRAY,
-            outline=COLOR_BLACK,
-        )
-        draw.ellipse(
-            [cx - 8, cy - 16, cx + 16, cy + 4],
-            fill=COLOR_GRAY,
-            outline=COLOR_BLACK,
-        )
-        draw.ellipse(
-            [cx + 2, cy - 6, cx + 22, cy + 14],
-            fill=COLOR_GRAY,
-            outline=COLOR_BLACK,
-        )
-        draw.rectangle(
-            [cx - 16, cy + 2, cx + 20, cy + 12],
-            fill=COLOR_GRAY,
-        )
-        draw.line(
-            [(cx - 16, cy + 12), (cx + 20, cy + 12)],
-            fill=COLOR_BLACK,
-            width=1,
-        )
-        if condition == "partlycloudy":
-            draw.ellipse(
-                [cx + 10, cy - 22, cx + 26, cy - 6],
-                outline=COLOR_BLACK,
-                width=2,
-            )
-    elif condition == "rainy":
-        draw.ellipse(
-            [cx - 16, cy - 12, cx + 4, cy + 4],
-            fill=COLOR_GRAY,
-            outline=COLOR_BLACK,
-        )
-        draw.ellipse(
-            [cx - 6, cy - 18, cx + 14, cy - 2],
-            fill=COLOR_GRAY,
-            outline=COLOR_BLACK,
-        )
-        draw.rectangle(
-            [cx - 14, cy - 2, cx + 12, cy + 4],
-            fill=COLOR_GRAY,
-        )
-        draw.line(
-            [(cx - 14, cy + 4), (cx + 12, cy + 4)],
-            fill=COLOR_BLACK,
-            width=1,
-        )
-        for dx in [-8, 0, 8]:
-            draw.line(
-                [(cx + dx, cy + 8), (cx + dx - 3, cy + 18)],
-                fill=COLOR_BLACK,
-                width=2,
-            )
+    result = _load_icon(condition, size)
+    if result is not None:
+        gray, mask = result
+        img.paste(gray, (cx - size // 2, cy - size // 2), mask)
     else:
-        font = _load_font(radius)
+        font = _load_font(size)
         bbox = draw.textbbox((0, 0), "?", font=font)
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
@@ -210,9 +178,11 @@ def render_weather(
     font_md = _load_font(22)
     font_sm = _load_font(16)
 
+    img = config.get("_image")
     icon_cx = x + 45
     icon_cy = y + 45
-    _draw_weather_icon(draw, icon_cx, icon_cy, 20, condition)
+    if img is not None:
+        _draw_weather_icon(img, draw, icon_cx, icon_cy, 64, condition)
 
     draw.text(
         (x + 100, y),
@@ -278,9 +248,10 @@ def render_weather(
             fill=COLOR_GRAY,
             font=font_sm,
         )
-        _draw_weather_icon(
-            draw, cx, forecast_y + 38, 14, day.get("condition", "")
-        )
+        if img is not None:
+            _draw_weather_icon(
+                img, draw, cx, forecast_y + 38, 28, day.get("condition", "")
+            )
         hi = day.get("temperature", "")
         lo = day.get("templow", "")
         hi_lo = f"{hi}° / {lo}°"
@@ -576,6 +547,7 @@ def render_dashboard(
     w = config["width"]
     h = config["height"]
     img = Image.new("L", (w, h), COLOR_WHITE)
+    config["_image"] = img
     draw = ImageDraw.Draw(img)
 
     for widget in widget_list:

@@ -7,3 +7,4 @@ dist/
 .tox/
 .tmp/
 /EINK_DASHBOARD.md
+custom_components/eink_dashboard/icons/*.png

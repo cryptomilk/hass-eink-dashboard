@@ -21,14 +21,14 @@ from homeassistant.helpers.template import Template, TemplateError
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    DEFAULT_CONTRAST,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_OPTIMIZE,
+    DEFAULT_SHARPNESS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DOMAIN,
-    DEFAULT_CONTRAST,
-    DEFAULT_SHARPNESS,
     WidgetType,
 )
 from .push import async_push_image

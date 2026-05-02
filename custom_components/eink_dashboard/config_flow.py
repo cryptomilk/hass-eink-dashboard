@@ -19,14 +19,14 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    DEFAULT_CONTRAST,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_OPTIMIZE,
+    DEFAULT_SHARPNESS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DOMAIN,
-    DEFAULT_CONTRAST,
-    DEFAULT_SHARPNESS,
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))

@@ -3,8 +3,8 @@ from __future__ import annotations
 from PIL import Image, ImageEnhance, ImageOps
 
 from .const import (
-    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_CONTRAST,
+    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_SHARPNESS,
 )
 
