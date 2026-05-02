@@ -3,6 +3,9 @@ from __future__ import annotations
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock
+from urllib.parse import urlparse
+
+import voluptuous as vol
 
 
 def _stub_module(name: str) -> ModuleType:
@@ -20,8 +23,10 @@ _HA_MODULES = [
     "homeassistant.core",
     "homeassistant.helpers",
     "homeassistant.helpers.aiohttp_client",
+    "homeassistant.helpers.config_validation",
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.event",
+    "homeassistant.helpers.selector",
     "homeassistant.helpers.storage",
     "homeassistant.helpers.template",
     "homeassistant.util",
@@ -58,18 +63,14 @@ config_entries.ConfigEntry = MagicMock  # type: ignore[attr-defined]
 config_entries.ConfigFlowResult = dict  # type: ignore[attr-defined]
 
 
-class _StubConfigFlow:
-    def __init_subclass__(
-        cls, *, domain: str | None = None, **kw: object
-    ) -> None:
-        super().__init_subclass__(**kw)
-
+class _StubFlowBase:
     def async_show_form(
         self,
         *,
         step_id: str | None = None,
         data_schema: object = None,
         errors: dict | None = None,
+        **kw: object,
     ) -> dict:
         return {
             "type": "form",
@@ -78,12 +79,33 @@ class _StubConfigFlow:
             "errors": errors,
         }
 
+    def async_show_menu(
+        self,
+        *,
+        step_id: str | None = None,
+        menu_options: object = None,
+        **kw: object,
+    ) -> dict:
+        return {
+            "type": "menu",
+            "step_id": step_id,
+            "menu_options": menu_options,
+        }
+
+
+class _StubConfigFlow(_StubFlowBase):
+    def __init_subclass__(
+        cls, *, domain: str | None = None, **kw: object
+    ) -> None:
+        super().__init_subclass__(**kw)
+
     def async_create_entry(
         self,
         *,
         title: str,
         data: object,
         options: object = None,
+        **kw: object,
     ) -> dict:
         return {
             "type": "create_entry",
@@ -93,10 +115,25 @@ class _StubConfigFlow:
         }
 
 
+class _StubOptionsFlow(_StubFlowBase):
+    def async_create_entry(
+        self,
+        *,
+        data: object = None,
+        **kw: object,
+    ) -> dict:
+        return {
+            "type": "create_entry",
+            "data": data,
+        }
+
+
 config_entries.ConfigFlow = _StubConfigFlow  # type: ignore[attr-defined]
+config_entries.OptionsFlow = _StubOptionsFlow  # type: ignore[attr-defined]
 
 core_mod = sys.modules["homeassistant.core"]
 core_mod.HomeAssistant = MagicMock  # type: ignore[attr-defined]
+core_mod.callback = lambda f: f  # type: ignore[attr-defined]
 
 aiohttp_client_mod = sys.modules["homeassistant.helpers.aiohttp_client"]
 aiohttp_client_mod.async_get_clientsession = MagicMock()  # type: ignore[attr-defined]
@@ -109,6 +146,41 @@ storage_mod.Store = MagicMock  # type: ignore[attr-defined]
 
 dt_mod = sys.modules["homeassistant.util.dt"]
 dt_mod.utcnow = MagicMock()  # type: ignore[attr-defined]
+
+
+def _cv_url(value: object) -> str:
+    url = str(value)
+    if urlparse(url).scheme in ("http", "https"):
+        return url
+    raise vol.Invalid("invalid url")
+
+
+cv_mod = sys.modules["homeassistant.helpers.config_validation"]
+cv_mod.url = _cv_url  # type: ignore[attr-defined]
+
+
+class _SelectSelectorMode:
+    LIST = "list"
+    DROPDOWN = "dropdown"
+
+
+class _SelectSelectorConfig(dict):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(kwargs)
+
+
+class _SelectSelector:
+    def __init__(self, config: object) -> None:
+        pass
+
+    def __call__(self, value: object) -> object:
+        return value
+
+
+selector_mod = sys.modules["homeassistant.helpers.selector"]
+selector_mod.SelectSelectorMode = _SelectSelectorMode  # type: ignore[attr-defined]
+selector_mod.SelectSelectorConfig = _SelectSelectorConfig  # type: ignore[attr-defined]
+selector_mod.SelectSelector = _SelectSelector  # type: ignore[attr-defined]
 
 template_mod = sys.modules["homeassistant.helpers.template"]
 

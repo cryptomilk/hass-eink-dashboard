@@ -7,12 +7,69 @@
           "name": "Name",
           "width": "Width (px)",
           "height": "Height (px)",
-          "update_interval": "Update interval (seconds)",
-          "webhook_url": "Webhook URL (optional, e.g. TRMNL)"
+          "update_interval": "Update interval (seconds)"
+        }
+      },
+      "push_target": {
+        "title": "Image delivery",
+        "menu_options": {
+          "pull_only": "Pull only (Kindle, browser)",
+          "trmnl_webhook": "TRMNL webhook (push)"
+        }
+      },
+      "trmnl_webhook": {
+        "title": "TRMNL Webhook",
+        "data": {
+          "name": "Name",
+          "webhook_url": "Webhook URL"
+        },
+        "data_description": {
+          "name": "A label for this push target (e.g. Kitchen TRMNL)",
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
         }
       }
     },
     "error": {},
     "abort": {}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E-Ink Dashboard options",
+        "menu_options": {
+          "add_webhook": "Add push target",
+          "remove_webhook": "Remove push target",
+          "settings": "Display settings"
+        }
+      },
+      "add_webhook": {
+        "title": "Add TRMNL Webhook",
+        "data": {
+          "name": "Name",
+          "webhook_url": "Webhook URL"
+        },
+        "data_description": {
+          "name": "A label for this push target (e.g. Hallway TRMNL)",
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
+        }
+      },
+      "remove_webhook": {
+        "title": "Remove Push Target",
+        "data": {
+          "webhook_url": "Push target"
+        }
+      },
+      "settings": {
+        "title": "Display Settings",
+        "data": {
+          "width": "Width (px)",
+          "height": "Height (px)",
+          "update_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "This webhook URL is already configured."
+    }
   }
 }

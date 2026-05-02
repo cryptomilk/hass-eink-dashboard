@@ -106,7 +106,7 @@ class EinkDashboardImage(ImageEntity):
         return resolved
 
     async def _async_refresh(self, _now: Any) -> None:
-        push_args: tuple | None = None
+        push_targets: list[tuple[Any, str, bytes]] = []
         async with self._refresh_lock:
             config = {
                 "width": self._entry.options.get("width", DEFAULT_WIDTH),
@@ -123,14 +123,18 @@ class EinkDashboardImage(ImageEntity):
                 self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
                 self._attr_image_last_updated = dt_util.utcnow()
                 self.async_write_ha_state()
-                webhook_url = self._entry.options.get("webhook_url", "")
+                webhook_urls = self._entry.options.get("webhook_urls", [])
                 now = time.monotonic()
-                if webhook_url and now - self._last_push >= PUSH_MIN_INTERVAL:
+                if webhook_urls and now - self._last_push >= PUSH_MIN_INTERVAL:
                     self._last_push = now
                     session = async_get_clientsession(self.hass)
-                    push_args = (session, webhook_url, new_bytes)
-        if push_args:
-            await async_push_image(*push_args)
+                    push_targets = [
+                        (session, wh["url"], new_bytes) for wh in webhook_urls
+                    ]
+        if push_targets:
+            await asyncio.gather(
+                *(async_push_image(*args) for args in push_targets)
+            )
 
     def _build_states(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

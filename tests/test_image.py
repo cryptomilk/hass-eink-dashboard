@@ -347,16 +347,18 @@ class TestImagePlatformSetup:
         assert entities[0]._widgets == widgets
 
 
+_WEBHOOK_URL = "https://trmnl.com/api/x"
+_WEBHOOK_OPTS = {
+    "width": 200,
+    "height": 100,
+    "webhook_urls": [{"name": "Test", "url": _WEBHOOK_URL}],
+}
+
+
 class TestWebhookPush:
     async def test_push_fires_on_image_change(self) -> None:
         hass = _make_hass()
-        entry = _make_entry(
-            {
-                "width": 200,
-                "height": 100,
-                "webhook_url": "https://trmnl.com/api/x",
-            }
-        )
+        entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
@@ -375,19 +377,48 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_called_once_with(
                 mock_session,
-                "https://trmnl.com/api/x",
+                _WEBHOOK_URL,
                 entity._rendered,
             )
 
-    async def test_push_does_not_fire_when_unchanged(self) -> None:
+    async def test_push_fires_for_each_webhook(self) -> None:
         hass = _make_hass()
         entry = _make_entry(
             {
                 "width": 200,
                 "height": 100,
-                "webhook_url": "https://trmnl.com/api/x",
+                "webhook_urls": [
+                    {"name": "Device 1", "url": "https://trmnl.com/api/1"},
+                    {"name": "Device 2", "url": "https://trmnl.com/api/2"},
+                ],
             }
         )
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        mock_session = MagicMock()
+        with (
+            patch(
+                "custom_components.eink_dashboard.image"
+                ".async_get_clientsession",
+                return_value=mock_session,
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
+            await entity._async_refresh(None)
+            assert mock_push.call_count == 2
+            pushed_urls = {call.args[1] for call in mock_push.call_args_list}
+            assert pushed_urls == {
+                "https://trmnl.com/api/1",
+                "https://trmnl.com/api/2",
+            }
+
+    async def test_push_does_not_fire_when_unchanged(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
@@ -407,7 +438,7 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
-    async def test_push_does_not_fire_without_webhook_url(
+    async def test_push_does_not_fire_without_webhook_urls(
         self,
     ) -> None:
         hass = _make_hass()
@@ -422,11 +453,11 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
-    async def test_push_does_not_fire_with_empty_webhook_url(
+    async def test_push_does_not_fire_with_empty_webhook_urls(
         self,
     ) -> None:
         hass = _make_hass()
-        entry = _make_entry({"width": 200, "height": 100, "webhook_url": ""})
+        entry = _make_entry({"width": 200, "height": 100, "webhook_urls": []})
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
@@ -439,13 +470,7 @@ class TestWebhookPush:
 
     async def test_push_rate_limited(self) -> None:
         hass = _make_hass()
-        entry = _make_entry(
-            {
-                "width": 200,
-                "height": 100,
-                "webhook_url": "https://trmnl.com/api/x",
-            }
-        )
+        entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
         entity._last_push = 1.0
