@@ -70,7 +70,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             self._data = {k: v for k, v in validated.items() if k != "name"}
             return self.async_show_menu(
                 step_id="push_target",
-                menu_options=["pull_only", "trmnl_webhook"],
+                menu_options=["pull_only", "trmnl_setup"],
             )
         return self.async_show_form(
             step_id="user",
@@ -85,6 +85,16 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             title=name,
             data={},
             options={**self._data, "webhook_urls": []},
+        )
+
+    async def async_step_trmnl_setup(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return await self.async_step_trmnl_webhook()
+        return self.async_show_form(
+            step_id="trmnl_setup",
+            data_schema=vol.Schema({}),
         )
 
     async def async_step_trmnl_webhook(

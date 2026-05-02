@@ -46,7 +46,23 @@ class TestEinkDashboardConfigFlow:
         assert result["type"] == "menu"
         assert result["step_id"] == "push_target"
         assert "pull_only" in result["menu_options"]
-        assert "trmnl_webhook" in result["menu_options"]
+        assert "trmnl_setup" in result["menu_options"]
+
+    async def test_trmnl_setup_shows_form(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT)
+        result = await flow.async_step_trmnl_setup(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "trmnl_setup"
+
+    async def test_trmnl_setup_advances_to_webhook(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT)
+        result = await flow.async_step_trmnl_setup({})
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "trmnl_webhook"
 
     async def test_pull_only_creates_entry(self) -> None:
         flow = EinkDashboardConfigFlow()
@@ -66,6 +82,7 @@ class TestEinkDashboardConfigFlow:
     async def test_trmnl_webhook_shows_form(self) -> None:
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(None)
 
         assert result["type"] == "form"
@@ -74,6 +91,7 @@ class TestEinkDashboardConfigFlow:
     async def test_trmnl_webhook_creates_entry(self) -> None:
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {
                 "name": "Kitchen TRMNL",
@@ -95,6 +113,7 @@ class TestEinkDashboardConfigFlow:
     async def test_trmnl_webhook_rejects_invalid_url(self) -> None:
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_trmnl_setup({})
         with pytest.raises(vol.Invalid):
             await flow.async_step_trmnl_webhook(
                 {"name": "Bad", "webhook_url": "not-a-url"}
