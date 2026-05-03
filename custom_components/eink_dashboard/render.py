@@ -87,15 +87,16 @@ def render_text(
     align = widget.get("align", Align.LEFT)
 
     font = _load_font(font_size)
-    width = config["width"]
+    w_override = widget.get("w")
+    right_edge = x + w_override if w_override is not None else config["width"]
 
     if align in (Align.RIGHT, Align.CENTER):
         bbox = draw.textbbox((0, 0), text, font=font)
         text_w = bbox[2] - bbox[0]
         if align == Align.RIGHT:
-            x = width - PADDING - text_w
+            x = right_edge - PADDING - text_w
         else:
-            x = (width - text_w) // 2
+            x = x + (right_edge - x - text_w) // 2
 
     draw.text((x, y), text, fill=color, font=font)
 
@@ -122,7 +123,12 @@ def render_separator(
     y = widget.get("y", 0)
     color = widget.get("color", COLOR_LIGHT_GRAY)
     x0 = widget.get("x", PADDING)
-    x1 = config["width"] - PADDING
+    w_override = widget.get("w")
+    x1 = (
+        x0 + w_override
+        if w_override is not None
+        else config["width"] - PADDING
+    )
     draw.line([(x0, y), (x1, y)], fill=color, width=1)
 
 
@@ -198,12 +204,14 @@ def render_weather(
     )
 
     width = config["width"]
+    w_override = widget.get("w")
+    right_edge = (x + w_override) if w_override is not None else width
 
     hum_text = f"{humidity}%"
     bbox = draw.textbbox((0, 0), hum_text, font=font_md)
     hum_w = bbox[2] - bbox[0]
     draw.text(
-        (width - PADDING - hum_w, y + 8),
+        (right_edge - PADDING - hum_w, y + 8),
         hum_text,
         fill=COLOR_BLACK,
         font=font_md,
@@ -213,7 +221,7 @@ def render_weather(
     bbox = draw.textbbox((0, 0), wind_text, font=font_md)
     wind_w = bbox[2] - bbox[0]
     draw.text(
-        (width - PADDING - wind_w, y + 38),
+        (right_edge - PADDING - wind_w, y + 38),
         wind_text,
         fill=COLOR_BLACK,
         font=font_md,
@@ -223,11 +231,11 @@ def render_weather(
     if not forecast or forecast_days <= 0:
         return
 
-    col_width = (width - x - PADDING) // forecast_days
+    col_width = (right_edge - x - PADDING) // forecast_days
     forecast_y = y + 100
 
     draw.line(
-        [(x, forecast_y - 4), (width - PADDING, forecast_y - 4)],
+        [(x, forecast_y - 4), (right_edge - PADDING, forecast_y - 4)],
         fill=COLOR_LIGHT_GRAY,
         width=1,
     )
@@ -279,6 +287,8 @@ def render_sensor_rows(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
+    w_override = widget.get("w")
+    right_edge = (x + w_override) if w_override is not None else width
 
     font_md = _load_font(22)
 
@@ -300,7 +310,7 @@ def render_sensor_rows(
         bbox = draw.textbbox((0, 0), display_val, font=font_md)
         text_w = bbox[2] - bbox[0]
         draw.text(
-            (width - PADDING - text_w, y),
+            (right_edge - PADDING - text_w, y),
             display_val,
             fill=COLOR_BLACK,
             font=font_md,
@@ -395,6 +405,8 @@ def render_status_icons(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
+    w_override = widget.get("w")
+    right_edge = (x + w_override) if w_override is not None else width
 
     font = _load_font(18)
     font_title = _load_font(22)
@@ -419,7 +431,7 @@ def render_status_icons(
         text_w = bbox[2] - bbox[0]
         item_w = s + 6 + text_w + 20
 
-        if cur_x + item_w > width - PADDING and cur_x > x:
+        if cur_x + item_w > right_edge - PADDING and cur_x > x:
             cur_x = x
             y += _STATUS_ROW_HEIGHT
 
@@ -476,6 +488,8 @@ def render_waste_schedule(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
+    w_override = widget.get("w")
+    right_edge = (x + w_override) if w_override is not None else width
 
     font_md = _load_font(22)
     font_sm = _load_font(18)
@@ -519,7 +533,7 @@ def render_waste_schedule(
         bbox = draw.textbbox((0, 0), date_str, font=font_sm)
         text_w = bbox[2] - bbox[0]
         draw.text(
-            (width - PADDING - text_w, y),
+            (right_edge - PADDING - text_w, y),
             date_str,
             fill=COLOR_GRAY,
             font=font_sm,

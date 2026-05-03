@@ -31,6 +31,9 @@ const WASTE_ICON_SIZE = 10;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const HANDLE_SIZE = 8;
+const HANDLE_HIT_RADIUS = 10;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function grayColor(v) {
@@ -90,6 +93,11 @@ class EinkDashboardCard extends HTMLElement {
     this._dragStartCY = 0;
     this._dragWidgetStart = null;
     this._hoverIndex = -1;
+    this._resizeIndex = -1;
+    this._resizeHandle = null;
+    this._resizeStartCX = 0;
+    this._resizeStartCY = 0;
+    this._resizeWidgetStart = null;
   }
 
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
@@ -374,9 +382,64 @@ class EinkDashboardCard extends HTMLElement {
     return -1;
   }
 
+  _getHandles(bounds, widget) {
+    if (widget.type === "line") {
+      return [
+        { id: "p1", cx: widget.x ?? 0, cy: widget.y ?? 0 },
+        { id: "p2", cx: widget.x2 ?? 0, cy: widget.y2 ?? 0 },
+      ];
+    }
+    if (widget.type === "battery_bar") return [];
+    return [
+      { id: "nw", cx: bounds.x, cy: bounds.y },
+      { id: "ne", cx: bounds.x + bounds.w, cy: bounds.y },
+      { id: "sw", cx: bounds.x, cy: bounds.y + bounds.h },
+      { id: "se", cx: bounds.x + bounds.w, cy: bounds.y + bounds.h },
+    ];
+  }
+
+  _handleHitTest(cx, cy) {
+    for (let i = this._widgetBounds.length - 1; i >= 0; i--) {
+      const b = this._widgetBounds[i];
+      const widget = this._layout.widgets[b.index];
+      for (const h of this._getHandles(b, widget)) {
+        const dx = cx - h.cx;
+        const dy = cy - h.cy;
+        if (dx * dx + dy * dy <= HANDLE_HIT_RADIUS * HANDLE_HIT_RADIUS) {
+          return { index: b.index, handleId: h.id };
+        }
+      }
+    }
+    return null;
+  }
+
+  _getResizeCursor(handleId) {
+    if (handleId === "p1" || handleId === "p2") return "crosshair";
+    return "ew-resize";
+  }
+
   _onPointerDown(event) {
     if (!this._editMode || this._showServerImage || !this._layout) return;
     const { x: cx, y: cy } = this._canvasCoords(event);
+
+    const handleHit = this._handleHitTest(cx, cy);
+    if (handleHit) {
+      event.preventDefault();
+      this._canvas.setPointerCapture(event.pointerId);
+      const w = this._layout.widgets[handleHit.index];
+      this._resizeIndex = handleHit.index;
+      this._resizeHandle = handleHit.handleId;
+      this._resizeStartCX = cx;
+      this._resizeStartCY = cy;
+      this._resizeWidgetStart = {
+        x: w.x ?? 0, y: w.y ?? 0,
+        x2: w.x2 ?? 0, y2: w.y2 ?? 0,
+        w: w.w,
+      };
+      this._canvas.style.cursor = this._getResizeCursor(handleHit.handleId);
+      return;
+    }
+
     const idx = this._hitTest(cx, cy);
     if (idx < 0) return;
     event.preventDefault();
@@ -398,6 +461,35 @@ class EinkDashboardCard extends HTMLElement {
     if (!this._editMode || this._showServerImage || !this._layout) return;
     const { x: cx, y: cy } = this._canvasCoords(event);
 
+    if (this._resizeIndex >= 0) {
+      event.preventDefault();
+      const dx = Math.round(cx - this._resizeStartCX);
+      const dy = Math.round(cy - this._resizeStartCY);
+      const w = this._layout.widgets[this._resizeIndex];
+      const s = this._resizeWidgetStart;
+      const { width: dw, height: dh } = this._layout.display;
+      const handle = this._resizeHandle;
+
+      if (handle === "p1") {
+        w.x = Math.max(0, Math.min(dw - 1, s.x + dx));
+        w.y = Math.max(0, Math.min(dh - 1, s.y + dy));
+      } else if (handle === "p2") {
+        w.x2 = Math.max(0, Math.min(dw - 1, s.x2 + dx));
+        w.y2 = Math.max(0, Math.min(dh - 1, s.y2 + dy));
+      } else if (handle === "ne" || handle === "se") {
+        const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
+        const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
+        w.w = Math.round(newRight - s.x);
+      } else if (handle === "nw" || handle === "sw") {
+        const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
+        const newX = Math.max(0, Math.min(startRight - 20, s.x + dx));
+        w.x = Math.round(newX);
+        w.w = Math.round(startRight - newX);
+      }
+      this._scheduleRender();
+      return;
+    }
+
     if (this._dragIndex >= 0) {
       event.preventDefault();
       const dx = Math.round(cx - this._dragStartCX);
@@ -413,6 +505,15 @@ class EinkDashboardCard extends HTMLElement {
       }
       this._scheduleRender();
     } else {
+      const handleHit = this._handleHitTest(cx, cy);
+      if (handleHit) {
+        if (this._hoverIndex !== handleHit.index) {
+          this._hoverIndex = handleHit.index;
+          this._scheduleRender();
+        }
+        this._canvas.style.cursor = this._getResizeCursor(handleHit.handleId);
+        return;
+      }
       const hoverIdx = this._hitTest(cx, cy);
       if (hoverIdx !== this._hoverIndex) {
         this._hoverIndex = hoverIdx;
@@ -423,6 +524,19 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   _onPointerUp(event) {
+    if (this._resizeIndex >= 0) {
+      this._canvas.releasePointerCapture(event.pointerId);
+      this._resizeIndex = -1;
+      this._resizeHandle = null;
+      this._resizeWidgetStart = null;
+      this._hoverIndex = -1;
+      this._canvas.style.cursor = "";
+      this._scheduleRender();
+      if (this._editor) {
+        this._editor.setWidgets(this._layout.widgets);
+      }
+      return;
+    }
     if (this._dragIndex < 0) return;
     this._canvas.releasePointerCapture(event.pointerId);
     this._dragIndex = -1;
@@ -436,6 +550,21 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   _onPointerCancel() {
+    if (this._resizeIndex >= 0) {
+      const w = this._layout.widgets[this._resizeIndex];
+      const s = this._resizeWidgetStart;
+      w.x = s.x;
+      w.w = s.w;
+      w.x2 = s.x2;
+      w.y2 = s.y2;
+      this._resizeIndex = -1;
+      this._resizeHandle = null;
+      this._resizeWidgetStart = null;
+      this._hoverIndex = -1;
+      this._canvas.style.cursor = "";
+      this._scheduleRender();
+      return;
+    }
     if (this._dragIndex < 0) return;
     this._dragIndex = -1;
     this._dragWidgetStart = null;
@@ -445,7 +574,7 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   _onPointerLeave(event) {
-    if (this._dragIndex >= 0) return;
+    if (this._dragIndex >= 0 || this._resizeIndex >= 0) return;
     if (this._hoverIndex >= 0) {
       this._hoverIndex = -1;
       this._canvas.style.cursor = "";
@@ -494,6 +623,7 @@ class EinkDashboardCard extends HTMLElement {
     }
 
     const highlightIdx =
+      this._resizeIndex >= 0 ? this._resizeIndex :
       this._dragIndex >= 0 ? this._dragIndex : this._hoverIndex;
     if (this._editMode && highlightIdx >= 0) {
       const entry = this._widgetBounds.find((b) => b.index === highlightIdx);
@@ -501,8 +631,28 @@ class EinkDashboardCard extends HTMLElement {
         ctx.save();
         ctx.strokeStyle = "rgba(3, 169, 244, 0.8)";
         ctx.lineWidth = 2;
-        ctx.setLineDash(this._dragIndex >= 0 ? [] : [4, 3]);
+        const isActive = this._dragIndex >= 0 || this._resizeIndex >= 0;
+        ctx.setLineDash(isActive ? [] : [4, 3]);
         ctx.strokeRect(entry.x - 3, entry.y - 3, entry.w + 6, entry.h + 6);
+
+        const widget = this._layout.widgets[highlightIdx];
+        const handles = this._getHandles(entry, widget);
+        ctx.setLineDash([]);
+        for (const h of handles) {
+          ctx.fillStyle = "rgba(3, 169, 244, 0.9)";
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1;
+          if (widget.type === "line") {
+            ctx.beginPath();
+            ctx.arc(h.cx, h.cy, HANDLE_SIZE / 2 + 1, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            const hs = HANDLE_SIZE;
+            ctx.fillRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
+            ctx.strokeRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
+          }
+        }
         ctx.restore();
       }
     }
@@ -547,6 +697,7 @@ class EinkDashboardCard extends HTMLElement {
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
     const width = this._layout.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.font = `${fontSize}px sans-serif`;
     ctx.fillStyle = grayColor(color);
@@ -556,14 +707,15 @@ class EinkDashboardCard extends HTMLElement {
     const tw = ctx.measureText(text).width;
     let drawX = x;
     if (align === "right") {
-      drawX = width - PADDING - tw;
+      drawX = rightEdge - PADDING - tw;
     } else if (align === "center") {
-      drawX = (width - tw) / 2;
+      drawX = x + (rightEdge - x - tw) / 2;
     }
 
     ctx.fillText(text, drawX, y);
     const bx = Math.min(drawX, x);
-    return { x: bx, y, w: Math.max(drawX + tw - bx, 20), h: fontSize };
+    const boundsW = widget.w != null ? widget.w : Math.max(drawX + tw - bx, 20);
+    return { x: bx, y, w: boundsW, h: fontSize };
   }
 
   // mirrors render.py: render_line (lines 103-114)
@@ -594,7 +746,7 @@ class EinkDashboardCard extends HTMLElement {
     const y = widget.y ?? 0;
     const color = widget.color ?? COLOR_LIGHT_GRAY;
     const x0 = widget.x ?? PADDING;
-    const x1 = this._layout.display.width - PADDING;
+    const x1 = widget.w != null ? (x0 + widget.w) : (this._layout.display.width - PADDING);
 
     ctx.beginPath();
     ctx.moveTo(x0, y);
@@ -616,6 +768,7 @@ class EinkDashboardCard extends HTMLElement {
     let y = origY;
     const forecastDays = widget.forecast_days ?? 3;
     const width = this._layout.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes ?? {};
@@ -648,26 +801,26 @@ class EinkDashboardCard extends HTMLElement {
     ctx.font = "22px sans-serif";
     ctx.fillStyle = grayColor(COLOR_BLACK);
     const humW = ctx.measureText(humText).width;
-    ctx.fillText(humText, width - PADDING - humW, y + 8);
+    ctx.fillText(humText, rightEdge - PADDING - humW, y + 8);
 
     // Wind (right-aligned)
     const windText = `${wind} km/h`;
     const windW = ctx.measureText(windText).width;
-    ctx.fillText(windText, width - PADDING - windW, y + 38);
+    ctx.fillText(windText, rightEdge - PADDING - windW, y + 38);
 
     // Forecast
     const forecast = attrs.forecast ?? [];
     if (!forecast.length || forecastDays <= 0) {
-      return { x, y: origY, w: width - 2 * PADDING, h: 90 };
+      return { x, y: origY, w: rightEdge - x, h: 90 };
     }
 
-    const colWidth = Math.floor((width - x - PADDING) / forecastDays);
+    const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
     const forecastY = y + 100;
 
     // Separator line
     ctx.beginPath();
     ctx.moveTo(x, forecastY - 4);
-    ctx.lineTo(width - PADDING, forecastY - 4);
+    ctx.lineTo(rightEdge - PADDING, forecastY - 4);
     ctx.strokeStyle = grayColor(COLOR_LIGHT_GRAY);
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -709,7 +862,7 @@ class EinkDashboardCard extends HTMLElement {
     // Reset to defaults
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    return { x, y: origY, w: width - 2 * PADDING, h: 180 };
+    return { x, y: origY, w: rightEdge - x, h: 180 };
   }
 
   // mirrors render.py: render_sensor_rows (lines 271-308)
@@ -720,6 +873,7 @@ class EinkDashboardCard extends HTMLElement {
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -745,11 +899,11 @@ class EinkDashboardCard extends HTMLElement {
       ctx.fillText(label, x + 16, y);
 
       const valW = ctx.measureText(displayVal).width;
-      ctx.fillText(displayVal, width - PADDING - valW, y);
+      ctx.fillText(displayVal, rightEdge - PADDING - valW, y);
 
       y += SENSOR_ROW_HEIGHT;
     }
-    return { x, y: origY, w: width - 2 * PADDING, h: Math.max(y - origY, 20) };
+    return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
   }
 
   // mirrors render.py: render_battery_bar (lines 317-367)
@@ -803,6 +957,7 @@ class EinkDashboardCard extends HTMLElement {
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -828,7 +983,7 @@ class EinkDashboardCard extends HTMLElement {
       const textW = ctx.measureText(label).width;
       const itemW = STATUS_ICON_SIZE + 6 + textW + 20;
 
-      if (curX + itemW > width - PADDING && curX > x) {
+      if (curX + itemW > rightEdge - PADDING && curX > x) {
         curX = x;
         y += STATUS_ROW_HEIGHT;
       }
@@ -848,7 +1003,7 @@ class EinkDashboardCard extends HTMLElement {
 
       curX += itemW;
     }
-    return { x, y: origY, w: width - 2 * PADDING, h: y - origY + STATUS_ROW_HEIGHT };
+    return { x, y: origY, w: rightEdge - x, h: y - origY + STATUS_ROW_HEIGHT };
   }
 
   // mirrors render.py: render_waste_schedule (lines 468-527)
@@ -859,6 +1014,7 @@ class EinkDashboardCard extends HTMLElement {
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -903,11 +1059,11 @@ class EinkDashboardCard extends HTMLElement {
       const dateStr = formatRelativeDate(days, raw);
       const dateW = ctx.measureText(dateStr).width;
       ctx.fillStyle = grayColor(COLOR_GRAY);
-      ctx.fillText(dateStr, width - PADDING - dateW, y);
+      ctx.fillText(dateStr, rightEdge - PADDING - dateW, y);
 
       y += WASTE_ROW_HEIGHT;
     }
-    return { x, y: origY, w: width - 2 * PADDING, h: Math.max(y - origY, 20) };
+    return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
   }
 }
 

@@ -14,6 +14,7 @@ const WIDGET_TYPES = {
       { key: "text",      label: "Text",      kind: "text"   },
       { key: "x",         label: "X",         kind: "number" },
       { key: "y",         label: "Y",         kind: "number" },
+      { key: "w",         label: "Width",     kind: "number" },
       { key: "font_size", label: "Font size", kind: "number" },
       { key: "color",     label: "Color",     kind: "number" },
       { key: "align",     label: "Align",     kind: "select",
@@ -38,6 +39,7 @@ const WIDGET_TYPES = {
     fields: [
       { key: "y",     label: "Y",     kind: "number" },
       { key: "x",     label: "X",     kind: "number" },
+      { key: "w",     label: "Width", kind: "number" },
       { key: "color", label: "Color", kind: "number" },
     ],
   },
@@ -45,9 +47,10 @@ const WIDGET_TYPES = {
     label: "Weather",
     defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 3 },
     fields: [
-      { key: "entity",       label: "Entity",        kind: "entity" },
-      { key: "x",            label: "X",             kind: "number" },
-      { key: "y",            label: "Y",             kind: "number" },
+      { key: "entity",        label: "Entity",        kind: "entity" },
+      { key: "x",             label: "X",             kind: "number" },
+      { key: "y",             label: "Y",             kind: "number" },
+      { key: "w",             label: "Width",         kind: "number" },
       { key: "forecast_days", label: "Forecast days", kind: "number" },
     ],
   },
@@ -58,6 +61,7 @@ const WIDGET_TYPES = {
       { key: "title",    label: "Title",    kind: "text"     },
       { key: "x",        label: "X",        kind: "number"   },
       { key: "y",        label: "Y",        kind: "number"   },
+      { key: "w",        label: "Width",    kind: "number"   },
       { key: "entities", label: "Entities", kind: "entities" },
     ],
   },
@@ -78,6 +82,7 @@ const WIDGET_TYPES = {
       { key: "title",    label: "Title",    kind: "text"     },
       { key: "x",        label: "X",        kind: "number"   },
       { key: "y",        label: "Y",        kind: "number"   },
+      { key: "w",        label: "Width",    kind: "number"   },
       { key: "entities", label: "Entities", kind: "entities" },
     ],
   },
@@ -88,6 +93,7 @@ const WIDGET_TYPES = {
       { key: "title",    label: "Title",    kind: "text"     },
       { key: "x",        label: "X",        kind: "number"   },
       { key: "y",        label: "Y",        kind: "number"   },
+      { key: "w",        label: "Width",    kind: "number"   },
       { key: "entities", label: "Entities", kind: "entities" },
     ],
   },
@@ -463,10 +469,21 @@ class EinkDashboardEditor extends HTMLElement {
       el.label = field.label;
       el.addEventListener("input", (ev) => {
         const raw = ev.target.value;
-        this._widgets[index] = {
-          ...this._widgets[index],
-          [key]: kind === "number" ? (Number.isNaN(parseInt(raw, 10)) ? (this._widgets[index][key] ?? 0) : parseInt(raw, 10)) : raw,
-        };
+        if (key === "w") {
+          const parsed = parseInt(raw, 10);
+          const updated = { ...this._widgets[index] };
+          if (raw === "" || Number.isNaN(parsed) || parsed <= 0) {
+            delete updated.w;
+          } else {
+            updated.w = parsed;
+          }
+          this._widgets[index] = updated;
+        } else {
+          this._widgets[index] = {
+            ...this._widgets[index],
+            [key]: kind === "number" ? (Number.isNaN(parseInt(raw, 10)) ? (this._widgets[index][key] ?? 0) : parseInt(raw, 10)) : raw,
+          };
+        }
         this._fireWidgetChange();
         this._updateSummary(index);
       });
