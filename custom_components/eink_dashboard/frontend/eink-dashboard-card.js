@@ -84,6 +84,12 @@ class EinkDashboardCard extends HTMLElement {
     this._editBtn = null;
     this._saving = false;
     this._saveError = null;
+    this._widgetBounds = [];
+    this._dragIndex = -1;
+    this._dragStartCX = 0;
+    this._dragStartCY = 0;
+    this._dragWidgetStart = null;
+    this._hoverIndex = -1;
   }
 
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
@@ -326,8 +332,15 @@ class EinkDashboardCard extends HTMLElement {
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
+    canvas.style.touchAction = "none";
     this._canvas = canvas;
     this._ctx = canvas.getContext("2d");
+
+    canvas.addEventListener("pointerdown", (e) => this._onPointerDown(e));
+    canvas.addEventListener("pointermove", (e) => this._onPointerMove(e));
+    canvas.addEventListener("pointerup", (e) => this._onPointerUp(e));
+    canvas.addEventListener("pointercancel", (e) => this._onPointerCancel(e));
+    canvas.addEventListener("pointerleave", (e) => this._onPointerLeave(e));
 
     const img = document.createElement("img");
     img.className = "server-render";
@@ -337,6 +350,107 @@ class EinkDashboardCard extends HTMLElement {
     this._container.innerHTML = "";
     this._container.appendChild(canvas);
     this._container.appendChild(img);
+  }
+
+  // ── Drag-to-reposition ────────────────────────────────────────────────────
+
+  _canvasCoords(event) {
+    const rect = this._canvas.getBoundingClientRect();
+    const scaleX = this._canvas.width / rect.width;
+    const scaleY = this._canvas.height / rect.height;
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    };
+  }
+
+  _hitTest(cx, cy) {
+    for (let i = this._widgetBounds.length - 1; i >= 0; i--) {
+      const b = this._widgetBounds[i];
+      if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
+        return b.index;
+      }
+    }
+    return -1;
+  }
+
+  _onPointerDown(event) {
+    if (!this._editMode || this._showServerImage || !this._layout) return;
+    const { x: cx, y: cy } = this._canvasCoords(event);
+    const idx = this._hitTest(cx, cy);
+    if (idx < 0) return;
+    event.preventDefault();
+    this._canvas.setPointerCapture(event.pointerId);
+    const w = this._layout.widgets[idx];
+    this._dragIndex = idx;
+    this._dragStartCX = cx;
+    this._dragStartCY = cy;
+    this._dragWidgetStart = {
+      x: w.x ?? 0,
+      y: w.y ?? 0,
+      x2: w.x2,
+      y2: w.y2,
+    };
+    this._canvas.style.cursor = "grabbing";
+  }
+
+  _onPointerMove(event) {
+    if (!this._editMode || this._showServerImage || !this._layout) return;
+    const { x: cx, y: cy } = this._canvasCoords(event);
+
+    if (this._dragIndex >= 0) {
+      event.preventDefault();
+      const dx = Math.round(cx - this._dragStartCX);
+      const dy = Math.round(cy - this._dragStartCY);
+      const w = this._layout.widgets[this._dragIndex];
+      const s = this._dragWidgetStart;
+      const { width, height } = this._layout.display;
+      w.x = Math.max(0, Math.min(width - 1, s.x + dx));
+      w.y = Math.max(0, Math.min(height - 1, s.y + dy));
+      if (s.x2 !== undefined) {
+        w.x2 = Math.max(0, Math.min(width - 1, s.x2 + dx));
+        w.y2 = Math.max(0, Math.min(height - 1, s.y2 + dy));
+      }
+      this._scheduleRender();
+    } else {
+      const hoverIdx = this._hitTest(cx, cy);
+      if (hoverIdx !== this._hoverIndex) {
+        this._hoverIndex = hoverIdx;
+        this._canvas.style.cursor = hoverIdx >= 0 ? "grab" : "";
+        this._scheduleRender();
+      }
+    }
+  }
+
+  _onPointerUp(event) {
+    if (this._dragIndex < 0) return;
+    this._canvas.releasePointerCapture(event.pointerId);
+    this._dragIndex = -1;
+    this._dragWidgetStart = null;
+    this._hoverIndex = -1;
+    this._canvas.style.cursor = "";
+    this._scheduleRender();
+    if (this._editor) {
+      this._editor.setWidgets(this._layout.widgets);
+    }
+  }
+
+  _onPointerCancel() {
+    if (this._dragIndex < 0) return;
+    this._dragIndex = -1;
+    this._dragWidgetStart = null;
+    this._hoverIndex = -1;
+    this._canvas.style.cursor = "";
+    this._scheduleRender();
+  }
+
+  _onPointerLeave(event) {
+    if (this._dragIndex >= 0) return;
+    if (this._hoverIndex >= 0) {
+      this._hoverIndex = -1;
+      this._canvas.style.cursor = "";
+      this._scheduleRender();
+    }
   }
 
   // ── Render scheduling ─────────────────────────────────────────────────────
@@ -370,9 +484,27 @@ class EinkDashboardCard extends HTMLElement {
       waste_schedule: (w) => this._renderWasteSchedule(ctx, w),
     };
 
-    for (const widget of this._layout.widgets) {
+    this._widgetBounds = [];
+    for (let i = 0; i < this._layout.widgets.length; i++) {
+      const widget = this._layout.widgets[i];
       const fn = dispatch[widget.type];
-      if (fn) fn(widget);
+      if (!fn) continue;
+      const bounds = fn(widget);
+      if (bounds) this._widgetBounds.push({ index: i, ...bounds });
+    }
+
+    const highlightIdx =
+      this._dragIndex >= 0 ? this._dragIndex : this._hoverIndex;
+    if (this._editMode && highlightIdx >= 0) {
+      const entry = this._widgetBounds.find((b) => b.index === highlightIdx);
+      if (entry) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(3, 169, 244, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash(this._dragIndex >= 0 ? [] : [4, 3]);
+        ctx.strokeRect(entry.x - 3, entry.y - 3, entry.w + 6, entry.h + 6);
+        ctx.restore();
+      }
     }
   }
 
@@ -421,16 +553,17 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
+    const tw = ctx.measureText(text).width;
     let drawX = x;
     if (align === "right") {
-      const tw = ctx.measureText(text).width;
       drawX = width - PADDING - tw;
     } else if (align === "center") {
-      const tw = ctx.measureText(text).width;
       drawX = (width - tw) / 2;
     }
 
     ctx.fillText(text, drawX, y);
+    const bx = Math.min(drawX, x);
+    return { x: bx, y, w: Math.max(drawX + tw - bx, 20), h: fontSize };
   }
 
   // mirrors render.py: render_line (lines 103-114)
@@ -448,6 +581,12 @@ class EinkDashboardCard extends HTMLElement {
     ctx.strokeStyle = grayColor(color);
     ctx.lineWidth = lineWidth;
     ctx.stroke();
+    return {
+      x: Math.min(x, x2),
+      y: Math.min(y, y2) - 4,
+      w: Math.max(Math.abs(x2 - x), 8),
+      h: Math.max(Math.abs(y2 - y), 8) + 8,
+    };
   }
 
   // mirrors render.py: render_separator (lines 117-126)
@@ -463,16 +602,18 @@ class EinkDashboardCard extends HTMLElement {
     ctx.strokeStyle = grayColor(color);
     ctx.lineWidth = 1;
     ctx.stroke();
+    return { x: x0, y: y - 4, w: x1 - x0, h: 8 };
   }
 
   // mirrors render.py: render_weather (lines 157-265)
   _renderWeather(ctx, widget) {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
-    if (!stateObj) return;
-
     const x = widget.x ?? PADDING;
-    let y = widget.y ?? 0;
+    const origY = widget.y ?? 0;
+    if (!stateObj) return { x, y: origY, w: 200, h: 90 };
+
+    let y = origY;
     const forecastDays = widget.forecast_days ?? 3;
     const width = this._layout.display.width;
 
@@ -516,7 +657,9 @@ class EinkDashboardCard extends HTMLElement {
 
     // Forecast
     const forecast = attrs.forecast ?? [];
-    if (!forecast.length || forecastDays <= 0) return;
+    if (!forecast.length || forecastDays <= 0) {
+      return { x, y: origY, w: width - 2 * PADDING, h: 90 };
+    }
 
     const colWidth = Math.floor((width - x - PADDING) / forecastDays);
     const forecastY = y + 100;
@@ -566,12 +709,14 @@ class EinkDashboardCard extends HTMLElement {
     // Reset to defaults
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
+    return { x, y: origY, w: width - 2 * PADDING, h: 180 };
   }
 
   // mirrors render.py: render_sensor_rows (lines 271-308)
   _renderSensorRows(ctx, widget) {
     const x = widget.x ?? PADDING;
-    let y = widget.y ?? 0;
+    const origY = widget.y ?? 0;
+    let y = origY;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -604,21 +749,20 @@ class EinkDashboardCard extends HTMLElement {
 
       y += SENSOR_ROW_HEIGHT;
     }
+    return { x, y: origY, w: width - 2 * PADDING, h: Math.max(y - origY, 20) };
   }
 
   // mirrors render.py: render_battery_bar (lines 317-367)
   _renderBatteryBar(ctx, widget) {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
-    if (!stateObj) return;
+    const x = widget.x ?? PADDING;
+    const y = widget.y ?? 0;
+    if (!stateObj) return { x, y, w: 60, h: 20 };
 
     const raw = stateObj.state ?? "";
     const pctFloat = parseFloat(raw);
-    if (isNaN(pctFloat)) return;
-    const pct = Math.max(0, Math.min(100, Math.round(pctFloat)));
-
-    const x = widget.x ?? PADDING;
-    const y = widget.y ?? 0;
+    if (isNaN(pctFloat)) return { x, y, w: 60, h: 20 };
     const color = widget.color ?? COLOR_BLACK;
 
     const bw = BATTERY_BODY_W;
@@ -643,16 +787,19 @@ class EinkDashboardCard extends HTMLElement {
 
     // Label
     ctx.font = "14px sans-serif";
+    const labelW = ctx.measureText(`${pct}%`).width;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     ctx.fillText(`${pct}%`, x + bw + BATTERY_NUB_W + 4, y - 2);
+    return { x, y: y - 2, w: bw + BATTERY_NUB_W + 4 + labelW, h: bh + 2 };
   }
 
   // mirrors render.py: render_status_icons (lines 387-439)
   _renderStatusIcons(ctx, widget) {
     const x = widget.x ?? PADDING;
-    let y = widget.y ?? 0;
+    const origY = widget.y ?? 0;
+    let y = origY;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -701,12 +848,14 @@ class EinkDashboardCard extends HTMLElement {
 
       curX += itemW;
     }
+    return { x, y: origY, w: width - 2 * PADDING, h: y - origY + STATUS_ROW_HEIGHT };
   }
 
   // mirrors render.py: render_waste_schedule (lines 468-527)
   _renderWasteSchedule(ctx, widget) {
     const x = widget.x ?? PADDING;
-    let y = widget.y ?? 0;
+    const origY = widget.y ?? 0;
+    let y = origY;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -758,6 +907,7 @@ class EinkDashboardCard extends HTMLElement {
 
       y += WASTE_ROW_HEIGHT;
     }
+    return { x, y: origY, w: width - 2 * PADDING, h: Math.max(y - origY, 20) };
   }
 }
 
