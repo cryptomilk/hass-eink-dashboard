@@ -88,6 +88,13 @@ class EinkDashboardImage(ImageEntity):
     def set_widgets(self, widgets: list[dict[str, Any]]) -> None:
         self._widgets = widgets
 
+    async def async_request_refresh(
+        self, widgets: list[dict[str, Any]] | None = None
+    ) -> None:
+        if widgets is not None:
+            self._widgets = widgets
+        await self._async_refresh(None)
+
     def _resolve_templates(  # must be called from the event loop
         self, widgets: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:

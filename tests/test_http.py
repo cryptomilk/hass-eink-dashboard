@@ -10,6 +10,7 @@ from aiohttp import web
 from custom_components.eink_dashboard.const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
+    WidgetType,
 )
 from custom_components.eink_dashboard.http import (
     EinkLayoutView,
@@ -133,24 +134,45 @@ def _make_layout_request(
     options: dict | None = None,
     *,
     entry_missing: bool = False,
+    body: object = None,
+    store: MagicMock | None = None,
+    entity: MagicMock | None = None,
+    json_error: bool = False,
 ) -> web.Request:
     request = MagicMock(spec=web.Request)
     hass = MagicMock()
+    if json_error:
+        request.json = AsyncMock(side_effect=ValueError("bad json"))
+    elif body is not None:
+        request.json = AsyncMock(return_value=body)
     if entry_missing:
         hass.data = {}
     else:
-        entry = MagicMock()
-        entry.options = options or {"width": 758, "height": 1024}
-        hass.data = {
-            "eink_dashboard": {
-                entry_id: {
-                    "widgets": widgets or [],
-                    "entry": entry,
-                },
-            },
+        ha_entry = MagicMock()
+        ha_entry.options = options or {"width": 758, "height": 1024}
+        entry_data: dict = {
+            "widgets": widgets or [],
+            "entry": ha_entry,
         }
+        if store is not None:
+            entry_data["store"] = store
+        if entity is not None:
+            entry_data["entity"] = entity
+        hass.data = {"eink_dashboard": {entry_id: entry_data}}
     request.app = {"hass": hass}
     return request
+
+
+def _make_store() -> MagicMock:
+    store = MagicMock()
+    store.async_save = AsyncMock()
+    return store
+
+
+def _make_post_entity() -> MagicMock:
+    entity = MagicMock()
+    entity.async_request_refresh = AsyncMock()
+    return entity
 
 
 class TestEinkLayoutView:
@@ -188,3 +210,145 @@ class TestEinkLayoutView:
         body = json.loads(response.text)
         assert body["display"]["width"] == DEFAULT_WIDTH
         assert body["display"]["height"] == DEFAULT_HEIGHT
+
+
+class TestEinkLayoutViewPost:
+    async def test_post_saves_and_returns_ok(self) -> None:
+        widgets = [{"type": "separator", "y": 50}]
+        store = _make_store()
+        entity = _make_post_entity()
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=widgets, store=store, entity=entity
+        )
+
+        response = await view.post(request, "test_entry")
+
+        assert response.status == 200
+        assert json.loads(response.text) == {"status": "ok"}
+        store.async_save.assert_called_once_with(widgets)
+        entity.async_request_refresh.assert_called_once_with(widgets)
+
+    async def test_post_updates_in_memory_widgets(self) -> None:
+        new_widgets = [{"type": "text", "text": "hi"}]
+        store = _make_store()
+        entity = _make_post_entity()
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            widgets=[], body=new_widgets, store=store, entity=entity
+        )
+        hass = request.app["hass"]
+
+        await view.post(request, "test_entry")
+
+        assert hass.data["eink_dashboard"]["test_entry"]["widgets"] == (
+            new_widgets
+        )
+
+    async def test_post_missing_entry_raises_404(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(entry_missing=True, body=[])
+
+        with pytest.raises(web.HTTPNotFound):
+            await view.post(request, "test_entry")
+
+    async def test_post_invalid_json_raises_400(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=None,
+            json_error=True,
+            store=_make_store(),
+            entity=_make_post_entity(),
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_non_list_raises_400(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body={"type": "text"},
+            store=_make_store(),
+            entity=_make_post_entity(),
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_invalid_widget_type_raises_400(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=[{"type": "bogus"}],
+            store=_make_store(),
+            entity=_make_post_entity(),
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_missing_type_key_raises_400(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=[{"x": 10}],
+            store=_make_store(),
+            entity=_make_post_entity(),
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_non_dict_widget_raises_400(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=["not a dict"],
+            store=_make_store(),
+            entity=_make_post_entity(),
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_empty_list_succeeds(self) -> None:
+        store = _make_store()
+        entity = _make_post_entity()
+        view = EinkLayoutView()
+        request = _make_layout_request(body=[], store=store, entity=entity)
+
+        response = await view.post(request, "test_entry")
+
+        assert response.status == 200
+        store.async_save.assert_called_once_with([])
+
+    async def test_post_all_valid_widget_types(self) -> None:
+        widgets = [{"type": t.value} for t in WidgetType]
+        store = _make_store()
+        entity = _make_post_entity()
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=widgets, store=store, entity=entity
+        )
+
+        response = await view.post(request, "test_entry")
+
+        assert response.status == 200
+        store.async_save.assert_called_once_with(widgets)
+
+    async def test_post_too_many_widgets_raises_400(self) -> None:
+        widgets = [{"type": "separator", "y": i} for i in range(201)]
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=widgets, store=_make_store(), entity=_make_post_entity()
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")
+
+    async def test_post_nested_dict_field_raises_400(self) -> None:
+        widgets = [{"type": "text", "text": {"nested": "bad"}}]
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            body=widgets, store=_make_store(), entity=_make_post_entity()
+        )
+
+        with pytest.raises(web.HTTPBadRequest):
+            await view.post(request, "test_entry")

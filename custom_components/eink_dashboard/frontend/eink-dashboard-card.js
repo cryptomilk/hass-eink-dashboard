@@ -78,6 +78,12 @@ class EinkDashboardCard extends HTMLElement {
     this._serverImg = null;
     this._container = null;
     this._toggleBtn = null;
+    this._editMode = false;
+    this._editor = null;
+    this._editorContainer = null;
+    this._editBtn = null;
+    this._saving = false;
+    this._saveError = null;
   }
 
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
@@ -96,11 +102,16 @@ class EinkDashboardCard extends HTMLElement {
       this._serverImg = null;
       this._fetching = false;
       this._showServerImage = false;
+      this._editMode = false;
+      this._editor = null;
     }
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (this._editor) {
+      this._editor.hass = hass;
+    }
     if (this._config && !this._layout && !this._fetching) {
       this._fetchLayout();
     }
@@ -159,6 +170,7 @@ class EinkDashboardCard extends HTMLElement {
         .toolbar {
           display: flex;
           justify-content: flex-end;
+          gap: 6px;
           padding: 4px 8px;
           border-top: 1px solid var(--divider-color, #e0e0e0);
           background: var(--card-background-color, #fff);
@@ -177,6 +189,19 @@ class EinkDashboardCard extends HTMLElement {
           color: #fff;
           border-color: var(--primary-color, #03a9f4);
         }
+        .editor-container {
+          border-top: 1px solid var(--divider-color, #e0e0e0);
+          max-height: 520px;
+          overflow-y: auto;
+        }
+        .save-error {
+          padding: 8px 12px;
+          color: var(--error-color, #b00020);
+          font-size: 13px;
+          background: var(--secondary-background-color, #fff3f3);
+          border-top: 1px solid var(--error-color, #b00020);
+          display: none;
+        }
       </style>
       <ha-card>
         <div class="container">
@@ -186,12 +211,91 @@ class EinkDashboardCard extends HTMLElement {
           <button class="toggle-btn" title="Toggle between canvas preview and server-rendered image">
             Show rendered image
           </button>
+          <button class="toggle-btn edit-btn" title="Edit widget layout">
+            Edit Widgets
+          </button>
         </div>
+        <div class="editor-container" style="display:none"></div>
+        <div class="save-error"></div>
       </ha-card>
     `;
     this._container = this.shadowRoot.querySelector(".container");
     this._toggleBtn = this.shadowRoot.querySelector(".toggle-btn");
     this._toggleBtn.addEventListener("click", () => this._onToggle());
+    this._editBtn = this.shadowRoot.querySelector(".edit-btn");
+    this._editBtn.addEventListener("click", () => this._onToggleEdit());
+    this._editorContainer = this.shadowRoot.querySelector(".editor-container");
+    this._saveError = this.shadowRoot.querySelector(".save-error");
+  }
+
+  // ── Edit mode ─────────────────────────────────────────────────────────────
+
+  async _ensureEditorLoaded() {
+    if (customElements.get("eink-dashboard-editor")) return;
+    const script = document.createElement("script");
+    script.src = "/eink_dashboard/frontend/eink-dashboard-editor.js";
+    document.head.appendChild(script);
+    await customElements.whenDefined("eink-dashboard-editor");
+  }
+
+  async _onToggleEdit() {
+    if (!this._layout) return;
+    this._editMode = !this._editMode;
+    if (this._editMode) {
+      await this._ensureEditorLoaded();
+      this._editBtn.textContent = "Close Editor";
+      this._editBtn.classList.add("active");
+      this._editorContainer.style.display = "block";
+      if (!this._editor) {
+        this._editor = document.createElement("eink-dashboard-editor");
+        this._editor.addEventListener(
+          "widget-change", (ev) => this._onWidgetChange(ev)
+        );
+        this._editor.addEventListener(
+          "save", (ev) => this._onSave(ev)
+        );
+        this._editor.setWidgets(this._layout.widgets);
+        this._editor.setDisplay(this._layout.display);
+        this._editorContainer.appendChild(this._editor);
+      }
+      if (this._hass) this._editor.hass = this._hass;
+    } else {
+      this._editBtn.textContent = "Edit Widgets";
+      this._editBtn.classList.remove("active");
+      this._editorContainer.style.display = "none";
+    }
+  }
+
+  _onWidgetChange(ev) {
+    this._layout.widgets = ev.detail.widgets;
+    this._scheduleRender();
+  }
+
+  async _onSave(ev) {
+    if (this._saving) return;
+    this._saving = true;
+    try {
+      const entryId = this._config.config_entry;
+      await this._hass.callApi(
+        "POST",
+        `eink_dashboard/${entryId}/layout`,
+        ev.detail.widgets,
+      );
+      await this._fetchLayout();
+      if (this._editor && this._layout) {
+        this._editor.setWidgets(this._layout.widgets);
+        this._editor.setDisplay(this._layout.display);
+      }
+      if (this._saveError) this._saveError.style.display = "none";
+    } catch (err) {
+      console.error("Failed to save layout:", err);
+      if (this._saveError) {
+        this._saveError.textContent = `Save failed: ${err.message || err}`;
+        this._saveError.style.display = "block";
+      }
+    } finally {
+      this._saving = false;
+    }
   }
 
   // ── Layout fetch ──────────────────────────────────────────────────────────

@@ -3,7 +3,13 @@ from __future__ import annotations
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
-from .const import DEFAULT_HEIGHT, DEFAULT_WIDTH, DOMAIN
+from .const import (
+    DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+    DOMAIN,
+    MAX_WIDGETS,
+    WidgetType,
+)
 
 
 class EinkLayoutView(HomeAssistantView):
@@ -25,6 +31,45 @@ class EinkLayoutView(HomeAssistantView):
         return web.json_response(
             {"widgets": widgets, "display": {"width": width, "height": height}}
         )
+
+    async def post(self, request: web.Request, entry_id: str) -> web.Response:
+        hass = request.app["hass"]
+        entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+        if entry_data is None:
+            raise web.HTTPNotFound()
+
+        try:
+            body = await request.json()
+        except ValueError:
+            raise web.HTTPBadRequest(text="Invalid JSON") from None
+
+        if not isinstance(body, list):
+            raise web.HTTPBadRequest(text="Body must be a list")
+
+        if len(body) > MAX_WIDGETS:
+            raise web.HTTPBadRequest(text="Too many widgets")
+
+        valid_types = {t.value for t in WidgetType}
+        _allowed_field_types = (str, int, float, bool, list, type(None))
+        for widget in body:
+            if not isinstance(widget, dict):
+                raise web.HTTPBadRequest(text="Each widget must be an object")
+            if widget.get("type") not in valid_types:
+                raise web.HTTPBadRequest(
+                    text=f"Invalid widget type: {widget.get('type')}"
+                )
+            for key, val in widget.items():
+                if key != "type" and not isinstance(val, _allowed_field_types):
+                    raise web.HTTPBadRequest(
+                        text=f"Invalid value type for field '{key}'"
+                    )
+
+        await entry_data["store"].async_save(body)
+        entry_data["widgets"] = body
+        entity = entry_data["entity"]
+        await entity.async_request_refresh(body)
+
+        return web.json_response({"status": "ok"})
 
 
 class EinkPublicImageView(HomeAssistantView):
