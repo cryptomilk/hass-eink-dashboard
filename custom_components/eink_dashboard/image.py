@@ -119,6 +119,8 @@ class EinkDashboardImage(ImageEntity):
     async def _async_refresh(self, _now: Any) -> None:
         push_targets: list[tuple[Any, str, bytes]] = []
         async with self._refresh_lock:
+            states = self._build_states()
+            await self._async_fetch_forecasts(states)
             config = {
                 "width": self._entry.options.get("width", DEFAULT_WIDTH),
                 "height": self._entry.options.get("height", DEFAULT_HEIGHT),
@@ -135,7 +137,7 @@ class EinkDashboardImage(ImageEntity):
                 "contrast": self._entry.options.get(
                     "contrast", DEFAULT_CONTRAST
                 ),
-                "states": self._build_states(),
+                "states": states,
             }
             widgets = self._resolve_templates(self._widgets)
             new_bytes = await self.hass.async_add_executor_job(
@@ -158,6 +160,28 @@ class EinkDashboardImage(ImageEntity):
             await asyncio.gather(
                 *(async_push_image(*args) for args in push_targets)
             )
+
+    async def _async_fetch_forecasts(self, states: dict[str, Any]) -> None:
+        weather_entities: set[str] = set()
+        for w in self._widgets:
+            if w.get("type") == WidgetType.WEATHER:
+                eid = w.get("entity", "")
+                if eid and eid in states:
+                    weather_entities.add(eid)
+
+        for entity_id in weather_entities:
+            try:
+                result = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"entity_id": entity_id, "type": "daily"},
+                    blocking=True,
+                    return_response=True,
+                )
+                forecast = result.get(entity_id, {}).get("forecast") or []
+                states[entity_id]["attributes"]["forecast"] = forecast
+            except Exception:
+                _LOGGER.debug("Could not fetch forecast for %s", entity_id)
 
     def _build_states(self) -> dict[str, Any]:
         result: dict[str, Any] = {}

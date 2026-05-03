@@ -186,6 +186,70 @@ class TestEinkDashboardImage:
             states["sensor.temp"]["attributes"]["unit_of_measurement"] == "°C"
         )
 
+    async def test_fetch_forecasts_merges_into_states(self) -> None:
+        hass = _make_hass()
+        forecast_data = [
+            {"datetime": "2025-05-04", "temperature": 18, "templow": 8},
+        ]
+        hass.services.async_call = AsyncMock(
+            return_value={
+                "weather.home": {"forecast": forecast_data},
+            }
+        )
+        entry = _make_entry()
+        entity = EinkDashboardImage(hass, entry)
+        entity.set_widgets([{"type": "weather", "entity": "weather.home"}])
+
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {"temperature": 20},
+            }
+        }
+        await entity._async_fetch_forecasts(states)
+
+        assert (
+            states["weather.home"]["attributes"]["forecast"] == forecast_data
+        )
+        hass.services.async_call.assert_called_once_with(
+            "weather",
+            "get_forecasts",
+            {"entity_id": "weather.home", "type": "daily"},
+            blocking=True,
+            return_response=True,
+        )
+
+    async def test_fetch_forecasts_skips_missing_entity(self) -> None:
+        hass = _make_hass()
+        hass.services.async_call = AsyncMock()
+        entry = _make_entry()
+        entity = EinkDashboardImage(hass, entry)
+        entity.set_widgets([{"type": "weather", "entity": "weather.missing"}])
+
+        states: dict[str, Any] = {}
+        await entity._async_fetch_forecasts(states)
+
+        hass.services.async_call.assert_not_called()
+
+    async def test_fetch_forecasts_handles_service_error(self) -> None:
+        hass = _make_hass()
+        hass.services.async_call = AsyncMock(
+            side_effect=Exception("service unavailable")
+        )
+        entry = _make_entry()
+        entity = EinkDashboardImage(hass, entry)
+        entity.set_widgets([{"type": "weather", "entity": "weather.home"}])
+
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {"temperature": 20},
+            }
+        }
+        await entity._async_fetch_forecasts(states)
+
+        assert "forecast" not in states["weather.home"]["attributes"]
+
     async def test_custom_update_interval(self) -> None:
         hass = _make_hass()
         entry = _make_entry(

@@ -34,6 +34,24 @@ const WASTE_ICON_SIZE = 10;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const CONDITION_ICONS = {
+  "sunny": "☀",
+  "clear-night": "☾",
+  "cloudy": "☁",
+  "partlycloudy": "⛅",
+  "fog": "▒",
+  "hail": "❄",
+  "lightning": "⚡",
+  "lightning-rainy": "⛈",
+  "pouring": "☂",
+  "rainy": "☔",
+  "snowy": "❄",
+  "snowy-rainy": "☖",
+  "windy": "☴",
+  "windy-variant": "☴",
+  "exceptional": "⚠",
+};
+
 const HANDLE_SIZE = 8;
 const HANDLE_HIT_RADIUS = 10;
 const GRID = 8;
@@ -104,6 +122,7 @@ class EinkDashboardCard extends HTMLElement {
     this._resizeStartCX = 0;
     this._resizeStartCY = 0;
     this._resizeWidgetStart = null;
+    this._forecasts = {};
   }
 
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
@@ -349,6 +368,7 @@ class EinkDashboardCard extends HTMLElement {
       );
       this._layout = resp;
       this._initCanvas();
+      this._fetchForecasts();
       this._scheduleRender();
     } catch (err) {
       const div = document.createElement("div");
@@ -357,6 +377,25 @@ class EinkDashboardCard extends HTMLElement {
       this._container.replaceChildren(div);
     } finally {
       this._fetching = false;
+    }
+  }
+
+  async _fetchForecasts() {
+    if (!this._layout || !this._hass) return;
+    for (const w of this._layout.widgets) {
+      if (w.type !== "weather" || !w.entity) continue;
+      try {
+        const resp = await this._hass.callService(
+          "weather", "get_forecasts",
+          { entity_id: w.entity, type: "daily" },
+          undefined, false, true,
+        );
+        const forecast = resp?.response?.[w.entity]?.forecast;
+        if (forecast) {
+          this._forecasts[w.entity] = forecast;
+          this._scheduleRender();
+        }
+      } catch (_) { /* forecast unavailable */ }
     }
   }
 
@@ -833,12 +872,12 @@ class EinkDashboardCard extends HTMLElement {
     const humidity = attrs.humidity ?? "--";
     const wind = attrs.wind_speed ?? "--";
 
-    // Main weather icon (placeholder "?")
+    const icon = CONDITION_ICONS[condition] || "?";
     ctx.font = `${Math.round(64 * s)}px sans-serif`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText("?", x + Math.round(45 * s), y + Math.round(45 * s));
+    ctx.fillText(icon, x + Math.round(45 * s), y + Math.round(45 * s));
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
@@ -865,8 +904,8 @@ class EinkDashboardCard extends HTMLElement {
     const windW = ctx.measureText(windText).width;
     ctx.fillText(windText, rightEdge - PADDING - windW, y + Math.round(38 * s));
 
-    // Forecast
-    const forecast = attrs.forecast ?? [];
+    // Forecast (prefer fetched data over deprecated attribute)
+    const forecast = this._forecasts[entityId] || attrs.forecast || [];
     if (!forecast.length || forecastDays <= 0) {
       return { x, y: origY, w: rightEdge - x, h: Math.round(90 * s) };
     }
@@ -900,11 +939,11 @@ class EinkDashboardCard extends HTMLElement {
       ctx.textAlign = "center";
       ctx.fillText(dayLabel, cx, forecastY);
 
-      // Forecast icon placeholder
+      const dayIcon = CONDITION_ICONS[day.condition] || "?";
       ctx.font = `${Math.round(28 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
-      ctx.fillText("?", cx, forecastY + Math.round(38 * s));
+      ctx.fillText(dayIcon, cx, forecastY + Math.round(38 * s));
 
       // Hi/Lo
       const hi = day.temperature ?? "";

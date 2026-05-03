@@ -57,6 +57,11 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     return ImageFont.load_default(size)
 
 
+def _fmt_temp(value: str | float | int) -> str:
+    n = float(value)
+    return str(int(n)) if n == int(n) else str(n)
+
+
 @functools.cache
 def _load_icon(
     condition: str,
@@ -200,7 +205,7 @@ def render_weather(
 
     draw.text(
         (x + round(100 * s), y),
-        f"{temp}°C",
+        f"{_fmt_temp(temp)}°C",
         fill=COLOR_BLACK,
         font=font_xl,
     )
@@ -274,7 +279,7 @@ def render_weather(
             )
         hi = day.get("temperature", "")
         lo = day.get("templow", "")
-        hi_lo = f"{hi}° / {lo}°"
+        hi_lo = f"{_fmt_temp(hi)}° / {_fmt_temp(lo)}°"
         bbox = draw.textbbox((0, 0), hi_lo, font=font_sm)
         text_w = bbox[2] - bbox[0]
         draw.text(
