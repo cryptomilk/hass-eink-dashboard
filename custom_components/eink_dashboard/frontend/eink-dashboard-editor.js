@@ -57,9 +57,9 @@ const SCHEMAS = {
     { name: "text", required: true, selector: { text: {} } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
       ],
     },
     {
@@ -82,14 +82,14 @@ const SCHEMAS = {
   line: (d) => [
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
       ],
     },
     {
       type: "grid", name: "", schema: [
-        { name: "x2", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y2", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
+        { name: "x2", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y2", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
       ],
     },
     {
@@ -105,9 +105,9 @@ const SCHEMAS = {
   separator: (d) => [
     {
       type: "grid", name: "", schema: [
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
       ],
     },
     { name: "color", default: 210, selector: { select: {
@@ -119,9 +119,9 @@ const SCHEMAS = {
     { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
       ],
     },
     {
@@ -136,9 +136,9 @@ const SCHEMAS = {
     { name: "title", selector: { text: {} } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
@@ -149,8 +149,8 @@ const SCHEMAS = {
     { name: "entity", required: true, selector: { entity: {} } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
       ],
     },
     {
@@ -167,9 +167,9 @@ const SCHEMAS = {
     { name: "title", selector: { text: {} } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "font_size", default: 18, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
@@ -180,9 +180,9 @@ const SCHEMAS = {
     { name: "title", selector: { text: {} } },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, mode: "box" } } },
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "font_size", default: 18, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },

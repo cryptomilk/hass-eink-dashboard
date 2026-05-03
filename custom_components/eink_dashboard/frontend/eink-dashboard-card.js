@@ -36,8 +36,11 @@ const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 const HANDLE_SIZE = 8;
 const HANDLE_HIT_RADIUS = 10;
+const GRID = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function snap(v) { return Math.round(v / GRID) * GRID; }
 
 function grayColor(v) {
   return `rgb(${v},${v},${v})`;
@@ -493,20 +496,20 @@ class EinkDashboardCard extends HTMLElement {
       const handle = this._resizeHandle;
 
       if (handle === "p1") {
-        w.x = Math.max(0, Math.min(dw - 1, s.x + dx));
-        w.y = Math.max(0, Math.min(dh - 1, s.y + dy));
+        w.x = snap(Math.max(0, Math.min(dw - 1, s.x + dx)));
+        w.y = snap(Math.max(0, Math.min(dh - 1, s.y + dy)));
       } else if (handle === "p2") {
-        w.x2 = Math.max(0, Math.min(dw - 1, s.x2 + dx));
-        w.y2 = Math.max(0, Math.min(dh - 1, s.y2 + dy));
+        w.x2 = snap(Math.max(0, Math.min(dw - 1, s.x2 + dx)));
+        w.y2 = snap(Math.max(0, Math.min(dh - 1, s.y2 + dy)));
       } else if (handle === "ne" || handle === "se") {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
-        w.w = Math.round(newRight - s.x);
+        w.w = snap(Math.round(newRight - s.x));
       } else if (handle === "nw" || handle === "sw") {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newX = Math.max(0, Math.min(startRight - 20, s.x + dx));
-        w.x = Math.round(newX);
-        w.w = Math.round(startRight - newX);
+        w.x = snap(Math.round(newX));
+        w.w = snap(Math.round(startRight - w.x));
       }
       this._scheduleRender();
       return;
@@ -519,11 +522,11 @@ class EinkDashboardCard extends HTMLElement {
       const w = this._layout.widgets[this._dragIndex];
       const s = this._dragWidgetStart;
       const { width, height } = this._layout.display;
-      w.x = Math.max(0, Math.min(width - 1, s.x + dx));
-      w.y = Math.max(0, Math.min(height - 1, s.y + dy));
+      w.x = snap(Math.max(0, Math.min(width - 1, s.x + dx)));
+      w.y = snap(Math.max(0, Math.min(height - 1, s.y + dy)));
       if (s.x2 !== undefined) {
-        w.x2 = Math.max(0, Math.min(width - 1, s.x2 + dx));
-        w.y2 = Math.max(0, Math.min(height - 1, s.y2 + dy));
+        w.x2 = snap(Math.max(0, Math.min(width - 1, s.x2 + dx)));
+        w.y2 = snap(Math.max(0, Math.min(height - 1, s.y2 + dy)));
       }
       this._scheduleRender();
     } else {
@@ -623,6 +626,20 @@ class EinkDashboardCard extends HTMLElement {
 
     ctx.fillStyle = grayColor(COLOR_WHITE);
     ctx.fillRect(0, 0, width, height);
+
+    if (this._editMode) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(0,0,0,0.06)";
+      ctx.setLineDash([1, 3]);
+      for (let gx = GRID; gx < width; gx += GRID) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke();
+      }
+      for (let gy = GRID; gy < height; gy += GRID) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
 
     const dispatch = {
       text: (w) => this._renderText(ctx, w),
