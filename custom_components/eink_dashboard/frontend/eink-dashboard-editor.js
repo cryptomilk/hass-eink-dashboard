@@ -309,13 +309,7 @@ class EinkDashboardEditor extends HTMLElement {
         </div>
         <div class="add-select-row" style="display:none">
           <label>Type:</label>
-          <ha-select>
-            ${Object.entries(WIDGET_TYPES)
-              .map(([k, v]) =>
-                `<mwc-list-item value="${k}">${v.label}</mwc-list-item>`
-              )
-              .join("")}
-          </ha-select>
+          <ha-select></ha-select>
           <button class="cancel-add-btn">Cancel</button>
         </div>
         <div class="widget-list"></div>
@@ -333,8 +327,12 @@ class EinkDashboardEditor extends HTMLElement {
       "click", () => this._cancelAdd()
     );
     const typeSelect = this.shadowRoot.querySelector(".add-select-row ha-select");
+    typeSelect.options = Object.entries(WIDGET_TYPES).map(([k, v]) => ({
+      value: k,
+      label: v.label,
+    }));
     typeSelect.addEventListener("selected", (ev) => {
-      const value = ev.detail?.item?.getAttribute("value");
+      const value = ev.detail?.value;
       if (value) this._onTypeSelected(value);
     });
     this.shadowRoot.querySelector(".save-btn").addEventListener(
@@ -499,17 +497,9 @@ class EinkDashboardEditor extends HTMLElement {
       const el = document.createElement("ha-select");
       el.label = field.label;
       el.value = value ?? field.options[0];
-      for (const opt of field.options) {
-        const item = document.createElement("mwc-list-item");
-        item.setAttribute("value", opt);
-        item.textContent = opt;
-        if (opt === (value ?? field.options[0])) {
-          item.setAttribute("selected", "");
-        }
-        el.appendChild(item);
-      }
+      el.options = field.options.map((opt) => ({ value: opt, label: opt }));
       el.addEventListener("selected", (ev) => {
-        const v = ev.detail?.item?.getAttribute("value");
+        const v = ev.detail?.value;
         if (v !== undefined) {
           this._widgets[index] = { ...this._widgets[index], [key]: v };
           this._fireWidgetChange();
