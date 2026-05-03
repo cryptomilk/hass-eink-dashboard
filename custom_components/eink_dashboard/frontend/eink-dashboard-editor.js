@@ -3,13 +3,22 @@
 
 const EDITOR_TAG = "eink-dashboard-editor";
 
+// ── Constants (mirror const.py) ─────────────────────────────────────────────
+
+const FONT_SIZE_TEXT = 32;
+const FONT_SIZE_WEATHER = 32;
+const FONT_SIZE_SENSOR_ROWS = 32;
+const FONT_SIZE_BATTERY_BAR = 24;
+const FONT_SIZE_STATUS_ICONS = 28;
+const FONT_SIZE_WASTE_SCHEDULE = 28;
+
 // ── Widget type registry ──────────────────────────────────────────────────────
 // Defines the label, defaults, and form field schema for each widget type.
 
 const WIDGET_TYPES = {
   text: {
     label: "Text",
-    defaults: { type: "text", x: 24, y: 0, text: "", font_size: 22, color: 0, align: "left" },
+    defaults: { type: "text", x: 24, y: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0, align: "left" },
   },
   line: {
     label: "Line",
@@ -21,23 +30,23 @@ const WIDGET_TYPES = {
   },
   weather: {
     label: "Weather",
-    defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 5, font_size: 32 },
+    defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 5, font_size: FONT_SIZE_WEATHER },
   },
   sensor_rows: {
     label: "Sensor Rows",
-    defaults: { type: "sensor_rows", title: "", x: 24, y: 0, entities: [], font_size: 22 },
+    defaults: { type: "sensor_rows", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_SENSOR_ROWS },
   },
   battery_bar: {
     label: "Battery Bar",
-    defaults: { type: "battery_bar", entity: "", x: 24, y: 0, color: 0, font_size: 14 },
+    defaults: { type: "battery_bar", entity: "", x: 24, y: 0, color: 0, font_size: FONT_SIZE_BATTERY_BAR },
   },
   status_icons: {
     label: "Status Icons",
-    defaults: { type: "status_icons", title: "", x: 24, y: 0, entities: [], font_size: 18 },
+    defaults: { type: "status_icons", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_STATUS_ICONS },
   },
   waste_schedule: {
     label: "Waste Schedule",
-    defaults: { type: "waste_schedule", title: "", x: 24, y: 0, entities: [], font_size: 18 },
+    defaults: { type: "waste_schedule", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_WASTE_SCHEDULE },
   },
 };
 
@@ -64,7 +73,7 @@ const SCHEMAS = {
     },
     {
       type: "grid", name: "", schema: [
-        { name: "font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_TEXT, selector: { number: { min: 8, max: 72, mode: "box" } } },
         { name: "color", default: 0, selector: { select: {
           options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
         } } },
@@ -127,7 +136,7 @@ const SCHEMAS = {
     {
       type: "grid", name: "", schema: [
         { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
-        { name: "font_size", default: 32, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_WEATHER, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
   ],
@@ -139,7 +148,7 @@ const SCHEMAS = {
         { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
         { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_SENSOR_ROWS, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
     { name: "entities", selector: { entity: { multiple: true } } },
@@ -158,7 +167,7 @@ const SCHEMAS = {
         { name: "color", default: 0, selector: { select: {
           options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
         } } },
-        { name: "font_size", default: 14, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_BATTERY_BAR, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
   ],
@@ -170,7 +179,7 @@ const SCHEMAS = {
         { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
         { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: 18, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_STATUS_ICONS, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
     { name: "entities", selector: { entity: { multiple: true } } },
@@ -183,7 +192,7 @@ const SCHEMAS = {
         { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
         { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
         { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: 18, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_WASTE_SCHEDULE, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
     { name: "entities", selector: { entity: { multiple: true } } },

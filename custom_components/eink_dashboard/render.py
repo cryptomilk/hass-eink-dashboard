@@ -14,6 +14,12 @@ from .const import (
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
     COLOR_WHITE,
+    FONT_SIZE_BATTERY_BAR,
+    FONT_SIZE_SENSOR_ROWS,
+    FONT_SIZE_STATUS_ICONS,
+    FONT_SIZE_TEXT,
+    FONT_SIZE_WASTE_SCHEDULE,
+    FONT_SIZE_WEATHER,
     PADDING,
     Align,
     WidgetType,
@@ -93,7 +99,7 @@ def render_text(
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     text = widget.get("text", "")
-    font_size = widget.get("font_size", 22)
+    font_size = widget.get("font_size", FONT_SIZE_TEXT)
     color = widget.get("color", COLOR_BLACK)
     align = widget.get("align", Align.LEFT)
 
@@ -207,13 +213,13 @@ def render_weather(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 32)
+    font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 32
+    s = font_size / 22
     font_xl = _load_font(round(48 * s))
     font_sm = _load_font(round(16 * s))
     font_xs = _load_font(round(14 * s))
@@ -398,7 +404,7 @@ def render_sensor_rows(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 22)
+    font_size = widget.get("font_size", FONT_SIZE_SENSOR_ROWS)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -406,7 +412,7 @@ def render_sensor_rows(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 22
+    s = font_size / FONT_SIZE_SENSOR_ROWS
     font_md = _load_font(font_size)
     row_height = round(_SENSOR_ROW_HEIGHT * s)
 
@@ -463,7 +469,7 @@ def render_battery_bar(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 14)
+    font_size = widget.get("font_size", FONT_SIZE_BATTERY_BAR)
     color = widget.get("color", COLOR_BLACK)
 
     bw = _BATTERY_BODY_W
@@ -523,7 +529,7 @@ def render_status_icons(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 18)
+    font_size = widget.get("font_size", FONT_SIZE_STATUS_ICONS)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -531,7 +537,7 @@ def render_status_icons(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 18
+    s = font_size / FONT_SIZE_STATUS_ICONS
     font = _load_font(font_size)
     font_title = _load_font(round(22 * s))
     sz = round(_STATUS_ICON_SIZE * s)
@@ -613,7 +619,7 @@ def render_waste_schedule(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 18)
+    font_size = widget.get("font_size", FONT_SIZE_WASTE_SCHEDULE)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -621,7 +627,7 @@ def render_waste_schedule(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 18
+    s = font_size / FONT_SIZE_WASTE_SCHEDULE
     font_md = _load_font(round(22 * s))
     font_sm = _load_font(font_size)
     sz = round(_WASTE_ICON_SIZE * s)

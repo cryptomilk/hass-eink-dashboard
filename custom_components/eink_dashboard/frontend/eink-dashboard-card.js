@@ -10,6 +10,26 @@ const COLOR_BLACK = 0;
 const COLOR_WHITE = 255;
 const COLOR_GRAY = 120;
 const COLOR_LIGHT_GRAY = 180;
+const FONT_FAMILY = "Roboto, sans-serif";
+const ROBOTO_URL = "/eink_dashboard/fonts/Roboto-Regular.ttf";
+
+const FONT_SIZE_TEXT = 32;
+const FONT_SIZE_WEATHER = 32;
+const FONT_SIZE_SENSOR_ROWS = 32;
+const FONT_SIZE_BATTERY_BAR = 24;
+const FONT_SIZE_STATUS_ICONS = 28;
+const FONT_SIZE_WASTE_SCHEDULE = 28;
+
+let _robotoLoaded = false;
+async function _loadRoboto() {
+  if (_robotoLoaded) return;
+  try {
+    const face = new FontFace("Roboto", `url(${ROBOTO_URL})`);
+    await face.load();
+    document.fonts.add(face);
+    _robotoLoaded = true;
+  } catch (_) { /* fall back to sans-serif */ }
+}
 
 const SENSOR_ROW_HEIGHT = 30;
 const SENSOR_TITLE_ADVANCE = 32;
@@ -360,6 +380,7 @@ class EinkDashboardCard extends HTMLElement {
   async _fetchLayout() {
     this._fetching = true;
     try {
+      await _loadRoboto();
       const entryId = await this._resolveEntryId();
       this._resolvedEntryId = entryId;
       const resp = await this._hass.callApi(
@@ -787,13 +808,13 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
     const text = String(widget.text ?? "");
-    const fontSize = Math.max(1, widget.font_size ?? 22);
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_TEXT);
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
     const width = this._layout.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
 
-    ctx.font = `${fontSize}px sans-serif`;
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -857,8 +878,8 @@ class EinkDashboardCard extends HTMLElement {
     const stateObj = this._getState(entityId);
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
-    const fontSize = Math.max(1, widget.font_size ?? 32);
-    const s = fontSize / 32;
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WEATHER);
+    const s = fontSize / 22;
     if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
     let y = origY;
@@ -880,7 +901,7 @@ class EinkDashboardCard extends HTMLElement {
     // Row 1: condition icon + temperature
     const iconSize = Math.round(64 * s);
     const icon = CONDITION_ICONS[condition] || "?";
-    ctx.font = `${iconSize}px sans-serif`;
+    ctx.font = `${iconSize}px ${FONT_FAMILY}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     ctx.fillStyle = grayColor(COLOR_BLACK);
@@ -888,14 +909,14 @@ class EinkDashboardCard extends HTMLElement {
 
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.font = `${Math.round(48 * s)}px sans-serif`;
+    ctx.font = `${Math.round(48 * s)}px ${FONT_FAMILY}`;
     ctx.fillStyle = grayColor(COLOR_BLACK);
     ctx.fillText(`${temp}${tempUnit}`, x + iconSize + Math.round(12 * s), y + iconSize / 2);
 
     // Row 2: detail chips
     const detailY = y + iconSize + Math.round(8 * s);
     const chipGap = Math.round(20 * s);
-    ctx.font = `${Math.round(16 * s)}px sans-serif`;
+    ctx.font = `${Math.round(16 * s)}px ${FONT_FAMILY}`;
     ctx.fillStyle = grayColor(COLOR_BLACK);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -945,7 +966,7 @@ class EinkDashboardCard extends HTMLElement {
         const dt = new Date(yr, mo - 1, dy);
         dayLabel = DAY_ABBREV[(dt.getDay() + 6) % 7];
       }
-      ctx.font = `${Math.round(16 * s)}px sans-serif`;
+      ctx.font = `${Math.round(16 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_GRAY);
       ctx.textBaseline = "top";
       ctx.textAlign = "center";
@@ -953,14 +974,14 @@ class EinkDashboardCard extends HTMLElement {
 
       // Condition icon
       const dayIcon = CONDITION_ICONS[day.condition] || "?";
-      ctx.font = `${Math.round(28 * s)}px sans-serif`;
+      ctx.font = `${Math.round(28 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
       ctx.fillText(dayIcon, cx, forecastY + Math.round(34 * s));
 
       // High temp
       const hi = day.temperature ?? "";
-      ctx.font = `${Math.round(16 * s)}px sans-serif`;
+      ctx.font = `${Math.round(16 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "top";
       ctx.fillText(hi !== "" ? `${hi}°` : "", cx, forecastY + Math.round(52 * s));
@@ -973,7 +994,7 @@ class EinkDashboardCard extends HTMLElement {
       // Precipitation
       const precip = day.precipitation;
       if (precip != null && precip > 0) {
-        ctx.font = `${Math.round(14 * s)}px sans-serif`;
+        ctx.font = `${Math.round(14 * s)}px ${FONT_FAMILY}`;
         ctx.fillStyle = grayColor(COLOR_GRAY);
         ctx.fillText(`${precip}${precipUnit}`, cx, forecastY + Math.round(88 * s));
       }
@@ -989,8 +1010,8 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? 22);
-    const s = fontSize / 22;
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_SENSOR_ROWS);
+    const s = fontSize / FONT_SIZE_SENSOR_ROWS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -999,7 +1020,7 @@ class EinkDashboardCard extends HTMLElement {
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.font = `${fontSize}px sans-serif`;
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
 
     if (title) {
       ctx.fillStyle = grayColor(COLOR_BLACK);
@@ -1039,7 +1060,7 @@ class EinkDashboardCard extends HTMLElement {
     const pctFloat = parseFloat(raw);
     if (isNaN(pctFloat)) return { x, y, w: 60, h: 20 };
     const pct = Math.max(0, Math.min(100, Math.floor(pctFloat)));
-    const fontSize = Math.max(1, widget.font_size ?? 14);
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_BATTERY_BAR);
     const color = widget.color ?? COLOR_BLACK;
 
     const bw = BATTERY_BODY_W;
@@ -1063,7 +1084,7 @@ class EinkDashboardCard extends HTMLElement {
     }
 
     // Label
-    ctx.font = `${fontSize}px sans-serif`;
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
     const labelW = ctx.measureText(`${pct}%`).width;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
@@ -1077,8 +1098,8 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? 18);
-    const s = fontSize / 18;
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_STATUS_ICONS);
+    const s = fontSize / FONT_SIZE_STATUS_ICONS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -1090,7 +1111,7 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = `${Math.round(22 * s)}px sans-serif`;
+      ctx.font = `${Math.round(22 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
       y += Math.round(STATUS_TITLE_ADVANCE * s);
@@ -1106,7 +1127,7 @@ class EinkDashboardCard extends HTMLElement {
       const deviceClass = attrs.device_class ?? "";
       const isProblem = isOn && PROBLEM_DEVICE_CLASSES.has(deviceClass);
 
-      ctx.font = `${fontSize}px sans-serif`;
+      ctx.font = `${fontSize}px ${FONT_FAMILY}`;
       const textW = ctx.measureText(label).width;
       const itemW = sz + Math.round(6 * s) + textW + Math.round(20 * s);
 
@@ -1138,8 +1159,8 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? 18);
-    const s = fontSize / 18;
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WASTE_SCHEDULE);
+    const s = fontSize / FONT_SIZE_WASTE_SCHEDULE;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
@@ -1151,7 +1172,7 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = `${Math.round(22 * s)}px sans-serif`;
+      ctx.font = `${Math.round(22 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
       y += Math.round(WASTE_TITLE_ADVANCE * s);
@@ -1182,7 +1203,7 @@ class EinkDashboardCard extends HTMLElement {
         ctx.stroke();
       }
 
-      ctx.font = `${fontSize}px sans-serif`;
+      ctx.font = `${fontSize}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(label, x + sz + Math.round(8 * s), y);
 

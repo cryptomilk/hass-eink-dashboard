@@ -50,9 +50,11 @@ class TestAsyncSetup:
 
         hass.http.async_register_static_paths.assert_called_once()
         configs = hass.http.async_register_static_paths.call_args.args[0]
-        assert len(configs) == 1
+        assert len(configs) == 2
         assert configs[0].url_path == "/eink_dashboard/frontend"
         assert configs[0].path.endswith("frontend")
+        assert configs[1].url_path == "/eink_dashboard/fonts"
+        assert configs[1].path.endswith("fonts")
 
     async def test_returns_true(self) -> None:
         hass = _make_hass()

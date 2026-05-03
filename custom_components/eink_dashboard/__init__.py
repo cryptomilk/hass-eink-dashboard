@@ -15,6 +15,7 @@ from .store import EinkDashboardStore
 PLATFORMS = ["image"]
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
+_FONTS_DIR = Path(__file__).parent / "fonts"
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -28,7 +29,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
                 "/eink_dashboard/frontend",
                 str(_FRONTEND_DIR),
                 False,
-            )
+            ),
+            StaticPathConfig(
+                "/eink_dashboard/fonts",
+                str(_FONTS_DIR),
+                True,
+            ),
         ]
     )
     add_extra_js_url(
