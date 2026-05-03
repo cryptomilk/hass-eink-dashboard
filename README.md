@@ -120,6 +120,32 @@ http://<ha-ip>:8123/api/eink_dashboard/<entry_id>/image.png
 
 This endpoint requires no authentication.
 
+### Kindle and HTTPS (nginx)
+
+Older Kindles cannot connect to modern HTTPS servers. If Home Assistant is
+behind an HTTPS reverse proxy, add an HTTP-only location for the image
+endpoint:
+
+```nginx
+server {
+    listen 80;
+    server_name homeassistant.example.com;
+
+    # E-Ink dashboard image — plain HTTP for Kindle
+    location ~ ^/api/eink_dashboard/[^/]+/image\.png$ {
+        proxy_pass http://127.0.0.1:8123;
+    }
+
+    # Everything else → HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+```
+
+This exposes only the unauthenticated image endpoint over HTTP. The
+authenticated layout API remains HTTPS-only.
+
 ## TRMNL setup
 
 1. Go to [usetrmnl.com](https://usetrmnl.com) → **Plugins** → **Webhook Image**.
