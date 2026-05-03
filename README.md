@@ -73,11 +73,12 @@ easiest setup is a dedicated Lovelace dashboard for each e-ink device.
      - title: E-Ink Dashboard
        cards:
          - type: custom:eink-dashboard-card
-           config_entry: <config_entry_id>
    ```
 
-   Replace `<config_entry_id>` with the entity ID of the image entity created
-   by the integration (e.g. `image.e_ink_dashboard`). Save.
+   The card auto-discovers the integration's config entry. If you have
+   multiple E-Ink Dashboard entries, add `config_entry: <entry_id>` to
+   select a specific one (the entry ID is visible in the integration URL).
+   Save.
 
 4. The card shows a live canvas preview at the exact pixel dimensions of your
    device.

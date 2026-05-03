@@ -106,9 +106,6 @@ class EinkDashboardCard extends HTMLElement {
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
 
   setConfig(config) {
-    if (!config.config_entry) {
-      throw new Error("config_entry is required");
-    }
     const entryChanged = this._config && this._config.config_entry !== config.config_entry;
     this._config = config;
     this._buildShadowDom();
@@ -292,7 +289,7 @@ class EinkDashboardCard extends HTMLElement {
     if (this._saving) return;
     this._saving = true;
     try {
-      const entryId = this._config.config_entry;
+      const entryId = this._resolvedEntryId;
       await this._hass.callApi(
         "POST",
         `eink_dashboard/${entryId}/layout`,
@@ -315,12 +312,34 @@ class EinkDashboardCard extends HTMLElement {
     }
   }
 
+  // ── Config entry resolution ────────────────────────────────────────────────
+
+  async _resolveEntryId() {
+    const configured = this._config.config_entry;
+    if (configured && !configured.includes(".")) {
+      return configured;
+    }
+    const entries = await this._hass.callWS({
+      type: "config_entries/get",
+      domain: "eink_dashboard",
+    });
+    if (!entries || entries.length === 0) {
+      throw new Error("No eink_dashboard config entries found");
+    }
+    if (configured) {
+      const match = entries.find((e) => e.entry_id === configured);
+      if (match) return match.entry_id;
+    }
+    return entries[0].entry_id;
+  }
+
   // ── Layout fetch ──────────────────────────────────────────────────────────
 
   async _fetchLayout() {
     this._fetching = true;
     try {
-      const entryId = this._config.config_entry;
+      const entryId = await this._resolveEntryId();
+      this._resolvedEntryId = entryId;
       const resp = await this._hass.callApi(
         "GET",
         `eink_dashboard/${entryId}/layout`,
@@ -667,7 +686,7 @@ class EinkDashboardCard extends HTMLElement {
     if (!this._canvas) return;
     this._showServerImage = !this._showServerImage;
     if (this._showServerImage) {
-      const entryId = this._config.config_entry;
+      const entryId = this._resolvedEntryId;
       if (this._layout?.widgets) {
         this._toggleBtn.disabled = true;
         try {
