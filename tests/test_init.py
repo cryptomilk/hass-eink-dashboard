@@ -49,9 +49,7 @@ class TestAsyncSetup:
         await async_setup(hass, {})
 
         hass.http.async_register_static_paths.assert_called_once()
-        configs = (
-            hass.http.async_register_static_paths.call_args.args[0]
-        )
+        configs = hass.http.async_register_static_paths.call_args.args[0]
         assert len(configs) == 1
         assert configs[0].url_path == "/eink_dashboard/frontend"
         assert configs[0].path.endswith("frontend")
@@ -74,9 +72,7 @@ class TestAsyncSetupEntry:
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(
-                return_value=widgets
-            )
+            MockStore.return_value.async_load = AsyncMock(return_value=widgets)
             await async_setup_entry(hass, entry)
 
         assert entry.entry_id in hass.data[DOMAIN]
@@ -92,9 +88,7 @@ class TestAsyncSetupEntry:
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(
-                return_value=[]
-            )
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
         assert hass.data[DOMAIN][entry.entry_id]["entry"] is entry
@@ -107,9 +101,7 @@ class TestAsyncSetupEntry:
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(
-                return_value=[]
-            )
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
         hass.config_entries.async_forward_entry_setups.assert_called_once_with(
@@ -124,9 +116,7 @@ class TestAsyncSetupEntry:
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(
-                return_value=[]
-            )
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
             result = await async_setup_entry(hass, entry)
 
         assert result is True

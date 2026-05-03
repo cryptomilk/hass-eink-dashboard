@@ -104,6 +104,21 @@ const WIDGET_TYPES = {
   },
 };
 
+// ── HA component loader ──────────────────────────────────────────────────────
+// Triggers HA's built-in card config elements to force lazy-load ha-form,
+// ha-selector, ha-entity-picker, and their dependencies.
+
+async function loadHaComponents() {
+  if (!customElements.get("ha-form")) {
+    const cls = customElements.get("hui-tile-card");
+    if (cls) await cls.getConfigElement();
+  }
+  if (!customElements.get("ha-entity-picker")) {
+    const cls = customElements.get("hui-entities-card");
+    if (cls) await cls.getConfigElement();
+  }
+}
+
 // ── Editor class ──────────────────────────────────────────────────────────────
 
 class EinkDashboardEditor extends HTMLElement {
@@ -145,7 +160,8 @@ class EinkDashboardEditor extends HTMLElement {
 
   // ── Shadow DOM ────────────────────────────────────────────────────────────
 
-  _buildShell() {
+  async _buildShell() {
+    await loadHaComponents();
     this.shadowRoot.innerHTML = `
       <style>
         :host { display: block; font-size: 14px; }
@@ -341,9 +357,9 @@ class EinkDashboardEditor extends HTMLElement {
     this._built = true;
   }
 
-  _rebuild() {
+  async _rebuild() {
     if (!this._built) {
-      this._buildShell();
+      await this._buildShell();
     }
     this._renderWidgetList();
   }
