@@ -1,6 +1,28 @@
 // E-Ink Dashboard Lovelace card — read-only canvas preview.
 // Mirrors the rendering logic from render.py using Canvas 2D.
 
+import type {
+  HomeAssistant,
+  HassEntity,
+  Widget,
+  TextWidget,
+  LineWidget,
+  SeparatorWidget,
+  WeatherWidget,
+  SensorRowsWidget,
+  BatteryBarWidget,
+  StatusIconsWidget,
+  WasteScheduleWidget,
+  LayoutResponse,
+  WidgetBounds,
+  IndexedBounds,
+  Handle,
+  ForecastDay,
+  ForecastServiceResult,
+  EinkEditorElement,
+  ConfigEntry,
+} from "./types/ha.js";
+
 const CARD_TAG = "eink-dashboard-card";
 
 // ── Constants (mirror const.py + render.py) ──────────────────────────────────
@@ -21,7 +43,7 @@ const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 
 let _robotoLoaded = false;
-async function _loadRoboto() {
+async function _loadRoboto(): Promise<void> {
   if (_robotoLoaded) return;
   try {
     const face = new FontFace("Roboto", `url(${ROBOTO_URL})`);
@@ -54,7 +76,7 @@ const WASTE_ICON_SIZE = 10;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-const CONDITION_ICONS = {
+const CONDITION_ICONS: Record<string, string> = {
   "sunny": "☀",
   "clear-night": "☾",
   "cloudy": "☁",
@@ -78,29 +100,29 @@ const GRID = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function snap(v) { return Math.round(v / GRID) * GRID; }
+export function snap(v: number): number { return Math.round(v / GRID) * GRID; }
 
-function grayColor(v) {
+export function grayColor(v: number): string {
   return `rgb(${v},${v},${v})`;
 }
 
 // Parse a raw state string as days-until-today.
 // Tries ISO date first, then integer. Returns null on failure.
-function parseDaysUntil(raw) {
+export function parseDaysUntil(raw: string): number | null {
   if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
     const [y, m, d] = raw.slice(0, 10).split("-").map(Number);
     const target = new Date(y, m - 1, d);
-    if (!isNaN(target)) {
+    if (!isNaN(target.getTime())) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      return Math.round((target - today) / 86400000);
+      return Math.round((target.getTime() - today.getTime()) / 86400000);
     }
   }
   const n = parseInt(raw, 10);
   return isNaN(n) ? null : n;
 }
 
-function formatRelativeDate(days, raw) {
+export function formatRelativeDate(days: number | null, raw: string): string {
   if (days === null || days < 0) return raw;
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";
@@ -109,45 +131,68 @@ function formatRelativeDate(days, raw) {
 
 // ── Card class ────────────────────────────────────────────────────────────────
 
+interface CardConfig {
+  config_entry?: string;
+}
+
+interface DragStart {
+  x: number;
+  y: number;
+  x2?: number;
+  y2?: number;
+}
+
+interface ResizeStart {
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  w?: number;
+}
+
+type MutableWidget = Widget & { x2?: number; y2?: number };
+
 class EinkDashboardCard extends HTMLElement {
+  private _config: CardConfig | null = null;
+  private _hass: HomeAssistant | null = null;
+  private _layout: LayoutResponse | null = null;
+  private _canvas: HTMLCanvasElement | null = null;
+  private _ctx: CanvasRenderingContext2D | null = null;
+  private _renderPending = false;
+  private _connected = false;
+  private _fetching = false;
+  private _showServerImage = false;
+  private _serverImg: HTMLImageElement | null = null;
+  private _container!: HTMLElement;
+  private _toggleBtn!: HTMLButtonElement;
+  private _editMode = false;
+  private _editor: EinkEditorElement | null = null;
+  private _editorContainer!: HTMLElement;
+  private _editBtn!: HTMLButtonElement;
+  private _saving = false;
+  private _saveError!: HTMLElement;
+  private _widgetBounds: IndexedBounds[] = [];
+  private _dragIndex = -1;
+  private _dragStartCX = 0;
+  private _dragStartCY = 0;
+  private _dragWidgetStart: DragStart | null = null;
+  private _hoverIndex = -1;
+  private _resizeIndex = -1;
+  private _resizeHandle: string | null = null;
+  private _resizeStartCX = 0;
+  private _resizeStartCY = 0;
+  private _resizeWidgetStart: ResizeStart | null = null;
+  private _forecasts: Record<string, ForecastDay[]> = {};
+  private _resolvedEntryId: string | undefined;
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._config = null;
-    this._hass = null;
-    this._layout = null;
-    this._canvas = null;
-    this._ctx = null;
-    this._renderPending = false;
-    this._connected = false;
-    this._fetching = false;
-    this._showServerImage = false;
-    this._serverImg = null;
-    this._container = null;
-    this._toggleBtn = null;
-    this._editMode = false;
-    this._editor = null;
-    this._editorContainer = null;
-    this._editBtn = null;
-    this._saving = false;
-    this._saveError = null;
-    this._widgetBounds = [];
-    this._dragIndex = -1;
-    this._dragStartCX = 0;
-    this._dragStartCY = 0;
-    this._dragWidgetStart = null;
-    this._hoverIndex = -1;
-    this._resizeIndex = -1;
-    this._resizeHandle = null;
-    this._resizeStartCX = 0;
-    this._resizeStartCY = 0;
-    this._resizeWidgetStart = null;
-    this._forecasts = {};
   }
 
   // ── Lovelace lifecycle ────────────────────────────────────────────────────
 
-  setConfig(config) {
+  setConfig(config: CardConfig): void {
     const entryChanged = this._config && this._config.config_entry !== config.config_entry;
     this._config = config;
     this._buildShadowDom();
@@ -163,7 +208,7 @@ class EinkDashboardCard extends HTMLElement {
     }
   }
 
-  set hass(hass) {
+  set hass(hass: HomeAssistant) {
     this._hass = hass;
     if (this._editor) {
       this._editor.hass = hass;
@@ -176,18 +221,18 @@ class EinkDashboardCard extends HTMLElement {
     }
   }
 
-  connectedCallback() {
+  connectedCallback(): void {
     this._connected = true;
     if (this._layout) {
       this._scheduleRender();
     }
   }
 
-  disconnectedCallback() {
+  disconnectedCallback(): void {
     this._connected = false;
   }
 
-  getCardSize() {
+  getCardSize(): number {
     if (this._layout) {
       return Math.ceil(this._layout.display.height / 50);
     }
@@ -196,8 +241,8 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Shadow DOM ────────────────────────────────────────────────────────────
 
-  _buildShadowDom() {
-    this.shadowRoot.innerHTML = `
+  private _buildShadowDom(): void {
+    this.shadowRoot!.innerHTML = `
       <style>
         :host { display: block; }
         ha-card { display: block; overflow: hidden; }
@@ -275,26 +320,27 @@ class EinkDashboardCard extends HTMLElement {
         <div class="save-error"></div>
       </ha-card>
     `;
-    this._container = this.shadowRoot.querySelector(".container");
-    this._toggleBtn = this.shadowRoot.querySelector(".toggle-btn");
+    this._container = this.shadowRoot!.querySelector<HTMLElement>(".container")!;
+    this._toggleBtn = this.shadowRoot!.querySelector<HTMLButtonElement>(".toggle-btn")!;
     this._toggleBtn.addEventListener("click", () => this._onToggle());
-    this._editBtn = this.shadowRoot.querySelector(".edit-btn");
+    this._editBtn = this.shadowRoot!.querySelector<HTMLButtonElement>(".edit-btn")!;
     this._editBtn.addEventListener("click", () => this._onToggleEdit());
-    this._editorContainer = this.shadowRoot.querySelector(".editor-container");
-    this._saveError = this.shadowRoot.querySelector(".save-error");
+    this._editorContainer = this.shadowRoot!.querySelector<HTMLElement>(".editor-container")!;
+    this._saveError = this.shadowRoot!.querySelector<HTMLElement>(".save-error")!;
   }
 
   // ── Edit mode ─────────────────────────────────────────────────────────────
 
-  async _ensureEditorLoaded() {
+  private async _ensureEditorLoaded(): Promise<void> {
     if (customElements.get("eink-dashboard-editor")) return;
     const script = document.createElement("script");
+    script.type = "module";
     script.src = "/eink_dashboard/frontend/eink-dashboard-editor.js";
     document.head.appendChild(script);
     await customElements.whenDefined("eink-dashboard-editor");
   }
 
-  async _onToggleEdit() {
+  private async _onToggleEdit(): Promise<void> {
     if (!this._layout) return;
     this._editMode = !this._editMode;
     if (this._editMode) {
@@ -303,12 +349,12 @@ class EinkDashboardCard extends HTMLElement {
       this._editBtn.classList.add("active");
       this._editorContainer.style.display = "block";
       if (!this._editor) {
-        this._editor = document.createElement("eink-dashboard-editor");
+        this._editor = document.createElement("eink-dashboard-editor") as unknown as EinkEditorElement;
         this._editor.addEventListener(
-          "widget-change", (ev) => this._onWidgetChange(ev)
+          "widget-change", (ev) => this._onWidgetChange(ev as CustomEvent<{ widgets: Widget[] }>)
         );
         this._editor.addEventListener(
-          "save", (ev) => this._onSave(ev)
+          "save", (ev) => this._onSave(ev as CustomEvent<{ widgets: Widget[] }>)
         );
         this._editor.setWidgets(this._layout.widgets);
         this._editor.setDisplay(this._layout.display);
@@ -322,17 +368,17 @@ class EinkDashboardCard extends HTMLElement {
     }
   }
 
-  _onWidgetChange(ev) {
-    this._layout.widgets = ev.detail.widgets;
+  private _onWidgetChange(ev: CustomEvent<{ widgets: Widget[] }>): void {
+    this._layout!.widgets = ev.detail.widgets;
     this._scheduleRender();
   }
 
-  async _onSave(ev) {
+  private async _onSave(ev: CustomEvent<{ widgets: Widget[] }>): Promise<void> {
     if (this._saving) return;
     this._saving = true;
     try {
       const entryId = this._resolvedEntryId;
-      await this._hass.callApi(
+      await this._hass!.callApi(
         "POST",
         `eink_dashboard/${entryId}/layout`,
         ev.detail.widgets,
@@ -342,13 +388,11 @@ class EinkDashboardCard extends HTMLElement {
         this._editor.setWidgets(this._layout.widgets);
         this._editor.setDisplay(this._layout.display);
       }
-      if (this._saveError) this._saveError.style.display = "none";
+      this._saveError.style.display = "none";
     } catch (err) {
       console.error("Failed to save layout:", err);
-      if (this._saveError) {
-        this._saveError.textContent = `Save failed: ${err.message || err}`;
-        this._saveError.style.display = "block";
-      }
+      this._saveError.textContent = `Save failed: ${(err as Error).message || err}`;
+      this._saveError.style.display = "block";
     } finally {
       this._saving = false;
     }
@@ -356,12 +400,12 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Config entry resolution ────────────────────────────────────────────────
 
-  async _resolveEntryId() {
-    const configured = this._config.config_entry;
+  private async _resolveEntryId(): Promise<string> {
+    const configured = this._config!.config_entry;
     if (configured && !configured.includes(".")) {
       return configured;
     }
-    const entries = await this._hass.callWS({
+    const entries = await this._hass!.callWS<ConfigEntry[]>({
       type: "config_entries/get",
       domain: "eink_dashboard",
     });
@@ -377,13 +421,13 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Layout fetch ──────────────────────────────────────────────────────────
 
-  async _fetchLayout() {
+  private async _fetchLayout(): Promise<void> {
     this._fetching = true;
     try {
       await _loadRoboto();
       const entryId = await this._resolveEntryId();
       this._resolvedEntryId = entryId;
-      const resp = await this._hass.callApi(
+      const resp = await this._hass!.callApi<LayoutResponse>(
         "GET",
         `eink_dashboard/${entryId}/layout`,
       );
@@ -394,19 +438,19 @@ class EinkDashboardCard extends HTMLElement {
     } catch (err) {
       const div = document.createElement("div");
       div.className = "error";
-      div.textContent = `Failed to load layout: ${err.message}`;
+      div.textContent = `Failed to load layout: ${(err as Error).message}`;
       this._container.replaceChildren(div);
     } finally {
       this._fetching = false;
     }
   }
 
-  async _fetchForecasts() {
+  private async _fetchForecasts(): Promise<void> {
     if (!this._layout || !this._hass) return;
     for (const w of this._layout.widgets) {
       if (w.type !== "weather" || !w.entity) continue;
       try {
-        const resp = await this._hass.callService(
+        const resp = await this._hass.callService<ForecastServiceResult>(
           "weather", "get_forecasts",
           { entity_id: w.entity, type: "daily" },
           undefined, false, true,
@@ -420,8 +464,8 @@ class EinkDashboardCard extends HTMLElement {
     }
   }
 
-  _initCanvas() {
-    const { width, height } = this._layout.display;
+  private _initCanvas(): void {
+    const { width, height } = this._layout!.display;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
@@ -432,8 +476,8 @@ class EinkDashboardCard extends HTMLElement {
     canvas.addEventListener("pointerdown", (e) => this._onPointerDown(e));
     canvas.addEventListener("pointermove", (e) => this._onPointerMove(e));
     canvas.addEventListener("pointerup", (e) => this._onPointerUp(e));
-    canvas.addEventListener("pointercancel", (e) => this._onPointerCancel(e));
-    canvas.addEventListener("pointerleave", (e) => this._onPointerLeave(e));
+    canvas.addEventListener("pointercancel", () => this._onPointerCancel());
+    canvas.addEventListener("pointerleave", () => this._onPointerLeave());
 
     const img = document.createElement("img");
     img.className = "server-render";
@@ -447,17 +491,17 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Drag-to-reposition ────────────────────────────────────────────────────
 
-  _canvasCoords(event) {
-    const rect = this._canvas.getBoundingClientRect();
-    const scaleX = this._canvas.width / rect.width;
-    const scaleY = this._canvas.height / rect.height;
+  private _canvasCoords(event: PointerEvent): { x: number; y: number } {
+    const rect = this._canvas!.getBoundingClientRect();
+    const scaleX = this._canvas!.width / rect.width;
+    const scaleY = this._canvas!.height / rect.height;
     return {
       x: (event.clientX - rect.left) * scaleX,
       y: (event.clientY - rect.top) * scaleY,
     };
   }
 
-  _hitTest(cx, cy) {
+  private _hitTest(cx: number, cy: number): number {
     for (let i = this._widgetBounds.length - 1; i >= 0; i--) {
       const b = this._widgetBounds[i];
       if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
@@ -467,7 +511,7 @@ class EinkDashboardCard extends HTMLElement {
     return -1;
   }
 
-  _getHandles(bounds, widget) {
+  private _getHandles(bounds: WidgetBounds, widget: Widget): Handle[] {
     if (widget.type === "line") {
       return [
         { id: "p1", cx: widget.x ?? 0, cy: widget.y ?? 0 },
@@ -483,10 +527,10 @@ class EinkDashboardCard extends HTMLElement {
     ];
   }
 
-  _handleHitTest(cx, cy) {
+  private _handleHitTest(cx: number, cy: number): { index: number; handleId: string } | null {
     for (let i = this._widgetBounds.length - 1; i >= 0; i--) {
       const b = this._widgetBounds[i];
-      const widget = this._layout.widgets[b.index];
+      const widget = this._layout!.widgets[b.index];
       for (const h of this._getHandles(b, widget)) {
         const dx = cx - h.cx;
         const dy = cy - h.cy;
@@ -498,20 +542,20 @@ class EinkDashboardCard extends HTMLElement {
     return null;
   }
 
-  _getResizeCursor(handleId) {
+  private _getResizeCursor(handleId: string): string {
     if (handleId === "p1" || handleId === "p2") return "crosshair";
     return "ew-resize";
   }
 
-  _onPointerDown(event) {
+  private _onPointerDown(event: PointerEvent): void {
     if (!this._editMode || this._showServerImage || !this._layout) return;
     const { x: cx, y: cy } = this._canvasCoords(event);
 
     const handleHit = this._handleHitTest(cx, cy);
     if (handleHit) {
       event.preventDefault();
-      this._canvas.setPointerCapture(event.pointerId);
-      const w = this._layout.widgets[handleHit.index];
+      this._canvas!.setPointerCapture(event.pointerId);
+      const w = this._layout.widgets[handleHit.index] as MutableWidget;
       this._resizeIndex = handleHit.index;
       this._resizeHandle = handleHit.handleId;
       this._resizeStartCX = cx;
@@ -521,15 +565,15 @@ class EinkDashboardCard extends HTMLElement {
         x2: w.x2 ?? 0, y2: w.y2 ?? 0,
         w: w.w,
       };
-      this._canvas.style.cursor = this._getResizeCursor(handleHit.handleId);
+      this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId);
       return;
     }
 
     const idx = this._hitTest(cx, cy);
     if (idx < 0) return;
     event.preventDefault();
-    this._canvas.setPointerCapture(event.pointerId);
-    const w = this._layout.widgets[idx];
+    this._canvas!.setPointerCapture(event.pointerId);
+    const w = this._layout.widgets[idx] as MutableWidget;
     this._dragIndex = idx;
     this._dragStartCX = cx;
     this._dragStartCY = cy;
@@ -539,10 +583,10 @@ class EinkDashboardCard extends HTMLElement {
       x2: w.x2,
       y2: w.y2,
     };
-    this._canvas.style.cursor = "grabbing";
+    this._canvas!.style.cursor = "grabbing";
   }
 
-  _onPointerMove(event) {
+  private _onPointerMove(event: PointerEvent): void {
     if (!this._editMode || this._showServerImage || !this._layout) return;
     const { x: cx, y: cy } = this._canvasCoords(event);
 
@@ -550,8 +594,8 @@ class EinkDashboardCard extends HTMLElement {
       event.preventDefault();
       const dx = Math.round(cx - this._resizeStartCX);
       const dy = Math.round(cy - this._resizeStartCY);
-      const w = this._layout.widgets[this._resizeIndex];
-      const s = this._resizeWidgetStart;
+      const w = this._layout.widgets[this._resizeIndex] as MutableWidget;
+      const s = this._resizeWidgetStart!;
       const { width: dw, height: dh } = this._layout.display;
       const handle = this._resizeHandle;
 
@@ -569,7 +613,7 @@ class EinkDashboardCard extends HTMLElement {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newX = Math.max(0, Math.min(startRight - 20, s.x + dx));
         w.x = snap(Math.round(newX));
-        w.w = snap(Math.round(startRight - w.x));
+        w.w = snap(Math.round(startRight - (w.x ?? 0)));
       }
       this._scheduleRender();
       return;
@@ -579,14 +623,14 @@ class EinkDashboardCard extends HTMLElement {
       event.preventDefault();
       const dx = Math.round(cx - this._dragStartCX);
       const dy = Math.round(cy - this._dragStartCY);
-      const w = this._layout.widgets[this._dragIndex];
-      const s = this._dragWidgetStart;
+      const w = this._layout.widgets[this._dragIndex] as MutableWidget;
+      const s = this._dragWidgetStart!;
       const { width, height } = this._layout.display;
       w.x = snap(Math.max(0, Math.min(width - 1, s.x + dx)));
       w.y = snap(Math.max(0, Math.min(height - 1, s.y + dy)));
       if (s.x2 !== undefined) {
         w.x2 = snap(Math.max(0, Math.min(width - 1, s.x2 + dx)));
-        w.y2 = snap(Math.max(0, Math.min(height - 1, s.y2 + dy)));
+        w.y2 = snap(Math.max(0, Math.min(height - 1, (s.y2 ?? 0) + dy)));
       }
       this._scheduleRender();
     } else {
@@ -596,48 +640,48 @@ class EinkDashboardCard extends HTMLElement {
           this._hoverIndex = handleHit.index;
           this._scheduleRender();
         }
-        this._canvas.style.cursor = this._getResizeCursor(handleHit.handleId);
+        this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId);
         return;
       }
       const hoverIdx = this._hitTest(cx, cy);
       if (hoverIdx !== this._hoverIndex) {
         this._hoverIndex = hoverIdx;
-        this._canvas.style.cursor = hoverIdx >= 0 ? "grab" : "";
+        this._canvas!.style.cursor = hoverIdx >= 0 ? "grab" : "";
         this._scheduleRender();
       }
     }
   }
 
-  _onPointerUp(event) {
+  private _onPointerUp(event: PointerEvent): void {
     if (this._resizeIndex >= 0) {
-      this._canvas.releasePointerCapture(event.pointerId);
+      this._canvas!.releasePointerCapture(event.pointerId);
       this._resizeIndex = -1;
       this._resizeHandle = null;
       this._resizeWidgetStart = null;
       this._hoverIndex = -1;
-      this._canvas.style.cursor = "";
+      this._canvas!.style.cursor = "";
       this._scheduleRender();
       if (this._editor) {
-        this._editor.setWidgets(this._layout.widgets);
+        this._editor.setWidgets(this._layout!.widgets);
       }
       return;
     }
     if (this._dragIndex < 0) return;
-    this._canvas.releasePointerCapture(event.pointerId);
+    this._canvas!.releasePointerCapture(event.pointerId);
     this._dragIndex = -1;
     this._dragWidgetStart = null;
     this._hoverIndex = -1;
-    this._canvas.style.cursor = "";
+    this._canvas!.style.cursor = "";
     this._scheduleRender();
     if (this._editor) {
-      this._editor.setWidgets(this._layout.widgets);
+      this._editor.setWidgets(this._layout!.widgets);
     }
   }
 
-  _onPointerCancel() {
+  private _onPointerCancel(): void {
     if (this._resizeIndex >= 0) {
-      const w = this._layout.widgets[this._resizeIndex];
-      const s = this._resizeWidgetStart;
+      const w = this._layout!.widgets[this._resizeIndex] as MutableWidget;
+      const s = this._resizeWidgetStart!;
       w.x = s.x;
       w.w = s.w;
       w.x2 = s.x2;
@@ -646,7 +690,7 @@ class EinkDashboardCard extends HTMLElement {
       this._resizeHandle = null;
       this._resizeWidgetStart = null;
       this._hoverIndex = -1;
-      this._canvas.style.cursor = "";
+      this._canvas!.style.cursor = "";
       this._scheduleRender();
       return;
     }
@@ -654,22 +698,22 @@ class EinkDashboardCard extends HTMLElement {
     this._dragIndex = -1;
     this._dragWidgetStart = null;
     this._hoverIndex = -1;
-    this._canvas.style.cursor = "";
+    this._canvas!.style.cursor = "";
     this._scheduleRender();
   }
 
-  _onPointerLeave(event) {
+  private _onPointerLeave(): void {
     if (this._dragIndex >= 0 || this._resizeIndex >= 0) return;
     if (this._hoverIndex >= 0) {
       this._hoverIndex = -1;
-      this._canvas.style.cursor = "";
+      this._canvas!.style.cursor = "";
       this._scheduleRender();
     }
   }
 
   // ── Render scheduling ─────────────────────────────────────────────────────
 
-  _scheduleRender() {
+  private _scheduleRender(): void {
     if (!this._connected || !this._layout || this._showServerImage) return;
     if (this._renderPending) return;
     this._renderPending = true;
@@ -679,7 +723,7 @@ class EinkDashboardCard extends HTMLElement {
     });
   }
 
-  _render() {
+  private _render(): void {
     if (!this._ctx || !this._layout || !this._hass) return;
     const ctx = this._ctx;
     const { width, height } = this._layout.display;
@@ -701,15 +745,15 @@ class EinkDashboardCard extends HTMLElement {
       ctx.restore();
     }
 
-    const dispatch = {
-      text: (w) => this._renderText(ctx, w),
-      line: (w) => this._renderLine(ctx, w),
-      separator: (w) => this._renderSeparator(ctx, w),
-      weather: (w) => this._renderWeather(ctx, w),
-      sensor_rows: (w) => this._renderSensorRows(ctx, w),
-      battery_bar: (w) => this._renderBatteryBar(ctx, w),
-      status_icons: (w) => this._renderStatusIcons(ctx, w),
-      waste_schedule: (w) => this._renderWasteSchedule(ctx, w),
+    const dispatch: Partial<Record<string, (w: Widget) => WidgetBounds>> = {
+      text: (w) => this._renderText(ctx, w as TextWidget),
+      line: (w) => this._renderLine(ctx, w as LineWidget),
+      separator: (w) => this._renderSeparator(ctx, w as SeparatorWidget),
+      weather: (w) => this._renderWeather(ctx, w as WeatherWidget),
+      sensor_rows: (w) => this._renderSensorRows(ctx, w as SensorRowsWidget),
+      battery_bar: (w) => this._renderBatteryBar(ctx, w as BatteryBarWidget),
+      status_icons: (w) => this._renderStatusIcons(ctx, w as StatusIconsWidget),
+      waste_schedule: (w) => this._renderWasteSchedule(ctx, w as WasteScheduleWidget),
     };
 
     this._widgetBounds = [];
@@ -759,7 +803,7 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Server image toggle ───────────────────────────────────────────────────
 
-  async _onToggle() {
+  private async _onToggle(): Promise<void> {
     if (!this._canvas) return;
     this._showServerImage = !this._showServerImage;
     if (this._showServerImage) {
@@ -767,7 +811,7 @@ class EinkDashboardCard extends HTMLElement {
       if (this._layout?.widgets) {
         this._toggleBtn.disabled = true;
         try {
-          await this._hass.callApi(
+          await this._hass!.callApi(
             "POST",
             `eink_dashboard/${entryId}/layout`,
             this._layout.widgets,
@@ -780,13 +824,13 @@ class EinkDashboardCard extends HTMLElement {
         }
         this._toggleBtn.disabled = false;
       }
-      this._serverImg.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
+      this._serverImg!.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
       this._canvas.style.display = "none";
-      this._serverImg.style.display = "block";
+      this._serverImg!.style.display = "block";
       this._toggleBtn.textContent = "Show canvas preview";
       this._toggleBtn.classList.add("active");
     } else {
-      this._serverImg.style.display = "none";
+      this._serverImg!.style.display = "none";
       this._canvas.style.display = "block";
       this._toggleBtn.textContent = "Show rendered image";
       this._toggleBtn.classList.remove("active");
@@ -796,22 +840,22 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── State helper ──────────────────────────────────────────────────────────
 
-  _getState(entityId) {
-    const s = this._hass.states[entityId];
+  private _getState(entityId: string): HassEntity | null {
+    const s = this._hass!.states[entityId];
     return s || null;
   }
 
   // ── Widget renderers ──────────────────────────────────────────────────────
 
   // mirrors render.py: render_text (lines 77-100)
-  _renderText(ctx, widget) {
+  private _renderText(ctx: CanvasRenderingContext2D, widget: TextWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
     const text = String(widget.text ?? "");
     const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_TEXT);
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
-    const width = this._layout.display.width;
+    const width = this._layout!.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.font = `${fontSize}px ${FONT_FAMILY}`;
@@ -834,7 +878,7 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_line (lines 103-114)
-  _renderLine(ctx, widget) {
+  private _renderLine(ctx: CanvasRenderingContext2D, widget: LineWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
     const x2 = widget.x2 ?? x;
@@ -857,11 +901,11 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_separator (lines 117-126)
-  _renderSeparator(ctx, widget) {
+  private _renderSeparator(ctx: CanvasRenderingContext2D, widget: SeparatorWidget): WidgetBounds {
     const y = widget.y ?? 0;
     const color = widget.color ?? COLOR_LIGHT_GRAY;
     const x0 = widget.x ?? PADDING;
-    const x1 = widget.w != null ? (x0 + widget.w) : (this._layout.display.width - PADDING);
+    const x1 = widget.w != null ? (x0 + widget.w) : (this._layout!.display.width - PADDING);
 
     ctx.beginPath();
     ctx.moveTo(x0, y);
@@ -873,7 +917,7 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_weather
-  _renderWeather(ctx, widget) {
+  private _renderWeather(ctx: CanvasRenderingContext2D, widget: WeatherWidget): WidgetBounds {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
     const x = widget.x ?? PADDING;
@@ -884,11 +928,11 @@ class EinkDashboardCard extends HTMLElement {
 
     let y = origY;
     const forecastDays = widget.forecast_days ?? 5;
-    const width = this._layout.display.width;
+    const width = this._layout!.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     const condition = stateObj.state ?? "";
-    const attrs = stateObj.attributes ?? {};
+    const attrs = stateObj.attributes as Record<string, string | number | null>;
     const temp = attrs.temperature ?? "--";
     const tempUnit = attrs.temperature_unit ?? "°C";
     const humidity = attrs.humidity;
@@ -922,7 +966,7 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textAlign = "left";
 
     const DETAIL_ICONS = { humidity: "\u{1F4A7}", barometer: "◉", wind: "\u{1F32C}︎", cloud: "☁" };
-    const chips = [];
+    const chips: Array<{ sym: string; text: string }> = [];
     if (humidity != null) chips.push({ sym: DETAIL_ICONS.humidity, text: `${humidity}%` });
     if (pressure != null) chips.push({ sym: DETAIL_ICONS.barometer, text: `${pressure}${pressureUnit}` });
     if (wind != null) chips.push({ sym: DETAIL_ICONS.wind, text: `${wind}${windUnit}` });
@@ -937,7 +981,7 @@ class EinkDashboardCard extends HTMLElement {
     }
 
     // Forecast
-    const forecast = this._forecasts[entityId] || attrs.forecast || [];
+    const forecast = this._forecasts[entityId] || (attrs.forecast as ForecastDay[] | null) || [];
     if (!forecast.length || forecastDays <= 0) {
       return { x, y: origY, w: rightEdge - x, h: detailY + Math.round(20 * s) - origY };
     }
@@ -953,7 +997,7 @@ class EinkDashboardCard extends HTMLElement {
 
     const forecastY = separatorY + Math.round(6 * s);
     const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
-    const precipUnit = attrs.precipitation_unit ?? "mm";
+    const precipUnit = String(attrs.precipitation_unit ?? "mm");
 
     for (let i = 0; i < Math.min(forecastDays, forecast.length); i++) {
       const day = forecast[i];
@@ -973,7 +1017,7 @@ class EinkDashboardCard extends HTMLElement {
       ctx.fillText(dayLabel, cx, forecastY);
 
       // Condition icon
-      const dayIcon = CONDITION_ICONS[day.condition] || "?";
+      const dayIcon = CONDITION_ICONS[day.condition ?? ""] || "?";
       ctx.font = `${Math.round(28 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
@@ -1006,17 +1050,17 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_sensor_rows
-  _renderSensorRows(ctx, widget) {
+  private _renderSensorRows(ctx: CanvasRenderingContext2D, widget: SensorRowsWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
     const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_SENSOR_ROWS);
-    const s = fontSize / FONT_SIZE_SENSOR_ROWS;
+    const sc = fontSize / FONT_SIZE_SENSOR_ROWS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout.display.width;
+    const width = this._layout!.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
-    const rowHeight = Math.round(SENSOR_ROW_HEIGHT * s);
+    const rowHeight = Math.round(SENSOR_ROW_HEIGHT * sc);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -1025,20 +1069,20 @@ class EinkDashboardCard extends HTMLElement {
     if (title) {
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += Math.round(SENSOR_TITLE_ADVANCE * s);
+      y += Math.round(SENSOR_TITLE_ADVANCE * sc);
     }
 
     for (const entityId of entityIds) {
       const stateObj = this._getState(entityId);
       if (!stateObj) continue;
-      const attrs = stateObj.attributes ?? {};
-      const label = attrs.friendly_name ?? entityId;
+      const attrs = stateObj.attributes as Record<string, string | null>;
+      const label = String(attrs.friendly_name ?? entityId);
       const value = stateObj.state ?? "";
-      const unit = attrs.unit_of_measurement ?? "";
+      const unit = String(attrs.unit_of_measurement ?? "");
       const displayVal = unit ? `${value}${unit}` : value;
 
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + Math.round(16 * s), y);
+      ctx.fillText(label, x + Math.round(16 * sc), y);
 
       const valW = ctx.measureText(displayVal).width;
       ctx.fillText(displayVal, rightEdge - PADDING - valW, y);
@@ -1049,7 +1093,7 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_battery_bar
-  _renderBatteryBar(ctx, widget) {
+  private _renderBatteryBar(ctx: CanvasRenderingContext2D, widget: BatteryBarWidget): WidgetBounds {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
     const x = widget.x ?? PADDING;
@@ -1094,49 +1138,49 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_status_icons
-  _renderStatusIcons(ctx, widget) {
+  private _renderStatusIcons(ctx: CanvasRenderingContext2D, widget: StatusIconsWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
     const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_STATUS_ICONS);
-    const s = fontSize / FONT_SIZE_STATUS_ICONS;
+    const sc = fontSize / FONT_SIZE_STATUS_ICONS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout.display.width;
+    const width = this._layout!.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
-    const sz = Math.round(STATUS_ICON_SIZE * s);
-    const rowH = Math.round(STATUS_ROW_HEIGHT * s);
+    const sz = Math.round(STATUS_ICON_SIZE * sc);
+    const rowH = Math.round(STATUS_ROW_HEIGHT * sc);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = `${Math.round(22 * s)}px ${FONT_FAMILY}`;
+      ctx.font = `${Math.round(22 * sc)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += Math.round(STATUS_TITLE_ADVANCE * s);
+      y += Math.round(STATUS_TITLE_ADVANCE * sc);
     }
 
     let curX = x;
     for (const entityId of entityIds) {
       const stateObj = this._getState(entityId);
       if (!stateObj) continue;
-      const attrs = stateObj.attributes ?? {};
-      const label = attrs.friendly_name ?? entityId;
+      const attrs = stateObj.attributes as Record<string, string | null>;
+      const label = String(attrs.friendly_name ?? entityId);
       const isOn = stateObj.state === "on";
-      const deviceClass = attrs.device_class ?? "";
+      const deviceClass = String(attrs.device_class ?? "");
       const isProblem = isOn && PROBLEM_DEVICE_CLASSES.has(deviceClass);
 
       ctx.font = `${fontSize}px ${FONT_FAMILY}`;
       const textW = ctx.measureText(label).width;
-      const itemW = sz + Math.round(6 * s) + textW + Math.round(20 * s);
+      const itemW = sz + Math.round(6 * sc) + textW + Math.round(20 * sc);
 
       if (curX + itemW > rightEdge - PADDING && curX > x) {
         curX = x;
         y += rowH;
       }
 
-      const iconTop = y + Math.round(4 * s);
+      const iconTop = y + Math.round(4 * sc);
       if (isProblem) {
         ctx.fillStyle = grayColor(COLOR_BLACK);
         ctx.fillRect(curX, iconTop, sz, sz);
@@ -1147,7 +1191,7 @@ class EinkDashboardCard extends HTMLElement {
       }
 
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, curX + sz + Math.round(6 * s), y);
+      ctx.fillText(label, curX + sz + Math.round(6 * sc), y);
 
       curX += itemW;
     }
@@ -1155,45 +1199,45 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_waste_schedule
-  _renderWasteSchedule(ctx, widget) {
+  private _renderWasteSchedule(ctx: CanvasRenderingContext2D, widget: WasteScheduleWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
     const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WASTE_SCHEDULE);
-    const s = fontSize / FONT_SIZE_WASTE_SCHEDULE;
+    const sc = fontSize / FONT_SIZE_WASTE_SCHEDULE;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout.display.width;
+    const width = this._layout!.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
-    const sz = Math.round(WASTE_ICON_SIZE * s);
-    const rowH = Math.round(WASTE_ROW_HEIGHT * s);
+    const sz = Math.round(WASTE_ICON_SIZE * sc);
+    const rowH = Math.round(WASTE_ROW_HEIGHT * sc);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = `${Math.round(22 * s)}px ${FONT_FAMILY}`;
+      ctx.font = `${Math.round(22 * sc)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += Math.round(WASTE_TITLE_ADVANCE * s);
+      y += Math.round(WASTE_TITLE_ADVANCE * sc);
     }
 
     for (const entityId of entityIds) {
       const stateObj = this._getState(entityId);
       if (!stateObj) continue;
-      const attrs = stateObj.attributes ?? {};
-      const label = attrs.friendly_name ?? entityId;
+      const attrs = stateObj.attributes as Record<string, string | null>;
+      const label = String(attrs.friendly_name ?? entityId);
       const raw = stateObj.state ?? "";
 
       const days = parseDaysUntil(raw);
       if (days !== null && (days < 0 || days > 3)) continue;
 
-      const cx = x + sz / 2;
-      const cy = y + Math.round(6 * s) + sz / 2;
+      const wcx = x + sz / 2;
+      const wcy = y + Math.round(6 * sc) + sz / 2;
       const r = sz / 2;
 
       ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+      ctx.arc(wcx, wcy, r, 0, 2 * Math.PI);
       if (days !== null && days <= 1) {
         ctx.fillStyle = grayColor(COLOR_BLACK);
         ctx.fill();
@@ -1205,7 +1249,7 @@ class EinkDashboardCard extends HTMLElement {
 
       ctx.font = `${fontSize}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + sz + Math.round(8 * s), y);
+      ctx.fillText(label, x + sz + Math.round(8 * sc), y);
 
       const dateStr = formatRelativeDate(days, raw);
       const dateW = ctx.measureText(dateStr).width;

@@ -9,3 +9,7 @@ dist/
 /EINK_DASHBOARD.md
 custom_components/eink_dashboard/icons/
 custom_components/eink_dashboard/fonts/
+node_modules/
+custom_components/eink_dashboard/frontend/eink-dashboard-card.js
+custom_components/eink_dashboard/frontend/eink-dashboard-editor.js
+custom_components/eink_dashboard/frontend/*.js.map

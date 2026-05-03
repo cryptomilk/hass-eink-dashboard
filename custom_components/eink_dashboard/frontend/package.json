@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2",
+    "jsdom": "^26.1",
+    "typescript": "^5.7",
+    "vitest": "^3.2"
+  }
+}

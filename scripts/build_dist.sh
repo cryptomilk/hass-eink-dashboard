@@ -22,13 +22,19 @@ DIST_DIR="${REPO_ROOT}/dist"
 VERSION=$(python3 -c "import json; print(json.load(open('${COMPONENT_DIR}/manifest.json'))['version'])")
 ARCHIVE="${DIST_DIR}/eink_dashboard-${VERSION}.tar.gz"
 
+FRONTEND_DIR="${COMPONENT_DIR}/frontend"
 ROBOTO_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
 
 cleanup() {
     echo "Cleaning up generated assets..."
     rm -rf "${ICONS_DIR}"
+    rm -f "${FRONTEND_DIR}/eink-dashboard-card.js" "${FRONTEND_DIR}/eink-dashboard-card.js.map"
+    rm -f "${FRONTEND_DIR}/eink-dashboard-editor.js" "${FRONTEND_DIR}/eink-dashboard-editor.js.map"
 }
 trap cleanup EXIT
+
+echo "==> Building frontend TypeScript..."
+(cd "${FRONTEND_DIR}" && pnpm install --frozen-lockfile && pnpm build)
 
 echo "==> Building icons..."
 python3 "${REPO_ROOT}/scripts/build_icons.py"

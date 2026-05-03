@@ -53,3 +53,22 @@ jobs:
           cache-dependency-path: tox.ini
       - run: pip install tox
       - run: tox -e test
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: custom_components/eink_dashboard/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: custom_components/eink_dashboard/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
