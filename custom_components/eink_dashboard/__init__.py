@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -28,10 +29,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not hass.data[DOMAIN].get("_view_registered"):
         hass.http.register_view(EinkPublicImageView())
         hass.http.register_view(EinkLayoutView())
-        hass.http.register_static_path(
-            "/eink_dashboard/frontend",
-            str(_FRONTEND_DIR),
-            cache_headers=False,
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig(
+                    "/eink_dashboard/frontend", str(_FRONTEND_DIR), False
+                )
+            ]
         )
         hass.data[DOMAIN]["_view_registered"] = True
 

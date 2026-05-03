@@ -24,6 +24,7 @@ def _make_hass() -> MagicMock:
     hass.data = {}
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
+    hass.http.async_register_static_paths = AsyncMock()
     return hass
 
 
@@ -98,10 +99,11 @@ class TestAsyncSetupEntry:
             MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
-        hass.http.register_static_path.assert_called_once()
-        call_args = hass.http.register_static_path.call_args
-        assert call_args.args[0] == "/eink_dashboard/frontend"
-        assert call_args.args[1].endswith("frontend")
+        hass.http.async_register_static_paths.assert_called_once()
+        configs = hass.http.async_register_static_paths.call_args.args[0]
+        assert len(configs) == 1
+        assert configs[0].url_path == "/eink_dashboard/frontend"
+        assert configs[0].path.endswith("frontend")
 
     async def test_forwards_to_image_platform(self) -> None:
         hass = _make_hass()

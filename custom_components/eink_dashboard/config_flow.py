@@ -72,13 +72,18 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             validated = _STEP_USER_SCHEMA(user_input)
             self._name = validated["name"]
             self._data = {k: v for k, v in validated.items() if k != "name"}
-            return self.async_show_menu(
-                step_id="push_target",
-                menu_options=["pull_only", "trmnl_setup"],
-            )
+            return await self.async_step_push_target()
         return self.async_show_form(
             step_id="user",
             data_schema=_STEP_USER_SCHEMA,
+        )
+
+    async def async_step_push_target(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="push_target",
+            menu_options=["pull_only", "trmnl_setup"],
         )
 
     async def async_step_pull_only(

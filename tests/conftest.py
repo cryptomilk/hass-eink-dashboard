@@ -38,6 +38,18 @@ for _mod_name in _HA_MODULES:
         sys.modules[_mod_name] = _stub_module(_mod_name)
 
 http_mod = sys.modules["homeassistant.components.http"]
+
+
+class _StaticPathConfig:
+    def __init__(
+        self, url_path: str, path: str, cache_headers: bool = True
+    ) -> None:
+        self.url_path = url_path
+        self.path = path
+        self.cache_headers = cache_headers
+
+
+http_mod.StaticPathConfig = _StaticPathConfig  # type: ignore[attr-defined]
 http_mod.HomeAssistantView = type(  # type: ignore[attr-defined]
     "HomeAssistantView",
     (),
