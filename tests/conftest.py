@@ -17,6 +17,7 @@ def _stub_module(name: str) -> ModuleType:
 _HA_MODULES = [
     "homeassistant",
     "homeassistant.components",
+    "homeassistant.components.frontend",
     "homeassistant.components.http",
     "homeassistant.components.image",
     "homeassistant.config_entries",
@@ -36,6 +37,9 @@ _HA_MODULES = [
 for _mod_name in _HA_MODULES:
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = _stub_module(_mod_name)
+
+frontend_mod = sys.modules["homeassistant.components.frontend"]
+frontend_mod.add_extra_js_url = MagicMock()  # type: ignore[attr-defined]
 
 http_mod = sys.modules["homeassistant.components.http"]
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -35,6 +36,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "/eink_dashboard/frontend", str(_FRONTEND_DIR), False
                 )
             ]
+        )
+        add_extra_js_url(
+            hass, "/eink_dashboard/frontend/eink-dashboard-card.js"
         )
         hass.data[DOMAIN]["_view_registered"] = True
 
