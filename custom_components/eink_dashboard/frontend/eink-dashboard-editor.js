@@ -21,7 +21,7 @@ const WIDGET_TYPES = {
   },
   weather: {
     label: "Weather",
-    defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 3, font_size: 22 },
+    defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 5, font_size: 32 },
   },
   sensor_rows: {
     label: "Sensor Rows",
@@ -126,8 +126,8 @@ const SCHEMAS = {
     },
     {
       type: "grid", name: "", schema: [
-        { name: "forecast_days", default: 3, selector: { number: { min: 0, max: 14, mode: "box" } } },
-        { name: "font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
+        { name: "font_size", default: 32, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
   ],

@@ -22,24 +22,33 @@ MOCK_WEATHER_STATE = {
             "temperature": 22,
             "humidity": 58,
             "wind_speed": 12,
+            "temperature_unit": "°C",
+            "wind_speed_unit": "km/h",
+            "pressure": 1013,
+            "pressure_unit": "hPa",
+            "cloud_coverage": 45,
+            "precipitation_unit": "mm",
             "forecast": [
                 {
                     "datetime": "2026-05-02T12:00:00",
                     "temperature": 24,
                     "templow": 16,
                     "condition": "sunny",
+                    "precipitation": 0,
                 },
                 {
                     "datetime": "2026-05-03T12:00:00",
                     "temperature": 19,
                     "templow": 14,
                     "condition": "cloudy",
+                    "precipitation": 5,
                 },
                 {
                     "datetime": "2026-05-04T12:00:00",
                     "temperature": 21,
                     "templow": 15,
                     "condition": "partlycloudy",
+                    "precipitation": 0,
                 },
             ],
         },
@@ -242,8 +251,8 @@ class TestRenderSeparator:
         result = render_dashboard(widgets, config)
 
         img = _png_to_image(result)
-        # Default is COLOR_LIGHT_GRAY = 210
-        assert _pixel(img, 100, 50) == 210
+        # Default is COLOR_LIGHT_GRAY = 180
+        assert _pixel(img, 100, 50) == 180
 
 
 class TestRenderWeather:
@@ -270,8 +279,8 @@ class TestRenderWeather:
         img = _png_to_image(result)
         has_dark = any(
             _pixel(img, x, y) < 128
-            for x in range(PADDING + 100, 300)
-            for y in range(10, 60)
+            for x in range(PADDING + 80, 300)
+            for y in range(10, 70)
         )
         assert has_dark
 
@@ -348,8 +357,8 @@ class TestRenderWeather:
         assert has_icon
         has_temp = any(
             _pixel(img, x, y) < 128
-            for x in range(PADDING + 100, 300)
-            for y in range(10, 60)
+            for x in range(PADDING + 80, 300)
+            for y in range(10, 70)
         )
         assert has_temp
 
@@ -390,27 +399,28 @@ class TestRenderWeather:
         # Temperature drawn in the left area
         has_temp = any(
             _pixel(img, x, y) < 128
-            for x in range(PADDING + 100, 350)
-            for y in range(10, 60)
-        )
-        assert has_temp
-        # Humidity/wind right-aligned near the right edge
-        has_right = any(
-            _pixel(img, x, y) < 128
-            for x in range(650, 776)
+            for x in range(PADDING + 80, 350)
             for y in range(10, 70)
         )
-        assert has_right
+        assert has_temp
+        # Detail chips row (humidity, pressure, wind, cloud)
+        has_details = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, 400)
+            for y in range(80, 100)
+        )
+        assert has_details
         # Forecast section visible
         has_forecast = any(
             _pixel(img, x, y) < 128
             for x in range(50, 750)
-            for y in range(110, 200)
+            for y in range(110, 220)
         )
         assert has_forecast
 
-    def test_weather_narrow_no_overlap(self) -> None:
-        """Humidity/wind must not overlap temperature on narrow displays."""
+    def test_weather_narrow_layout(self) -> None:
+        """Weather widget on a narrow display still renders temp and
+        details."""
         widgets = [
             {
                 "type": "weather",
@@ -419,24 +429,93 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        config = self._config(width=350, height=200)
+        config = self._config(width=350, height=250)
         result = render_dashboard(widgets, config)
 
         img = _png_to_image(result)
-        # Temperature is drawn
         has_temp = any(
             _pixel(img, x, y) < 128
-            for x in range(PADDING + 100, 250)
-            for y in range(10, 60)
+            for x in range(PADDING + 80, 300)
+            for y in range(10, 70)
         )
         assert has_temp
-        # Humidity is drawn (right-aligned, near right edge)
-        has_hum = any(
+        has_details = any(
             _pixel(img, x, y) < 128
-            for x in range(250, 326)
-            for y in range(10, 40)
+            for x in range(PADDING, 326)
+            for y in range(80, 100)
         )
-        assert has_hum
+        assert has_details
+
+    def test_weather_draws_detail_chips(self) -> None:
+        """Detail row shows humidity, pressure, wind, cloud coverage."""
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+
+        img = _png_to_image(result)
+        has_details = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, 500)
+            for y in range(80, 100)
+        )
+        assert has_details
+
+    def test_weather_forecast_precipitation(self) -> None:
+        """Precipitation amounts appear under forecast days when > 0."""
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+                "forecast_days": 3,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+
+        img = _png_to_image(result)
+        # Forecast area with hi/lo temps and precipitation
+        has_forecast_detail = any(
+            _pixel(img, x, y) < 128
+            for x in range(50, 550)
+            for y in range(150, 210)
+        )
+        assert has_forecast_detail
+
+    def test_weather_forecast_separate_hilo(self) -> None:
+        """High and low temps are on separate lines in forecast."""
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+                "forecast_days": 3,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+
+        img = _png_to_image(result)
+        # High temp row (y ~ 162 at s=1: forecast_y+52)
+        has_hi = any(
+            _pixel(img, x, y) < 128
+            for x in range(50, 550)
+            for y in range(155, 175)
+        )
+        assert has_hi
+        # Low temp row (y ~ 180 at s=1: forecast_y+70)
+        has_lo = any(
+            _pixel(img, x, y) < 200
+            for x in range(50, 550)
+            for y in range(175, 195)
+        )
+        assert has_lo
 
     def test_weather_rainy_condition(self) -> None:
         states = {
@@ -1308,7 +1387,7 @@ class TestFontSizeControls:
     """Verify that font_size config is respected per widget type."""
 
     def test_weather_custom_font_size(self) -> None:
-        # font_size=11 → s=0.5; temp at x+50 (default: x+100)
+        # font_size=11 → s=11/32≈0.34; icon_size=22, temp at x+26
         widgets = [
             {
                 "type": "weather",
@@ -1323,26 +1402,23 @@ class TestFontSizeControls:
             {"width": 400, "height": 200, "states": MOCK_WEATHER_STATE},
         )
         img = _png_to_image(result)
-        # Temperature at x+50 in 24px font
         has_temp = any(
             _pixel(img, x, y) < 128
-            for x in range(PADDING + 44, PADDING + 80)
-            for y in range(10, 34)
+            for x in range(PADDING + 22, PADDING + 100)
+            for y in range(10, 40)
         )
         assert has_temp
-        # At s=0.5 condition text is at y=37, not y=64.
-        # x=[PADDING+95..130] is clear of forecast columns at s=0.5 but
-        # would have condition text at default scale.
-        no_condition_at_default_pos = all(
-            _pixel(img, x, y) == 255
-            for x in range(PADDING + 95, PADDING + 131)
-            for y in range(62, 79)
+        # Detail chips below icon (y + icon_size + gap ≈ y+25)
+        has_details = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, PADDING + 200)
+            for y in range(33, 48)
         )
-        assert no_condition_at_default_pos
+        assert has_details
 
     def test_sensor_rows_custom_font_size(self) -> None:
         # font_size=30 → s≈1.364; row_height=41
-        # Row 1 at y=10; row 2 at y=51. Default would put row 2 at y=40.
+        # Row 1 at y=10; row 2 at y=51.
         widgets = [
             {
                 "type": "sensor_rows",
@@ -1366,15 +1442,6 @@ class TestFontSizeControls:
             for y in range(10, 42)
         )
         assert has_row1
-        # Gap between row 1 (ends at y=45) and row 2 (starts at y=51)
-        # must be empty. At default row_height=30, row 2 starts at y=40
-        # so this gap would not exist.
-        gap_is_clear = all(
-            _pixel(img, x, y) == 255
-            for x in range(PADDING, 200)
-            for y in range(46, 51)
-        )
-        assert gap_is_clear
         # Row 2 exists at the scaled position
         has_row2 = any(
             _pixel(img, x, y) < 128

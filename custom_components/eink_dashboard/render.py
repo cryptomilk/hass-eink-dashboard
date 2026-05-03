@@ -62,14 +62,19 @@ def _fmt_temp(value: str | float | int) -> str:
     return str(int(n)) if n == int(n) else str(n)
 
 
+_DETAIL_ICONS: frozenset[str] = frozenset(
+    {"humidity", "barometer", "wind", "cloud", "raindrop"}
+)
+
+
 @functools.cache
 def _load_icon(
-    condition: str,
+    name: str,
     size: int,
 ) -> tuple[Image.Image, Image.Image] | None:
-    if condition not in _KNOWN_CONDITIONS:
+    if name not in _KNOWN_CONDITIONS and name not in _DETAIL_ICONS:
         return None
-    path = _ICONS_DIR / f"{condition}.png"
+    path = _ICONS_DIR / f"{name}.png"
     if not path.exists():
         return None
     icon = Image.open(path).convert("RGBA")
@@ -166,6 +171,30 @@ def _draw_weather_icon(
         )
 
 
+def _draw_detail_chip(
+    img: Image.Image | None,
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    text_y: int,
+    icon_name: str,
+    text: str,
+    icon_size: int,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_h = bbox[3] - bbox[1]
+    icon_y = int(text_y + (text_h - icon_size) // 2)
+    if img is not None:
+        result = _load_icon(icon_name, icon_size)
+        if result is not None:
+            gray, mask = result
+            img.paste(gray, (x, icon_y), mask)
+    text_x = x + icon_size + round(icon_size * 0.25)
+    draw.text((text_x, text_y), text, fill=COLOR_BLACK, font=font)
+    text_w = int(bbox[2] - bbox[0])
+    return text_x + text_w
+
+
 def render_weather(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -178,82 +207,121 @@ def render_weather(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", 22)
-    forecast_days = widget.get("forecast_days", 3)
+    font_size = widget.get("font_size", 32)
+    forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 22
+    s = font_size / 32
     font_xl = _load_font(round(48 * s))
-    font_md = _load_font(font_size)
     font_sm = _load_font(round(16 * s))
+    font_xs = _load_font(round(14 * s))
 
     condition = state.get("state", "")
     attrs = state.get("attributes", {})
     temp = attrs.get("temperature", "--")
-    humidity = attrs.get("humidity", "--")
-    wind = attrs.get("wind_speed", "--")
+    temp_unit = attrs.get("temperature_unit", "°C")
+    humidity = attrs.get("humidity")
+    wind = attrs.get("wind_speed")
+    wind_unit = attrs.get("wind_speed_unit", "km/h")
+    pressure = attrs.get("pressure")
+    pressure_unit = attrs.get("pressure_unit", "hPa")
+    cloud_coverage = attrs.get("cloud_coverage")
 
     img = config.get("_image")
-    icon_cx = x + round(45 * s)
-    icon_cy = y + round(45 * s)
-    if img is not None:
-        _draw_weather_icon(
-            img, draw, icon_cx, icon_cy, round(64 * s), condition
-        )
 
+    # Row 1: condition icon + temperature
+    icon_size = round(64 * s)
+    icon_cx = x + icon_size // 2
+    icon_cy = y + icon_size // 2
+    if img is not None:
+        _draw_weather_icon(img, draw, icon_cx, icon_cy, icon_size, condition)
+
+    temp_text = f"{_fmt_temp(temp)}{temp_unit}"
+    temp_bbox = draw.textbbox((0, 0), temp_text, font=font_xl)
+    temp_h = temp_bbox[3] - temp_bbox[1]
+    temp_y = y + (icon_size - temp_h) // 2
     draw.text(
-        (x + round(100 * s), y),
-        f"{_fmt_temp(temp)}°C",
+        (x + icon_size + round(12 * s), temp_y),
+        temp_text,
         fill=COLOR_BLACK,
         font=font_xl,
     )
-    draw.text(
-        (x + round(100 * s), y + round(54 * s)),
-        condition.replace("_", " ").title(),
-        fill=COLOR_GRAY,
-        font=font_md,
-    )
 
-    hum_text = f"{humidity}%"
-    bbox = draw.textbbox((0, 0), hum_text, font=font_md)
-    hum_w = bbox[2] - bbox[0]
-    draw.text(
-        (right_edge - PADDING - hum_w, y + round(8 * s)),
-        hum_text,
-        fill=COLOR_BLACK,
-        font=font_md,
-    )
+    # Row 2: detail chips with small icons
+    detail_y = y + icon_size + round(8 * s)
+    detail_icon_size = round(18 * s)
+    chip_x = x
+    chip_gap = round(20 * s)
 
-    wind_text = f"{wind} km/h"
-    bbox = draw.textbbox((0, 0), wind_text, font=font_md)
-    wind_w = bbox[2] - bbox[0]
-    draw.text(
-        (right_edge - PADDING - wind_w, y + round(38 * s)),
-        wind_text,
-        fill=COLOR_BLACK,
-        font=font_md,
-    )
+    if humidity is not None:
+        chip_x = _draw_detail_chip(
+            img,
+            draw,
+            chip_x,
+            detail_y,
+            "humidity",
+            f"{humidity}%",
+            detail_icon_size,
+            font_sm,
+        )
+        chip_x += chip_gap
+    if pressure is not None:
+        chip_x = _draw_detail_chip(
+            img,
+            draw,
+            chip_x,
+            detail_y,
+            "barometer",
+            f"{pressure}{pressure_unit}",
+            detail_icon_size,
+            font_sm,
+        )
+        chip_x += chip_gap
+    if wind is not None:
+        chip_x = _draw_detail_chip(
+            img,
+            draw,
+            chip_x,
+            detail_y,
+            "wind",
+            f"{wind}{wind_unit}",
+            detail_icon_size,
+            font_sm,
+        )
+        chip_x += chip_gap
+    if cloud_coverage is not None:
+        _draw_detail_chip(
+            img,
+            draw,
+            chip_x,
+            detail_y,
+            "cloud",
+            f"{cloud_coverage}%",
+            detail_icon_size,
+            font_sm,
+        )
 
+    # Forecast
     forecast = attrs.get("forecast", [])
     if not forecast or forecast_days <= 0:
         return
 
-    col_width = (right_edge - x - PADDING) // forecast_days
-    forecast_y = y + round(100 * s)
-
+    separator_y = detail_y + round(22 * s)
     draw.line(
-        [
-            (x, forecast_y - round(4 * s)),
-            (right_edge - PADDING, forecast_y - round(4 * s)),
-        ],
+        [(x, separator_y), (right_edge - PADDING, separator_y)],
         fill=COLOR_LIGHT_GRAY,
         width=1,
     )
 
+    forecast_y = separator_y + round(6 * s)
+    col_width = (right_edge - x - PADDING) // forecast_days
+
     for i, day in enumerate(forecast[:forecast_days]):
         cx = x + col_width * i + col_width // 2
+
+        # Day label
         dt_str = day.get("datetime")
         if dt_str:
             dt = datetime.fromisoformat(dt_str)
@@ -268,26 +336,55 @@ def render_weather(
             fill=COLOR_GRAY,
             font=font_sm,
         )
+
+        # Condition icon
         if img is not None:
             _draw_weather_icon(
                 img,
                 draw,
                 cx,
-                forecast_y + round(38 * s),
+                forecast_y + round(34 * s),
                 round(28 * s),
                 day.get("condition", ""),
             )
+
+        # High temp
         hi = day.get("temperature", "")
-        lo = day.get("templow", "")
-        hi_lo = f"{_fmt_temp(hi)}° / {_fmt_temp(lo)}°"
-        bbox = draw.textbbox((0, 0), hi_lo, font=font_sm)
+        hi_text = f"{_fmt_temp(hi)}°" if hi != "" else ""
+        bbox = draw.textbbox((0, 0), hi_text, font=font_sm)
         text_w = bbox[2] - bbox[0]
         draw.text(
-            (cx - text_w // 2, forecast_y + round(60 * s)),
-            hi_lo,
+            (cx - text_w // 2, forecast_y + round(52 * s)),
+            hi_text,
             fill=COLOR_BLACK,
             font=font_sm,
         )
+
+        # Low temp
+        lo = day.get("templow", "")
+        lo_text = f"{_fmt_temp(lo)}°" if lo != "" else ""
+        bbox = draw.textbbox((0, 0), lo_text, font=font_sm)
+        text_w = bbox[2] - bbox[0]
+        draw.text(
+            (cx - text_w // 2, forecast_y + round(70 * s)),
+            lo_text,
+            fill=COLOR_GRAY,
+            font=font_sm,
+        )
+
+        # Precipitation
+        precip = day.get("precipitation")
+        if precip is not None and precip > 0:
+            precip_unit = attrs.get("precipitation_unit", "mm")
+            precip_text = f"{precip}{precip_unit}"
+            bbox = draw.textbbox((0, 0), precip_text, font=font_xs)
+            text_w = bbox[2] - bbox[0]
+            draw.text(
+                (cx - text_w // 2, forecast_y + round(88 * s)),
+                precip_text,
+                fill=COLOR_GRAY,
+                font=font_xs,
+            )
 
 
 _SENSOR_ROW_HEIGHT = 30

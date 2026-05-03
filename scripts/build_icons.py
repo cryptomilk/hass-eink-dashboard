@@ -30,6 +30,14 @@ CONDITION_TO_SVG: dict[str, str] = {
     "exceptional": "wi-na",
 }
 
+DETAIL_TO_SVG: dict[str, str] = {
+    "humidity": "wi-humidity",
+    "barometer": "wi-barometer",
+    "wind": "wi-strong-wind",
+    "cloud": "wi-cloud",
+    "raindrop": "wi-raindrop",
+}
+
 ROOT = Path(__file__).resolve().parent.parent
 SVG_DIR = ROOT / "icons" / "svg"
 OUT_DIR = ROOT / "custom_components" / "eink_dashboard" / "icons"
@@ -38,9 +46,10 @@ OUT_DIR = ROOT / "custom_components" / "eink_dashboard" / "icons"
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    for condition, svg_name in CONDITION_TO_SVG.items():
+    all_icons = {**CONDITION_TO_SVG, **DETAIL_TO_SVG}
+    for name, svg_name in all_icons.items():
         svg_path = SVG_DIR / f"{svg_name}.svg"
-        png_path = OUT_DIR / f"{condition}.png"
+        png_path = OUT_DIR / f"{name}.png"
 
         if not svg_path.exists():
             print(f"SKIP {svg_name}.svg (not found)")
@@ -52,7 +61,7 @@ def main() -> None:
             output_width=ICON_SIZE,
             output_height=ICON_SIZE,
         )
-        print(f"{svg_name}.svg -> {condition}.png")
+        print(f"{svg_name}.svg -> {name}.png")
 
 
 if __name__ == "__main__":

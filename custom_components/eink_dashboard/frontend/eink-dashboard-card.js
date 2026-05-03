@@ -8,8 +8,8 @@ const CARD_TAG = "eink-dashboard-card";
 const PADDING = 24;
 const COLOR_BLACK = 0;
 const COLOR_WHITE = 255;
-const COLOR_GRAY = 160;
-const COLOR_LIGHT_GRAY = 210;
+const COLOR_GRAY = 120;
+const COLOR_LIGHT_GRAY = 180;
 
 const SENSOR_ROW_HEIGHT = 30;
 const SENSOR_TITLE_ADVANCE = 32;
@@ -857,69 +857,82 @@ class EinkDashboardCard extends HTMLElement {
     const stateObj = this._getState(entityId);
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
-    const fontSize = Math.max(1, widget.font_size ?? 22);
-    const s = fontSize / 22;
+    const fontSize = Math.max(1, widget.font_size ?? 32);
+    const s = fontSize / 32;
     if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
     let y = origY;
-    const forecastDays = widget.forecast_days ?? 3;
+    const forecastDays = widget.forecast_days ?? 5;
     const width = this._layout.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes ?? {};
     const temp = attrs.temperature ?? "--";
-    const humidity = attrs.humidity ?? "--";
-    const wind = attrs.wind_speed ?? "--";
+    const tempUnit = attrs.temperature_unit ?? "°C";
+    const humidity = attrs.humidity;
+    const wind = attrs.wind_speed;
+    const windUnit = attrs.wind_speed_unit ?? "km/h";
+    const pressure = attrs.pressure;
+    const pressureUnit = attrs.pressure_unit ?? "hPa";
+    const cloudCoverage = attrs.cloud_coverage;
 
+    // Row 1: condition icon + temperature
+    const iconSize = Math.round(64 * s);
     const icon = CONDITION_ICONS[condition] || "?";
-    ctx.font = `${Math.round(64 * s)}px sans-serif`;
+    ctx.font = `${iconSize}px sans-serif`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(icon, x + Math.round(45 * s), y + Math.round(45 * s));
+    ctx.fillText(icon, x + iconSize / 2, y + iconSize / 2);
+
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    ctx.font = `${Math.round(48 * s)}px sans-serif`;
+    ctx.fillStyle = grayColor(COLOR_BLACK);
+    ctx.fillText(`${temp}${tempUnit}`, x + iconSize + Math.round(12 * s), y + iconSize / 2);
+
+    // Row 2: detail chips
+    const detailY = y + iconSize + Math.round(8 * s);
+    const chipGap = Math.round(20 * s);
+    ctx.font = `${Math.round(16 * s)}px sans-serif`;
+    ctx.fillStyle = grayColor(COLOR_BLACK);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
-    // Temperature
-    ctx.font = `${Math.round(48 * s)}px sans-serif`;
-    ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(`${temp}°C`, x + Math.round(100 * s), y);
+    const DETAIL_ICONS = { humidity: "\u{1F4A7}", barometer: "◉", wind: "\u{1F32C}︎", cloud: "☁" };
+    const chips = [];
+    if (humidity != null) chips.push({ sym: DETAIL_ICONS.humidity, text: `${humidity}%` });
+    if (pressure != null) chips.push({ sym: DETAIL_ICONS.barometer, text: `${pressure}${pressureUnit}` });
+    if (wind != null) chips.push({ sym: DETAIL_ICONS.wind, text: `${wind}${windUnit}` });
+    if (cloudCoverage != null) chips.push({ sym: DETAIL_ICONS.cloud, text: `${cloudCoverage}%` });
 
-    // Condition label
-    const condLabel = condition.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    ctx.font = `${fontSize}px sans-serif`;
-    ctx.fillStyle = grayColor(COLOR_GRAY);
-    ctx.fillText(condLabel, x + Math.round(100 * s), y + Math.round(54 * s));
-
-    // Humidity (right-aligned)
-    const humText = `${humidity}%`;
-    ctx.font = `${fontSize}px sans-serif`;
-    ctx.fillStyle = grayColor(COLOR_BLACK);
-    const humW = ctx.measureText(humText).width;
-    ctx.fillText(humText, rightEdge - PADDING - humW, y + Math.round(8 * s));
-
-    // Wind (right-aligned)
-    const windText = `${wind} km/h`;
-    const windW = ctx.measureText(windText).width;
-    ctx.fillText(windText, rightEdge - PADDING - windW, y + Math.round(38 * s));
-
-    // Forecast (prefer fetched data over deprecated attribute)
-    const forecast = this._forecasts[entityId] || attrs.forecast || [];
-    if (!forecast.length || forecastDays <= 0) {
-      return { x, y: origY, w: rightEdge - x, h: Math.round(90 * s) };
+    let chipX = x;
+    for (const chip of chips) {
+      ctx.fillText(chip.sym, chipX, detailY);
+      const symW = ctx.measureText(chip.sym).width;
+      ctx.fillText(chip.text, chipX + symW + 4, detailY);
+      chipX += symW + 4 + ctx.measureText(chip.text).width + chipGap;
     }
 
-    const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
-    const forecastY = y + Math.round(100 * s);
+    // Forecast
+    const forecast = this._forecasts[entityId] || attrs.forecast || [];
+    if (!forecast.length || forecastDays <= 0) {
+      return { x, y: origY, w: rightEdge - x, h: detailY + Math.round(20 * s) - origY };
+    }
 
-    // Separator line
+    // Separator
+    const separatorY = detailY + Math.round(22 * s);
     ctx.beginPath();
-    ctx.moveTo(x, forecastY - Math.round(4 * s));
-    ctx.lineTo(rightEdge - PADDING, forecastY - Math.round(4 * s));
+    ctx.moveTo(x, separatorY);
+    ctx.lineTo(rightEdge - PADDING, separatorY);
     ctx.strokeStyle = grayColor(COLOR_LIGHT_GRAY);
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    const forecastY = separatorY + Math.round(6 * s);
+    const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
+    const precipUnit = attrs.precipitation_unit ?? "mm";
 
     for (let i = 0; i < Math.min(forecastDays, forecast.length); i++) {
       const day = forecast[i];
@@ -930,7 +943,6 @@ class EinkDashboardCard extends HTMLElement {
       if (day.datetime) {
         const [yr, mo, dy] = day.datetime.slice(0, 10).split("-").map(Number);
         const dt = new Date(yr, mo - 1, dy);
-        // JS getDay(): 0=Sun … 6=Sat; Python weekday(): 0=Mon … 6=Sun
         dayLabel = DAY_ABBREV[(dt.getDay() + 6) % 7];
       }
       ctx.font = `${Math.round(16 * s)}px sans-serif`;
@@ -939,26 +951,37 @@ class EinkDashboardCard extends HTMLElement {
       ctx.textAlign = "center";
       ctx.fillText(dayLabel, cx, forecastY);
 
+      // Condition icon
       const dayIcon = CONDITION_ICONS[day.condition] || "?";
       ctx.font = `${Math.round(28 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
-      ctx.fillText(dayIcon, cx, forecastY + Math.round(38 * s));
+      ctx.fillText(dayIcon, cx, forecastY + Math.round(34 * s));
 
-      // Hi/Lo
+      // High temp
       const hi = day.temperature ?? "";
-      const lo = day.templow ?? "";
-      const hiLo = `${hi}° / ${lo}°`;
       ctx.font = `${Math.round(16 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "top";
-      ctx.fillText(hiLo, cx, forecastY + Math.round(60 * s));
+      ctx.fillText(hi !== "" ? `${hi}°` : "", cx, forecastY + Math.round(52 * s));
+
+      // Low temp
+      const lo = day.templow ?? "";
+      ctx.fillStyle = grayColor(COLOR_GRAY);
+      ctx.fillText(lo !== "" ? `${lo}°` : "", cx, forecastY + Math.round(70 * s));
+
+      // Precipitation
+      const precip = day.precipitation;
+      if (precip != null && precip > 0) {
+        ctx.font = `${Math.round(14 * s)}px sans-serif`;
+        ctx.fillStyle = grayColor(COLOR_GRAY);
+        ctx.fillText(`${precip}${precipUnit}`, cx, forecastY + Math.round(88 * s));
+      }
     }
 
-    // Reset to defaults
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    return { x, y: origY, w: rightEdge - x, h: Math.round(180 * s) };
+    return { x, y: origY, w: rightEdge - x, h: Math.round(200 * s) };
   }
 
   // mirrors render.py: render_sensor_rows
