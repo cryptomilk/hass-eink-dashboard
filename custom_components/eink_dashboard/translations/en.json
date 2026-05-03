@@ -1,0 +1,89 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "E-Ink Dashboard",
+        "data": {
+          "name": "Name",
+          "width": "Width (px)",
+          "height": "Height (px)",
+          "update_interval": "Update interval (seconds)"
+        }
+      },
+      "push_target": {
+        "title": "Image delivery",
+        "menu_options": {
+          "pull_only": "Pull only (Kindle, browser)",
+          "trmnl_setup": "TRMNL webhook (push)"
+        }
+      },
+      "trmnl_setup": {
+        "title": "TRMNL Setup",
+        "description": "Before entering the webhook URL, create a plugin on trmnl.com:\n\n1. Go to **Plugins** → **Webhook Image**\n2. Give it a name, set **Image Fit Mode** to **Contain**, and click **Save**\n3. Copy the **Webhook URL** — it looks like `https://trmnl.com/api/custom_plugins/<uuid>`\n\nSelect **Submit** when ready to enter the URL."
+      },
+      "trmnl_webhook": {
+        "title": "TRMNL Webhook",
+        "data": {
+          "name": "Name",
+          "webhook_url": "Webhook URL"
+        },
+        "data_description": {
+          "name": "A label for this push target (e.g. Kitchen TRMNL)",
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
+        }
+      }
+    },
+    "error": {},
+    "abort": {}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "E-Ink Dashboard options",
+        "menu_options": {
+          "add_webhook": "Add push target",
+          "remove_webhook": "Remove push target",
+          "settings": "Display settings"
+        }
+      },
+      "add_webhook": {
+        "title": "Add TRMNL Webhook",
+        "data": {
+          "name": "Name",
+          "webhook_url": "Webhook URL"
+        },
+        "data_description": {
+          "name": "A label for this push target (e.g. Hallway TRMNL)",
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
+        }
+      },
+      "remove_webhook": {
+        "title": "Remove Push Target",
+        "data": {
+          "webhook_url": "Push target"
+        }
+      },
+      "settings": {
+        "title": "Display Settings",
+        "data": {
+          "width": "Width (px)",
+          "height": "Height (px)",
+          "update_interval": "Update interval (seconds)",
+          "optimize": "E-ink optimization",
+          "grayscale_levels": "Grayscale levels",
+          "sharpness": "Sharpness",
+          "contrast": "Contrast"
+        },
+        "data_description": {
+          "optimize": "Apply autocontrast, sharpening, and quantization for e-ink displays",
+          "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
+          "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
+          "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
+        }
+      }
+    },
+    "error": {
+      "already_configured": "This webhook URL is already configured."
+    }
+  }
+}
