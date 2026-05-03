@@ -663,11 +663,27 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Server image toggle ───────────────────────────────────────────────────
 
-  _onToggle() {
+  async _onToggle() {
     if (!this._canvas) return;
     this._showServerImage = !this._showServerImage;
     if (this._showServerImage) {
       const entryId = this._config.config_entry;
+      if (this._layout?.widgets) {
+        this._toggleBtn.disabled = true;
+        try {
+          await this._hass.callApi(
+            "POST",
+            `eink_dashboard/${entryId}/layout`,
+            this._layout.widgets,
+          );
+        } catch (err) {
+          console.error("Failed to save before render:", err);
+          this._showServerImage = false;
+          this._toggleBtn.disabled = false;
+          return;
+        }
+        this._toggleBtn.disabled = false;
+      }
       this._serverImg.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
       this._canvas.style.display = "none";
       this._serverImg.style.display = "block";
