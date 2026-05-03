@@ -51,7 +51,7 @@ _KNOWN_CONDITIONS: frozenset[str] = frozenset(
 @functools.cache
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     size = max(1, size)
-    ttf_path = _FONTS_DIR / "DejaVuSans.ttf"
+    ttf_path = _FONTS_DIR / "Roboto-Regular.ttf"
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
     return ImageFont.load_default(size)
