@@ -12,6 +12,7 @@ const COLOR_GRAY = 160;
 const COLOR_LIGHT_GRAY = 210;
 
 const SENSOR_ROW_HEIGHT = 30;
+const SENSOR_TITLE_ADVANCE = 32;
 
 const BATTERY_BODY_W = 22;
 const BATTERY_BODY_H = 10;
@@ -20,6 +21,7 @@ const BATTERY_NUB_H = 4;
 
 const STATUS_ICON_SIZE = 12;
 const STATUS_ROW_HEIGHT = 26;
+const STATUS_TITLE_ADVANCE = 30;
 const PROBLEM_DEVICE_CLASSES = new Set([
   "door", "window", "garage_door", "opening",
   "moisture", "smoke", "gas", "problem", "safety",
@@ -27,6 +29,7 @@ const PROBLEM_DEVICE_CLASSES = new Set([
 ]);
 
 const WASTE_ROW_HEIGHT = 28;
+const WASTE_TITLE_ADVANCE = 32;
 const WASTE_ICON_SIZE = 10;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -693,7 +696,7 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
     const text = String(widget.text ?? "");
-    const fontSize = widget.font_size ?? 22;
+    const fontSize = Math.max(1, widget.font_size ?? 22);
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
     const width = this._layout.display.width;
@@ -757,13 +760,15 @@ class EinkDashboardCard extends HTMLElement {
     return { x: x0, y: y - 4, w: x1 - x0, h: 8 };
   }
 
-  // mirrors render.py: render_weather (lines 157-265)
+  // mirrors render.py: render_weather
   _renderWeather(ctx, widget) {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
-    if (!stateObj) return { x, y: origY, w: 200, h: 90 };
+    const fontSize = Math.max(1, widget.font_size ?? 22);
+    const s = fontSize / 22;
+    if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
     let y = origY;
     const forecastDays = widget.forecast_days ?? 3;
@@ -777,50 +782,50 @@ class EinkDashboardCard extends HTMLElement {
     const wind = attrs.wind_speed ?? "--";
 
     // Main weather icon (placeholder "?")
-    ctx.font = `64px sans-serif`;
+    ctx.font = `${Math.round(64 * s)}px sans-serif`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText("?", x + 45, y + 45);
+    ctx.fillText("?", x + Math.round(45 * s), y + Math.round(45 * s));
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
     // Temperature
-    ctx.font = "48px sans-serif";
+    ctx.font = `${Math.round(48 * s)}px sans-serif`;
     ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(`${temp}°C`, x + 100, y);
+    ctx.fillText(`${temp}°C`, x + Math.round(100 * s), y);
 
     // Condition label
     const condLabel = condition.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    ctx.font = "22px sans-serif";
+    ctx.font = `${fontSize}px sans-serif`;
     ctx.fillStyle = grayColor(COLOR_GRAY);
-    ctx.fillText(condLabel, x + 100, y + 54);
+    ctx.fillText(condLabel, x + Math.round(100 * s), y + Math.round(54 * s));
 
     // Humidity (right-aligned)
     const humText = `${humidity}%`;
-    ctx.font = "22px sans-serif";
+    ctx.font = `${fontSize}px sans-serif`;
     ctx.fillStyle = grayColor(COLOR_BLACK);
     const humW = ctx.measureText(humText).width;
-    ctx.fillText(humText, rightEdge - PADDING - humW, y + 8);
+    ctx.fillText(humText, rightEdge - PADDING - humW, y + Math.round(8 * s));
 
     // Wind (right-aligned)
     const windText = `${wind} km/h`;
     const windW = ctx.measureText(windText).width;
-    ctx.fillText(windText, rightEdge - PADDING - windW, y + 38);
+    ctx.fillText(windText, rightEdge - PADDING - windW, y + Math.round(38 * s));
 
     // Forecast
     const forecast = attrs.forecast ?? [];
     if (!forecast.length || forecastDays <= 0) {
-      return { x, y: origY, w: rightEdge - x, h: 90 };
+      return { x, y: origY, w: rightEdge - x, h: Math.round(90 * s) };
     }
 
     const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
-    const forecastY = y + 100;
+    const forecastY = y + Math.round(100 * s);
 
     // Separator line
     ctx.beginPath();
-    ctx.moveTo(x, forecastY - 4);
-    ctx.lineTo(rightEdge - PADDING, forecastY - 4);
+    ctx.moveTo(x, forecastY - Math.round(4 * s));
+    ctx.lineTo(rightEdge - PADDING, forecastY - Math.round(4 * s));
     ctx.strokeStyle = grayColor(COLOR_LIGHT_GRAY);
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -832,57 +837,60 @@ class EinkDashboardCard extends HTMLElement {
       // Day label
       let dayLabel = "";
       if (day.datetime) {
-        const [y, m, d] = day.datetime.slice(0, 10).split("-").map(Number);
-        const dt = new Date(y, m - 1, d);
+        const [yr, mo, dy] = day.datetime.slice(0, 10).split("-").map(Number);
+        const dt = new Date(yr, mo - 1, dy);
         // JS getDay(): 0=Sun … 6=Sat; Python weekday(): 0=Mon … 6=Sun
         dayLabel = DAY_ABBREV[(dt.getDay() + 6) % 7];
       }
-      ctx.font = "16px sans-serif";
+      ctx.font = `${Math.round(16 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_GRAY);
       ctx.textBaseline = "top";
       ctx.textAlign = "center";
       ctx.fillText(dayLabel, cx, forecastY);
 
       // Forecast icon placeholder
-      ctx.font = "28px sans-serif";
+      ctx.font = `${Math.round(28 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
-      ctx.fillText("?", cx, forecastY + 38);
+      ctx.fillText("?", cx, forecastY + Math.round(38 * s));
 
       // Hi/Lo
       const hi = day.temperature ?? "";
       const lo = day.templow ?? "";
       const hiLo = `${hi}° / ${lo}°`;
-      ctx.font = "16px sans-serif";
+      ctx.font = `${Math.round(16 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "top";
-      ctx.fillText(hiLo, cx, forecastY + 60);
+      ctx.fillText(hiLo, cx, forecastY + Math.round(60 * s));
     }
 
     // Reset to defaults
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    return { x, y: origY, w: rightEdge - x, h: 180 };
+    return { x, y: origY, w: rightEdge - x, h: Math.round(180 * s) };
   }
 
-  // mirrors render.py: render_sensor_rows (lines 271-308)
+  // mirrors render.py: render_sensor_rows
   _renderSensorRows(ctx, widget) {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
+    const fontSize = Math.max(1, widget.font_size ?? 22);
+    const s = fontSize / 22;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
+    const rowHeight = Math.round(SENSOR_ROW_HEIGHT * s);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
+    ctx.font = `${fontSize}px sans-serif`;
 
     if (title) {
-      ctx.font = "22px sans-serif";
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += 32;
+      y += Math.round(SENSOR_TITLE_ADVANCE * s);
     }
 
     for (const entityId of entityIds) {
@@ -894,19 +902,18 @@ class EinkDashboardCard extends HTMLElement {
       const unit = attrs.unit_of_measurement ?? "";
       const displayVal = unit ? `${value}${unit}` : value;
 
-      ctx.font = "22px sans-serif";
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + 16, y);
+      ctx.fillText(label, x + Math.round(16 * s), y);
 
       const valW = ctx.measureText(displayVal).width;
       ctx.fillText(displayVal, rightEdge - PADDING - valW, y);
 
-      y += SENSOR_ROW_HEIGHT;
+      y += rowHeight;
     }
     return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
   }
 
-  // mirrors render.py: render_battery_bar (lines 317-367)
+  // mirrors render.py: render_battery_bar
   _renderBatteryBar(ctx, widget) {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
@@ -917,6 +924,8 @@ class EinkDashboardCard extends HTMLElement {
     const raw = stateObj.state ?? "";
     const pctFloat = parseFloat(raw);
     if (isNaN(pctFloat)) return { x, y, w: 60, h: 20 };
+    const pct = Math.max(0, Math.min(100, Math.floor(pctFloat)));
+    const fontSize = Math.max(1, widget.font_size ?? 14);
     const color = widget.color ?? COLOR_BLACK;
 
     const bw = BATTERY_BODY_W;
@@ -940,7 +949,7 @@ class EinkDashboardCard extends HTMLElement {
     }
 
     // Label
-    ctx.font = "14px sans-serif";
+    ctx.font = `${fontSize}px sans-serif`;
     const labelW = ctx.measureText(`${pct}%`).width;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
@@ -949,24 +958,28 @@ class EinkDashboardCard extends HTMLElement {
     return { x, y: y - 2, w: bw + BATTERY_NUB_W + 4 + labelW, h: bh + 2 };
   }
 
-  // mirrors render.py: render_status_icons (lines 387-439)
+  // mirrors render.py: render_status_icons
   _renderStatusIcons(ctx, widget) {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
+    const fontSize = Math.max(1, widget.font_size ?? 18);
+    const s = fontSize / 18;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
+    const sz = Math.round(STATUS_ICON_SIZE * s);
+    const rowH = Math.round(STATUS_ROW_HEIGHT * s);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = "22px sans-serif";
+      ctx.font = `${Math.round(22 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += 30;
+      y += Math.round(STATUS_TITLE_ADVANCE * s);
     }
 
     let curX = x;
@@ -979,51 +992,55 @@ class EinkDashboardCard extends HTMLElement {
       const deviceClass = attrs.device_class ?? "";
       const isProblem = isOn && PROBLEM_DEVICE_CLASSES.has(deviceClass);
 
-      ctx.font = "18px sans-serif";
+      ctx.font = `${fontSize}px sans-serif`;
       const textW = ctx.measureText(label).width;
-      const itemW = STATUS_ICON_SIZE + 6 + textW + 20;
+      const itemW = sz + Math.round(6 * s) + textW + Math.round(20 * s);
 
       if (curX + itemW > rightEdge - PADDING && curX > x) {
         curX = x;
-        y += STATUS_ROW_HEIGHT;
+        y += rowH;
       }
 
-      const s = STATUS_ICON_SIZE;
+      const iconTop = y + Math.round(4 * s);
       if (isProblem) {
         ctx.fillStyle = grayColor(COLOR_BLACK);
-        ctx.fillRect(curX, y + 4, s, s);
+        ctx.fillRect(curX, iconTop, sz, sz);
       } else {
         ctx.strokeStyle = grayColor(COLOR_GRAY);
         ctx.lineWidth = 1;
-        ctx.strokeRect(curX, y + 4, s, s);
+        ctx.strokeRect(curX, iconTop, sz, sz);
       }
 
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, curX + s + 6, y);
+      ctx.fillText(label, curX + sz + Math.round(6 * s), y);
 
       curX += itemW;
     }
-    return { x, y: origY, w: rightEdge - x, h: y - origY + STATUS_ROW_HEIGHT };
+    return { x, y: origY, w: rightEdge - x, h: y - origY + rowH };
   }
 
-  // mirrors render.py: render_waste_schedule (lines 468-527)
+  // mirrors render.py: render_waste_schedule
   _renderWasteSchedule(ctx, widget) {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     let y = origY;
+    const fontSize = Math.max(1, widget.font_size ?? 18);
+    const s = fontSize / 18;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
     const width = this._layout.display.width;
     const rightEdge = widget.w != null ? (x + widget.w) : width;
+    const sz = Math.round(WASTE_ICON_SIZE * s);
+    const rowH = Math.round(WASTE_ROW_HEIGHT * s);
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
     if (title) {
-      ctx.font = "22px sans-serif";
+      ctx.font = `${Math.round(22 * s)}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.fillText(title, x, y);
-      y += 32;
+      y += Math.round(WASTE_TITLE_ADVANCE * s);
     }
 
     for (const entityId of entityIds) {
@@ -1036,10 +1053,9 @@ class EinkDashboardCard extends HTMLElement {
       const days = parseDaysUntil(raw);
       if (days !== null && (days < 0 || days > 3)) continue;
 
-      const s = WASTE_ICON_SIZE;
-      const cx = x + s / 2;
-      const cy = y + 6 + s / 2;
-      const r = s / 2;
+      const cx = x + sz / 2;
+      const cy = y + Math.round(6 * s) + sz / 2;
+      const r = sz / 2;
 
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, 2 * Math.PI);
@@ -1052,16 +1068,16 @@ class EinkDashboardCard extends HTMLElement {
         ctx.stroke();
       }
 
-      ctx.font = "18px sans-serif";
+      ctx.font = `${fontSize}px sans-serif`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + s + 8, y);
+      ctx.fillText(label, x + sz + Math.round(8 * s), y);
 
       const dateStr = formatRelativeDate(days, raw);
       const dateW = ctx.measureText(dateStr).width;
       ctx.fillStyle = grayColor(COLOR_GRAY);
       ctx.fillText(dateStr, rightEdge - PADDING - dateW, y);
 
-      y += WASTE_ROW_HEIGHT;
+      y += rowH;
     }
     return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
   }

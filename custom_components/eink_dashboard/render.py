@@ -50,6 +50,7 @@ _KNOWN_CONDITIONS: frozenset[str] = frozenset(
 
 @functools.cache
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    size = max(1, size)
     ttf_path = _FONTS_DIR / "DejaVuSans.ttf"
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
@@ -172,7 +173,16 @@ def render_weather(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
+    font_size = widget.get("font_size", 22)
     forecast_days = widget.get("forecast_days", 3)
+    width = config["width"]
+    w_override = widget.get("w")
+    right_edge = (x + w_override) if w_override is not None else width
+
+    s = font_size / 22
+    font_xl = _load_font(round(48 * s))
+    font_md = _load_font(font_size)
+    font_sm = _load_font(round(16 * s))
 
     condition = state.get("state", "")
     attrs = state.get("attributes", {})
@@ -180,38 +190,32 @@ def render_weather(
     humidity = attrs.get("humidity", "--")
     wind = attrs.get("wind_speed", "--")
 
-    font_xl = _load_font(48)
-    font_md = _load_font(22)
-    font_sm = _load_font(16)
-
     img = config.get("_image")
-    icon_cx = x + 45
-    icon_cy = y + 45
+    icon_cx = x + round(45 * s)
+    icon_cy = y + round(45 * s)
     if img is not None:
-        _draw_weather_icon(img, draw, icon_cx, icon_cy, 64, condition)
+        _draw_weather_icon(
+            img, draw, icon_cx, icon_cy, round(64 * s), condition
+        )
 
     draw.text(
-        (x + 100, y),
+        (x + round(100 * s), y),
         f"{temp}°C",
         fill=COLOR_BLACK,
         font=font_xl,
     )
     draw.text(
-        (x + 100, y + 54),
+        (x + round(100 * s), y + round(54 * s)),
         condition.replace("_", " ").title(),
         fill=COLOR_GRAY,
         font=font_md,
     )
 
-    width = config["width"]
-    w_override = widget.get("w")
-    right_edge = (x + w_override) if w_override is not None else width
-
     hum_text = f"{humidity}%"
     bbox = draw.textbbox((0, 0), hum_text, font=font_md)
     hum_w = bbox[2] - bbox[0]
     draw.text(
-        (right_edge - PADDING - hum_w, y + 8),
+        (right_edge - PADDING - hum_w, y + round(8 * s)),
         hum_text,
         fill=COLOR_BLACK,
         font=font_md,
@@ -221,7 +225,7 @@ def render_weather(
     bbox = draw.textbbox((0, 0), wind_text, font=font_md)
     wind_w = bbox[2] - bbox[0]
     draw.text(
-        (right_edge - PADDING - wind_w, y + 38),
+        (right_edge - PADDING - wind_w, y + round(38 * s)),
         wind_text,
         fill=COLOR_BLACK,
         font=font_md,
@@ -232,10 +236,13 @@ def render_weather(
         return
 
     col_width = (right_edge - x - PADDING) // forecast_days
-    forecast_y = y + 100
+    forecast_y = y + round(100 * s)
 
     draw.line(
-        [(x, forecast_y - 4), (right_edge - PADDING, forecast_y - 4)],
+        [
+            (x, forecast_y - round(4 * s)),
+            (right_edge - PADDING, forecast_y - round(4 * s)),
+        ],
         fill=COLOR_LIGHT_GRAY,
         width=1,
     )
@@ -258,7 +265,12 @@ def render_weather(
         )
         if img is not None:
             _draw_weather_icon(
-                img, draw, cx, forecast_y + 38, 28, day.get("condition", "")
+                img,
+                draw,
+                cx,
+                forecast_y + round(38 * s),
+                round(28 * s),
+                day.get("condition", ""),
             )
         hi = day.get("temperature", "")
         lo = day.get("templow", "")
@@ -266,7 +278,7 @@ def render_weather(
         bbox = draw.textbbox((0, 0), hi_lo, font=font_sm)
         text_w = bbox[2] - bbox[0]
         draw.text(
-            (cx - text_w // 2, forecast_y + 60),
+            (cx - text_w // 2, forecast_y + round(60 * s)),
             hi_lo,
             fill=COLOR_BLACK,
             font=font_sm,
@@ -274,6 +286,7 @@ def render_weather(
 
 
 _SENSOR_ROW_HEIGHT = 30
+_SENSOR_TITLE_ADVANCE = 32
 
 
 def render_sensor_rows(
@@ -283,6 +296,7 @@ def render_sensor_rows(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
+    font_size = widget.get("font_size", 22)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -290,11 +304,13 @@ def render_sensor_rows(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    font_md = _load_font(22)
+    s = font_size / 22
+    font_md = _load_font(font_size)
+    row_height = round(_SENSOR_ROW_HEIGHT * s)
 
     if title:
         draw.text((x, y), title, fill=COLOR_BLACK, font=font_md)
-        y += 32
+        y += round(_SENSOR_TITLE_ADVANCE * s)
 
     for entity_id in entity_ids:
         state = states.get(entity_id)
@@ -306,7 +322,9 @@ def render_sensor_rows(
         unit = attrs.get("unit_of_measurement", "")
         display_val = f"{value}{unit}" if unit else value
 
-        draw.text((x + 16, y), label, fill=COLOR_BLACK, font=font_md)
+        draw.text(
+            (x + round(16 * s), y), label, fill=COLOR_BLACK, font=font_md
+        )
         bbox = draw.textbbox((0, 0), display_val, font=font_md)
         text_w = bbox[2] - bbox[0]
         draw.text(
@@ -315,7 +333,7 @@ def render_sensor_rows(
             fill=COLOR_BLACK,
             font=font_md,
         )
-        y += _SENSOR_ROW_HEIGHT
+        y += row_height
 
 
 _BATTERY_BODY_W = 22
@@ -343,6 +361,7 @@ def render_battery_bar(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
+    font_size = widget.get("font_size", 14)
     color = widget.get("color", COLOR_BLACK)
 
     bw = _BATTERY_BODY_W
@@ -367,7 +386,7 @@ def render_battery_bar(
             fill=color,
         )
 
-    font = _load_font(14)
+    font = _load_font(font_size)
     label = f"{pct}%"
     draw.text(
         (x + bw + _BATTERY_NUB_W + 4, y - 2),
@@ -379,6 +398,7 @@ def render_battery_bar(
 
 _STATUS_ICON_SIZE = 12
 _STATUS_ROW_HEIGHT = 26
+_STATUS_TITLE_ADVANCE = 30
 _PROBLEM_DEVICE_CLASSES = {
     "door",
     "window",
@@ -401,6 +421,7 @@ def render_status_icons(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
+    font_size = widget.get("font_size", 18)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -408,12 +429,15 @@ def render_status_icons(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    font = _load_font(18)
-    font_title = _load_font(22)
+    s = font_size / 18
+    font = _load_font(font_size)
+    font_title = _load_font(round(22 * s))
+    sz = round(_STATUS_ICON_SIZE * s)
+    row_height = round(_STATUS_ROW_HEIGHT * s)
 
     if title:
         draw.text((x, y), title, fill=COLOR_BLACK, font=font_title)
-        y += 30
+        y += round(_STATUS_TITLE_ADVANCE * s)
 
     cur_x = x
     for entity_id in entity_ids:
@@ -426,32 +450,35 @@ def render_status_icons(
         device_class = attrs.get("device_class", "")
         is_problem = is_on and device_class in _PROBLEM_DEVICE_CLASSES
 
-        s = _STATUS_ICON_SIZE
         bbox = draw.textbbox((0, 0), label, font=font)
         text_w = bbox[2] - bbox[0]
-        item_w = s + 6 + text_w + 20
+        item_w = sz + round(6 * s) + text_w + round(20 * s)
 
         if cur_x + item_w > right_edge - PADDING and cur_x > x:
             cur_x = x
-            y += _STATUS_ROW_HEIGHT
+            y += row_height
 
+        icon_top = y + round(4 * s)
         if is_problem:
             draw.rectangle(
-                [cur_x, y + 4, cur_x + s, y + 4 + s],
+                [cur_x, icon_top, cur_x + sz, icon_top + sz],
                 fill=COLOR_BLACK,
             )
         else:
             draw.rectangle(
-                [cur_x, y + 4, cur_x + s, y + 4 + s],
+                [cur_x, icon_top, cur_x + sz, icon_top + sz],
                 outline=COLOR_GRAY,
             )
 
-        draw.text((cur_x + s + 6, y), label, fill=COLOR_BLACK, font=font)
+        draw.text(
+            (cur_x + sz + round(6 * s), y), label, fill=COLOR_BLACK, font=font
+        )
 
         cur_x += item_w
 
 
 _WASTE_ROW_HEIGHT = 28
+_WASTE_TITLE_ADVANCE = 32
 _WASTE_ICON_SIZE = 10
 
 
@@ -484,6 +511,7 @@ def render_waste_schedule(
 ) -> None:
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
+    font_size = widget.get("font_size", 18)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
@@ -491,12 +519,15 @@ def render_waste_schedule(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    font_md = _load_font(22)
-    font_sm = _load_font(18)
+    s = font_size / 18
+    font_md = _load_font(round(22 * s))
+    font_sm = _load_font(font_size)
+    sz = round(_WASTE_ICON_SIZE * s)
+    row_height = round(_WASTE_ROW_HEIGHT * s)
 
     if title:
         draw.text((x, y), title, fill=COLOR_BLACK, font=font_md)
-        y += 32
+        y += round(_WASTE_TITLE_ADVANCE * s)
 
     today = date.today()
     for entity_id in entity_ids:
@@ -510,20 +541,20 @@ def render_waste_schedule(
         days = _parse_days_until(raw, today)
         if days is not None and (days < 0 or days > 3):
             continue
-        s = _WASTE_ICON_SIZE
+        icon_top = y + round(6 * s)
         if days is not None and days <= 1:
             draw.ellipse(
-                [x, y + 6, x + s, y + 6 + s],
+                [x, icon_top, x + sz, icon_top + sz],
                 fill=COLOR_BLACK,
             )
         else:
             draw.ellipse(
-                [x, y + 6, x + s, y + 6 + s],
+                [x, icon_top, x + sz, icon_top + sz],
                 outline=COLOR_GRAY,
             )
 
         draw.text(
-            (x + s + 8, y),
+            (x + sz + round(8 * s), y),
             label,
             fill=COLOR_BLACK,
             font=font_sm,
@@ -538,7 +569,7 @@ def render_waste_schedule(
             fill=COLOR_GRAY,
             font=font_sm,
         )
-        y += _WASTE_ROW_HEIGHT
+        y += row_height
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {

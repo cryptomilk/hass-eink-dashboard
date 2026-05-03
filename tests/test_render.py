@@ -1302,3 +1302,187 @@ class TestRenderWasteSchedule:
             for y in range(0, 300, 20)
         )
         assert all_white
+
+
+class TestFontSizeControls:
+    """Verify that font_size config is respected per widget type."""
+
+    def test_weather_custom_font_size(self) -> None:
+        # font_size=11 → s=0.5; temp at x+50 (default: x+100)
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+                "font_size": 11,
+            }
+        ]
+        result = render_dashboard(
+            widgets,
+            {"width": 400, "height": 200, "states": MOCK_WEATHER_STATE},
+        )
+        img = _png_to_image(result)
+        # Temperature at x+50 in 24px font
+        has_temp = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING + 44, PADDING + 80)
+            for y in range(10, 34)
+        )
+        assert has_temp
+        # At s=0.5 condition text is at y=37, not y=64.
+        # x=[PADDING+95..130] is clear of forecast columns at s=0.5 but
+        # would have condition text at default scale.
+        no_condition_at_default_pos = all(
+            _pixel(img, x, y) == 255
+            for x in range(PADDING + 95, PADDING + 131)
+            for y in range(62, 79)
+        )
+        assert no_condition_at_default_pos
+
+    def test_sensor_rows_custom_font_size(self) -> None:
+        # font_size=30 → s≈1.364; row_height=41
+        # Row 1 at y=10; row 2 at y=51. Default would put row 2 at y=40.
+        widgets = [
+            {
+                "type": "sensor_rows",
+                "x": PADDING,
+                "y": 10,
+                "font_size": 30,
+                "entities": [
+                    "sensor.living_room_temperature",
+                    "sensor.bedroom_temperature",
+                ],
+            }
+        ]
+        result = render_dashboard(
+            widgets,
+            {"width": 400, "height": 200, "states": MOCK_SENSOR_STATES},
+        )
+        img = _png_to_image(result)
+        has_row1 = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, 200)
+            for y in range(10, 42)
+        )
+        assert has_row1
+        # Gap between row 1 (ends at y=45) and row 2 (starts at y=51)
+        # must be empty. At default row_height=30, row 2 starts at y=40
+        # so this gap would not exist.
+        gap_is_clear = all(
+            _pixel(img, x, y) == 255
+            for x in range(PADDING, 200)
+            for y in range(46, 51)
+        )
+        assert gap_is_clear
+        # Row 2 exists at the scaled position
+        has_row2 = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, 200)
+            for y in range(51, 85)
+        )
+        assert has_row2
+
+    def test_battery_bar_custom_font_size(self) -> None:
+        # font_size=20 — larger percentage label
+        widgets = [
+            {
+                "type": "battery_bar",
+                "entity": "sensor.kindle_battery",
+                "x": PADDING,
+                "y": 20,
+                "font_size": 20,
+            }
+        ]
+        result = render_dashboard(
+            widgets,
+            {"width": 400, "height": 100, "states": MOCK_BATTERY_STATES},
+        )
+        img = _png_to_image(result)
+        has_label = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING + 28, PADDING + 90)
+            for y in range(10, 40)
+        )
+        assert has_label
+
+    def test_status_icons_custom_font_size(self) -> None:
+        # font_size=14 → s≈0.778; sz=round(12*0.778)=9 (default sz=12)
+        # front_door is "on"+door → filled black square at
+        # (curX=PADDING, iconTop=y+3=13, sz=9)
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": PADDING,
+                "y": 10,
+                "font_size": 14,
+                "entities": list(MOCK_STATUS_ICON_STATES.keys()),
+            }
+        ]
+        result = render_dashboard(
+            widgets,
+            {"width": 500, "height": 100, "states": MOCK_STATUS_ICON_STATES},
+        )
+        img = _png_to_image(result)
+        # Icon exists in the scaled region (sz=9, x=[PADDING, PADDING+9])
+        has_icon = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING, PADDING + 9)
+            for y in range(13, 22)
+        )
+        assert has_icon
+        # At sz=9 the icon ends at x=PADDING+9; the extra band
+        # x=[PADDING+10, PADDING+13] would be dark at default (sz=12)
+        # but must be white here.
+        icon_not_oversized = all(
+            _pixel(img, x, y) == 255
+            for x in range(PADDING + 10, PADDING + 13)
+            for y in range(14, 22)
+        )
+        assert icon_not_oversized
+
+    def test_waste_schedule_custom_font_size(self) -> None:
+        # font_size=27 → s=1.5; row_height=round(28*1.5)=42
+        # Row 1 at y=10; row 2 at y=52. Default row_height=28 would put
+        # row 2 at y=38.
+        widgets = [
+            {
+                "type": "waste_schedule",
+                "x": PADDING,
+                "y": 10,
+                "font_size": 27,
+                "entities": ["sensor.restmull", "sensor.gelbe_tonne"],
+            }
+        ]
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            result = render_dashboard(
+                widgets,
+                {
+                    "width": 400,
+                    "height": 150,
+                    "states": MOCK_WASTE_SCHEDULE_STATES,
+                },
+            )
+        img = _png_to_image(result)
+        has_row1 = any(
+            _pixel(img, x, y) < 200
+            for x in range(PADDING, 350)
+            for y in range(10, 38)
+        )
+        assert has_row1
+        # Gap between row 1 (ends ~y=37) and row 2 (starts at y=52)
+        # must be empty. At default row_height=28, row 2 starts at y=38
+        # so this gap would not exist.
+        gap_is_clear = all(
+            _pixel(img, x, y) == 255
+            for x in range(PADDING, 200)
+            for y in range(41, 52)
+        )
+        assert gap_is_clear
+        has_row2 = any(
+            _pixel(img, x, y) < 200
+            for x in range(PADDING, 350)
+            for y in range(52, 90)
+        )
+        assert has_row2
