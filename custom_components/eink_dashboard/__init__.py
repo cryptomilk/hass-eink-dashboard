@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
@@ -16,9 +17,28 @@ PLATFORMS = ["image"]
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
+    hass.http.register_view(EinkPublicImageView())
+    hass.http.register_view(EinkLayoutView())
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                "/eink_dashboard/frontend",
+                str(_FRONTEND_DIR),
+                False,
+            )
+        ]
+    )
+    add_extra_js_url(
+        hass,
+        "/eink_dashboard/frontend/eink-dashboard-card.js",
+    )
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = EinkDashboardStore(hass, entry.entry_id)
     widgets = await store.async_load()
     hass.data[DOMAIN][entry.entry_id] = {
@@ -26,21 +46,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "widgets": widgets,
         "entry": entry,
     }
-
-    if not hass.data[DOMAIN].get("_view_registered"):
-        hass.http.register_view(EinkPublicImageView())
-        hass.http.register_view(EinkLayoutView())
-        await hass.http.async_register_static_paths(
-            [
-                StaticPathConfig(
-                    "/eink_dashboard/frontend", str(_FRONTEND_DIR), False
-                )
-            ]
-        )
-        add_extra_js_url(
-            hass, "/eink_dashboard/frontend/eink-dashboard-card.js"
-        )
-        hass.data[DOMAIN]["_view_registered"] = True
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

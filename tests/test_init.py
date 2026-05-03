@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.eink_dashboard import (
+    async_setup,
     async_setup_entry,
     async_unload_entry,
 )
@@ -28,44 +29,11 @@ def _make_hass() -> MagicMock:
     return hass
 
 
-class TestAsyncSetupEntry:
-    async def test_populates_hass_data(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        widgets = [{"type": "separator", "y": 10}]
-
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=widgets)
-            await async_setup_entry(hass, entry)
-
-        assert entry.entry_id in hass.data[DOMAIN]
-        data = hass.data[DOMAIN][entry.entry_id]
-        assert "store" in data
-        assert data["widgets"] == widgets
-
-    async def test_stores_entry_reference(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, entry)
-
-        assert hass.data[DOMAIN][entry.entry_id]["entry"] is entry
-
+class TestAsyncSetup:
     async def test_registers_http_views(self) -> None:
         hass = _make_hass()
-        entry = _make_entry()
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, entry)
+        await async_setup(hass, {})
 
         assert hass.http.register_view.call_count == 2
         view_types = {
@@ -75,44 +43,73 @@ class TestAsyncSetupEntry:
         assert EinkPublicImageView in view_types
         assert EinkLayoutView in view_types
 
-    async def test_registers_http_views_once_for_multiple_entries(
-        self,
-    ) -> None:
-        hass = _make_hass()
-
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, _make_entry("e1"))
-            await async_setup_entry(hass, _make_entry("e2"))
-
-        assert hass.http.register_view.call_count == 2
-
     async def test_registers_static_path(self) -> None:
         hass = _make_hass()
-        entry = _make_entry()
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, entry)
+        await async_setup(hass, {})
 
         hass.http.async_register_static_paths.assert_called_once()
-        configs = hass.http.async_register_static_paths.call_args.args[0]
+        configs = (
+            hass.http.async_register_static_paths.call_args.args[0]
+        )
         assert len(configs) == 1
         assert configs[0].url_path == "/eink_dashboard/frontend"
         assert configs[0].path.endswith("frontend")
 
-    async def test_forwards_to_image_platform(self) -> None:
+    async def test_returns_true(self) -> None:
         hass = _make_hass()
+
+        result = await async_setup(hass, {})
+
+        assert result is True
+
+
+class TestAsyncSetupEntry:
+    async def test_populates_hass_data(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
+        entry = _make_entry()
+        widgets = [{"type": "separator", "y": 10}]
+
+        with patch(
+            "custom_components.eink_dashboard.EinkDashboardStore"
+        ) as MockStore:
+            MockStore.return_value.async_load = AsyncMock(
+                return_value=widgets
+            )
+            await async_setup_entry(hass, entry)
+
+        assert entry.entry_id in hass.data[DOMAIN]
+        data = hass.data[DOMAIN][entry.entry_id]
+        assert "store" in data
+        assert data["widgets"] == widgets
+
+    async def test_stores_entry_reference(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
         entry = _make_entry()
 
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
+            MockStore.return_value.async_load = AsyncMock(
+                return_value=[]
+            )
+            await async_setup_entry(hass, entry)
+
+        assert hass.data[DOMAIN][entry.entry_id]["entry"] is entry
+
+    async def test_forwards_to_image_platform(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
+        entry = _make_entry()
+
+        with patch(
+            "custom_components.eink_dashboard.EinkDashboardStore"
+        ) as MockStore:
+            MockStore.return_value.async_load = AsyncMock(
+                return_value=[]
+            )
             await async_setup_entry(hass, entry)
 
         hass.config_entries.async_forward_entry_setups.assert_called_once_with(
@@ -121,12 +118,15 @@ class TestAsyncSetupEntry:
 
     async def test_returns_true(self) -> None:
         hass = _make_hass()
+        hass.data[DOMAIN] = {}
         entry = _make_entry()
 
         with patch(
             "custom_components.eink_dashboard.EinkDashboardStore"
         ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
+            MockStore.return_value.async_load = AsyncMock(
+                return_value=[]
+            )
             result = await async_setup_entry(hass, entry)
 
         assert result is True
