@@ -75,10 +75,10 @@ _STEP_CUSTOM_RESOLUTION_SCHEMA = vol.Schema(
 
 _STEP_WEBHOOK_SCHEMA = vol.Schema(
     {
-        vol.Required("name"): str,
         vol.Required("webhook_url"): TextSelector(
             TextSelectorConfig(type=TextSelectorType.URL)
         ),
+        vol.Optional("label", default=""): str,
     }
 )
 
@@ -206,6 +206,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             if not _is_valid_url(validated["webhook_url"]):
                 errors["webhook_url"] = "invalid_url"
             else:
+                name = validated["label"] or self._name
                 return self.async_create_entry(
                     title=self._name,
                     data={},
@@ -215,7 +216,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "contrast": DEFAULT_CONTRAST,
                         "webhook_urls": [
                             {
-                                "name": validated["name"],
+                                "name": name,
                                 "url": validated["webhook_url"],
                             }
                         ],
@@ -269,9 +270,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     errors["webhook_url"] = "already_configured"
                 else:
                     opts = deepcopy(dict(self.config_entry.options))
+                    name = validated["label"] or self.config_entry.title
                     opts.setdefault("webhook_urls", []).append(
                         {
-                            "name": validated["name"],
+                            "name": name,
                             "url": url,
                         }
                     )

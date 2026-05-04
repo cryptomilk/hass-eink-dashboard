@@ -157,8 +157,8 @@ class TestEinkDashboardConfigFlow:
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {
-                "name": "Hallway TRMNL",
                 "webhook_url": "https://usetrmnl.com/api/custom_plugins/abc",
+                "label": "Hallway TRMNL",
             }
         )
 
@@ -176,12 +176,23 @@ class TestEinkDashboardConfigFlow:
             }
         ]
 
+    async def test_trmnl_webhook_defaults_label_to_device_name(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_trmnl_setup({})
+        result = await flow.async_step_trmnl_webhook(
+            {"webhook_url": "https://usetrmnl.com/api/custom_plugins/abc"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["options"]["webhook_urls"][0]["name"] == "Hallway"
+
     async def test_trmnl_webhook_rejects_invalid_url(self) -> None:
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
-            {"name": "Bad", "webhook_url": "not-a-url"}
+            {"webhook_url": "not-a-url"}
         )
         assert result["type"] == "form"
         assert result["errors"] == {"webhook_url": "invalid_url"}
@@ -240,8 +251,8 @@ class TestEinkDashboardConfigFlow:
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {
-                "name": "Custom TRMNL",
                 "webhook_url": "https://usetrmnl.com/api/custom_plugins/xyz",
+                "label": "Custom TRMNL",
             }
         )
 
@@ -301,8 +312,8 @@ class TestEinkDashboardOptionsFlow:
         )
         result = await flow.async_step_add_webhook(
             {
-                "name": "Kitchen TRMNL",
                 "webhook_url": "https://usetrmnl.com/api/custom_plugins/abc",
+                "label": "Kitchen TRMNL",
             }
         )
 
@@ -314,6 +325,16 @@ class TestEinkDashboardOptionsFlow:
             }
         ]
 
+    async def test_add_webhook_defaults_label_to_entry_title(self) -> None:
+        flow = _make_options_flow({"webhook_urls": []})
+        flow.config_entry.title = "My Device"
+        result = await flow.async_step_add_webhook(
+            {"webhook_url": "https://usetrmnl.com/api/custom_plugins/abc"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["webhook_urls"][0]["name"] == "My Device"
+
     async def test_add_webhook_preserves_existing(self) -> None:
         existing = {
             "name": "Existing",
@@ -322,7 +343,6 @@ class TestEinkDashboardOptionsFlow:
         flow = _make_options_flow({"webhook_urls": [existing]})
         result = await flow.async_step_add_webhook(
             {
-                "name": "New",
                 "webhook_url": "https://example.com/2",
             }
         )
@@ -340,7 +360,6 @@ class TestEinkDashboardOptionsFlow:
         flow = _make_options_flow({"webhook_urls": [existing]})
         result = await flow.async_step_add_webhook(
             {
-                "name": "Duplicate",
                 "webhook_url": "https://example.com/1",
             }
         )
@@ -355,7 +374,7 @@ class TestEinkDashboardOptionsFlow:
     ) -> None:
         flow = _make_options_flow({"webhook_urls": []})
         result = await flow.async_step_add_webhook(
-            {"name": "Bad", "webhook_url": "ftp://invalid"}
+            {"webhook_url": "ftp://invalid"}
         )
         assert result["type"] == "form"
         assert result["errors"] == {"webhook_url": "invalid_url"}

@@ -36,12 +36,12 @@
       "trmnl_webhook": {
         "title": "TRMNL Webhook",
         "data": {
-          "name": "Name",
-          "webhook_url": "Webhook URL"
+          "webhook_url": "Webhook URL",
+          "label": "Label (optional)"
         },
         "data_description": {
-          "name": "A label for this push target (e.g. Kitchen TRMNL)",
-          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL",
+          "label": "A name for this push target — defaults to the device name if left empty"
         }
       }
     },
@@ -83,12 +83,12 @@
       "add_webhook": {
         "title": "Add TRMNL Webhook",
         "data": {
-          "name": "Name",
-          "webhook_url": "Webhook URL"
+          "webhook_url": "Webhook URL",
+          "label": "Label (optional)"
         },
         "data_description": {
-          "name": "A label for this push target (e.g. Hallway TRMNL)",
-          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL"
+          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL",
+          "label": "A name for this push target — defaults to the device name if left empty"
         }
       },
       "remove_webhook": {
