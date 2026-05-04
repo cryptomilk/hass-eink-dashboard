@@ -1,3 +1,5 @@
+"""PIL-based rendering engine for e-ink dashboard widgets."""
+
 from __future__ import annotations
 
 import functools
@@ -56,6 +58,7 @@ _KNOWN_CONDITIONS: frozenset[str] = frozenset(
 
 @functools.cache
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load Roboto at the given pixel size, falling back to PIL default."""
     size = max(1, size)
     ttf_path = _FONTS_DIR / "Roboto-Regular.ttf"
     if ttf_path.exists():
@@ -64,6 +67,7 @@ def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def _fmt_temp(value: str | float | int) -> str:
+    """Format a temperature value, omitting the decimal when it is zero."""
     n = float(value)
     return str(int(n)) if n == int(n) else str(n)
 
@@ -78,6 +82,7 @@ def _load_icon(
     name: str,
     size: int,
 ) -> tuple[Image.Image, Image.Image] | None:
+    """Load and resize a PNG icon, returning (gray, mask) or None."""
     if name not in _KNOWN_CONDITIONS and name not in _DETAIL_ICONS:
         return None
     path = _ICONS_DIR / f"{name}.png"
@@ -96,6 +101,7 @@ def render_text(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw a text widget with optional alignment and custom font size."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     text = widget.get("text", "")
@@ -123,6 +129,7 @@ def render_line(
     widget: Widget,
     _config: DisplayConfig,
 ) -> None:
+    """Draw a straight line between two points defined by the widget."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     x2 = widget.get("x2", x)
@@ -137,6 +144,7 @@ def render_separator(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw a full-width horizontal rule at the given y position."""
     y = widget.get("y", 0)
     color = widget.get("color", COLOR_LIGHT_GRAY)
     x0 = widget.get("x", PADDING)
@@ -160,6 +168,7 @@ def _draw_weather_icon(
     size: int,
     condition: str,
 ) -> None:
+    """Paste a weather condition icon centred at (cx, cy), or draw '?'."""
     result = _load_icon(condition, size)
     if result is not None:
         gray, mask = result
@@ -187,6 +196,7 @@ def _draw_detail_chip(
     icon_size: int,
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
 ) -> int:
+    """Draw an icon-plus-text chip and return the x coordinate after it."""
     bbox = draw.textbbox((0, 0), text, font=font)
     text_h = bbox[3] - bbox[1]
     icon_y = int(text_y + (text_h - icon_size) // 2)
@@ -206,6 +216,7 @@ def render_weather(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw current conditions, detail chips, and a multi-day forecast."""
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
     if state is None:
@@ -402,6 +413,7 @@ def render_sensor_rows(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw a labelled list of sensor values with right-aligned readings."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_SENSOR_ROWS)
@@ -455,6 +467,7 @@ def render_battery_bar(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw a small battery icon and percentage label for an entity."""
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
     if state is None:
@@ -527,6 +540,7 @@ def render_status_icons(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw binary-sensor status icons, highlighting problem states."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_STATUS_ICONS)
@@ -591,6 +605,7 @@ _WASTE_ICON_SIZE = 10
 
 
 def _parse_days_until(raw: str, today: date) -> int | None:
+    """Parse an ISO date or integer offset into days from today."""
     try:
         target = date.fromisoformat(raw)
         return (target - today).days
@@ -603,6 +618,7 @@ def _parse_days_until(raw: str, today: date) -> int | None:
 
 
 def _format_relative_date(days: int | None, raw: str) -> str:
+    """Return 'today', 'tomorrow', 'in N days', or the original string."""
     if days is None or days < 0:
         return raw
     if days == 0:
@@ -617,6 +633,7 @@ def render_waste_schedule(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
+    """Draw upcoming waste-collection entries due within the next 3 days."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_WASTE_SCHEDULE)
@@ -696,6 +713,7 @@ def render_dashboard(
     widget_list: list[Widget],
     config: DisplayConfig,
 ) -> bytes:
+    """Render all widgets onto a grayscale canvas and return PNG bytes."""
     config = {"width": 600, "height": 800, **config}
     w = config["width"]
     h = config["height"]

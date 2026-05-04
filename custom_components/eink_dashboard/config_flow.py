@@ -1,3 +1,5 @@
+"""Config and options flows for the e-ink dashboard integration."""
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -39,6 +41,7 @@ _POSITIVE_INT = vol.All(int, vol.Range(min=1))
 
 
 def _is_valid_url(value: str) -> bool:
+    """Return True if value is an http or https URL with a netloc."""
     parsed = urlparse(value)
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
@@ -84,9 +87,12 @@ _STEP_WEBHOOK_SCHEMA = vol.Schema(
 
 
 class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Multi-step config flow for creating a new dashboard entry."""
+
     VERSION = 1
 
     def __init__(self) -> None:
+        """Initialise flow state."""
         super().__init__()
         self._data: dict[str, Any] = {}
         self._name: str = ""
@@ -96,11 +102,13 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: ConfigEntry,
     ) -> EinkDashboardOptionsFlow:
+        """Return the options flow handler."""
         return EinkDashboardOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Handle the initial setup step: name, model, and orientation."""
         if user_input is not None:
             validated = _STEP_USER_SCHEMA(user_input)
             self._name = validated["name"]
@@ -145,6 +153,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_custom_resolution(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Collect width and height for the custom device model."""
         if user_input is not None:
             validated = _STEP_CUSTOM_RESOLUTION_SCHEMA(user_input)
             self._data.update(
@@ -165,12 +174,14 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_push_target(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Show a menu to choose pull-only or TRMNL webhook delivery."""
         return self.async_show_menu(
             step_id="push_target",
             menu_options=["pull_only", "trmnl_setup"],
         )
 
     def _create_pull_entry(self) -> ConfigFlowResult:
+        """Create a config entry with no webhook URLs (pull-only mode)."""
         return self.async_create_entry(
             title=self._name,
             data={},
@@ -185,11 +196,13 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_pull_only(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Finish setup without adding a webhook target."""
         return self._create_pull_entry()
 
     async def async_step_trmnl_setup(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Show the TRMNL intro screen before collecting the webhook URL."""
         if user_input is not None:
             return await self.async_step_trmnl_webhook()
         return self.async_show_form(
@@ -200,6 +213,9 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_trmnl_webhook(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Collect and validate the TRMNL webhook URL, then create the
+        entry.
+        """
         errors: dict[str, str] = {}
         if user_input is not None:
             validated = _STEP_WEBHOOK_SCHEMA(user_input)
@@ -230,13 +246,17 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EinkDashboardOptionsFlow(OptionsFlow):
+    """Options flow for modifying an existing dashboard config entry."""
+
     def __init__(self) -> None:
+        """Initialise options flow state."""
         super().__init__()
         self._data: dict[str, Any] = {}
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Show the options menu, adding remove_webhook if webhooks exist."""
         webhooks = self.config_entry.options.get("webhook_urls", [])
         menu_options: list[str] = [
             "device_settings",
@@ -262,6 +282,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_copy_card_yaml(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Display the Lovelace card YAML snippet for this entry."""
         if user_input is not None:
             return await self.async_step_init()
         yaml = (
@@ -277,6 +298,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_copy_dashboard_yaml(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Display a full dashboard YAML view containing all e-ink cards."""
         if user_input is not None:
             return await self.async_step_init()
         entries = self.hass.config_entries.async_entries(DOMAIN)
@@ -295,6 +317,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_add_webhook(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Validate and append a new webhook URL to the options."""
         errors: dict[str, str] = {}
         if user_input is not None:
             validated = _STEP_WEBHOOK_SCHEMA(user_input)
@@ -324,6 +347,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_remove_webhook(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Remove a selected webhook URL from the options."""
         if user_input is not None:
             url_to_remove = user_input["webhook_url"]
             opts = deepcopy(dict(self.config_entry.options))
@@ -352,6 +376,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_device_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Update device model, orientation, and area assignment."""
         opts = self.config_entry.options
         schema = vol.Schema(
             {
@@ -431,6 +456,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_custom_resolution(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Update canvas dimensions for the custom device model."""
         if not self._data:
             return await self.async_step_device_settings()
         if user_input is not None:
@@ -457,6 +483,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_display_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        """Update refresh interval, optimize, and image quality settings."""
         opts = self.config_entry.options
         schema = vol.Schema(
             {

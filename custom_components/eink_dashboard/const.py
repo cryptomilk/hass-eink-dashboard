@@ -1,3 +1,5 @@
+"""Constants, enums, and device presets for the e-ink dashboard."""
+
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -30,6 +32,8 @@ FONT_SIZE_WASTE_SCHEDULE = 28
 
 @dataclass(frozen=True)
 class DevicePreset:
+    """Static display properties for a known e-ink device model."""
+
     label: str
     width: int
     height: int
@@ -128,12 +132,16 @@ def resolve_display(
 
 
 class Align(StrEnum):
+    """Horizontal text alignment options for widget rendering."""
+
     LEFT = "left"
     RIGHT = "right"
     CENTER = "center"
 
 
 class WidgetType(StrEnum):
+    """Supported widget type identifiers."""
+
     TEXT = "text"
     LINE = "line"
     SEPARATOR = "separator"

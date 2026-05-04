@@ -1,3 +1,5 @@
+"""HTTP push of dashboard images to webhook URLs."""
+
 from __future__ import annotations
 
 import logging
@@ -12,6 +14,9 @@ async def async_push_image(
     url: str,
     image_bytes: bytes,
 ) -> None:
+    """POST raw PNG bytes to a webhook URL, logging failures
+    without raising.
+    """
     try:
         timeout = aiohttp.ClientTimeout(total=10)
         async with session.post(

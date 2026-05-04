@@ -1,3 +1,5 @@
+"""Post-render image optimization pipeline for e-ink displays."""
+
 from __future__ import annotations
 
 from PIL import Image, ImageEnhance, ImageOps
@@ -13,6 +15,9 @@ def optimize_for_eink(
     img: Image.Image,
     config: dict,
 ) -> Image.Image:
+    """Apply autocontrast, sharpness, contrast, and grayscale
+    quantization to an image.
+    """
     if not config.get("optimize", False):
         return img
 

@@ -1,3 +1,5 @@
+"""ImageEntity that renders and refreshes the e-ink dashboard PNG."""
+
 from __future__ import annotations
 
 import asyncio
@@ -45,6 +47,7 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: Any,
 ) -> None:
+    """Create and register the EinkDashboardImage entity."""
     entity = EinkDashboardImage(hass, entry)
     widgets = hass.data[DOMAIN][entry.entry_id]["widgets"]
     entity.set_widgets(widgets)
@@ -53,6 +56,8 @@ async def async_setup_entry(
 
 
 class EinkDashboardImage(ImageEntity):
+    """HA image entity that renders the dashboard and pushes to webhooks."""
+
     _attr_content_type = "image/png"
 
     def __init__(
@@ -60,6 +65,7 @@ class EinkDashboardImage(ImageEntity):
         hass: HomeAssistant,
         entry: ConfigEntry,
     ) -> None:
+        """Initialise the entity from the config entry."""
         super().__init__(hass)
         self._entry = entry
         self._widgets: list[dict[str, Any]] = []
@@ -72,6 +78,7 @@ class EinkDashboardImage(ImageEntity):
         self._attr_unique_id = entry.entry_id
 
     async def async_added_to_hass(self) -> None:
+        """Schedule periodic refresh and render the first frame."""
         interval = self._entry.options.get(
             "update_interval", DEFAULT_UPDATE_INTERVAL
         )
@@ -83,15 +90,18 @@ class EinkDashboardImage(ImageEntity):
         await self._async_refresh(None)
 
     async def async_will_remove_from_hass(self) -> None:
+        """Cancel the periodic refresh subscription."""
         if self._unsub:
             self._unsub()
 
     def set_widgets(self, widgets: list[dict[str, Any]]) -> None:
+        """Replace the current widget list without triggering a refresh."""
         self._widgets = widgets
 
     async def async_request_refresh(
         self, widgets: list[dict[str, Any]] | None = None
     ) -> None:
+        """Update widgets (if provided) and trigger an immediate re-render."""
         if widgets is not None:
             self._widgets = widgets
         await self._async_refresh(None)
@@ -99,6 +109,7 @@ class EinkDashboardImage(ImageEntity):
     def _resolve_templates(  # must be called from the event loop
         self, widgets: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
+        """Render Jinja2 templates in TEXT widget text fields."""
         resolved = []
         for widget in widgets:
             if widget.get("type") == WidgetType.TEXT and "text" in widget:
@@ -118,6 +129,9 @@ class EinkDashboardImage(ImageEntity):
         return resolved
 
     async def _async_refresh(self, _now: Any) -> None:
+        """Re-render the dashboard and push to webhooks if the image
+        changed.
+        """
         push_targets: list[tuple[Any, str, bytes]] = []
         async with self._refresh_lock:
             states = self._build_states()
@@ -175,6 +189,7 @@ class EinkDashboardImage(ImageEntity):
             )
 
     async def _async_fetch_forecasts(self, states: dict[str, Any]) -> None:
+        """Fetch daily forecasts for weather widgets and inject into states."""
         weather_entities: set[str] = set()
         for w in self._widgets:
             if w.get("type") == WidgetType.WEATHER:
@@ -197,6 +212,7 @@ class EinkDashboardImage(ImageEntity):
                 _LOGGER.debug("Could not fetch forecast for %s", entity_id)
 
     def _build_states(self) -> dict[str, Any]:
+        """Snapshot all HA states as a plain dict for the renderer."""
         result: dict[str, Any] = {}
         for state in self.hass.states.async_all():
             result[state.entity_id] = {
@@ -207,7 +223,11 @@ class EinkDashboardImage(ImageEntity):
 
     @property
     def etag(self) -> str | None:
+        """SHA-256 ETag of the last rendered image, or None if not
+        yet rendered.
+        """
         return self._etag
 
     async def async_image(self) -> bytes | None:
+        """Return the latest rendered PNG bytes."""
         return self._rendered

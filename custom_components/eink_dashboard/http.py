@@ -1,3 +1,5 @@
+"""Authenticated layout API and public image HTTP views."""
+
 from __future__ import annotations
 
 import logging
@@ -18,11 +20,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class EinkLayoutView(HomeAssistantView):
+    """Authenticated API view to read and write the widget layout."""
+
     url = "/api/eink_dashboard/{entry_id}/layout"
     name = "api:eink_dashboard:layout"
     requires_auth = True
 
     async def get(self, request: web.Request, entry_id: str) -> web.Response:
+        """Return the current widget list and display config as JSON."""
         hass = request.app["hass"]
         entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
         if entry_data is None:
@@ -56,6 +61,7 @@ class EinkLayoutView(HomeAssistantView):
         )
 
     async def post(self, request: web.Request, entry_id: str) -> web.Response:
+        """Validate and persist a new widget list, then trigger a refresh."""
         hass = request.app["hass"]
         entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
         if entry_data is None:
@@ -96,11 +102,14 @@ class EinkLayoutView(HomeAssistantView):
 
 
 class EinkPublicImageView(HomeAssistantView):
+    """Unauthenticated view serving the rendered PNG with ETag/304 support."""
+
     url = "/api/eink_dashboard/{entry_id}/image.png"
     name = "api:eink_dashboard:image"
     requires_auth = False
 
     async def get(self, request: web.Request, entry_id: str) -> web.Response:
+        """Serve the latest rendered PNG, honouring If-None-Match."""
         hass = request.app["hass"]
         entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
         if entry_data is None:
