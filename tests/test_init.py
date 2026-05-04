@@ -14,9 +14,17 @@ from custom_components.eink_dashboard.http import (
 )
 
 
-def _make_entry(entry_id: str = "entry1") -> MagicMock:
+def _make_entry(
+    entry_id: str = "entry1",
+    data: dict | None = None,
+    options: dict | None = None,
+    title: str = "My Dashboard",
+) -> MagicMock:
     entry = MagicMock()
     entry.entry_id = entry_id
+    entry.title = title
+    entry.data = data or {}
+    entry.options = options or {}
     return entry
 
 
@@ -122,6 +130,128 @@ class TestAsyncSetupEntry:
             result = await async_setup_entry(hass, entry)
 
         assert result is True
+
+    async def test_registers_device_with_preset(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
+        entry = _make_entry(
+            options={"device_model": "kindle_pw4", "area_id": "kitchen"}
+        )
+        mock_area = MagicMock()
+        mock_area.name = "Kitchen"
+        mock_area_reg = MagicMock()
+        mock_area_reg.async_get_area.return_value = mock_area
+        mock_dev_reg = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.EinkDashboardStore"
+            ) as MockStore,
+            patch(
+                "custom_components.eink_dashboard.ar.async_get",
+                return_value=mock_area_reg,
+            ),
+            patch(
+                "custom_components.eink_dashboard.dr.async_get",
+                return_value=mock_dev_reg,
+            ),
+        ):
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
+            await async_setup_entry(hass, entry)
+
+        mock_dev_reg.async_get_or_create.assert_called_once_with(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            manufacturer="Amazon",
+            model="Kindle Paperwhite 4",
+            suggested_area="Kitchen",
+        )
+
+    async def test_registers_device_custom_no_area(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
+        entry = _make_entry(options={"device_model": "custom"})
+        mock_dev_reg = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.EinkDashboardStore"
+            ) as MockStore,
+            patch(
+                "custom_components.eink_dashboard.dr.async_get",
+                return_value=mock_dev_reg,
+            ),
+        ):
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
+            await async_setup_entry(hass, entry)
+
+        mock_dev_reg.async_get_or_create.assert_called_once_with(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            manufacturer=None,
+            model="Custom",
+            suggested_area=None,
+        )
+
+    async def test_registers_device_no_model_key(self) -> None:
+        hass = _make_hass()
+        hass.data[DOMAIN] = {}
+        entry = _make_entry(data={})
+        mock_dev_reg = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.EinkDashboardStore"
+            ) as MockStore,
+            patch(
+                "custom_components.eink_dashboard.dr.async_get",
+                return_value=mock_dev_reg,
+            ),
+        ):
+            MockStore.return_value.async_load = AsyncMock(return_value=[])
+            await async_setup_entry(hass, entry)
+
+        call_kwargs = mock_dev_reg.async_get_or_create.call_args.kwargs
+        assert call_kwargs["manufacturer"] is None
+        assert call_kwargs["model"] == "Custom"
+
+
+class TestAsyncUpdateListener:
+    async def test_update_listener_re_registers_device(self) -> None:
+        from custom_components.eink_dashboard import _async_update_listener
+
+        hass = _make_hass()
+        entry = _make_entry(
+            options={"device_model": "kindle_pw4", "area_id": "kitchen"}
+        )
+        mock_area = MagicMock()
+        mock_area.name = "Kitchen"
+        mock_area_reg = MagicMock()
+        mock_area_reg.async_get_area.return_value = mock_area
+        mock_dev_reg = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.ar.async_get",
+                return_value=mock_area_reg,
+            ),
+            patch(
+                "custom_components.eink_dashboard.dr.async_get",
+                return_value=mock_dev_reg,
+            ),
+        ):
+            await _async_update_listener(hass, entry)
+
+        mock_dev_reg.async_get_or_create.assert_called_once_with(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            manufacturer="Amazon",
+            model="Kindle Paperwhite 4",
+            suggested_area="Kitchen",
+        )
 
 
 class TestAsyncUnloadEntry:

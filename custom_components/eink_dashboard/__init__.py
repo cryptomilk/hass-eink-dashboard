@@ -7,12 +7,44 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN
+from .const import DEVICE_PRESETS, DOMAIN
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 
 PLATFORMS = ["image"]
+
+
+def _area_name(hass: HomeAssistant, area_id: str | None) -> str | None:
+    if not area_id:
+        return None
+    area_reg = ar.async_get(hass)
+    area_entry = area_reg.async_get_area(area_id)
+    return area_entry.name if area_entry else None
+
+
+def _register_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    preset = DEVICE_PRESETS.get(entry.options.get("device_model", "custom"))
+    device_reg = dr.async_get(hass)
+    device_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=entry.title,
+        manufacturer=(
+            preset.manufacturer if preset and preset.manufacturer else None
+        ),
+        model=preset.label if preset else "Custom",
+        suggested_area=_area_name(hass, entry.options.get("area_id")),
+    )
+
+
+async def _async_update_listener(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    _register_device(hass, entry)
+
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 _FONTS_DIR = Path(__file__).parent / "fonts"
@@ -52,6 +84,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "widgets": widgets,
         "entry": entry,
     }
+
+    _register_device(hass, entry)
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

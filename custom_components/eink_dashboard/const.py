@@ -30,6 +30,7 @@ FONT_SIZE_WASTE_SCHEDULE = 28
 
 @dataclass(frozen=True)
 class DevicePreset:
+    label: str
     width: int
     height: int
     grayscale_levels: int
@@ -40,6 +41,7 @@ class DevicePreset:
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {
     "kindle_4": DevicePreset(
+        "Kindle 4/5",
         600,
         800,
         16,
@@ -47,6 +49,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "Amazon",
     ),
     "kindle_pw": DevicePreset(
+        "Kindle Paperwhite 1/2/3",
         758,
         1024,
         16,
@@ -54,6 +57,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "Amazon",
     ),
     "kindle_pw4": DevicePreset(
+        "Kindle Paperwhite 4",
         1072,
         1448,
         16,
@@ -61,6 +65,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "Amazon",
     ),
     "kindle_oasis": DevicePreset(
+        "Kindle Oasis 2/3",
         1264,
         1680,
         16,
@@ -68,6 +73,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "Amazon",
     ),
     "trmnl_og": DevicePreset(
+        "TRMNL OG",
         800,
         480,
         2,
@@ -76,6 +82,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         native_landscape=True,
     ),
     "trmnl_x": DevicePreset(
+        "TRMNL X",
         1872,
         1404,
         16,
@@ -84,6 +91,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         native_landscape=True,
     ),
     "trmnl_rgb": DevicePreset(
+        "TRMNL RGB",
         2560,
         1440,
         2,
@@ -92,6 +100,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         native_landscape=True,
     ),
     "custom": DevicePreset(
+        "Custom",
         758,
         1024,
         16,

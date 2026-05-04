@@ -24,7 +24,9 @@ _HA_MODULES = [
     "homeassistant.core",
     "homeassistant.helpers",
     "homeassistant.helpers.aiohttp_client",
+    "homeassistant.helpers.area_registry",
     "homeassistant.helpers.config_validation",
+    "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_platform",
     "homeassistant.helpers.event",
     "homeassistant.helpers.selector",
@@ -156,6 +158,12 @@ aiohttp_client_mod.async_get_clientsession = MagicMock()  # type: ignore[attr-de
 
 event_mod = sys.modules["homeassistant.helpers.event"]
 event_mod.async_track_time_interval = MagicMock()  # type: ignore[attr-defined]
+
+area_reg_mod = sys.modules["homeassistant.helpers.area_registry"]
+area_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
+
+device_reg_mod = sys.modules["homeassistant.helpers.device_registry"]
+device_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
 
 storage_mod = sys.modules["homeassistant.helpers.storage"]
 storage_mod.Store = MagicMock  # type: ignore[attr-defined]
