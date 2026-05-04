@@ -103,6 +103,15 @@ class TestEinkPublicImageView:
         assert response.status == 304
         assert response.headers["ETag"] == PNG_ETAG
 
+    async def test_200_on_no_etag_header(self) -> None:
+        view = EinkPublicImageView()
+        request = _make_request()  # no If-None-Match header
+
+        response = await view.get(request, "test_entry")
+
+        assert response.status == 200
+        assert response.body == PNG_STUB
+
     async def test_200_on_mismatched_etag(self) -> None:
         view = EinkPublicImageView()
         request = _make_request(headers={"If-None-Match": '"stale"'})

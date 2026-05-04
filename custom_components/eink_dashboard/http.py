@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
@@ -11,6 +13,8 @@ from .const import (
     MAX_WIDGETS,
     WidgetType,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EinkLayoutView(HomeAssistantView):
@@ -110,7 +114,8 @@ class EinkPublicImageView(HomeAssistantView):
         etag = entity.etag
 
         if_none_match = request.headers.get("If-None-Match")
-        if if_none_match in ("*", etag):
+        if if_none_match is not None and if_none_match in ("*", etag):
+            _LOGGER.debug("ETag match (%s), returning 304", etag)
             resp = web.Response(status=304)
             resp.headers["ETag"] = etag
             resp.headers["Cache-Control"] = "no-cache"
@@ -121,5 +126,6 @@ class EinkPublicImageView(HomeAssistantView):
             content_type="image/png",
         )
         response.headers["Cache-Control"] = "no-cache"
-        response.headers["ETag"] = etag
+        if etag is not None:
+            response.headers["ETag"] = etag
         return response
