@@ -52,6 +52,14 @@ mkdir -p "${DIST_DIR}"
 tar czf "${ARCHIVE}" \
     --exclude="eink_dashboard/__pycache__" \
     --exclude="eink_dashboard/**/__pycache__" \
+    --exclude="eink_dashboard/frontend/src" \
+    --exclude="eink_dashboard/frontend/test" \
+    --exclude="eink_dashboard/frontend/node_modules" \
+    --exclude="eink_dashboard/frontend/package.json" \
+    --exclude="eink_dashboard/frontend/pnpm-lock.yaml" \
+    --exclude="eink_dashboard/frontend/pnpm-workspace.yaml" \
+    --exclude="eink_dashboard/frontend/tsconfig.json" \
+    --exclude="eink_dashboard/frontend/vitest.config.ts" \
     -C "${REPO_ROOT}/custom_components" eink_dashboard
 
 echo "Done: ${ARCHIVE}"
