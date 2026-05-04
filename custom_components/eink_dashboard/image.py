@@ -67,7 +67,7 @@ class EinkDashboardImage(ImageEntity):
         self._etag: str | None = None
         self._unsub: Callable[[], None] | None = None
         self._refresh_lock = asyncio.Lock()
-        self._last_push: float = 0.0
+        self._last_push: float | None = None
         self._attr_name = entry.title
         self._attr_unique_id = entry.entry_id
 
@@ -151,7 +151,10 @@ class EinkDashboardImage(ImageEntity):
                 self.async_write_ha_state()
                 webhook_urls = self._entry.options.get("webhook_urls", [])
                 now = time.monotonic()
-                if webhook_urls and now - self._last_push >= PUSH_MIN_INTERVAL:
+                if webhook_urls and (
+                    self._last_push is None
+                    or now - self._last_push >= PUSH_MIN_INTERVAL
+                ):
                     if len(new_bytes) > PUSH_MAX_IMAGE_BYTES:
                         _LOGGER.warning(
                             "Rendered image is %d bytes, exceeds %d byte"
