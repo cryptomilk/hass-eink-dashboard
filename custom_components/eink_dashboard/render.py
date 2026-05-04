@@ -230,7 +230,7 @@ def render_weather(
     w_override = widget.get("w")
     right_edge = (x + w_override) if w_override is not None else width
 
-    s = font_size / 22
+    s = font_size / FONT_SIZE_WEATHER
     font_xl = _load_font(round(48 * s))
     font_sm = _load_font(round(16 * s))
     font_xs = _load_font(round(14 * s))

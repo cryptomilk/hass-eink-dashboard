@@ -1388,6 +1388,7 @@ class TestFontSizeControls:
 
     def test_weather_custom_font_size(self) -> None:
         # font_size=11 → s=11/32≈0.34; icon_size=22, temp at x+26
+        # detail_y = y+icon_size+round(8*s) = 10+22+3 = 35
         widgets = [
             {
                 "type": "weather",
@@ -1408,11 +1409,11 @@ class TestFontSizeControls:
             for y in range(10, 40)
         )
         assert has_temp
-        # Detail chips below icon (y + icon_size + gap ≈ y+25)
+        # Detail chips at detail_y=35 (wrong /22 divisor shifts them to y=46)
         has_details = any(
             _pixel(img, x, y) < 128
             for x in range(PADDING, PADDING + 200)
-            for y in range(33, 48)
+            for y in range(35, 46)
         )
         assert has_details
 

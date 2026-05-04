@@ -1010,7 +1010,7 @@ class EinkDashboardCard extends HTMLElement {
     const x = widget.x ?? PADDING;
     const origY = widget.y ?? 0;
     const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WEATHER);
-    const s = fontSize / 22;
+    const s = fontSize / FONT_SIZE_WEATHER;
     if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
     let y = origY;
