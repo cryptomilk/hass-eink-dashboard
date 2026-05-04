@@ -10,10 +10,24 @@ from custom_components.eink_dashboard.config_flow import (
     EinkDashboardOptionsFlow,
 )
 
-_USER_INPUT = {
+_USER_INPUT_KINDLE = {
     "name": "Kitchen",
-    "width": 758,
-    "height": 1024,
+    "device_model": "kindle_pw",
+    "orientation": "portrait",
+    "update_interval": 60,
+}
+
+_USER_INPUT_TRMNL = {
+    "name": "Hallway",
+    "device_model": "trmnl_og",
+    "orientation": "landscape",
+    "update_interval": 60,
+}
+
+_USER_INPUT_CUSTOM = {
+    "name": "Custom Display",
+    "device_model": "custom",
+    "orientation": "portrait",
     "update_interval": 60,
 }
 
@@ -39,18 +53,91 @@ class TestEinkDashboardConfigFlow:
         assert result["step_id"] == "user"
         assert result["data_schema"] is not None
 
-    async def test_step_user_advances_to_menu(self) -> None:
+    async def test_kindle_creates_entry(self) -> None:
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(_USER_INPUT)
+        result = await flow.async_step_user(_USER_INPUT_KINDLE)
 
-        assert result["type"] == "menu"
-        assert result["step_id"] == "push_target"
-        assert "pull_only" in result["menu_options"]
-        assert "trmnl_setup" in result["menu_options"]
+        assert result["type"] == "create_entry"
+        assert result["title"] == "Kitchen"
+        assert result["data"] == {}
+        opts = result["options"]
+        assert opts["device_model"] == "kindle_pw"
+        assert opts["orientation"] == "portrait"
+        assert opts["width"] == 758
+        assert opts["height"] == 1024
+        assert opts["rotation"] == 0
+        assert opts["optimize"] is True
+        assert opts["grayscale_levels"] == 16
+        assert opts["update_interval"] == 60
+        assert opts["webhook_urls"] == []
+
+    async def test_kindle_landscape_rotation(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {**_USER_INPUT_KINDLE, "orientation": "landscape"},
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["width"] == 1024
+        assert opts["height"] == 758
+        assert opts["rotation"] == 90
+
+    async def test_kindle_pw4_dimensions(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {**_USER_INPUT_KINDLE, "device_model": "kindle_pw4"},
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["width"] == 1072
+        assert opts["height"] == 1448
+
+    async def test_user_with_area(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {**_USER_INPUT_KINDLE, "area": "kitchen"},
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["options"]["area_id"] == "kitchen"
+
+    async def test_user_without_area(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(_USER_INPUT_KINDLE)
+
+        assert "area_id" not in result["options"]
+
+    async def test_trmnl_advances_to_setup(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(_USER_INPUT_TRMNL)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "trmnl_setup"
+
+    async def test_trmnl_og_dimensions(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_TRMNL)
+
+        assert flow._data["width"] == 800
+        assert flow._data["height"] == 480
+        assert flow._data["rotation"] == 0
+        assert flow._data["grayscale_levels"] == 2
+
+    async def test_trmnl_portrait_rotation(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(
+            {**_USER_INPUT_TRMNL, "orientation": "portrait"},
+        )
+
+        assert flow._data["width"] == 480
+        assert flow._data["height"] == 800
+        assert flow._data["rotation"] == 90
 
     async def test_trmnl_setup_shows_form(self) -> None:
         flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_trmnl_setup(None)
 
         assert result["type"] == "form"
@@ -58,66 +145,119 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_setup_advances_to_webhook(self) -> None:
         flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_trmnl_setup({})
-
-        assert result["type"] == "form"
-        assert result["step_id"] == "trmnl_webhook"
-
-    async def test_pull_only_creates_entry(self) -> None:
-        flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
-        result = await flow.async_step_pull_only(None)
-
-        assert result["type"] == "create_entry"
-        assert result["title"] == "Kitchen"
-        assert result["data"] == {}
-        assert result["options"] == {
-            "width": 758,
-            "height": 1024,
-            "update_interval": 60,
-            "webhook_urls": [],
-        }
-
-    async def test_trmnl_webhook_shows_form(self) -> None:
-        flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
-        await flow.async_step_trmnl_setup({})
-        result = await flow.async_step_trmnl_webhook(None)
 
         assert result["type"] == "form"
         assert result["step_id"] == "trmnl_webhook"
 
     async def test_trmnl_webhook_creates_entry(self) -> None:
         flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {
-                "name": "Kitchen TRMNL",
+                "name": "Hallway TRMNL",
                 "webhook_url": "https://usetrmnl.com/api/custom_plugins/abc",
             }
         )
 
         assert result["type"] == "create_entry"
-        assert result["title"] == "Kitchen"
+        assert result["title"] == "Hallway"
         assert result["data"] == {}
-        assert result["options"]["webhook_urls"] == [
+        opts = result["options"]
+        assert opts["device_model"] == "trmnl_og"
+        assert opts["width"] == 800
+        assert opts["height"] == 480
+        assert opts["webhook_urls"] == [
             {
-                "name": "Kitchen TRMNL",
+                "name": "Hallway TRMNL",
                 "url": "https://usetrmnl.com/api/custom_plugins/abc",
             }
         ]
-        assert result["options"]["width"] == 758
 
     async def test_trmnl_webhook_rejects_invalid_url(self) -> None:
         flow = EinkDashboardConfigFlow()
-        await flow.async_step_user(_USER_INPUT)
+        await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_trmnl_setup({})
         with pytest.raises(vol.Invalid):
             await flow.async_step_trmnl_webhook(
                 {"name": "Bad", "webhook_url": "not-a-url"}
             )
+
+    async def test_custom_advances_to_resolution(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(_USER_INPUT_CUSTOM)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
+
+    async def test_custom_resolution_shows_form(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_CUSTOM)
+        result = await flow.async_step_custom_resolution(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
+
+    async def test_custom_resolution_advances_to_menu(
+        self,
+    ) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_CUSTOM)
+        result = await flow.async_step_custom_resolution(
+            {"width": 600, "height": 800},
+        )
+
+        assert result["type"] == "menu"
+        assert result["step_id"] == "push_target"
+        assert "pull_only" in result["menu_options"]
+        assert "trmnl_setup" in result["menu_options"]
+
+    async def test_custom_pull_only_creates_entry(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_CUSTOM)
+        await flow.async_step_custom_resolution(
+            {"width": 600, "height": 800},
+        )
+        result = await flow.async_step_pull_only(None)
+
+        assert result["type"] == "create_entry"
+        assert result["title"] == "Custom Display"
+        opts = result["options"]
+        assert opts["device_model"] == "custom"
+        assert opts["width"] == 600
+        assert opts["height"] == 800
+        assert opts["rotation"] == 0
+        assert opts["optimize"] is False
+        assert opts["webhook_urls"] == []
+
+    async def test_custom_trmnl_webhook_creates_entry(self) -> None:
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_CUSTOM)
+        await flow.async_step_custom_resolution({"width": 600, "height": 800})
+        await flow.async_step_trmnl_setup({})
+        result = await flow.async_step_trmnl_webhook(
+            {
+                "name": "Custom TRMNL",
+                "webhook_url": "https://usetrmnl.com/api/custom_plugins/xyz",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["title"] == "Custom Display"
+        opts = result["options"]
+        assert opts["device_model"] == "custom"
+        assert opts["width"] == 600
+        assert opts["height"] == 800
+        assert opts["rotation"] == 0
+        assert opts["optimize"] is False
+        assert opts["webhook_urls"] == [
+            {
+                "name": "Custom TRMNL",
+                "url": "https://usetrmnl.com/api/custom_plugins/xyz",
+            }
+        ]
 
 
 class TestEinkDashboardOptionsFlow:
@@ -132,7 +272,11 @@ class TestEinkDashboardOptionsFlow:
 
     async def test_init_menu_with_webhooks(self) -> None:
         flow = _make_options_flow(
-            {"webhook_urls": [{"name": "Test", "url": "https://example.com"}]}
+            {
+                "webhook_urls": [
+                    {"name": "Test", "url": "https://example.com"},
+                ],
+            }
         )
         result = await flow.async_step_init(None)
 
@@ -166,7 +310,10 @@ class TestEinkDashboardOptionsFlow:
         ]
 
     async def test_add_webhook_preserves_existing(self) -> None:
-        existing = {"name": "Existing", "url": "https://example.com/1"}
+        existing = {
+            "name": "Existing",
+            "url": "https://example.com/1",
+        }
         flow = _make_options_flow({"webhook_urls": [existing]})
         result = await flow.async_step_add_webhook(
             {
@@ -178,17 +325,29 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] == "create_entry"
         assert len(result["data"]["webhook_urls"]) == 2
 
-    async def test_add_webhook_rejects_duplicate_url(self) -> None:
-        existing = {"name": "Existing", "url": "https://example.com/1"}
+    async def test_add_webhook_rejects_duplicate_url(
+        self,
+    ) -> None:
+        existing = {
+            "name": "Existing",
+            "url": "https://example.com/1",
+        }
         flow = _make_options_flow({"webhook_urls": [existing]})
         result = await flow.async_step_add_webhook(
-            {"name": "Duplicate", "webhook_url": "https://example.com/1"}
+            {
+                "name": "Duplicate",
+                "webhook_url": "https://example.com/1",
+            }
         )
 
         assert result["type"] == "form"
-        assert result["errors"] == {"webhook_url": "already_configured"}
+        assert result["errors"] == {
+            "webhook_url": "already_configured",
+        }
 
-    async def test_add_webhook_rejects_invalid_url(self) -> None:
+    async def test_add_webhook_rejects_invalid_url(
+        self,
+    ) -> None:
         flow = _make_options_flow({"webhook_urls": []})
         with pytest.raises(vol.Invalid):
             await flow.async_step_add_webhook(
@@ -197,14 +356,20 @@ class TestEinkDashboardOptionsFlow:
 
     async def test_remove_webhook_shows_form(self) -> None:
         flow = _make_options_flow(
-            {"webhook_urls": [{"name": "Test", "url": "https://example.com"}]}
+            {
+                "webhook_urls": [
+                    {"name": "Test", "url": "https://example.com"},
+                ],
+            }
         )
         result = await flow.async_step_remove_webhook(None)
 
         assert result["type"] == "form"
         assert result["step_id"] == "remove_webhook"
 
-    async def test_remove_webhook_removes_selected(self) -> None:
+    async def test_remove_webhook_removes_selected(
+        self,
+    ) -> None:
         webhooks = [
             {"name": "Keep", "url": "https://example.com/1"},
             {"name": "Remove", "url": "https://example.com/2"},
@@ -221,7 +386,11 @@ class TestEinkDashboardOptionsFlow:
 
     async def test_settings_shows_form(self) -> None:
         flow = _make_options_flow(
-            {"width": 800, "height": 480, "update_interval": 60}
+            {
+                "width": 800,
+                "height": 480,
+                "update_interval": 60,
+            }
         )
         result = await flow.async_step_settings(None)
 
@@ -237,28 +406,24 @@ class TestEinkDashboardOptionsFlow:
                 "webhook_urls": [],
             }
         )
-        result = await flow.async_step_settings(
-            {
-                "width": 758,
-                "height": 1024,
-                "update_interval": 120,
-            }
-        )
+        result = await flow.async_step_settings({"update_interval": 120})
 
         assert result["type"] == "create_entry"
-        assert result["data"]["width"] == 758
-        assert result["data"]["height"] == 1024
+        assert result["data"]["width"] == 800
+        assert result["data"]["height"] == 480
         assert result["data"]["update_interval"] == 120
         assert result["data"]["webhook_urls"] == []
 
     async def test_settings_saves_optimize_values(self) -> None:
         flow = _make_options_flow(
-            {"width": 800, "height": 480, "update_interval": 60}
-        )
-        result = await flow.async_step_settings(
             {
                 "width": 800,
                 "height": 480,
+                "update_interval": 60,
+            }
+        )
+        result = await flow.async_step_settings(
+            {
                 "update_interval": 60,
                 "optimize": True,
                 "grayscale_levels": 2,
@@ -277,14 +442,13 @@ class TestEinkDashboardOptionsFlow:
         self,
     ) -> None:
         flow = _make_options_flow(
-            {"width": 800, "height": 480, "update_interval": 60}
+            {
+                "width": 800,
+                "height": 480,
+                "update_interval": 60,
+            }
         )
         with pytest.raises(vol.Invalid):
             await flow.async_step_settings(
-                {
-                    "width": 800,
-                    "height": 480,
-                    "update_interval": 60,
-                    "grayscale_levels": 7,
-                }
+                {"update_interval": 60, "grayscale_levels": 7}
             )

@@ -185,8 +185,21 @@ class _SelectSelectorConfig(dict):
         super().__init__(kwargs)
 
 
+class _SelectOptionDict(dict):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(kwargs)
+
+
 class _SelectSelector:
     def __init__(self, config: object) -> None:
+        pass
+
+    def __call__(self, value: object) -> object:
+        return value
+
+
+class _AreaSelector:
+    def __init__(self, config: object = None) -> None:
         pass
 
     def __call__(self, value: object) -> object:
@@ -196,7 +209,9 @@ class _SelectSelector:
 selector_mod = sys.modules["homeassistant.helpers.selector"]
 selector_mod.SelectSelectorMode = _SelectSelectorMode  # type: ignore[attr-defined]
 selector_mod.SelectSelectorConfig = _SelectSelectorConfig  # type: ignore[attr-defined]
+selector_mod.SelectOptionDict = _SelectOptionDict  # type: ignore[attr-defined]
 selector_mod.SelectSelector = _SelectSelector  # type: ignore[attr-defined]
+selector_mod.AreaSelector = _AreaSelector  # type: ignore[attr-defined]
 
 template_mod = sys.modules["homeassistant.helpers.template"]
 

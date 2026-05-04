@@ -5,9 +5,21 @@
         "title": "E-Ink Dashboard",
         "data": {
           "name": "Name",
-          "width": "Width (px)",
-          "height": "Height (px)",
+          "device_model": "Device model",
+          "orientation": "Orientation",
+          "area": "Area",
           "update_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "device_model": "Select your e-ink display model",
+          "orientation": "Portrait or landscape layout"
+        }
+      },
+      "custom_resolution": {
+        "title": "Custom resolution",
+        "data": {
+          "width": "Width (px)",
+          "height": "Height (px)"
         }
       },
       "push_target": {
@@ -66,8 +78,6 @@
       "settings": {
         "title": "Display Settings",
         "data": {
-          "width": "Width (px)",
-          "height": "Height (px)",
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",
           "grayscale_levels": "Grayscale levels",
@@ -84,6 +94,26 @@
     },
     "error": {
       "already_configured": "This webhook URL is already configured."
+    }
+  },
+  "selector": {
+    "device_model": {
+      "options": {
+        "kindle_4": "Kindle 4/5",
+        "kindle_pw": "Kindle Paperwhite 1/2/3",
+        "kindle_pw4": "Kindle Paperwhite 4",
+        "kindle_oasis": "Kindle Oasis 2/3",
+        "trmnl_og": "TRMNL OG",
+        "trmnl_x": "TRMNL X",
+        "trmnl_rgb": "TRMNL RGB",
+        "custom": "Custom"
+      }
+    },
+    "orientation": {
+      "options": {
+        "portrait": "Portrait",
+        "landscape": "Landscape"
+      }
     }
   }
 }

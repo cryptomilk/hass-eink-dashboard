@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
+    AreaSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -26,7 +27,9 @@ from .const import (
     DEFAULT_SHARPNESS,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
+    DEVICE_PRESETS,
     DOMAIN,
+    resolve_display,
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
@@ -34,11 +37,30 @@ _POSITIVE_INT = vol.All(int, vol.Range(min=1))
 _STEP_USER_SCHEMA = vol.Schema(
     {
         vol.Required("name", default="E-Ink Dashboard"): str,
-        vol.Required("width", default=DEFAULT_WIDTH): _POSITIVE_INT,
-        vol.Required("height", default=DEFAULT_HEIGHT): _POSITIVE_INT,
+        vol.Required("device_model", default="kindle_pw"): SelectSelector(
+            SelectSelectorConfig(
+                options=list(DEVICE_PRESETS.keys()),
+                translation_key="device_model",
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Required("orientation", default="portrait"): SelectSelector(
+            SelectSelectorConfig(
+                options=["portrait", "landscape"],
+                translation_key="orientation",
+            )
+        ),
+        vol.Optional("area"): AreaSelector(),
         vol.Required(
             "update_interval", default=DEFAULT_UPDATE_INTERVAL
         ): _POSITIVE_INT,
+    }
+)
+
+_STEP_CUSTOM_RESOLUTION_SCHEMA = vol.Schema(
+    {
+        vol.Required("width", default=DEFAULT_WIDTH): _POSITIVE_INT,
+        vol.Required("height", default=DEFAULT_HEIGHT): _POSITIVE_INT,
     }
 )
 
@@ -71,11 +93,62 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             validated = _STEP_USER_SCHEMA(user_input)
             self._name = validated["name"]
-            self._data = {k: v for k, v in validated.items() if k != "name"}
-            return await self.async_step_push_target()
+            device_model = validated["device_model"]
+            orientation = validated["orientation"]
+
+            self._data = {
+                "device_model": device_model,
+                "orientation": orientation,
+                "update_interval": validated["update_interval"],
+            }
+            area_id = validated.get("area")
+            if area_id:
+                self._data["area_id"] = area_id
+
+            if device_model == "custom":
+                return await self.async_step_custom_resolution()
+
+            width, height, rotation, preset = resolve_display(
+                device_model,
+                orientation,
+            )
+            self._data.update(
+                {
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation,
+                    "optimize": preset.optimize,
+                    "grayscale_levels": preset.grayscale_levels,
+                }
+            )
+
+            if device_model.startswith("trmnl_"):
+                return await self.async_step_trmnl_setup()
+            return self._create_pull_entry()
+
         return self.async_show_form(
             step_id="user",
             data_schema=_STEP_USER_SCHEMA,
+        )
+
+    async def async_step_custom_resolution(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            validated = _STEP_CUSTOM_RESOLUTION_SCHEMA(user_input)
+            self._data.update(
+                {
+                    "width": validated["width"],
+                    "height": validated["height"],
+                    "rotation": 0,
+                    "optimize": DEFAULT_OPTIMIZE,
+                    "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                }
+            )
+            return await self.async_step_push_target()
+        return self.async_show_form(
+            step_id="custom_resolution",
+            data_schema=_STEP_CUSTOM_RESOLUTION_SCHEMA,
         )
 
     async def async_step_push_target(
@@ -86,15 +159,22 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             menu_options=["pull_only", "trmnl_setup"],
         )
 
+    def _create_pull_entry(self) -> ConfigFlowResult:
+        return self.async_create_entry(
+            title=self._name,
+            data={},
+            options={
+                **self._data,
+                "sharpness": DEFAULT_SHARPNESS,
+                "contrast": DEFAULT_CONTRAST,
+                "webhook_urls": [],
+            },
+        )
+
     async def async_step_pull_only(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        name = self._name
-        return self.async_create_entry(
-            title=name,
-            data={},
-            options={**self._data, "webhook_urls": []},
-        )
+        return self._create_pull_entry()
 
     async def async_step_trmnl_setup(
         self, user_input: dict[str, Any] | None = None
@@ -111,12 +191,13 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         if user_input is not None:
             validated = _STEP_WEBHOOK_SCHEMA(user_input)
-            name = self._name
             return self.async_create_entry(
-                title=name,
+                title=self._name,
                 data={},
                 options={
                     **self._data,
+                    "sharpness": DEFAULT_SHARPNESS,
+                    "contrast": DEFAULT_CONTRAST,
                     "webhook_urls": [
                         {
                             "name": validated["name"],
@@ -203,13 +284,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         opts = self.config_entry.options
         schema = vol.Schema(
             {
-                vol.Required(
-                    "width", default=opts.get("width", DEFAULT_WIDTH)
-                ): _POSITIVE_INT,
-                vol.Required(
-                    "height",
-                    default=opts.get("height", DEFAULT_HEIGHT),
-                ): _POSITIVE_INT,
                 vol.Required(
                     "update_interval",
                     default=opts.get(
