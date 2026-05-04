@@ -85,6 +85,7 @@ class _StubFlowBase:
         step_id: str | None = None,
         data_schema: object = None,
         errors: dict | None = None,
+        description_placeholders: dict | None = None,
         **kw: object,
     ) -> dict:
         return {
@@ -92,6 +93,7 @@ class _StubFlowBase:
             "step_id": step_id,
             "data_schema": data_schema,
             "errors": errors,
+            "description_placeholders": description_placeholders,
         }
 
     def async_show_menu(

@@ -683,3 +683,49 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 800
         assert result["data"]["rotation"] == 0
         assert result["data"]["area_id"] == "kitchen"
+
+    async def test_copy_card_yaml_shows_entry_id(self) -> None:
+        flow = _make_options_flow({"webhook_urls": []})
+        flow.config_entry.entry_id = "abc123"
+        result = await flow.async_step_copy_card_yaml(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "copy_card_yaml"
+        placeholders = result["description_placeholders"]
+        assert "abc123" in placeholders["yaml"]
+        assert "eink-dashboard-card" in placeholders["yaml"]
+
+    async def test_copy_card_yaml_submit_returns_to_init(self) -> None:
+        flow = _make_options_flow({"webhook_urls": []})
+        flow.config_entry.entry_id = "abc123"
+        result = await flow.async_step_copy_card_yaml({})
+
+        assert result["type"] == "menu"
+        assert result["step_id"] == "init"
+
+    async def test_copy_dashboard_yaml_shows_all_entries(self) -> None:
+        flow = _make_options_flow({"webhook_urls": []})
+        entry_a = MagicMock()
+        entry_a.entry_id = "aaa111"
+        entry_b = MagicMock()
+        entry_b.entry_id = "bbb222"
+        flow.hass = MagicMock()
+        flow.hass.config_entries.async_entries.return_value = [
+            entry_a,
+            entry_b,
+        ]
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "copy_dashboard_yaml"
+        yaml = result["description_placeholders"]["yaml"]
+        assert "aaa111" in yaml
+        assert "bbb222" in yaml
+        assert "eink-dashboard-card" in yaml
+
+    async def test_copy_dashboard_yaml_submit_returns_to_init(self) -> None:
+        flow = _make_options_flow({"webhook_urls": []})
+        result = await flow.async_step_copy_dashboard_yaml({})
+
+        assert result["type"] == "menu"
+        assert result["step_id"] == "init"

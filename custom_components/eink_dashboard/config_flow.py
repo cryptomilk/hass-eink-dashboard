@@ -242,6 +242,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             "device_settings",
             "display_settings",
             "add_webhook",
+            "copy_card_yaml",
+            "copy_dashboard_yaml",
         ]
         if webhooks:
             menu_options = [
@@ -249,10 +251,45 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 "display_settings",
                 "add_webhook",
                 "remove_webhook",
+                "copy_card_yaml",
+                "copy_dashboard_yaml",
             ]
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
+        )
+
+    async def async_step_copy_card_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return await self.async_step_init()
+        yaml = (
+            f"type: custom:eink-dashboard-card\n"
+            f"config_entry: {self.config_entry.entry_id}"
+        )
+        return self.async_show_form(
+            step_id="copy_card_yaml",
+            data_schema=vol.Schema({}),
+            description_placeholders={"yaml": yaml},
+        )
+
+    async def async_step_copy_dashboard_yaml(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            return await self.async_step_init()
+        entries = self.hass.config_entries.async_entries(DOMAIN)
+        cards = "\n".join(
+            f"      - type: custom:eink-dashboard-card\n"
+            f"        config_entry: {e.entry_id}"
+            for e in entries
+        )
+        yaml = f"views:\n  - title: E-Ink Dashboards\n    cards:\n{cards}"
+        return self.async_show_form(
+            step_id="copy_dashboard_yaml",
+            data_schema=vol.Schema({}),
+            description_placeholders={"yaml": yaml},
         )
 
     async def async_step_add_webhook(

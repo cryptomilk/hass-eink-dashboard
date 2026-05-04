@@ -58,8 +58,18 @@
           "device_settings": "Device settings",
           "display_settings": "Display settings",
           "add_webhook": "Add push target",
-          "remove_webhook": "Remove push target"
+          "remove_webhook": "Remove push target",
+          "copy_card_yaml": "Copy card YAML",
+          "copy_dashboard_yaml": "Copy dashboard YAML"
         }
+      },
+      "copy_card_yaml": {
+        "title": "Card YAML",
+        "description": "Add this card to your Lovelace dashboard:\n\n```yaml\n{yaml}\n```"
+      },
+      "copy_dashboard_yaml": {
+        "title": "Dashboard YAML",
+        "description": "Create a new dashboard with this YAML:\n\n```yaml\n{yaml}\n```"
       },
       "device_settings": {
         "title": "Device Settings",
