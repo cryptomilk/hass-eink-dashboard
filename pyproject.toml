@@ -29,6 +29,11 @@ max-complexity = 25
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.interrogate]
+fail-under = 80
+ignore-init-method = true
+ignore-magic = true
+
 [tool.ty.src]
 exclude = [
     "tests/",
