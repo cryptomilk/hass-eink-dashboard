@@ -132,6 +132,7 @@ def _make_layout_request(
     entry_id: str = "test_entry",
     widgets: list | None = None,
     options: dict | None = None,
+    data: dict | None = None,
     *,
     entry_missing: bool = False,
     body: object = None,
@@ -150,6 +151,7 @@ def _make_layout_request(
     else:
         ha_entry = MagicMock()
         ha_entry.options = options or {"width": 758, "height": 1024}
+        ha_entry.data = data or {}
         entry_data: dict = {
             "widgets": widgets or [],
             "entry": ha_entry,
@@ -193,6 +195,36 @@ class TestEinkLayoutView:
         body = json.loads(response.text)
         assert body["widgets"] == widgets
         assert body["display"] == {"width": 758, "height": 1024}
+
+    async def test_device_metadata_from_entry_data(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            data={
+                "device_model": "kindle_pw4",
+                "orientation": "landscape",
+                "area_id": "kitchen",
+            }
+        )
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["model"] == "kindle_pw4"
+        assert device["model_label"] == "Kindle Paperwhite 4"
+        assert device["orientation"] == "landscape"
+        assert device["area_id"] == "kitchen"
+
+    async def test_device_metadata_defaults(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(data={})
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["model"] == "custom"
+        assert device["model_label"] == "Custom"
+        assert device["orientation"] == "portrait"
+        assert device["area_id"] is None
 
     async def test_missing_entry_raises_404(self) -> None:
         view = EinkLayoutView()

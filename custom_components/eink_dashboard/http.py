@@ -6,6 +6,7 @@ from homeassistant.components.http import HomeAssistantView
 from .const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
+    DEVICE_PRESETS,
     DOMAIN,
     MAX_WIDGETS,
     WidgetType,
@@ -28,8 +29,20 @@ class EinkLayoutView(HomeAssistantView):
         width = entry.options.get("width", DEFAULT_WIDTH)
         height = entry.options.get("height", DEFAULT_HEIGHT)
 
+        device_model = entry.data.get("device_model", "custom")
+        preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
+
         return web.json_response(
-            {"widgets": widgets, "display": {"width": width, "height": height}}
+            {
+                "widgets": widgets,
+                "display": {"width": width, "height": height},
+                "device": {
+                    "model": device_model,
+                    "model_label": preset.label,
+                    "orientation": entry.data.get("orientation", "portrait"),
+                    "area_id": entry.data.get("area_id"),
+                },
+            }
         )
 
     async def post(self, request: web.Request, entry_id: str) -> web.Response:
