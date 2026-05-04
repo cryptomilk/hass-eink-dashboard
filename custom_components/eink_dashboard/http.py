@@ -41,6 +41,9 @@ class EinkLayoutView(HomeAssistantView):
                     "model_label": preset.label,
                     "orientation": entry.data.get("orientation", "portrait"),
                     "area_id": entry.data.get("area_id"),
+                    "has_webhooks": bool(
+                        entry.options.get("webhook_urls", [])
+                    ),
                 },
             }
         )

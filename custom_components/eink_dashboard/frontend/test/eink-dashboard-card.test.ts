@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { snap, grayColor, parseDaysUntil, formatRelativeDate } from "../src/eink-dashboard-card.js";
+import { snap, grayColor, parseDaysUntil, formatRelativeDate, buildHeaderText, shouldShowCopyUrl } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
   it("snaps 0 to 0", () => expect(snap(0)).toBe(0));
@@ -78,4 +78,57 @@ describe("formatRelativeDate", () => {
   it("returns 'in N days' for values > 1", () => expect(formatRelativeDate(3, "2024-01-04")).toBe("in 3 days"));
   it("returns raw string for negative days", () => expect(formatRelativeDate(-1, "2023-12-31")).toBe("2023-12-31"));
   it("returns raw string for null", () => expect(formatRelativeDate(null, "garbage")).toBe("garbage"));
+});
+
+describe("buildHeaderText", () => {
+  const areas = {
+    kitchen: { name: "Kitchen" },
+    bedroom: { name: "Bedroom" },
+  };
+
+  it("shows area and model label when area exists", () => {
+    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "kitchen" };
+    const display = { width: 1072, height: 1448 };
+    expect(buildHeaderText(device, display, areas)).toBe("Kitchen — Kindle Paperwhite 4");
+  });
+
+  it("shows only model label when no area", () => {
+    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: null };
+    const display = { width: 1072, height: 1448 };
+    expect(buildHeaderText(device, display, areas)).toBe("Kindle Paperwhite 4");
+  });
+
+  it("uses dimensions for custom device with area", () => {
+    const device = { model: "custom", model_label: "Custom", area_id: "bedroom" };
+    const display = { width: 800, height: 600 };
+    expect(buildHeaderText(device, display, areas)).toBe("Bedroom — 800×600");
+  });
+
+  it("uses dimensions for custom device without area", () => {
+    const device = { model: "custom", model_label: "Custom", area_id: null };
+    const display = { width: 800, height: 600 };
+    expect(buildHeaderText(device, display, areas)).toBe("800×600");
+  });
+
+  it("falls back to model label when area_id not found in areas", () => {
+    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "garage" };
+    const display = { width: 1072, height: 1448 };
+    expect(buildHeaderText(device, display, areas)).toBe("Kindle Paperwhite 4");
+  });
+
+  it("falls back to model label when areas is undefined", () => {
+    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "kitchen" };
+    const display = { width: 1072, height: 1448 };
+    expect(buildHeaderText(device, display, undefined)).toBe("Kindle Paperwhite 4");
+  });
+});
+
+describe("shouldShowCopyUrl", () => {
+  it("returns true for kindle_pw4", () => expect(shouldShowCopyUrl("kindle_pw4", false)).toBe(true));
+  it("returns true for kindle_4 regardless of webhooks", () => expect(shouldShowCopyUrl("kindle_4", true)).toBe(true));
+  it("returns true for kindle_oasis regardless of webhooks", () => expect(shouldShowCopyUrl("kindle_oasis", true)).toBe(true));
+  it("returns true for custom without webhooks", () => expect(shouldShowCopyUrl("custom", false)).toBe(true));
+  it("returns false for custom with webhooks", () => expect(shouldShowCopyUrl("custom", true)).toBe(false));
+  it("returns false for trmnl_og", () => expect(shouldShowCopyUrl("trmnl_og", false)).toBe(false));
+  it("returns false for trmnl_x", () => expect(shouldShowCopyUrl("trmnl_x", true)).toBe(false));
 });

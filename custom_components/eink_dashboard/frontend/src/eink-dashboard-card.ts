@@ -129,6 +129,28 @@ export function formatRelativeDate(days: number | null, raw: string): string {
   return `in ${days} days`;
 }
 
+export function buildHeaderText(
+  device: { model: string; model_label: string; area_id: string | null },
+  display: { width: number; height: number },
+  areas: Record<string, { name: string }> | undefined,
+): string {
+  const deviceLabel =
+    device.model === "custom"
+      ? `${display.width}×${display.height}`
+      : device.model_label;
+  const areaName =
+    device.area_id && areas?.[device.area_id]?.name
+      ? areas[device.area_id].name
+      : null;
+  return areaName ? `${areaName} — ${deviceLabel}` : deviceLabel;
+}
+
+export function shouldShowCopyUrl(model: string, hasWebhooks: boolean): boolean {
+  if (model.startsWith("kindle_")) return true;
+  if (model === "custom" && !hasWebhooks) return true;
+  return false;
+}
+
 // ── Card class ────────────────────────────────────────────────────────────────
 
 interface CardConfig {
@@ -184,6 +206,9 @@ class EinkDashboardCard extends HTMLElement {
   private _resizeWidgetStart: ResizeStart | null = null;
   private _forecasts: Record<string, ForecastDay[]> = {};
   private _resolvedEntryId: string | undefined;
+  private _headerEl!: HTMLElement;
+  private _copyBtn!: HTMLButtonElement;
+  private _copyTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
@@ -205,6 +230,7 @@ class EinkDashboardCard extends HTMLElement {
       this._showServerImage = false;
       this._editMode = false;
       this._editor = null;
+      if (this._copyTimeout) { clearTimeout(this._copyTimeout); this._copyTimeout = null; }
     }
   }
 
@@ -217,7 +243,16 @@ class EinkDashboardCard extends HTMLElement {
       this._fetchLayout();
     }
     if (this._layout) {
+      if (!this._headerEl) return;
       this._scheduleRender();
+      const newHeader = buildHeaderText(
+        this._layout.device,
+        this._layout.display,
+        hass.areas,
+      );
+      if (this._headerEl.textContent !== newHeader) {
+        this._headerEl.textContent = newHeader;
+      }
     }
   }
 
@@ -303,12 +338,37 @@ class EinkDashboardCard extends HTMLElement {
           border-top: 1px solid var(--error-color, #b00020);
           display: none;
         }
+        .card-header {
+          padding: 12px 16px 4px;
+          font-size: 16px;
+          font-weight: 500;
+          color: var(--primary-text-color, #212121);
+          line-height: 1.2;
+        }
+        .copy-btn {
+          font-size: 12px;
+          padding: 4px 8px;
+          border: 1px solid var(--divider-color, #ccc);
+          border-radius: 4px;
+          cursor: pointer;
+          background: var(--card-background-color, #fff);
+          color: var(--primary-text-color, #212121);
+        }
+        .copy-btn.copied {
+          background: var(--success-color, #4caf50);
+          color: #fff;
+          border-color: var(--success-color, #4caf50);
+        }
       </style>
       <ha-card>
+        <div class="card-header"></div>
         <div class="container">
           <div class="loading">Loading layout…</div>
         </div>
         <div class="toolbar">
+          <button class="copy-btn" style="display:none" title="Copy image URL to clipboard">
+            Copy image URL
+          </button>
           <button class="toggle-btn" title="Toggle between canvas preview and server-rendered image">
             Show rendered image
           </button>
@@ -327,6 +387,9 @@ class EinkDashboardCard extends HTMLElement {
     this._editBtn.addEventListener("click", () => this._onToggleEdit());
     this._editorContainer = this.shadowRoot!.querySelector<HTMLElement>(".editor-container")!;
     this._saveError = this.shadowRoot!.querySelector<HTMLElement>(".save-error")!;
+    this._headerEl = this.shadowRoot!.querySelector<HTMLElement>(".card-header")!;
+    this._copyBtn = this.shadowRoot!.querySelector<HTMLButtonElement>(".copy-btn")!;
+    this._copyBtn.addEventListener("click", () => this._onCopyUrl());
   }
 
   // ── Edit mode ─────────────────────────────────────────────────────────────
@@ -432,6 +495,15 @@ class EinkDashboardCard extends HTMLElement {
         `eink_dashboard/${entryId}/layout`,
       );
       this._layout = resp;
+      this._headerEl.textContent = buildHeaderText(
+        resp.device,
+        resp.display,
+        this._hass?.areas,
+      );
+      this._copyBtn.style.display = shouldShowCopyUrl(
+        resp.device.model,
+        resp.device.has_webhooks,
+      ) ? "" : "none";
       this._initCanvas();
       this._fetchForecasts();
       this._scheduleRender();
@@ -836,6 +908,30 @@ class EinkDashboardCard extends HTMLElement {
       this._toggleBtn.classList.remove("active");
       this._scheduleRender();
     }
+  }
+
+  // ── Copy URL ──────────────────────────────────────────────────────────────
+
+  private _onCopyUrl(): void {
+    if (!this._resolvedEntryId) return;
+    const url = `${window.location.origin}/api/eink_dashboard/${this._resolvedEntryId}/image.png`;
+    navigator.clipboard.writeText(url).then(() => {
+      this._copyBtn.textContent = "Copied!";
+      this._copyBtn.classList.add("copied");
+      if (this._copyTimeout) clearTimeout(this._copyTimeout);
+      this._copyTimeout = setTimeout(() => {
+        this._copyBtn.textContent = "Copy image URL";
+        this._copyBtn.classList.remove("copied");
+        this._copyTimeout = null;
+      }, 2000);
+    }).catch(() => {
+      this._copyBtn.textContent = "Copy failed";
+      if (this._copyTimeout) clearTimeout(this._copyTimeout);
+      this._copyTimeout = setTimeout(() => {
+        this._copyBtn.textContent = "Copy image URL";
+        this._copyTimeout = null;
+      }, 2000);
+    });
   }
 
   // ── State helper ──────────────────────────────────────────────────────────

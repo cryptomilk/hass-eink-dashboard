@@ -12,6 +12,7 @@ export interface ConfigEntry {
 
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
+  areas: Record<string, { name: string }>;
   callApi<T = unknown>(method: string, path: string, data?: unknown): Promise<T>;
   callWS<T = unknown>(msg: Record<string, unknown>): Promise<T>;
   callService<T = unknown>(
@@ -61,6 +62,14 @@ export interface DisplayConfig {
   height: number;
 }
 
+export interface DeviceInfo {
+  model: string;
+  model_label: string;
+  orientation: string;
+  area_id: string | null;
+  has_webhooks: boolean;
+}
+
 export interface WidgetBounds {
   x: number;
   y: number;
@@ -89,6 +98,7 @@ export interface ForecastDay {
 export interface LayoutResponse {
   display: DisplayConfig;
   widgets: Widget[];
+  device: DeviceInfo;
 }
 
 export interface ForecastServiceResult {

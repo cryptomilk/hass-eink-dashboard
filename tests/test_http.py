@@ -187,7 +187,9 @@ class TestEinkLayoutView:
     async def test_returns_layout_json(self) -> None:
         widgets = [{"type": "separator", "y": 50}]
         view = EinkLayoutView()
-        request = _make_layout_request(widgets=widgets)
+        request = _make_layout_request(
+            widgets=widgets, data={"device_model": "kindle_pw"}
+        )
 
         response = await view.get(request, "test_entry")
 
@@ -195,6 +197,11 @@ class TestEinkLayoutView:
         body = json.loads(response.text)
         assert body["widgets"] == widgets
         assert body["display"] == {"width": 758, "height": 1024}
+        assert body["device"]["model"] == "kindle_pw"
+        assert body["device"]["model_label"] == "Kindle Paperwhite 1/2/3"
+        assert body["device"]["orientation"] == "portrait"
+        assert body["device"]["area_id"] is None
+        assert body["device"]["has_webhooks"] is False
 
     async def test_device_metadata_from_entry_data(self) -> None:
         view = EinkLayoutView()
@@ -225,6 +232,25 @@ class TestEinkLayoutView:
         assert device["model_label"] == "Custom"
         assert device["orientation"] == "portrait"
         assert device["area_id"] is None
+        assert device["has_webhooks"] is False
+
+    async def test_has_webhooks_true(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            options={
+                "width": 758,
+                "height": 1024,
+                "webhook_urls": [
+                    {"name": "trmnl", "url": "https://example.com"}
+                ],
+            },
+            data={},
+        )
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["has_webhooks"] is True
 
     async def test_missing_entry_raises_404(self) -> None:
         view = EinkLayoutView()
