@@ -700,90 +700,32 @@ class TestRenderSensorRows:
         assert all_white
 
 
-MOCK_BATTERY_STATES = {
-    "sensor.kindle_battery": {
-        "state": "75",
-        "attributes": {
-            "unit_of_measurement": "%",
-            "friendly_name": "Kindle Battery",
-        },
-    },
-}
-
-
-class TestRenderBatteryBar:
+class TestRenderDeviceBattery:
     def _config(self, **overrides: object) -> dict[str, object]:
         base: dict[str, object] = {
             "width": 400,
             "height": 100,
-            "states": MOCK_BATTERY_STATES,
+            "device_battery_level": 75,
         }
         base.update(overrides)
         return base
 
-    def test_battery_bar_draws_fill(self) -> None:
-        widgets = [
-            {
-                "type": "battery_bar",
-                "x": PADDING,
-                "y": 20,
-                "entity": "sensor.kindle_battery",
-            }
-        ]
+    def test_device_battery_draws_fill(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
-
         img = _png_to_image(result)
-        # Fill inside compact battery icon (22x10 body)
         has_dark_fill = any(
             _pixel(img, x, y) < 128
             for x in range(PADDING + 1, PADDING + 16)
-            for y in range(21, 30)
+            for y in range(33, 42)
         )
         assert has_dark_fill
 
-    def test_battery_bar_missing_entity_is_noop(
-        self,
-    ) -> None:
-        widgets = [
-            {
-                "type": "battery_bar",
-                "x": PADDING,
-                "y": 20,
-                "entity": "sensor.nonexistent",
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
-        img = _png_to_image(result)
-        all_white = all(
-            _pixel(img, x, y) == 255
-            for x in range(0, 400, 20)
-            for y in range(0, 100, 20)
-        )
-        assert all_white
-
-    def test_battery_bar_non_numeric_is_noop(
-        self,
-    ) -> None:
-        states = {
-            "sensor.kindle_battery": {
-                "state": "unavailable",
-                "attributes": {},
-            },
-        }
-        widgets = [
-            {
-                "type": "battery_bar",
-                "x": PADDING,
-                "y": 20,
-                "entity": "sensor.kindle_battery",
-            }
-        ]
+    def test_device_battery_none_is_noop(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(
-            widgets,
-            {"width": 400, "height": 100, "states": states},
+            widgets, self._config(device_battery_level=None)
         )
-
         img = _png_to_image(result)
         all_white = all(
             _pixel(img, x, y) == 255
@@ -792,45 +734,100 @@ class TestRenderBatteryBar:
         )
         assert all_white
 
-    def test_battery_bar_draws_percentage_text(self) -> None:
-        widgets = [
-            {
-                "type": "battery_bar",
-                "x": PADDING,
-                "y": 20,
-                "entity": "sensor.kindle_battery",
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
+    def test_device_battery_missing_key_is_noop(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, {"width": 400, "height": 100})
         img = _png_to_image(result)
-        # "75%" text drawn to the right of the icon
+        all_white = all(
+            _pixel(img, x, y) == 255
+            for x in range(0, 400, 20)
+            for y in range(0, 100, 20)
+        )
+        assert all_white
+
+    def test_device_battery_draws_percentage_text(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, self._config())
+        img = _png_to_image(result)
         has_text = any(
             _pixel(img, x, y) < 128
             for x in range(PADDING + 28, PADDING + 70)
-            for y in range(18, 34)
+            for y in range(29, 47)
         )
         assert has_text
 
-    def test_battery_bar_draws_nub(self) -> None:
-        widgets = [
-            {
-                "type": "battery_bar",
-                "x": PADDING,
-                "y": 20,
-                "entity": "sensor.kindle_battery",
-            }
-        ]
+    def test_device_battery_draws_nub(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
-
         img = _png_to_image(result)
-        # Terminal nub right of the body (at x + 22..24)
         has_nub = any(
             _pixel(img, x, y) < 200
             for x in range(PADDING + 23, PADDING + 25)
-            for y in range(23, 27)
+            for y in range(35, 40)
         )
         assert has_nub
+
+    def test_device_battery_zero_percent(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=0)
+        )
+        img = _png_to_image(result)
+        has_outline = any(
+            _pixel(img, x, y) < 200
+            for x in range(PADDING, PADDING + 25)
+            for y in range(32, 43)
+        )
+        assert has_outline
+
+    def test_device_battery_100_percent(self) -> None:
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=100)
+        )
+        img = _png_to_image(result)
+        has_full_fill = any(
+            _pixel(img, x, y) < 128
+            for x in range(PADDING + 1, PADDING + 21)
+            for y in range(33, 42)
+        )
+        assert has_full_fill
+
+    def test_device_battery_icon_scales_with_font_size(self) -> None:
+        # font_size=48 → s=2 → icon is 44×20 instead of default 22×10
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 40,
+                "font_size": 48,
+            }
+        ]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=75)
+        )
+        img = _png_to_image(result)
+        # Scaled icon body: PADDING to PADDING+44, icon_y=64 to 84
+        has_scaled_icon = any(
+            _pixel(img, x, y) < 200
+            for x in range(PADDING, PADDING + 44)
+            for y in range(64, 85)
+        )
+        assert has_scaled_icon
+
+        # At default font_size, the gap between nub-end (PADDING+24) and
+        # label-start (PADDING+30) is clear — proving the scaled icon actually
+        # extends its body into a region the default size never reaches.
+        result_default = render_dashboard(
+            [{"type": "device_battery", "x": PADDING, "y": 40}],
+            self._config(device_battery_level=75),
+        )
+        img_default = _png_to_image(result_default)
+        assert all(
+            _pixel(img_default, x, y) >= 200
+            for x in range(PADDING + 25, PADDING + 30)
+            for y in range(40, 50)
+        )
 
 
 MOCK_STATUS_ICON_STATES = {
@@ -1451,20 +1448,14 @@ class TestFontSizeControls:
         )
         assert has_row2
 
-    def test_battery_bar_custom_font_size(self) -> None:
+    def test_device_battery_custom_font_size(self) -> None:
         # font_size=20 — larger percentage label
         widgets = [
-            {
-                "type": "battery_bar",
-                "entity": "sensor.kindle_battery",
-                "x": PADDING,
-                "y": 20,
-                "font_size": 20,
-            }
+            {"type": "device_battery", "x": PADDING, "y": 20, "font_size": 20}
         ]
         result = render_dashboard(
             widgets,
-            {"width": 400, "height": 100, "states": MOCK_BATTERY_STATES},
+            {"width": 400, "height": 100, "device_battery_level": 75},
         )
         img = _png_to_image(result)
         has_label = any(

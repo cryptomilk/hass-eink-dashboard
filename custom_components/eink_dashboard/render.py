@@ -16,7 +16,7 @@ from .const import (
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
     COLOR_WHITE,
-    FONT_SIZE_BATTERY_BAR,
+    FONT_SIZE_DEVICE_BATTERY,
     FONT_SIZE_SENSOR_ROWS,
     FONT_SIZE_STATUS_ICONS,
     FONT_SIZE_TEXT,
@@ -462,55 +462,58 @@ _BATTERY_NUB_W = 2
 _BATTERY_NUB_H = 4
 
 
-def render_battery_bar(
+def render_device_battery(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
-    """Draw a small battery icon and percentage label for an entity."""
-    entity_id = widget.get("entity", "")
-    state = config.get("states", {}).get(entity_id)
-    if state is None:
+    """Draw battery icon and percentage for the device's own battery."""
+    level = config.get("device_battery_level")
+    if level is None:
         return
 
-    raw = state.get("state", "")
-    try:
-        pct = int(float(raw))
-    except (ValueError, TypeError):
-        return
-    pct = max(0, min(100, pct))
+    pct = max(0, min(100, int(level)))
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    font_size = widget.get("font_size", FONT_SIZE_BATTERY_BAR)
+    font_size = widget.get("font_size", FONT_SIZE_DEVICE_BATTERY)
     color = widget.get("color", COLOR_BLACK)
 
-    bw = _BATTERY_BODY_W
-    bh = _BATTERY_BODY_H
+    s = font_size / FONT_SIZE_DEVICE_BATTERY
+    bw = round(_BATTERY_BODY_W * s)
+    bh = round(_BATTERY_BODY_H * s)
+    nub_w = round(_BATTERY_NUB_W * s)
+    nub_h = round(_BATTERY_NUB_H * s)
+    nub_gap = max(1, round(s))
+    gap = round(4 * s)
+
+    font = _load_font(font_size)
+    label = f"{pct}%"
+    bbox = draw.textbbox((0, 0), label, font=font)
+    text_h = bbox[3] - bbox[1]
+    icon_y = y + bbox[1] + (text_h - bh) // 2
 
     draw.rectangle(
-        [x, y, x + bw, y + bh],
+        [x, icon_y, x + bw, icon_y + bh],
         outline=COLOR_GRAY,
         width=1,
     )
 
-    nub_y = y + (bh - _BATTERY_NUB_H) // 2
+    nub_y = icon_y + (bh - nub_h) // 2
     draw.rectangle(
-        [x + bw + 1, nub_y, x + bw + _BATTERY_NUB_W, nub_y + _BATTERY_NUB_H],
+        [x + bw + nub_gap, nub_y, x + bw + nub_gap + nub_w - 1, nub_y + nub_h],
         fill=COLOR_GRAY,
     )
 
     fill_w = int((bw - 2) * pct / 100)
     if fill_w > 0:
         draw.rectangle(
-            [x + 1, y + 1, x + 1 + fill_w, y + bh - 1],
+            [x + 1, icon_y + 1, x + 1 + fill_w, icon_y + bh - 1],
             fill=color,
         )
 
-    font = _load_font(font_size)
-    label = f"{pct}%"
     draw.text(
-        (x + bw + _BATTERY_NUB_W + 4, y - 2),
+        (x + bw + nub_gap + nub_w + gap, y),
         label,
         fill=color,
         font=font,
@@ -703,7 +706,7 @@ _RENDERERS: dict[WidgetType, RendererFn] = {
     WidgetType.SEPARATOR: render_separator,
     WidgetType.WEATHER: render_weather,
     WidgetType.SENSOR_ROWS: render_sensor_rows,
-    WidgetType.BATTERY_BAR: render_battery_bar,
+    WidgetType.DEVICE_BATTERY: render_device_battery,
     WidgetType.STATUS_ICONS: render_status_icons,
     WidgetType.WASTE_SCHEDULE: render_waste_schedule,
 }

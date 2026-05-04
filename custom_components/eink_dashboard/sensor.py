@@ -52,6 +52,13 @@ class EinkDashboardBatterySensor(RestoreSensor):
         if last_data is None:
             return
         self._attr_native_value = last_data.native_value
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            is_charging = last_state.attributes.get("is_charging")
+            if is_charging is not None:
+                self._attr_extra_state_attributes = {
+                    "is_charging": is_charging
+                }
 
     def update_battery(self, level: int, is_charging: bool) -> None:
         """Update battery level and charging state, then push to HA."""

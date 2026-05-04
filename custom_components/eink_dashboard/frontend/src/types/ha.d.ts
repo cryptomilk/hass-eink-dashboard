@@ -69,6 +69,7 @@ export interface DeviceInfo {
   orientation: string;
   area_id: string | null;
   has_webhooks: boolean;
+  device_battery_level: number | null;
 }
 
 export interface WidgetBounds {
@@ -146,9 +147,8 @@ export interface SensorRowsWidget extends WidgetBase {
   entities?: string[];
 }
 
-export interface BatteryBarWidget extends WidgetBase {
-  type: "battery_bar";
-  entity?: string;
+export interface DeviceBatteryWidget extends WidgetBase {
+  type: "device_battery";
 }
 
 export interface StatusIconsWidget extends WidgetBase {
@@ -169,7 +169,7 @@ export type Widget =
   | SeparatorWidget
   | WeatherWidget
   | SensorRowsWidget
-  | BatteryBarWidget
+  | DeviceBatteryWidget
   | StatusIconsWidget
   | WasteScheduleWidget;
 

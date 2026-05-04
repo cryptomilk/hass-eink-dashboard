@@ -33,7 +33,7 @@ function findField(schema: HaFormSchema[], name: string): HaFormSchema | undefin
 // ── WIDGET_TYPES ──────────────────────────────────────────────────────────────
 
 describe("WIDGET_TYPES", () => {
-  const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "battery_bar", "status_icons", "waste_schedule"];
+  const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
 
   it("has all 8 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(ALL_TYPES.sort());
@@ -52,7 +52,7 @@ describe("WIDGET_TYPES", () => {
 
 describe("SCHEMAS", () => {
   it("has a schema builder for all 8 widget types", () => {
-    const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "battery_bar", "status_icons", "waste_schedule"];
+    const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -150,8 +150,8 @@ describe("getSummary", () => {
     expect(getSummary({ type: "weather" })).toBe("(no entity)");
   });
 
-  it("returns entity for battery_bar widget", () => {
-    expect(getSummary({ type: "battery_bar", entity: "sensor.battery" })).toBe("sensor.battery");
+  it("returns static text for device_battery widget", () => {
+    expect(getSummary({ type: "device_battery" })).toBe("Device battery");
   });
 
   it("returns entity count for sensor_rows", () => {

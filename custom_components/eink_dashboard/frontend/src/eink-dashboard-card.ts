@@ -10,7 +10,7 @@ import type {
   SeparatorWidget,
   WeatherWidget,
   SensorRowsWidget,
-  BatteryBarWidget,
+  DeviceBatteryWidget,
   StatusIconsWidget,
   WasteScheduleWidget,
   LayoutResponse,
@@ -38,7 +38,7 @@ const ROBOTO_URL = "/eink_dashboard/fonts/Roboto-Regular.ttf";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_SENSOR_ROWS = 32;
-const FONT_SIZE_BATTERY_BAR = 24;
+const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 
@@ -161,6 +161,9 @@ interface ResizeStart {
   x2: number;
   y2: number;
   w?: number;
+  font_size?: number;
+  renderedW?: number;
+  renderedH?: number;
 }
 
 type MutableWidget = Widget & { x2?: number; y2?: number };
@@ -572,7 +575,11 @@ class EinkDashboardCard extends HTMLElement {
         { id: "p2", cx: widget.x2 ?? 0, cy: widget.y2 ?? 0 },
       ];
     }
-    if (widget.type === "battery_bar") return [];
+    if (widget.type === "device_battery") {
+      return [
+        { id: "se", cx: bounds.x + bounds.w, cy: bounds.y + bounds.h },
+      ];
+    }
     return [
       { id: "nw", cx: bounds.x, cy: bounds.y },
       { id: "ne", cx: bounds.x + bounds.w, cy: bounds.y },
@@ -596,8 +603,9 @@ class EinkDashboardCard extends HTMLElement {
     return null;
   }
 
-  private _getResizeCursor(handleId: string): string {
+  private _getResizeCursor(handleId: string, widget?: Widget): string {
     if (handleId === "p1" || handleId === "p2") return "crosshair";
+    if (widget?.type === "device_battery") return "nwse-resize";
     return "ew-resize";
   }
 
@@ -614,12 +622,16 @@ class EinkDashboardCard extends HTMLElement {
       this._resizeHandle = handleHit.handleId;
       this._resizeStartCX = cx;
       this._resizeStartCY = cy;
+      const wb = this._widgetBounds.find(b => b.index === handleHit.index);
       this._resizeWidgetStart = {
         x: w.x ?? 0, y: w.y ?? 0,
         x2: w.x2 ?? 0, y2: w.y2 ?? 0,
         w: w.w,
+        font_size: w.font_size,
+        renderedW: wb?.w,
+        renderedH: wb?.h,
       };
-      this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId);
+      this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId, w);
       return;
     }
 
@@ -659,6 +671,16 @@ class EinkDashboardCard extends HTMLElement {
       } else if (handle === "p2") {
         w.x2 = snap(Math.max(0, Math.min(dw - 1, s.x2 + dx)));
         w.y2 = snap(Math.max(0, Math.min(dh - 1, s.y2 + dy)));
+      } else if (w.type === "device_battery" && s.renderedW != null && s.renderedH != null) {
+        const startFs = s.font_size ?? FONT_SIZE_DEVICE_BATTERY;
+        const sdx = (handle === "ne" || handle === "se") ? dx : -dx;
+        const sdy = (handle === "nw" || handle === "ne") ? -dy : dy;
+        const startDiag = Math.sqrt(s.renderedW ** 2 + s.renderedH ** 2);
+        const newDiag = Math.sqrt(
+          (s.renderedW + sdx) ** 2 + (s.renderedH + sdy) ** 2
+        );
+        w.font_size = Math.max(8, Math.min(72,
+          Math.round(startFs * newDiag / startDiag)));
       } else if (handle === "ne" || handle === "se") {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
@@ -694,7 +716,10 @@ class EinkDashboardCard extends HTMLElement {
           this._hoverIndex = handleHit.index;
           this._scheduleRender();
         }
-        this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId);
+        this._canvas!.style.cursor = this._getResizeCursor(
+          handleHit.handleId,
+          this._layout!.widgets[handleHit.index]
+        );
         return;
       }
       const hoverIdx = this._hitTest(cx, cy);
@@ -741,6 +766,7 @@ class EinkDashboardCard extends HTMLElement {
       w.w = s.w;
       w.x2 = s.x2;
       w.y2 = s.y2;
+      w.font_size = s.font_size;
       this._resizeIndex = -1;
       this._resizeHandle = null;
       this._resizeWidgetStart = null;
@@ -814,7 +840,7 @@ class EinkDashboardCard extends HTMLElement {
       separator: (w) => this._renderSeparator(ctx, w as SeparatorWidget),
       weather: (w) => this._renderWeather(ctx, w as WeatherWidget),
       sensor_rows: (w) => this._renderSensorRows(ctx, w as SensorRowsWidget),
-      battery_bar: (w) => this._renderBatteryBar(ctx, w as BatteryBarWidget),
+      device_battery: (w) => this._renderDeviceBattery(ctx, w as DeviceBatteryWidget),
       status_icons: (w) => this._renderStatusIcons(ctx, w as StatusIconsWidget),
       waste_schedule: (w) => this._renderWasteSchedule(ctx, w as WasteScheduleWidget),
     };
@@ -1179,49 +1205,57 @@ class EinkDashboardCard extends HTMLElement {
     return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
   }
 
-  // mirrors render.py: render_battery_bar
-  private _renderBatteryBar(ctx: CanvasRenderingContext2D, widget: BatteryBarWidget): WidgetBounds {
-    const entityId = widget.entity ?? "";
-    const stateObj = this._getState(entityId);
+  // mirrors render.py: render_device_battery
+  private _renderDeviceBattery(ctx: CanvasRenderingContext2D, widget: DeviceBatteryWidget): WidgetBounds {
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
-    if (!stateObj) return { x, y, w: 60, h: 20 };
-
-    const raw = stateObj.state ?? "";
-    const pctFloat = parseFloat(raw);
-    if (isNaN(pctFloat)) return { x, y, w: 60, h: 20 };
-    const pct = Math.max(0, Math.min(100, Math.floor(pctFloat)));
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_BATTERY_BAR);
+    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_DEVICE_BATTERY);
     const color = widget.color ?? COLOR_BLACK;
 
-    const bw = BATTERY_BODY_W;
-    const bh = BATTERY_BODY_H;
+    const rawLevel = this._layout?.device?.device_battery_level;
+    const pct = rawLevel != null ? Math.max(0, Math.min(100, Math.floor(rawLevel))) : null;
+    const label = pct != null ? `${pct}%` : "---%";
+
+    const s = fontSize / FONT_SIZE_DEVICE_BATTERY;
+    const bw = Math.round(BATTERY_BODY_W * s);
+    const bh = Math.round(BATTERY_BODY_H * s);
+    const nubW = Math.round(BATTERY_NUB_W * s);
+    const nubH = Math.round(BATTERY_NUB_H * s);
+    const nubGap = Math.max(1, Math.round(s));
+    const gap = Math.round(4 * s);
+
+    // Measure label to center icon against text
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    const metrics = ctx.measureText(label);
+    const textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
+    const iconY = y + Math.floor((textH - bh) / 2);
 
     // Outline
     ctx.strokeStyle = grayColor(COLOR_GRAY);
     ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, bw, bh);
+    ctx.strokeRect(x, iconY, bw, bh);
 
     // Nub
-    const nubY = y + Math.floor((bh - BATTERY_NUB_H) / 2);
+    const nubY = iconY + Math.floor((bh - nubH) / 2);
     ctx.fillStyle = grayColor(COLOR_GRAY);
-    ctx.fillRect(x + bw + 1, nubY, BATTERY_NUB_W, BATTERY_NUB_H);
+    ctx.fillRect(x + bw + nubGap, nubY, nubW, nubH);
 
     // Fill bar
-    const fillW = Math.floor((bw - 2) * pct / 100);
-    if (fillW > 0) {
-      ctx.fillStyle = grayColor(color);
-      ctx.fillRect(x + 1, y + 1, fillW, bh - 2);
+    if (pct != null) {
+      const fillW = Math.floor((bw - 2) * pct / 100);
+      if (fillW > 0) {
+        ctx.fillStyle = grayColor(color);
+        ctx.fillRect(x + 1, iconY + 1, fillW, bh - 2);
+      }
     }
 
     // Label
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-    const labelW = ctx.measureText(`${pct}%`).width;
+    const labelW = metrics.width;
     ctx.fillStyle = grayColor(color);
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.fillText(`${pct}%`, x + bw + BATTERY_NUB_W + 4, y - 2);
-    return { x, y: y - 2, w: bw + BATTERY_NUB_W + 4 + labelW, h: bh + 2 };
+    ctx.fillText(label, x + bw + nubGap + nubW + gap, y);
+    return { x, y, w: bw + nubGap + nubW + gap + labelW, h: textH };
   }
 
   // mirrors render.py: render_status_icons

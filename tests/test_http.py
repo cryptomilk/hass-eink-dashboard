@@ -263,6 +263,7 @@ def _make_layout_request(
     body: object = None,
     store: MagicMock | None = None,
     entity: MagicMock | None = None,
+    battery_sensor: MagicMock | None = None,
     json_error: bool = False,
 ) -> web.Request:
     request = MagicMock(spec=web.Request)
@@ -286,6 +287,8 @@ def _make_layout_request(
             entry_data["store"] = store
         if entity is not None:
             entry_data["entity"] = entity
+        if battery_sensor is not None:
+            entry_data["battery_sensor"] = battery_sensor
         hass.data = {"eink_dashboard": {entry_id: entry_data}}
     request.app = {"hass": hass}
     return request
@@ -402,6 +405,26 @@ class TestEinkLayoutView:
         body = json.loads(response.text)
         assert body["display"]["width"] == DEFAULT_WIDTH
         assert body["display"]["height"] == DEFAULT_HEIGHT
+
+    async def test_layout_includes_device_battery_level(self) -> None:
+        view = EinkLayoutView()
+        sensor = MagicMock()
+        sensor.native_value = 72
+        request = _make_layout_request(battery_sensor=sensor)
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["device_battery_level"] == 72
+
+    async def test_layout_battery_level_none_without_sensor(self) -> None:
+        view = EinkLayoutView()
+        request = _make_layout_request()
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["device_battery_level"] is None
 
 
 class TestEinkLayoutViewPost:

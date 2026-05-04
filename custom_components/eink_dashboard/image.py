@@ -158,6 +158,16 @@ class EinkDashboardImage(ImageEntity):
                 ),
                 "states": states,
             }
+            battery_sensor = self.hass.data[DOMAIN][self._entry.entry_id].get(
+                "battery_sensor"
+            )
+            if battery_sensor is not None:
+                config["device_battery_level"] = battery_sensor.native_value
+                config["device_battery_charging"] = (
+                    battery_sensor.extra_state_attributes.get(
+                        "is_charging", False
+                    )
+                )
             widgets = self._resolve_templates(self._widgets)
             new_bytes = await self.hass.async_add_executor_job(
                 render_dashboard, widgets, config

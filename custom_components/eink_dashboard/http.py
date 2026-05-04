@@ -41,6 +41,13 @@ class EinkLayoutView(HomeAssistantView):
         device_model = entry.options.get("device_model", "custom")
         preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
 
+        battery_sensor = entry_data.get("battery_sensor")
+        device_battery_level = None
+        if battery_sensor is not None:
+            raw = battery_sensor.native_value
+            if raw is not None:
+                device_battery_level = int(raw)
+
         return web.json_response(
             {
                 "widgets": widgets,
@@ -56,6 +63,7 @@ class EinkLayoutView(HomeAssistantView):
                     "has_webhooks": bool(
                         entry.options.get("webhook_urls", [])
                     ),
+                    "device_battery_level": device_battery_level,
                 },
             }
         )
@@ -120,6 +128,7 @@ class EinkPublicImageView(HomeAssistantView):
         if image_bytes is None:
             raise web.HTTPServiceUnavailable()
 
+        # Battery arrives on every poll, even when returning 304.
         battery_str = request.query.get("batteryLevel")
         if battery_str is not None:
             try:

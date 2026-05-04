@@ -18,7 +18,7 @@ const EDITOR_TAG = "eink-dashboard-editor";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_SENSOR_ROWS = 32;
-const FONT_SIZE_BATTERY_BAR = 24;
+const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 
@@ -45,9 +45,9 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
     label: "Sensor Rows",
     defaults: { type: "sensor_rows", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_SENSOR_ROWS },
   },
-  battery_bar: {
-    label: "Battery Bar",
-    defaults: { type: "battery_bar", entity: "", x: 24, y: 0, color: 0, font_size: FONT_SIZE_BATTERY_BAR },
+  device_battery: {
+    label: "Device Battery",
+    defaults: { type: "device_battery", x: 24, y: 0, color: 0, font_size: FONT_SIZE_DEVICE_BATTERY },
   },
   status_icons: {
     label: "Status Icons",
@@ -161,8 +161,7 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
-  battery_bar: (d) => [
-    { name: "entity", required: true, selector: { entity: {} } },
+  device_battery: (d) => [
     {
       type: "grid", name: "", schema: [
         { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
@@ -174,7 +173,7 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
         { name: "color", default: 0, selector: { select: {
           options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
         } } },
-        { name: "font_size", default: FONT_SIZE_BATTERY_BAR, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        { name: "font_size", default: FONT_SIZE_DEVICE_BATTERY, selector: { number: { min: 8, max: 72, mode: "box" } } },
       ],
     },
   ],
@@ -243,8 +242,11 @@ export function getSummary(widget: Widget): string {
     const s = String(widget.text || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
-  if (t === "weather" || t === "battery_bar") {
+  if (t === "weather") {
     return widget.entity || "(no entity)";
+  }
+  if (t === "device_battery") {
+    return "Device battery";
   }
   if (t === "sensor_rows" || t === "status_icons" || t === "waste_schedule") {
     const title = widget.title ? `${widget.title} — ` : "";

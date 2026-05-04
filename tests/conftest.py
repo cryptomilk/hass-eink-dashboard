@@ -279,6 +279,9 @@ class _RestoreSensor:
     async def async_get_last_sensor_data(self) -> None:
         return None
 
+    async def async_get_last_state(self) -> None:
+        return None
+
 
 sensor_mod.SensorDeviceClass = _SensorDeviceClass  # type: ignore[attr-defined]
 sensor_mod.SensorStateClass = _SensorStateClass  # type: ignore[attr-defined]

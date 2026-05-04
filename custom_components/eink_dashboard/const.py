@@ -25,7 +25,7 @@ COLOR_LIGHT_GRAY = 180
 FONT_SIZE_TEXT = 32
 FONT_SIZE_WEATHER = 32
 FONT_SIZE_SENSOR_ROWS = 32
-FONT_SIZE_BATTERY_BAR = 24
+FONT_SIZE_DEVICE_BATTERY = 24
 FONT_SIZE_STATUS_ICONS = 28
 FONT_SIZE_WASTE_SCHEDULE = 28
 
@@ -147,6 +147,6 @@ class WidgetType(StrEnum):
     SEPARATOR = "separator"
     WEATHER = "weather"
     SENSOR_ROWS = "sensor_rows"
-    BATTERY_BAR = "battery_bar"
+    DEVICE_BATTERY = "device_battery"
     STATUS_ICONS = "status_icons"
     WASTE_SCHEDULE = "waste_schedule"

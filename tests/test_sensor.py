@@ -68,6 +68,7 @@ class TestBatterySensorRestore:
         last_data = MagicMock()
         last_data.native_value = 65
         sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
+        sensor.async_get_last_state = AsyncMock(return_value=None)
 
         await sensor.async_added_to_hass()
 
@@ -80,6 +81,32 @@ class TestBatterySensorRestore:
         await sensor.async_added_to_hass()
 
         assert sensor._attr_native_value is None
+
+    async def test_restore_is_charging(self) -> None:
+        sensor = EinkDashboardBatterySensor(_make_entry())
+        last_data = MagicMock()
+        last_data.native_value = 42
+        last_state = MagicMock()
+        last_state.attributes = {"is_charging": True}
+        sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
+        sensor.async_get_last_state = AsyncMock(return_value=last_state)
+
+        await sensor.async_added_to_hass()
+
+        assert sensor._attr_extra_state_attributes == {"is_charging": True}
+
+    async def test_restore_is_charging_absent_leaves_attrs_empty(self) -> None:
+        sensor = EinkDashboardBatterySensor(_make_entry())
+        last_data = MagicMock()
+        last_data.native_value = 42
+        last_state = MagicMock()
+        last_state.attributes = {}
+        sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
+        sensor.async_get_last_state = AsyncMock(return_value=last_state)
+
+        await sensor.async_added_to_hass()
+
+        assert sensor._attr_extra_state_attributes == {}
 
 
 class TestSensorPlatformSetup:
