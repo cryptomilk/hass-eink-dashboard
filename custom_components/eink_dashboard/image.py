@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import (
     async_get_clientsession,
 )
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.event import (
     async_track_time_interval,
 )
@@ -76,6 +77,9 @@ class EinkDashboardImage(ImageEntity):
         self._last_push: float | None = None
         self._attr_name = entry.title
         self._attr_unique_id = entry.entry_id
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+        )
 
     async def async_added_to_hass(self) -> None:
         """Schedule periodic refresh and render the first frame."""

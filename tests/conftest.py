@@ -17,6 +17,7 @@ _HA_MODULES = [
     "homeassistant.components.frontend",
     "homeassistant.components.http",
     "homeassistant.components.image",
+    "homeassistant.components.sensor",
     "homeassistant.config_entries",
     "homeassistant.core",
     "homeassistant.helpers",
@@ -163,6 +164,7 @@ area_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
 
 device_reg_mod = sys.modules["homeassistant.helpers.device_registry"]
 device_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
+device_reg_mod.DeviceInfo = lambda **kw: kw  # type: ignore[attr-defined]
 
 storage_mod = sys.modules["homeassistant.helpers.storage"]
 storage_mod.Store = MagicMock  # type: ignore[attr-defined]
@@ -255,3 +257,29 @@ class _StubTemplate:
 
 
 template_mod.Template = _StubTemplate  # type: ignore[attr-defined]
+
+sensor_mod = sys.modules["homeassistant.components.sensor"]
+
+
+class _SensorDeviceClass:
+    BATTERY = "battery"
+
+
+class _SensorStateClass:
+    MEASUREMENT = "measurement"
+
+
+class _RestoreSensor:
+    def async_write_ha_state(self) -> None:
+        pass
+
+    async def async_added_to_hass(self) -> None:
+        pass
+
+    async def async_get_last_sensor_data(self) -> None:
+        return None
+
+
+sensor_mod.SensorDeviceClass = _SensorDeviceClass  # type: ignore[attr-defined]
+sensor_mod.SensorStateClass = _SensorStateClass  # type: ignore[attr-defined]
+sensor_mod.RestoreSensor = _RestoreSensor  # type: ignore[attr-defined]

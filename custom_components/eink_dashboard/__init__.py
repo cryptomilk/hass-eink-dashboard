@@ -16,7 +16,7 @@ from .const import DEVICE_PRESETS, DOMAIN
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 
-PLATFORMS = ["image"]
+PLATFORMS = ["image", "sensor"]
 
 
 def _area_name(hass: HomeAssistant, area_id: str | None) -> str | None:

@@ -37,18 +37,24 @@ def _make_request(
     headers: dict[str, str] | None = None,
     *,
     entry_missing: bool = False,
+    query: dict[str, str] | None = None,
+    battery_sensor: MagicMock | None = None,
 ) -> web.Request:
     request = MagicMock(spec=web.Request)
     request.headers = headers or {}
+    request.query = query if query is not None else {}
 
     hass = MagicMock()
     if entry_missing:
         hass.data = {}
     else:
         ent = entity if entity is not None else _make_entity()
+        entry_data: dict = {"entity": ent}
+        if battery_sensor is not None:
+            entry_data["battery_sensor"] = battery_sensor
         hass.data = {
             "eink_dashboard": {
-                entry_id: {"entity": ent},
+                entry_id: entry_data,
             },
         }
 
@@ -135,6 +141,116 @@ class TestEinkPublicImageView:
 
         with pytest.raises(web.HTTPServiceUnavailable):
             await view.get(request, "test_entry")
+
+    async def test_battery_params_update_sensor(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "78", "isCharging": "1"},
+            battery_sensor=sensor,
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(78, True)
+
+    async def test_battery_not_charging(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "50", "isCharging": "0"},
+            battery_sensor=sensor,
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(50, False)
+
+    async def test_battery_no_params_no_sensor_call(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(query={}, battery_sensor=sensor)
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_not_called()
+
+    async def test_battery_invalid_value_ignored(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "abc"}, battery_sensor=sensor
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_not_called()
+
+    async def test_battery_no_sensor_registered(self) -> None:
+        view = EinkPublicImageView()
+        request = _make_request(query={"batteryLevel": "50"})
+
+        response = await view.get(request, "test_entry")
+
+        assert response.status == 200
+
+    async def test_battery_missing_is_charging_defaults_false(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "50"}, battery_sensor=sensor
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(50, False)
+
+    async def test_battery_clamped_above_100(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "150"}, battery_sensor=sensor
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(100, False)
+
+    async def test_battery_clamped_below_0(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "-5"}, battery_sensor=sensor
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(0, False)
+
+    async def test_battery_float_truncated(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            query={"batteryLevel": "78.9"}, battery_sensor=sensor
+        )
+
+        await view.get(request, "test_entry")
+
+        sensor.update_battery.assert_called_once_with(78, False)
+
+    async def test_battery_updated_on_304(self) -> None:
+        view = EinkPublicImageView()
+        sensor = MagicMock()
+        request = _make_request(
+            headers={"If-None-Match": PNG_ETAG},
+            query={"batteryLevel": "78", "isCharging": "1"},
+            battery_sensor=sensor,
+        )
+
+        response = await view.get(request, "test_entry")
+
+        assert response.status == 304
+        sensor.update_battery.assert_called_once_with(78, True)
 
 
 def _make_layout_request(

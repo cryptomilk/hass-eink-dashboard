@@ -120,6 +120,18 @@ class EinkPublicImageView(HomeAssistantView):
         if image_bytes is None:
             raise web.HTTPServiceUnavailable()
 
+        battery_str = request.query.get("batteryLevel")
+        if battery_str is not None:
+            try:
+                level = max(0, min(100, int(float(battery_str))))
+            except (ValueError, TypeError):
+                level = None
+            if level is not None:
+                sensor = entry_data.get("battery_sensor")
+                if sensor is not None:
+                    is_charging = request.query.get("isCharging") == "1"
+                    sensor.update_battery(level, is_charging)
+
         etag = entity.etag
 
         if_none_match = request.headers.get("If-None-Match")

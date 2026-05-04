@@ -115,7 +115,7 @@ class TestAsyncSetupEntry:
             await async_setup_entry(hass, entry)
 
         hass.config_entries.async_forward_entry_setups.assert_called_once_with(
-            entry, ["image"]
+            entry, ["image", "sensor"]
         )
 
     async def test_returns_true(self) -> None:
@@ -263,7 +263,7 @@ class TestAsyncUnloadEntry:
         result = await async_unload_entry(hass, entry)
 
         hass.config_entries.async_unload_platforms.assert_called_once_with(
-            entry, ["image"]
+            entry, ["image", "sensor"]
         )
         assert result is True
 

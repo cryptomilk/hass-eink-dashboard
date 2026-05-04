@@ -53,6 +53,15 @@ class TestEinkDashboardImage:
         assert entity._attr_unique_id == "test_entry_id"
         assert entity._attr_content_type == "image/png"
 
+    def test_device_info_set_from_entry(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry()
+        entity = EinkDashboardImage(hass, entry)
+
+        assert entity._attr_device_info == {
+            "identifiers": {(DOMAIN, "test_entry_id")}
+        }
+
     async def test_async_image_returns_none_before_refresh(
         self,
     ) -> None:
