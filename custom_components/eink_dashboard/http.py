@@ -29,7 +29,7 @@ class EinkLayoutView(HomeAssistantView):
         width = entry.options.get("width", DEFAULT_WIDTH)
         height = entry.options.get("height", DEFAULT_HEIGHT)
 
-        device_model = entry.data.get("device_model", "custom")
+        device_model = entry.options.get("device_model", "custom")
         preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
 
         return web.json_response(
@@ -37,10 +37,13 @@ class EinkLayoutView(HomeAssistantView):
                 "widgets": widgets,
                 "display": {"width": width, "height": height},
                 "device": {
+                    "name": entry.title,
                     "model": device_model,
                     "model_label": preset.label,
-                    "orientation": entry.data.get("orientation", "portrait"),
-                    "area_id": entry.data.get("area_id"),
+                    "orientation": entry.options.get(
+                        "orientation", "portrait"
+                    ),
+                    "area_id": entry.options.get("area_id"),
                     "has_webhooks": bool(
                         entry.options.get("webhook_urls", [])
                     ),

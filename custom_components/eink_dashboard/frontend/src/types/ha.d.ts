@@ -63,6 +63,7 @@ export interface DisplayConfig {
 }
 
 export interface DeviceInfo {
+  name: string;
   model: string;
   model_label: string;
   orientation: string;

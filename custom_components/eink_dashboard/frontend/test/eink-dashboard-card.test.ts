@@ -81,45 +81,12 @@ describe("formatRelativeDate", () => {
 });
 
 describe("buildHeaderText", () => {
-  const areas = {
-    kitchen: { name: "Kitchen" },
-    bedroom: { name: "Bedroom" },
-  };
-
-  it("shows area and model label when area exists", () => {
-    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "kitchen" };
-    const display = { width: 1072, height: 1448 };
-    expect(buildHeaderText(device, display, areas)).toBe("Kitchen — Kindle Paperwhite 4");
+  it("returns the device name", () => {
+    expect(buildHeaderText({ name: "My Kindle" })).toBe("My Kindle");
   });
 
-  it("shows only model label when no area", () => {
-    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: null };
-    const display = { width: 1072, height: 1448 };
-    expect(buildHeaderText(device, display, areas)).toBe("Kindle Paperwhite 4");
-  });
-
-  it("uses dimensions for custom device with area", () => {
-    const device = { model: "custom", model_label: "Custom", area_id: "bedroom" };
-    const display = { width: 800, height: 600 };
-    expect(buildHeaderText(device, display, areas)).toBe("Bedroom — 800×600");
-  });
-
-  it("uses dimensions for custom device without area", () => {
-    const device = { model: "custom", model_label: "Custom", area_id: null };
-    const display = { width: 800, height: 600 };
-    expect(buildHeaderText(device, display, areas)).toBe("800×600");
-  });
-
-  it("falls back to model label when area_id not found in areas", () => {
-    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "garage" };
-    const display = { width: 1072, height: 1448 };
-    expect(buildHeaderText(device, display, areas)).toBe("Kindle Paperwhite 4");
-  });
-
-  it("falls back to model label when areas is undefined", () => {
-    const device = { model: "kindle_pw4", model_label: "Kindle Paperwhite 4", area_id: "kitchen" };
-    const display = { width: 1072, height: 1448 };
-    expect(buildHeaderText(device, display, undefined)).toBe("Kindle Paperwhite 4");
+  it("falls back to default when name is empty", () => {
+    expect(buildHeaderText({ name: "" })).toBe("E-Ink Dashboard");
   });
 });
 

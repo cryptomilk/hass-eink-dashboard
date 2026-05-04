@@ -150,6 +150,7 @@ def _make_layout_request(
         hass.data = {}
     else:
         ha_entry = MagicMock()
+        ha_entry.title = "Test Dashboard"
         ha_entry.options = options or {"width": 758, "height": 1024}
         ha_entry.data = data or {}
         entry_data: dict = {
@@ -188,7 +189,12 @@ class TestEinkLayoutView:
         widgets = [{"type": "separator", "y": 50}]
         view = EinkLayoutView()
         request = _make_layout_request(
-            widgets=widgets, data={"device_model": "kindle_pw"}
+            widgets=widgets,
+            options={
+                "width": 758,
+                "height": 1024,
+                "device_model": "kindle_pw",
+            },
         )
 
         response = await view.get(request, "test_entry")
@@ -197,16 +203,19 @@ class TestEinkLayoutView:
         body = json.loads(response.text)
         assert body["widgets"] == widgets
         assert body["display"] == {"width": 758, "height": 1024}
+        assert body["device"]["name"] == "Test Dashboard"
         assert body["device"]["model"] == "kindle_pw"
         assert body["device"]["model_label"] == "Kindle Paperwhite 1/2/3"
         assert body["device"]["orientation"] == "portrait"
         assert body["device"]["area_id"] is None
         assert body["device"]["has_webhooks"] is False
 
-    async def test_device_metadata_from_entry_data(self) -> None:
+    async def test_device_metadata_from_entry_options(self) -> None:
         view = EinkLayoutView()
         request = _make_layout_request(
-            data={
+            options={
+                "width": 758,
+                "height": 1024,
                 "device_model": "kindle_pw4",
                 "orientation": "landscape",
                 "area_id": "kitchen",

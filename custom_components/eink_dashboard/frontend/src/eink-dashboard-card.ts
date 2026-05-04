@@ -130,24 +130,15 @@ export function formatRelativeDate(days: number | null, raw: string): string {
 }
 
 export function buildHeaderText(
-  device: { model: string; model_label: string; area_id: string | null },
-  display: { width: number; height: number },
-  areas: Record<string, { name: string }> | undefined,
+  device: { name: string },
 ): string {
-  const deviceLabel =
-    device.model === "custom"
-      ? `${display.width}×${display.height}`
-      : device.model_label;
-  const areaName =
-    device.area_id && areas?.[device.area_id]?.name
-      ? areas[device.area_id].name
-      : null;
-  return areaName ? `${areaName} — ${deviceLabel}` : deviceLabel;
+  return device.name || "E-Ink Dashboard";
 }
 
 export function shouldShowCopyUrl(model: string, hasWebhooks: boolean): boolean {
   if (model.startsWith("kindle_")) return true;
   if (model === "custom" && !hasWebhooks) return true;
+  // TRMNL devices are push-only (always have webhooks); no URL needed.
   return false;
 }
 
@@ -243,13 +234,8 @@ class EinkDashboardCard extends HTMLElement {
       this._fetchLayout();
     }
     if (this._layout) {
-      if (!this._headerEl) return;
       this._scheduleRender();
-      const newHeader = buildHeaderText(
-        this._layout.device,
-        this._layout.display,
-        hass.areas,
-      );
+      const newHeader = buildHeaderText(this._layout.device);
       if (this._headerEl.textContent !== newHeader) {
         this._headerEl.textContent = newHeader;
       }
@@ -495,11 +481,7 @@ class EinkDashboardCard extends HTMLElement {
         `eink_dashboard/${entryId}/layout`,
       );
       this._layout = resp;
-      this._headerEl.textContent = buildHeaderText(
-        resp.device,
-        resp.display,
-        this._hass?.areas,
-      );
+      this._headerEl.textContent = buildHeaderText(resp.device);
       this._copyBtn.style.display = shouldShowCopyUrl(
         resp.device.model,
         resp.device.has_webhooks,
@@ -755,6 +737,7 @@ class EinkDashboardCard extends HTMLElement {
       const w = this._layout!.widgets[this._resizeIndex] as MutableWidget;
       const s = this._resizeWidgetStart!;
       w.x = s.x;
+      w.y = s.y;
       w.w = s.w;
       w.x2 = s.x2;
       w.y2 = s.y2;
@@ -767,6 +750,14 @@ class EinkDashboardCard extends HTMLElement {
       return;
     }
     if (this._dragIndex < 0) return;
+    const wd = this._layout!.widgets[this._dragIndex] as MutableWidget;
+    const sd = this._dragWidgetStart!;
+    wd.x = sd.x;
+    wd.y = sd.y;
+    if (sd.x2 !== undefined) {
+      wd.x2 = sd.x2;
+      wd.y2 = sd.y2;
+    }
     this._dragIndex = -1;
     this._dragWidgetStart = null;
     this._hoverIndex = -1;
