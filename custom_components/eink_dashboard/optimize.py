@@ -33,5 +33,7 @@ def optimize_for_eink(
             dither=Image.Dither.FLOYDSTEINBERG,
         )
         img = img.convert("L")
+        if colors <= 2:
+            img = img.convert("1", dither=Image.Dither.NONE)
 
     return img

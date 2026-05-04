@@ -58,6 +58,7 @@ class TestOptimizeEnabled:
         result = optimize_for_eink(
             img, {"optimize": True, "grayscale_levels": 2}
         )
+        assert result.mode == "1"
         assert len(set(result.get_flattened_data())) <= 2
 
     def test_256_levels_skips_quantize(self) -> None:
@@ -162,6 +163,24 @@ class TestOptimizeIntegration:
         img = Image.open(io.BytesIO(png))
         assert img.mode == "L"
         assert len(set(img.get_flattened_data())) <= 4
+
+    def test_render_2_levels_produces_1bit_png(self) -> None:
+        from custom_components.eink_dashboard.render import (
+            render_dashboard,
+        )
+
+        config = {
+            "width": 200,
+            "height": 100,
+            "optimize": True,
+            "grayscale_levels": 2,
+        }
+        widgets = [
+            {"type": "text", "x": 10, "y": 10, "text": "Hi", "font_size": 20}
+        ]
+        png = render_dashboard(widgets, config)
+        img = Image.open(io.BytesIO(png))
+        assert img.mode == "1"
 
     def test_render_without_optimize_has_more_colors(self) -> None:
         from custom_components.eink_dashboard.render import (
