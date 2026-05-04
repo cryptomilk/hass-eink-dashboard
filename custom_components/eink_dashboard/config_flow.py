@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import Any
+from urllib.parse import urlparse
 
 import voluptuous as vol
 from homeassistant.config_entries import (
@@ -11,12 +12,14 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
-from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import (
     AreaSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
@@ -33,6 +36,12 @@ from .const import (
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
+
+
+def _is_valid_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
 
 _STEP_USER_SCHEMA = vol.Schema(
     {
@@ -67,7 +76,9 @@ _STEP_CUSTOM_RESOLUTION_SCHEMA = vol.Schema(
 _STEP_WEBHOOK_SCHEMA = vol.Schema(
     {
         vol.Required("name"): str,
-        vol.Required("webhook_url"): cv.url,
+        vol.Required("webhook_url"): TextSelector(
+            TextSelectorConfig(type=TextSelectorType.URL)
+        ),
     }
 )
 
@@ -189,26 +200,31 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_trmnl_webhook(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             validated = _STEP_WEBHOOK_SCHEMA(user_input)
-            return self.async_create_entry(
-                title=self._name,
-                data={},
-                options={
-                    **self._data,
-                    "sharpness": DEFAULT_SHARPNESS,
-                    "contrast": DEFAULT_CONTRAST,
-                    "webhook_urls": [
-                        {
-                            "name": validated["name"],
-                            "url": validated["webhook_url"],
-                        }
-                    ],
-                },
-            )
+            if not _is_valid_url(validated["webhook_url"]):
+                errors["webhook_url"] = "invalid_url"
+            else:
+                return self.async_create_entry(
+                    title=self._name,
+                    data={},
+                    options={
+                        **self._data,
+                        "sharpness": DEFAULT_SHARPNESS,
+                        "contrast": DEFAULT_CONTRAST,
+                        "webhook_urls": [
+                            {
+                                "name": validated["name"],
+                                "url": validated["webhook_url"],
+                            }
+                        ],
+                    },
+                )
         return self.async_show_form(
             step_id="trmnl_webhook",
             data_schema=_STEP_WEBHOOK_SCHEMA,
+            **({"errors": errors} if errors else {}),
         )
 
 
@@ -241,26 +257,29 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_add_webhook(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             validated = _STEP_WEBHOOK_SCHEMA(user_input)
-            existing = self.config_entry.options.get("webhook_urls", [])
-            if any(wh["url"] == validated["webhook_url"] for wh in existing):
-                return self.async_show_form(
-                    step_id="add_webhook",
-                    data_schema=_STEP_WEBHOOK_SCHEMA,
-                    errors={"webhook_url": "already_configured"},
-                )
-            opts = deepcopy(dict(self.config_entry.options))
-            opts.setdefault("webhook_urls", []).append(
-                {
-                    "name": validated["name"],
-                    "url": validated["webhook_url"],
-                }
-            )
-            return self.async_create_entry(data=opts)
+            if not _is_valid_url(validated["webhook_url"]):
+                errors["webhook_url"] = "invalid_url"
+            else:
+                existing = self.config_entry.options.get("webhook_urls", [])
+                url = validated["webhook_url"]
+                if any(wh["url"] == url for wh in existing):
+                    errors["webhook_url"] = "already_configured"
+                else:
+                    opts = deepcopy(dict(self.config_entry.options))
+                    opts.setdefault("webhook_urls", []).append(
+                        {
+                            "name": validated["name"],
+                            "url": url,
+                        }
+                    )
+                    return self.async_create_entry(data=opts)
         return self.async_show_form(
             step_id="add_webhook",
             data_schema=_STEP_WEBHOOK_SCHEMA,
+            **({"errors": errors} if errors else {}),
         )
 
     async def async_step_remove_webhook(

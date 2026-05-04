@@ -3,9 +3,6 @@ from __future__ import annotations
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock
-from urllib.parse import urlparse
-
-import voluptuous as vol
 
 
 def _stub_module(name: str) -> ModuleType:
@@ -172,17 +169,6 @@ dt_mod = sys.modules["homeassistant.util.dt"]
 dt_mod.utcnow = MagicMock()  # type: ignore[attr-defined]
 
 
-def _cv_url(value: object) -> str:
-    url = str(value)
-    if urlparse(url).scheme in ("http", "https"):
-        return url
-    raise vol.Invalid("invalid url")
-
-
-cv_mod = sys.modules["homeassistant.helpers.config_validation"]
-cv_mod.url = _cv_url  # type: ignore[attr-defined]
-
-
 class _SelectSelectorMode:
     LIST = "list"
     DROPDOWN = "dropdown"
@@ -214,12 +200,33 @@ class _AreaSelector:
         return value
 
 
+class _TextSelectorType:
+    URL = "url"
+    TEXT = "text"
+
+
+class _TextSelectorConfig(dict):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(kwargs)
+
+
+class _TextSelector:
+    def __init__(self, config: object = None) -> None:
+        pass
+
+    def __call__(self, value: object) -> object:
+        return value
+
+
 selector_mod = sys.modules["homeassistant.helpers.selector"]
 selector_mod.SelectSelectorMode = _SelectSelectorMode  # type: ignore[attr-defined]
 selector_mod.SelectSelectorConfig = _SelectSelectorConfig  # type: ignore[attr-defined]
 selector_mod.SelectOptionDict = _SelectOptionDict  # type: ignore[attr-defined]
 selector_mod.SelectSelector = _SelectSelector  # type: ignore[attr-defined]
 selector_mod.AreaSelector = _AreaSelector  # type: ignore[attr-defined]
+selector_mod.TextSelectorType = _TextSelectorType  # type: ignore[attr-defined]
+selector_mod.TextSelectorConfig = _TextSelectorConfig  # type: ignore[attr-defined]
+selector_mod.TextSelector = _TextSelector  # type: ignore[attr-defined]
 
 template_mod = sys.modules["homeassistant.helpers.template"]
 

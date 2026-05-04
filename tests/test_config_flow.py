@@ -180,10 +180,11 @@ class TestEinkDashboardConfigFlow:
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_trmnl_setup({})
-        with pytest.raises(vol.Invalid):
-            await flow.async_step_trmnl_webhook(
-                {"name": "Bad", "webhook_url": "not-a-url"}
-            )
+        result = await flow.async_step_trmnl_webhook(
+            {"name": "Bad", "webhook_url": "not-a-url"}
+        )
+        assert result["type"] == "form"
+        assert result["errors"] == {"webhook_url": "invalid_url"}
 
     async def test_custom_advances_to_resolution(self) -> None:
         flow = EinkDashboardConfigFlow()
@@ -353,10 +354,11 @@ class TestEinkDashboardOptionsFlow:
         self,
     ) -> None:
         flow = _make_options_flow({"webhook_urls": []})
-        with pytest.raises(vol.Invalid):
-            await flow.async_step_add_webhook(
-                {"name": "Bad", "webhook_url": "ftp://invalid"}
-            )
+        result = await flow.async_step_add_webhook(
+            {"name": "Bad", "webhook_url": "ftp://invalid"}
+        )
+        assert result["type"] == "form"
+        assert result["errors"] == {"webhook_url": "invalid_url"}
 
     async def test_remove_webhook_shows_form(self) -> None:
         flow = _make_options_flow(

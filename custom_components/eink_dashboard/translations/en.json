@@ -45,7 +45,9 @@
         }
       }
     },
-    "error": {},
+    "error": {
+      "invalid_url": "Please enter a valid http or https URL."
+    },
     "abort": {}
   },
   "options": {
@@ -113,7 +115,8 @@
       }
     },
     "error": {
-      "already_configured": "This webhook URL is already configured."
+      "already_configured": "This webhook URL is already configured.",
+      "invalid_url": "Please enter a valid http or https URL."
     }
   },
   "selector": {
