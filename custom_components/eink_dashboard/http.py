@@ -131,17 +131,25 @@ class EinkPublicImageView(HomeAssistantView):
                 if sensor is not None:
                     is_charging = request.query.get("isCharging") == "1"
                     sensor.update_battery(level, is_charging)
+                    _LOGGER.info(
+                        "E-Ink device request: battery=%d%%, charging=%s",
+                        level,
+                        is_charging,
+                    )
 
         etag = entity.etag
 
         if_none_match = request.headers.get("If-None-Match")
         if if_none_match is not None and if_none_match in ("*", etag):
-            _LOGGER.debug("ETag match (%s), returning 304", etag)
+            _LOGGER.info("ETag hit (%s), returning 304", etag)
             resp = web.Response(status=304)
             resp.headers["ETag"] = etag
             resp.headers["Cache-Control"] = "no-cache"
             return resp
 
+        _LOGGER.info(
+            "Serving image: %d bytes, etag=%s", len(image_bytes), etag
+        )
         response = web.Response(
             body=image_bytes,
             content_type="image/png",
