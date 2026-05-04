@@ -36,7 +36,8 @@ from .render import render_dashboard
 
 _LOGGER = logging.getLogger(__name__)
 
-PUSH_MIN_INTERVAL = 60
+PUSH_MIN_INTERVAL = 300
+PUSH_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 async def async_setup_entry(
@@ -151,11 +152,20 @@ class EinkDashboardImage(ImageEntity):
                 webhook_urls = self._entry.options.get("webhook_urls", [])
                 now = time.monotonic()
                 if webhook_urls and now - self._last_push >= PUSH_MIN_INTERVAL:
-                    self._last_push = now
-                    session = async_get_clientsession(self.hass)
-                    push_targets = [
-                        (session, wh["url"], new_bytes) for wh in webhook_urls
-                    ]
+                    if len(new_bytes) > PUSH_MAX_IMAGE_BYTES:
+                        _LOGGER.warning(
+                            "Rendered image is %d bytes, exceeds %d byte"
+                            " webhook limit; skipping push",
+                            len(new_bytes),
+                            PUSH_MAX_IMAGE_BYTES,
+                        )
+                    else:
+                        self._last_push = now
+                        session = async_get_clientsession(self.hass)
+                        push_targets = [
+                            (session, wh["url"], new_bytes)
+                            for wh in webhook_urls
+                        ]
         if push_targets:
             await asyncio.gather(
                 *(async_push_image(*args) for args in push_targets)

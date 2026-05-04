@@ -13,6 +13,7 @@ from custom_components.eink_dashboard.const import (
     DOMAIN,
 )
 from custom_components.eink_dashboard.image import (
+    PUSH_MAX_IMAGE_BYTES,
     EinkDashboardImage,
     async_setup_entry,
 )
@@ -559,6 +560,30 @@ class TestWebhookPush:
         ) as mock_push:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
+
+    async def test_push_skipped_when_image_too_large(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(_WEBHOOK_OPTS)
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        oversized = b"x" * (PUSH_MAX_IMAGE_BYTES + 1)
+        with (
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=oversized,
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+            patch(
+                "custom_components.eink_dashboard.image._LOGGER"
+            ) as mock_log,
+        ):
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+            mock_log.warning.assert_called_once()
 
     async def test_push_rate_limited(self) -> None:
         hass = _make_hass()
