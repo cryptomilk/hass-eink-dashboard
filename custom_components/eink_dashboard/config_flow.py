@@ -36,7 +36,7 @@ _POSITIVE_INT = vol.All(int, vol.Range(min=1))
 
 _STEP_USER_SCHEMA = vol.Schema(
     {
-        vol.Required("name", default="E-Ink Dashboard"): str,
+        vol.Required("name", default="My E-Ink Display"): str,
         vol.Required("device_model", default="kindle_pw"): SelectSelector(
             SelectSelectorConfig(
                 options=list(DEVICE_PRESETS.keys()),
