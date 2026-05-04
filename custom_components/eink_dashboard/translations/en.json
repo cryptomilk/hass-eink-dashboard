@@ -31,7 +31,7 @@
       },
       "trmnl_setup": {
         "title": "TRMNL Setup",
-        "description": "Before entering the webhook URL, create a plugin on trmnl.com:\n\n1. Go to **Plugins** → **Webhook Image**\n2. Give it a name, set **Image Fit Mode** to **Contain**, and click **Save**\n3. Copy the **Webhook URL** — it looks like `https://trmnl.com/api/custom_plugins/<uuid>`\n\nSelect **Submit** when ready to enter the URL."
+        "description": "Before entering the webhook URL, create a plugin on trmnl.com:\n\n1. Go to **Plugins** → **Webhook Image**\n2. Give it a name, set **Image Fit Mode** to **Contain**, and click **Save**\n3. Copy the **Webhook URL** shown on the plugin page\n\nSelect **Submit** when ready to enter the URL."
       },
       "trmnl_webhook": {
         "title": "TRMNL Webhook",
