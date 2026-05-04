@@ -53,9 +53,29 @@
       "init": {
         "title": "E-Ink Dashboard options",
         "menu_options": {
+          "device_settings": "Device settings",
+          "display_settings": "Display settings",
           "add_webhook": "Add push target",
-          "remove_webhook": "Remove push target",
-          "settings": "Display settings"
+          "remove_webhook": "Remove push target"
+        }
+      },
+      "device_settings": {
+        "title": "Device Settings",
+        "data": {
+          "device_model": "Device model",
+          "orientation": "Orientation",
+          "area": "Area"
+        },
+        "data_description": {
+          "device_model": "Select your e-ink display model",
+          "orientation": "Portrait or landscape layout"
+        }
+      },
+      "custom_resolution": {
+        "title": "Custom resolution",
+        "data": {
+          "width": "Width (px)",
+          "height": "Height (px)"
         }
       },
       "add_webhook": {
@@ -75,7 +95,7 @@
           "webhook_url": "Push target"
         }
       },
-      "settings": {
+      "display_settings": {
         "title": "Display Settings",
         "data": {
           "update_interval": "Update interval (seconds)",

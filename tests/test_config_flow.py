@@ -266,9 +266,11 @@ class TestEinkDashboardOptionsFlow:
         result = await flow.async_step_init(None)
 
         assert result["type"] == "menu"
+        assert "device_settings" in result["menu_options"]
+        assert "display_settings" in result["menu_options"]
         assert "add_webhook" in result["menu_options"]
         assert "remove_webhook" not in result["menu_options"]
-        assert "settings" in result["menu_options"]
+        assert "settings" not in result["menu_options"]
 
     async def test_init_menu_with_webhooks(self) -> None:
         flow = _make_options_flow(
@@ -281,6 +283,8 @@ class TestEinkDashboardOptionsFlow:
         result = await flow.async_step_init(None)
 
         assert result["type"] == "menu"
+        assert "device_settings" in result["menu_options"]
+        assert "display_settings" in result["menu_options"]
         assert "remove_webhook" in result["menu_options"]
 
     async def test_add_webhook_shows_form(self) -> None:
@@ -384,20 +388,14 @@ class TestEinkDashboardOptionsFlow:
         assert len(remaining) == 1
         assert remaining[0]["name"] == "Keep"
 
-    async def test_settings_shows_form(self) -> None:
-        flow = _make_options_flow(
-            {
-                "width": 800,
-                "height": 480,
-                "update_interval": 60,
-            }
-        )
-        result = await flow.async_step_settings(None)
+    async def test_display_settings_shows_form(self) -> None:
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
 
         assert result["type"] == "form"
-        assert result["step_id"] == "settings"
+        assert result["step_id"] == "display_settings"
 
-    async def test_settings_saves_values(self) -> None:
+    async def test_display_settings_saves_values(self) -> None:
         flow = _make_options_flow(
             {
                 "width": 800,
@@ -406,23 +404,18 @@ class TestEinkDashboardOptionsFlow:
                 "webhook_urls": [],
             }
         )
-        result = await flow.async_step_settings({"update_interval": 120})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 120}
+        )
 
         assert result["type"] == "create_entry"
-        assert result["data"]["width"] == 800
-        assert result["data"]["height"] == 480
         assert result["data"]["update_interval"] == 120
+        assert result["data"]["width"] == 800
         assert result["data"]["webhook_urls"] == []
 
-    async def test_settings_saves_optimize_values(self) -> None:
-        flow = _make_options_flow(
-            {
-                "width": 800,
-                "height": 480,
-                "update_interval": 60,
-            }
-        )
-        result = await flow.async_step_settings(
+    async def test_display_settings_saves_optimize_values(self) -> None:
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
                 "optimize": True,
@@ -438,17 +431,234 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["sharpness"] == 2.0
         assert result["data"]["contrast"] == 1.5
 
-    async def test_settings_rejects_invalid_grayscale_levels(
+    async def test_display_settings_rejects_invalid_grayscale_levels(
+        self,
+    ) -> None:
+        flow = _make_options_flow({"update_interval": 60})
+        with pytest.raises(vol.Invalid):
+            await flow.async_step_display_settings(
+                {"update_interval": 60, "grayscale_levels": 7}
+            )
+
+    async def test_device_settings_shows_form(self) -> None:
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_device_settings(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "device_settings"
+
+    async def test_device_settings_preset_recomputes_dimensions(
         self,
     ) -> None:
         flow = _make_options_flow(
             {
-                "width": 800,
-                "height": 480,
-                "update_interval": 60,
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+                "webhook_urls": [],
             }
         )
-        with pytest.raises(vol.Invalid):
-            await flow.async_step_settings(
-                {"update_interval": 60, "grayscale_levels": 7}
-            )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw4", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["device_model"] == "kindle_pw4"
+        assert result["data"]["width"] == 1072
+        assert result["data"]["height"] == 1448
+        assert result["data"]["rotation"] == 0
+        assert result["data"]["optimize"] is True
+        assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["webhook_urls"] == []
+
+    async def test_device_settings_orientation_change_recomputes(
+        self,
+    ) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "landscape"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["orientation"] == "landscape"
+        assert result["data"]["width"] == 1024
+        assert result["data"]["height"] == 758
+        assert result["data"]["rotation"] == 90
+
+    async def test_device_settings_area_saved(self) -> None:
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "area": "kitchen",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["area_id"] == "kitchen"
+
+    async def test_device_settings_area_removed(self) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "area_id": "kitchen",
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert "area_id" not in result["data"]
+
+    async def test_device_settings_custom_routes_to_resolution(
+        self,
+    ) -> None:
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "custom", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
+
+    async def test_options_custom_resolution_shows_form(self) -> None:
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "custom", "orientation": "portrait"}
+        )
+        result = await flow.async_step_custom_resolution(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
+
+    async def test_options_custom_resolution_saves(self) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+                "webhook_urls": [],
+            }
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "custom", "orientation": "portrait"}
+        )
+        result = await flow.async_step_custom_resolution(
+            {"width": 600, "height": 800}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["device_model"] == "custom"
+        assert result["data"]["width"] == 600
+        assert result["data"]["height"] == 800
+        assert result["data"]["rotation"] == 0
+        assert result["data"]["optimize"] is False
+        assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["webhook_urls"] == []
+
+    async def test_options_custom_resolution_preserves_area(self) -> None:
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "area": "kitchen",
+            }
+        )
+        result = await flow.async_step_custom_resolution(
+            {"width": 600, "height": 800}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["area_id"] == "kitchen"
+
+    async def test_options_custom_resolution_removes_area(self) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "area_id": "kitchen",
+            }
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "custom", "orientation": "portrait"}
+        )
+        result = await flow.async_step_custom_resolution(
+            {"width": 600, "height": 800}
+        )
+
+        assert result["type"] == "create_entry"
+        assert "area_id" not in result["data"]
+
+    async def test_device_settings_custom_to_preset(self) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "width": 600,
+                "height": 800,
+                "rotation": 0,
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw4", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["device_model"] == "kindle_pw4"
+        assert result["data"]["width"] == 1072
+        assert result["data"]["height"] == 1448
+        assert result["data"]["rotation"] == 0
+        assert result["data"]["optimize"] is True
+        assert result["data"]["grayscale_levels"] == 16
+
+    async def test_device_settings_custom_stays_custom_skips_resolution(
+        self,
+    ) -> None:
+        flow = _make_options_flow(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "width": 600,
+                "height": 800,
+                "rotation": 0,
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "area": "kitchen",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["width"] == 600
+        assert result["data"]["height"] == 800
+        assert result["data"]["rotation"] == 0
+        assert result["data"]["area_id"] == "kitchen"

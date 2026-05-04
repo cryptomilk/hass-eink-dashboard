@@ -213,13 +213,26 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class EinkDashboardOptionsFlow(OptionsFlow):
+    def __init__(self) -> None:
+        super().__init__()
+        self._data: dict[str, Any] = {}
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         webhooks = self.config_entry.options.get("webhook_urls", [])
-        menu_options: list[str] = ["add_webhook", "settings"]
+        menu_options: list[str] = [
+            "device_settings",
+            "display_settings",
+            "add_webhook",
+        ]
         if webhooks:
-            menu_options = ["add_webhook", "remove_webhook", "settings"]
+            menu_options = [
+                "device_settings",
+                "display_settings",
+                "add_webhook",
+                "remove_webhook",
+            ]
         return self.async_show_menu(
             step_id="init",
             menu_options=menu_options,
@@ -278,7 +291,112 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             step_id="remove_webhook", data_schema=schema
         )
 
-    async def async_step_settings(
+    async def async_step_device_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        opts = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "device_model",
+                    default=opts.get("device_model", "kindle_pw"),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(DEVICE_PRESETS.keys()),
+                        translation_key="device_model",
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(
+                    "orientation",
+                    default=opts.get("orientation", "portrait"),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=["portrait", "landscape"],
+                        translation_key="orientation",
+                    )
+                ),
+                vol.Optional(
+                    "area",
+                    description={"suggested_value": opts.get("area_id")},
+                ): AreaSelector(),
+            }
+        )
+        if user_input is not None:
+            validated = schema(user_input)
+            device_model = validated["device_model"]
+            orientation = validated["orientation"]
+            area_id = validated.get("area")
+
+            self._data = {
+                "device_model": device_model,
+                "orientation": orientation,
+            }
+            if area_id:
+                self._data["area_id"] = area_id
+
+            if device_model == "custom":
+                if opts.get("device_model") == "custom":
+                    new_opts = deepcopy(dict(opts))
+                    new_opts.update(self._data)
+                    if "area_id" not in self._data:
+                        new_opts.pop("area_id", None)
+                    return self.async_create_entry(data=new_opts)
+                return await self.async_step_custom_resolution()
+
+            width, height, rotation, preset = resolve_display(
+                device_model, orientation
+            )
+            new_opts = deepcopy(dict(opts))
+            new_opts.update(
+                {
+                    "device_model": device_model,
+                    "orientation": orientation,
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation,
+                    "optimize": preset.optimize,
+                    "grayscale_levels": preset.grayscale_levels,
+                }
+            )
+            if area_id:
+                new_opts["area_id"] = area_id
+            else:
+                new_opts.pop("area_id", None)
+            return self.async_create_entry(data=new_opts)
+
+        return self.async_show_form(
+            step_id="device_settings",
+            data_schema=schema,
+        )
+
+    async def async_step_custom_resolution(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if not self._data:
+            return await self.async_step_device_settings()
+        if user_input is not None:
+            validated = _STEP_CUSTOM_RESOLUTION_SCHEMA(user_input)
+            opts = deepcopy(dict(self.config_entry.options))
+            opts.update(
+                {
+                    **self._data,
+                    "width": validated["width"],
+                    "height": validated["height"],
+                    "rotation": 0,
+                    "optimize": DEFAULT_OPTIMIZE,
+                    "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                }
+            )
+            if "area_id" not in self._data:
+                opts.pop("area_id", None)
+            return self.async_create_entry(data=opts)
+        return self.async_show_form(
+            step_id="custom_resolution",
+            data_schema=_STEP_CUSTOM_RESOLUTION_SCHEMA,
+        )
+
+    async def async_step_display_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         opts = self.config_entry.options
@@ -312,5 +430,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         )
         if user_input is not None:
             validated = schema(user_input)
-            return self.async_create_entry(data={**opts, **validated})
-        return self.async_show_form(step_id="settings", data_schema=schema)
+            return self.async_create_entry(
+                data={**opts, **validated},
+            )
+        return self.async_show_form(
+            step_id="display_settings",
+            data_schema=schema,
+        )
