@@ -1,8 +1,30 @@
-# hass-eink-dashboard
+# E-Ink Dashboard for Home Assistant
 
 Home Assistant custom component that renders e-ink dashboard images as PNG
 directly from entity state using Pillow, and serves them to Kindle and TRMNL
 devices. No Chromium, no ImageMagick, no Node.js.
+
+## Features
+
+- **Multiple e-ink displays** - create a separate dashboard for each device
+  with its own layout, resolution, and refresh interval
+- **Device presets** - built-in profiles for Kindle 4/5, Paperwhite 1-4,
+  Oasis 2/3, TRMNL OG/X/RGB, or enter a custom resolution
+- **Portrait and landscape** - rotation is handled automatically based on the
+  device preset and chosen orientation
+- **WYSIWYG Lovelace editor** - drag, resize, and configure widgets on a
+  canvas preview that matches your device's exact pixel dimensions
+- **Pull and push delivery** - devices can fetch the image on their own
+  schedule (Kindle) or have HA push it via webhook (TRMNL)
+- **E-ink optimization** - optional post-processing pipeline: autocontrast,
+  sharpness, contrast adjustment, and grayscale quantization (2/4/16/256
+  levels with Floyd-Steinberg dithering)
+- **Jinja2 templates** - text widgets support Home Assistant templates
+  (e.g. `{{ now().strftime('%H:%M') }}`)
+- **ETag support** - conditional HTTP responses so devices skip the download
+  and e-ink refresh when the image has not changed
+- **Webhook rate limiting** - push targets are throttled to one push per 5
+  minutes with a 5 MB size cap
 
 ## Installation
 
@@ -18,94 +40,117 @@ devices. No Chromium, no ImageMagick, no Node.js.
 
 ## Setup
 
-Go to **Settings → Devices & Services → Add Integration** and search for
+Go to **Settings -> Devices & Services -> Add Integration** and search for
 **E-Ink Dashboard**.
 
-### Step 1 — Display
+### Step 1 -- Device
 
 | Field | Description |
 |---|---|
 | Name | Label for this dashboard (e.g. "Kitchen Kindle") |
-| Width / Height | Pixel dimensions — must match your device exactly |
+| Device model | Select your e-ink display from the preset list, or choose **Custom** to enter a resolution manually |
+| Orientation | Portrait or landscape layout |
+| Area | Optional - assign the device to a Home Assistant area |
 | Update interval | How often to re-render, in seconds (default: 60) |
 
-Common resolutions:
+Supported device presets:
 
-| Device | Width | Height |
+| Preset | Resolution | Grayscale levels |
 |---|---|---|
-| Kindle 4 / 5 | 600 | 800 |
-| Kindle Paperwhite 1–3 | 758 | 1024 |
-| Kindle Paperwhite 4 | 1072 | 1448 |
-| Kindle Oasis 2 / 3 | 1264 | 1680 |
-| TRMNL OG | 800 | 480 |
-| TRMNL X | 1872 | 1404 |
+| Kindle 4/5 | 600 × 800 | 16 |
+| Kindle Paperwhite 1/2/3 | 758 × 1024 | 16 |
+| Kindle Paperwhite 4 | 1072 × 1448 | 16 |
+| Kindle Oasis 2/3 | 1264 × 1680 | 16 |
+| TRMNL OG | 800 × 480 | 2 (black & white) |
+| TRMNL X | 1872 × 1404 | 16 |
+| TRMNL RGB | 2560 × 1440 | 2 (black & white) |
+| Custom | user-defined | 16 |
 
-### Step 2 — Image delivery
+### Step 2 -- Image delivery
 
-- **Pull only** — the device fetches the image from HA on its own schedule.
+For **Custom** devices, you get a choice:
+
+- **Pull only** - the device fetches the image from HA on its own schedule.
   Choose this for Kindle.
-- **TRMNL webhook** — HA pushes the rendered PNG to TRMNL after each render.
-  See [TRMNL setup](#trmnl-setup) below.
+- **TRMNL webhook** - HA pushes the rendered PNG to TRMNL after each render.
+  See [TRMNL setup](#trmnl) below.
 
-### Options (reconfigure)
+For **Kindle** presets, the integration is configured in pull mode
+automatically. For **TRMNL** presets, you are guided through the webhook
+setup.
 
-After setup, click **Configure** on the integration to:
+### Reconfigure
 
-- Add or remove TRMNL push targets
-- Adjust display settings: e-ink optimization, grayscale levels, sharpness,
-  contrast
+After setup, click **Configure** on the integration entry to:
 
-## Lovelace card
+- **Device settings** - change device model, orientation, or area
+- **Display settings** - update interval, e-ink optimization toggle,
+  grayscale levels, sharpness, contrast
+- **Add / remove push target** - manage TRMNL webhook URLs
+- **Copy card YAML** - get the Lovelace card snippet for this device
+- **Copy dashboard YAML** - get a full dashboard YAML with cards for all
+  configured devices
 
-The component ships a WYSIWYG card for editing the dashboard layout. The
-easiest setup is a dedicated Lovelace dashboard for each e-ink device.
+## Dashboard setup
 
-1. Go to **Settings → Dashboards → Add Dashboard**. Give it a name (e.g.
-   "Kitchen Kindle") and save.
+The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 
-2. Open the new dashboard, click the **⋮** menu → **Edit dashboard** →
+### Quick start
+
+1. Go to **Settings -> Dashboards -> Add Dashboard**. Give it a name
+   (e.g. "Kitchen Kindle") and save.
+
+2. Open the new dashboard, click the three-dot menu -> **Edit dashboard** ->
    **Raw configuration editor**.
 
-3. Replace the contents with:
+3. Paste the YAML. You can get it from the integration's **Configure** menu
+   (**Copy card YAML** or **Copy dashboard YAML**), or write it manually:
 
    ```yaml
    views:
      - title: E-Ink Dashboard
        cards:
          - type: custom:eink-dashboard-card
+           config_entry: <entry_id>
    ```
 
-   The card auto-discovers the integration's config entry. If you have
-   multiple E-Ink Dashboard entries, add `config_entry: <entry_id>` to
-   select a specific one (the entry ID is visible in the integration URL).
-   Save.
+   The `config_entry` field selects which display to edit. Find the entry ID
+   in the integration URL or use the **Copy card YAML** option. If you only
+   have one E-Ink Dashboard entry, you can omit `config_entry` and the card
+   will auto-discover it.
 
-4. The card shows a live canvas preview at the exact pixel dimensions of your
-   device.
+4. Save. The card shows a live canvas preview at the exact pixel dimensions
+   of your device.
 
-5. Click **Edit Widgets** to open the editor panel: add, reorder, and
-   configure widgets.
+### Editing widgets
 
-6. Click **Save** to persist the layout. The image entity is refreshed
+1. Click **Edit Widgets** to open the editor panel.
+2. Add widgets from the dropdown, reorder them with the up/down buttons, and
+   configure each widget's properties in the form.
+3. Click **Save** to persist the layout. The image entity is refreshed
    immediately.
-
-7. Click **Show rendered image** to fetch the actual Pillow-rendered PNG for
+4. Click **Show rendered image** to fetch the actual Pillow-rendered PNG for
    a pixel-exact comparison with the canvas preview.
 
-## Widgets
+### Available widgets (Work in progress)
 
 | Type | What it renders |
 |---|---|
-| `text` | Static or Jinja2 template text (e.g. `{{ now().strftime('%H:%M') }}`) |
-| `line` | Horizontal or diagonal line |
-| `separator` | Full-width horizontal rule |
-| `weather` | Current conditions + N-day forecast with icons |
-| `sensor_rows` | Label → value rows for a list of sensors |
-| `battery_bar` | Horizontal battery level bar |
-| `status_icons` | Row of filled/outline squares for binary sensors |
-| `waste_schedule` | Upcoming waste collection dates |
+| Text | Static or Jinja2 template text (e.g. `{{ now().strftime('%H:%M') }}`) |
+| Line | Horizontal or diagonal line |
+| Separator | Full-width horizontal rule |
+| Weather | Current conditions + N-day forecast with icons |
+| Sensor Rows | Label / value rows for a list of sensors |
+| Battery Bar | Horizontal battery level bar with percentage |
+| Status Icons | Row of filled/outline squares for binary sensors |
+| Waste Schedule | Upcoming waste collection dates (today, tomorrow, in N days) |
 
-## Kindle setup
+All widgets support `x`, `y` positioning and `font_size`. Most support a `w`
+(width) override to constrain rendering to a sub-region of the display.
+
+## Device setup
+
+### Kindle
 
 Use [kndl-online-screensaver](https://codeberg.org/cryptomilk/kndl-online-screensaver/)
 on your Kindle. It supports ETag-based conditional fetching (skips the
@@ -120,7 +165,7 @@ http://<ha-ip>:8123/api/eink_dashboard/<entry_id>/image.png
 
 This endpoint requires no authentication.
 
-### Kindle and HTTPS (nginx)
+#### Kindle and HTTPS (nginx)
 
 Older Kindles cannot connect to modern HTTPS servers. If Home Assistant is
 behind an HTTPS reverse proxy, add an HTTP-only location for the image
@@ -131,7 +176,7 @@ server {
     listen 80;
     server_name homeassistant.example.com;
 
-    # E-Ink dashboard image — plain HTTP for Kindle
+    # E-Ink dashboard image - plain HTTP for Kindle
     location ~ ^/api/eink_dashboard/[^/]+/image\.png$ {
         proxy_pass http://127.0.0.1:8123;
     }
@@ -146,34 +191,24 @@ server {
 This exposes only the unauthenticated image endpoint over HTTP. The
 authenticated layout API remains HTTPS-only.
 
-## TRMNL setup
+### TRMNL
 
-1. Go to [usetrmnl.com](https://usetrmnl.com) → **Plugins** → **Webhook Image**.
+1. Go to [usetrmnl.com](https://usetrmnl.com) -> **Plugins** -> **Webhook Image**.
 2. Give the plugin a name, set **Image Fit Mode** to **Contain**, and click
    **Save**.
 3. Copy the **Webhook URL** (looks like
    `https://trmnl.com/api/custom_plugins/<uuid>`).
 4. During the HA config flow, choose **TRMNL webhook** and paste the URL.
 
-HA will push the rendered PNG to TRMNL after each render cycle, subject to a
-minimum push interval of 60 seconds.
+HA pushes the rendered PNG to TRMNL whenever the image changes, subject to a
+minimum interval of 5 minutes and a 5 MB size cap per push.
 
-## Development
-
-```bash
-pip install cairosvg           # build-time only, for icon generation
-tox -e test                    # run all tests
-tox -e lint                    # ruff check
-tox -e format                  # ruff format check
-tox -e typecheck               # ty type checker
-
-python3 scripts/build_icons.py # regenerate weather icon PNGs
-bash scripts/build_dist.sh     # build distributable tar.gz into dist/
-```
+You can add multiple TRMNL webhook targets per dashboard entry via
+**Configure -> Add push target**.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 -- see [LICENSE](LICENSE).
 
 Weather icons from [erikflowers/weather-icons](https://github.com/erikflowers/weather-icons),
 licensed under SIL Open Font License 1.1.
