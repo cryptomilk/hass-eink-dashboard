@@ -31,5 +31,7 @@ async def async_push_image(
                     url,
                     resp.status,
                 )
+    except TimeoutError:
+        _LOGGER.warning("Webhook push to %s timed out", url)
     except Exception:
         _LOGGER.warning("Webhook push to %s failed", url, exc_info=True)
