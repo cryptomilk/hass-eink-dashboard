@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - tox_env: lint
+          - tox_env: format
+          - tox_env: typecheck
+          - tox_env: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: tox.ini
+      - run: pip install tox
+      - run: tox -e ${{ matrix.tox_env }}
+
+  validate-frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - pnpm_cmd: typecheck
+          - pnpm_cmd: test
+    defaults:
+      run:
+        working-directory: custom_components/eink_dashboard/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: custom_components/eink_dashboard/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ${{ matrix.pnpm_cmd }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [validate, validate-frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: custom_components/eink_dashboard/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
+      - run: pip install cairosvg
+      - name: Stamp version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq ".version = \"${VERSION}\"" custom_components/eink_dashboard/manifest.json > manifest.tmp
+          mv manifest.tmp custom_components/eink_dashboard/manifest.json
+      - run: bash scripts/build_dist.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eink_dashboard-dist
+          path: dist/
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: eink_dashboard-dist
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/eink_dashboard.zip
+            dist/eink_dashboard-*.tar.gz
+          generate_release_notes: true

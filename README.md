@@ -28,12 +28,27 @@ devices. No Chromium, no ImageMagick, no Node.js.
 
 ## Installation
 
-1. Download `eink_dashboard-<version>.tar.gz` from the
-   [releases page](https://github.com/cryptomilk/hass-eink-dashboard/releases).
-2. Extract it into your Home Assistant `custom_components/` directory:
+### HACS (recommended)
+
+1. Open HACS in your Home Assistant instance.
+2. Click the three-dot menu → **Custom repositories**.
+3. Add `https://github.com/cryptomilk/hass-eink-dashboard` with
+   category **Integration**.
+4. Search for "E-Ink Dashboard" and click **Download**.
+5. Restart Home Assistant.
+
+Once the repository is included in the HACS default store, steps 2–3 can
+be skipped.
+
+### Manual
+
+1. Download `eink_dashboard.zip` from the
+   [latest release](https://github.com/cryptomilk/hass-eink-dashboard/releases/latest).
+2. Extract into `custom_components/eink_dashboard/`:
 
    ```bash
-   tar xzf eink_dashboard-0.1.0.tar.gz -C /path/to/homeassistant/custom_components/
+   mkdir -p /path/to/homeassistant/custom_components/eink_dashboard
+   unzip eink_dashboard.zip -d /path/to/homeassistant/custom_components/eink_dashboard/
    ```
 
 3. Restart Home Assistant.

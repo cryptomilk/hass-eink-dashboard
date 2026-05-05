@@ -1,0 +1,7 @@
+{
+  "name": "E-Ink Dashboard",
+  "zip_release": true,
+  "filename": "eink_dashboard.zip",
+  "homeassistant": "2026.1.0",
+  "render_readme": true
+}
