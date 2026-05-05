@@ -177,6 +177,7 @@ class EinkDashboardCard extends HTMLElement {
   private _renderPending = false;
   private _connected = false;
   private _fetching = false;
+  private _fetchGeneration = 0;
   private _showServerImage = false;
   private _serverImg: HTMLImageElement | null = null;
   private _container!: HTMLElement;
@@ -221,6 +222,7 @@ class EinkDashboardCard extends HTMLElement {
       this._ctx = null;
       this._serverImg = null;
       this._fetching = false;
+      this._fetchGeneration++;
       this._showServerImage = false;
       this._editMode = false;
       this._editor = null;
@@ -249,11 +251,15 @@ class EinkDashboardCard extends HTMLElement {
     this._connected = true;
     if (this._layout) {
       this._scheduleRender();
+    } else if (this._hass && this._config) {
+      this._fetchLayout();
     }
   }
 
   disconnectedCallback(): void {
     this._connected = false;
+    this._fetchGeneration++;
+    this._fetching = false;
   }
 
   getCardSize(): number {
@@ -474,15 +480,21 @@ class EinkDashboardCard extends HTMLElement {
   // ── Layout fetch ──────────────────────────────────────────────────────────
 
   private async _fetchLayout(): Promise<void> {
+    const gen = ++this._fetchGeneration;
     this._fetching = true;
     try {
       await _loadRoboto();
+      if (gen !== this._fetchGeneration) return;
+
       const entryId = await this._resolveEntryId();
+      if (gen !== this._fetchGeneration) return;
       this._resolvedEntryId = entryId;
+
       const resp = await this._hass!.callApi<LayoutResponse>(
         "GET",
         `eink_dashboard/${entryId}/layout`,
       );
+      if (gen !== this._fetchGeneration) return;
       this._layout = resp;
       this._headerEl.textContent = buildHeaderText(resp.device);
       this._copyBtn.style.display = shouldShowCopyUrl(
@@ -493,25 +505,31 @@ class EinkDashboardCard extends HTMLElement {
       this._fetchForecasts();
       this._scheduleRender();
     } catch (err) {
+      if (gen !== this._fetchGeneration) return;
       const div = document.createElement("div");
       div.className = "error";
       div.textContent = `Failed to load layout: ${(err as Error).message}`;
       this._container.replaceChildren(div);
     } finally {
-      this._fetching = false;
+      if (gen === this._fetchGeneration) {
+        this._fetching = false;
+      }
     }
   }
 
   private async _fetchForecasts(): Promise<void> {
     if (!this._layout || !this._hass) return;
+    const gen = this._fetchGeneration;
     for (const w of this._layout.widgets) {
       if (w.type !== "weather" || !w.entity) continue;
+      if (gen !== this._fetchGeneration) return;
       try {
         const resp = await this._hass.callService<ForecastServiceResult>(
           "weather", "get_forecasts",
           { entity_id: w.entity, type: "daily" },
           undefined, false, true,
         );
+        if (gen !== this._fetchGeneration) return;
         const forecast = resp?.response?.[w.entity]?.forecast;
         if (forecast) {
           this._forecasts[w.entity] = forecast;
@@ -1385,7 +1403,68 @@ class EinkDashboardCard extends HTMLElement {
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
-customElements.define(CARD_TAG, EinkDashboardCard);
+// HA may create cards before this module runs, producing hui-error-card
+// placeholders.  We register the element, then periodically scan the DOM
+// (including shadow roots) for stale error cards and force their parent
+// hui-card to recreate them.
+
+function ensureRegistered(): void {
+  if (!customElements.get(CARD_TAG)) {
+    customElements.define(CARD_TAG, EinkDashboardCard);
+  }
+}
+ensureRegistered();
+
+function queryShadow(root: Node, tag: string): Element[] {
+  const results: Element[] = [];
+  if (root instanceof Element) {
+    if (root.localName === tag) results.push(root);
+    if (root.shadowRoot) {
+      results.push(...queryShadow(root.shadowRoot, tag));
+    }
+  }
+  for (const child of (root as Element).children ?? []) {
+    results.push(...queryShadow(child, tag));
+  }
+  return results;
+}
+
+type HuiCard = HTMLElement & { config?: Record<string, unknown> };
+
+function findHuiCard(errorCard: Element): HuiCard | null {
+  const root = errorCard.getRootNode();
+  if (root instanceof ShadowRoot && root.host?.localName === "hui-card") {
+    return root.host as HuiCard;
+  }
+  let el = errorCard.parentElement;
+  while (el) {
+    if (el.localName === "hui-card") return el as HuiCard;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function forceHuiCardRebuilds(): number {
+  ensureRegistered();
+  let fixed = 0;
+  for (const el of queryShadow(document.body, "hui-error-card")) {
+    const huiCard = findHuiCard(el);
+    if (!huiCard) continue;
+    const cfg = huiCard.config;
+    if (!cfg || cfg.type !== `custom:${CARD_TAG}`) continue;
+    huiCard.config = { type: "error", error: "reloading" };
+    requestAnimationFrame(() => { huiCard.config = cfg; });
+    fixed++;
+  }
+  return fixed;
+}
+
+let _rebuildRetry = 0;
+function retryRebuilds(): void {
+  if (forceHuiCardRebuilds() > 0 || ++_rebuildRetry >= 10) return;
+  setTimeout(retryRebuilds, 2000);
+}
+setTimeout(retryRebuilds, 1000);
 
 window.customCards = window.customCards || [];
 window.customCards.push({

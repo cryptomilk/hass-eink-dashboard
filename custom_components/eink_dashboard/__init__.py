@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -56,6 +57,10 @@ async def _async_update_listener(
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 _FONTS_DIR = Path(__file__).parent / "fonts"
+_MANIFEST = json.loads(
+    (Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")
+)
+_VERSION = _MANIFEST["version"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -81,7 +86,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     )
     add_extra_js_url(
         hass,
-        "/eink_dashboard/frontend/eink-dashboard-card.js",
+        f"/eink_dashboard/frontend/eink-dashboard-card.js?v={_VERSION}",
     )
     _LOGGER.debug("async_setup: complete")
     return True

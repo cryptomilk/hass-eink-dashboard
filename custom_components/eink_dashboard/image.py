@@ -195,9 +195,12 @@ class EinkDashboardImage(ImageEntity):
                     render_dashboard, widgets, config
                 )
                 if new_bytes != self._rendered:
+                    first_render = self._rendered is None
                     _LOGGER.debug(
-                        "_async_refresh: image changed, %d bytes",
+                        "_async_refresh: image changed, %d bytes"
+                        " (first_render=%s)",
                         len(new_bytes),
+                        first_render,
                     )
                     self._rendered = new_bytes
                     self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
@@ -205,9 +208,13 @@ class EinkDashboardImage(ImageEntity):
                     self.async_write_ha_state()
                     webhook_urls = self._entry.options.get("webhook_urls", [])
                     now = time.monotonic()
-                    if webhook_urls and (
-                        self._last_push is None
-                        or now - self._last_push >= PUSH_MIN_INTERVAL
+                    if (
+                        not first_render
+                        and webhook_urls
+                        and (
+                            self._last_push is None
+                            or now - self._last_push >= PUSH_MIN_INTERVAL
+                        )
                     ):
                         if len(new_bytes) > PUSH_MAX_IMAGE_BYTES:
                             _LOGGER.warning(
@@ -223,6 +230,10 @@ class EinkDashboardImage(ImageEntity):
                                 (session, wh["url"], new_bytes)
                                 for wh in webhook_urls
                             ]
+                    elif first_render and webhook_urls:
+                        _LOGGER.info(
+                            "_async_refresh: skipping push on initial render"
+                        )
                 else:
                     _LOGGER.debug("_async_refresh: image unchanged")
         except Exception:

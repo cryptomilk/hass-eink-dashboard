@@ -458,11 +458,34 @@ _WEBHOOK_OPTS = {
 
 
 class TestWebhookPush:
+    async def test_push_skipped_on_initial_render(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(_WEBHOOK_OPTS)
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image"
+                ".async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+
     async def test_push_fires_on_image_change(self) -> None:
         hass = _make_hass()
         entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
+
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
 
         mock_session = MagicMock()
         with (
@@ -475,12 +498,16 @@ class TestWebhookPush:
                 "custom_components.eink_dashboard.image.async_push_image",
                 new_callable=AsyncMock,
             ) as mock_push,
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"changed-image",
+            ),
         ):
             await entity._async_refresh(None)
             mock_push.assert_called_once_with(
                 mock_session,
                 _WEBHOOK_URL,
-                entity._rendered,
+                b"changed-image",
             )
 
     async def test_push_fires_for_each_webhook(self) -> None:
@@ -498,6 +525,9 @@ class TestWebhookPush:
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
+
         mock_session = MagicMock()
         with (
             patch(
@@ -509,6 +539,10 @@ class TestWebhookPush:
                 "custom_components.eink_dashboard.image.async_push_image",
                 new_callable=AsyncMock,
             ) as mock_push,
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"changed-image",
+            ),
         ):
             await entity._async_refresh(None)
             assert mock_push.call_count == 2
@@ -548,10 +582,19 @@ class TestWebhookPush:
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
-        with patch(
-            "custom_components.eink_dashboard.image.async_push_image",
-            new_callable=AsyncMock,
-        ) as mock_push:
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"changed-image",
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
@@ -563,10 +606,19 @@ class TestWebhookPush:
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
 
-        with patch(
-            "custom_components.eink_dashboard.image.async_push_image",
-            new_callable=AsyncMock,
-        ) as mock_push:
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"changed-image",
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
@@ -575,6 +627,9 @@ class TestWebhookPush:
         entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
+
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
 
         oversized = b"x" * (PUSH_MAX_IMAGE_BYTES + 1)
         with (
@@ -599,9 +654,16 @@ class TestWebhookPush:
         entry = _make_entry(_WEBHOOK_OPTS)
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
+
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
         entity._last_push = 1.0
 
         with (
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"changed-image",
+            ),
             patch(
                 "custom_components.eink_dashboard.image"
                 ".async_get_clientsession",

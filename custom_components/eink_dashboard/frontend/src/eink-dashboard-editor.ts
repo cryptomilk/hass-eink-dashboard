@@ -669,4 +669,6 @@ class EinkDashboardEditor extends HTMLElement {
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
-customElements.define(EDITOR_TAG, EinkDashboardEditor);
+if (!customElements.get(EDITOR_TAG)) {
+  customElements.define(EDITOR_TAG, EinkDashboardEditor);
+}
