@@ -775,6 +775,12 @@ def render_dashboard(
 
     img = optimize_for_eink(img, config)
 
+    _LOGGER.debug(
+        "render_dashboard: post-optimize mode=%s size=%s",
+        img.mode,
+        img.size,
+    )
+
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()

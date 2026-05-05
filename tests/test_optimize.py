@@ -61,6 +61,19 @@ class TestOptimizeEnabled:
         assert result.mode == "1"
         assert len(set(result.get_flattened_data())) <= 2
 
+    def test_quantize_2_preserves_content(self) -> None:
+        img = Image.new("L", (200, 100), 255)
+        from PIL import ImageDraw
+
+        draw = ImageDraw.Draw(img)
+        draw.rectangle((10, 10, 190, 90), fill=0)
+        result = optimize_for_eink(
+            img, {"optimize": True, "grayscale_levels": 2}
+        )
+        assert result.mode == "1"
+        dark = sum(1 for b in result.tobytes() if b == 0)
+        assert dark > 0
+
     def test_256_levels_skips_quantize(self) -> None:
         img = _gradient()
         result = optimize_for_eink(

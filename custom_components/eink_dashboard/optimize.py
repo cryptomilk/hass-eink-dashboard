@@ -32,13 +32,13 @@ def optimize_for_eink(
         img = ImageEnhance.Contrast(img).enhance(factor)
 
     colors = config.get("grayscale_levels", DEFAULT_GRAYSCALE_LEVELS)
-    if colors < 256:
+    if colors <= 2:
+        img = img.convert("1", dither=Image.Dither.FLOYDSTEINBERG)
+    elif colors < 256:
         img = img.quantize(
             colors=colors,
             dither=Image.Dither.FLOYDSTEINBERG,
         )
         img = img.convert("L")
-        if colors <= 2:
-            img = img.convert("1", dither=Image.Dither.NONE)
 
     return img
