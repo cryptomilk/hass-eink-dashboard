@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import io
+import logging
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
@@ -27,6 +28,8 @@ from .const import (
     WidgetType,
 )
 from .optimize import optimize_for_eink
+
+_LOGGER = logging.getLogger(__name__)
 
 type Widget = dict[str, Any]
 type DisplayConfig = dict[str, Any]
@@ -220,6 +223,10 @@ def render_weather(
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
     if state is None:
+        _LOGGER.warning(
+            "render_weather: entity %r not in states, widget will be blank",
+            entity_id,
+        )
         return
 
     x = widget.get("x", PADDING)
@@ -435,6 +442,9 @@ def render_sensor_rows(
     for entity_id in entity_ids:
         state = states.get(entity_id)
         if state is None:
+            _LOGGER.debug(
+                "render_sensor_rows: entity %r not in states", entity_id
+            )
             continue
         attrs = state.get("attributes", {})
         label = attrs.get("friendly_name", entity_id)
@@ -470,6 +480,9 @@ def render_device_battery(
     """Draw battery icon and percentage for the device's own battery."""
     level = config.get("device_battery_level")
     if level is None:
+        _LOGGER.debug(
+            "render_device_battery: no battery level in config, skipping"
+        )
         return
 
     pct = max(0, min(100, int(level)))
@@ -568,6 +581,9 @@ def render_status_icons(
     for entity_id in entity_ids:
         state = states.get(entity_id)
         if state is None:
+            _LOGGER.debug(
+                "render_status_icons: entity %r not in states", entity_id
+            )
             continue
         attrs = state.get("attributes", {})
         label = attrs.get("friendly_name", entity_id)
@@ -661,6 +677,9 @@ def render_waste_schedule(
     for entity_id in entity_ids:
         state = states.get(entity_id)
         if state is None:
+            _LOGGER.debug(
+                "render_waste_schedule: entity %r not in states", entity_id
+            )
             continue
         attrs = state.get("attributes", {})
         label = attrs.get("friendly_name", entity_id)
