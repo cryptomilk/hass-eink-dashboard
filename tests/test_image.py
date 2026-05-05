@@ -679,3 +679,30 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
             assert entity._last_push == 1.0
+
+    async def test_push_skipped_when_image_blank(self) -> None:
+        hass = _make_hass()
+        entry = _make_entry(_WEBHOOK_OPTS)
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        # Initial render (push skipped).
+        await entity._async_refresh(None)
+
+        blank_png = io.BytesIO()
+        Image.new("L", (200, 100), 255).save(blank_png, "PNG")
+        blank_bytes = blank_png.getvalue()
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=blank_bytes,
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.async_push_image",
+                new_callable=AsyncMock,
+            ) as mock_push,
+        ):
+            await entity._async_refresh(None)
+            mock_push.assert_not_called()
+            assert entity._rendered == blank_bytes

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import io
 import logging
 import time
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.helpers.template import Template, TemplateError
 from homeassistant.util import dt as dt_util
+from PIL import Image
 
 from .const import (
     DEFAULT_CONTRAST,
@@ -41,6 +43,17 @@ _LOGGER = logging.getLogger(__name__)
 
 PUSH_MIN_INTERVAL = 300
 PUSH_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+
+def _is_image_blank(image_bytes: bytes) -> bool:
+    """Return True if the image has no dark pixels (appears all-white)."""
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        if img.mode != "L":
+            img = img.convert("L")
+        return not any(b < 200 for b in img.tobytes())
+    except Exception:
+        return False
 
 
 async def async_setup_entry(
@@ -194,6 +207,15 @@ class EinkDashboardImage(ImageEntity):
                 new_bytes = await self.hass.async_add_executor_job(
                     render_dashboard, widgets, config
                 )
+                is_blank = await self.hass.async_add_executor_job(
+                    _is_image_blank, new_bytes
+                )
+                if is_blank:
+                    _LOGGER.warning(
+                        "_async_refresh: rendered image is blank for %s,"
+                        " skipping webhook push",
+                        self._entry.entry_id,
+                    )
                 if new_bytes != self._rendered:
                     first_render = self._rendered is None
                     _LOGGER.debug(
@@ -210,6 +232,7 @@ class EinkDashboardImage(ImageEntity):
                     now = time.monotonic()
                     if (
                         not first_render
+                        and not is_blank
                         and webhook_urls
                         and (
                             self._last_push is None

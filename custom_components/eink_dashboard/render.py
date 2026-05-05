@@ -746,10 +746,28 @@ def render_dashboard(
     for widget in widget_list:
         widget_type = widget.get("type")
         if widget_type is None:
+            _LOGGER.warning("render_dashboard: widget has no type: %r", widget)
             continue
         renderer = _RENDERERS.get(widget_type)
-        if renderer is not None:
-            renderer(draw, widget, config)
+        if renderer is None:
+            _LOGGER.warning(
+                "render_dashboard: unknown widget type %r, skipping",
+                widget_type,
+            )
+            continue
+        _LOGGER.debug(
+            "render_dashboard: rendering widget type=%s entity=%s",
+            widget_type,
+            widget.get("entity", "N/A"),
+        )
+        renderer(draw, widget, config)
+
+    mn, mx = img.getextrema()
+    _LOGGER.debug(
+        "render_dashboard: pre-optimize pixel range min=%d max=%d",
+        mn,
+        mx,
+    )
 
     rotation = config.get("rotation", 0)
     if rotation:
