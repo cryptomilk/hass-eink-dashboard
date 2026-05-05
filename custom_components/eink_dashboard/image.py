@@ -49,11 +49,15 @@ async def async_setup_entry(
     async_add_entities: Any,
 ) -> None:
     """Create and register the EinkDashboardImage entity."""
+    _LOGGER.debug("image async_setup_entry: %s", entry.entry_id)
     entity = EinkDashboardImage(hass, entry)
     widgets = hass.data[DOMAIN][entry.entry_id]["widgets"]
     entity.set_widgets(widgets)
     hass.data[DOMAIN][entry.entry_id]["entity"] = entity
     async_add_entities([entity])
+    _LOGGER.debug(
+        "image async_setup_entry: entity added for %s", entry.entry_id
+    )
 
 
 class EinkDashboardImage(ImageEntity):
@@ -85,6 +89,12 @@ class EinkDashboardImage(ImageEntity):
         """Schedule periodic refresh and render the first frame."""
         interval = self._entry.options.get(
             "update_interval", DEFAULT_UPDATE_INTERVAL
+        )
+        _LOGGER.debug(
+            "async_added_to_hass: %s interval=%ds widgets=%d",
+            self._entry.entry_id,
+            interval,
+            len(self._widgets),
         )
         self._unsub = async_track_time_interval(
             self.hass,
@@ -136,67 +146,90 @@ class EinkDashboardImage(ImageEntity):
         """Re-render the dashboard and push to webhooks if the image
         changed.
         """
+        _LOGGER.debug("_async_refresh: start for %s", self._entry.entry_id)
         push_targets: list[tuple[Any, str, bytes]] = []
-        async with self._refresh_lock:
-            states = self._build_states()
-            await self._async_fetch_forecasts(states)
-            config = {
-                "width": self._entry.options.get("width", DEFAULT_WIDTH),
-                "height": self._entry.options.get("height", DEFAULT_HEIGHT),
-                "rotation": self._entry.options.get("rotation", 0),
-                "optimize": self._entry.options.get(
-                    "optimize", DEFAULT_OPTIMIZE
-                ),
-                "grayscale_levels": self._entry.options.get(
-                    "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
-                ),
-                "sharpness": self._entry.options.get(
-                    "sharpness", DEFAULT_SHARPNESS
-                ),
-                "contrast": self._entry.options.get(
-                    "contrast", DEFAULT_CONTRAST
-                ),
-                "states": states,
-            }
-            battery_sensor = self.hass.data[DOMAIN][self._entry.entry_id].get(
-                "battery_sensor"
-            )
-            if battery_sensor is not None:
-                config["device_battery_level"] = battery_sensor.native_value
-                config["device_battery_charging"] = (
-                    battery_sensor.extra_state_attributes.get(
-                        "is_charging", False
+        try:
+            async with self._refresh_lock:
+                states = self._build_states()
+                await self._async_fetch_forecasts(states)
+                config = {
+                    "width": self._entry.options.get("width", DEFAULT_WIDTH),
+                    "height": self._entry.options.get(
+                        "height", DEFAULT_HEIGHT
+                    ),
+                    "rotation": self._entry.options.get("rotation", 0),
+                    "optimize": self._entry.options.get(
+                        "optimize", DEFAULT_OPTIMIZE
+                    ),
+                    "grayscale_levels": self._entry.options.get(
+                        "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+                    ),
+                    "sharpness": self._entry.options.get(
+                        "sharpness", DEFAULT_SHARPNESS
+                    ),
+                    "contrast": self._entry.options.get(
+                        "contrast", DEFAULT_CONTRAST
+                    ),
+                    "states": states,
+                }
+                battery_sensor = self.hass.data[DOMAIN][
+                    self._entry.entry_id
+                ].get("battery_sensor")
+                if battery_sensor is not None:
+                    config["device_battery_level"] = (
+                        battery_sensor.native_value
                     )
-                )
-            widgets = self._resolve_templates(self._widgets)
-            new_bytes = await self.hass.async_add_executor_job(
-                render_dashboard, widgets, config
-            )
-            if new_bytes != self._rendered:
-                self._rendered = new_bytes
-                self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
-                self._attr_image_last_updated = dt_util.utcnow()
-                self.async_write_ha_state()
-                webhook_urls = self._entry.options.get("webhook_urls", [])
-                now = time.monotonic()
-                if webhook_urls and (
-                    self._last_push is None
-                    or now - self._last_push >= PUSH_MIN_INTERVAL
-                ):
-                    if len(new_bytes) > PUSH_MAX_IMAGE_BYTES:
-                        _LOGGER.warning(
-                            "Rendered image is %d bytes, exceeds %d byte"
-                            " webhook limit; skipping push",
-                            len(new_bytes),
-                            PUSH_MAX_IMAGE_BYTES,
+                    config["device_battery_charging"] = (
+                        battery_sensor.extra_state_attributes.get(
+                            "is_charging", False
                         )
-                    else:
-                        self._last_push = now
-                        session = async_get_clientsession(self.hass)
-                        push_targets = [
-                            (session, wh["url"], new_bytes)
-                            for wh in webhook_urls
-                        ]
+                    )
+                widgets = self._resolve_templates(self._widgets)
+                _LOGGER.debug(
+                    "_async_refresh: rendering %d widgets at %dx%d",
+                    len(widgets),
+                    config["width"],
+                    config["height"],
+                )
+                new_bytes = await self.hass.async_add_executor_job(
+                    render_dashboard, widgets, config
+                )
+                if new_bytes != self._rendered:
+                    _LOGGER.debug(
+                        "_async_refresh: image changed, %d bytes",
+                        len(new_bytes),
+                    )
+                    self._rendered = new_bytes
+                    self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
+                    self._attr_image_last_updated = dt_util.utcnow()
+                    self.async_write_ha_state()
+                    webhook_urls = self._entry.options.get("webhook_urls", [])
+                    now = time.monotonic()
+                    if webhook_urls and (
+                        self._last_push is None
+                        or now - self._last_push >= PUSH_MIN_INTERVAL
+                    ):
+                        if len(new_bytes) > PUSH_MAX_IMAGE_BYTES:
+                            _LOGGER.warning(
+                                "Rendered image is %d bytes, exceeds %d"
+                                " byte webhook limit; skipping push",
+                                len(new_bytes),
+                                PUSH_MAX_IMAGE_BYTES,
+                            )
+                        else:
+                            self._last_push = now
+                            session = async_get_clientsession(self.hass)
+                            push_targets = [
+                                (session, wh["url"], new_bytes)
+                                for wh in webhook_urls
+                            ]
+                else:
+                    _LOGGER.debug("_async_refresh: image unchanged")
+        except Exception:
+            _LOGGER.exception(
+                "_async_refresh: failed for %s", self._entry.entry_id
+            )
+            return
         if push_targets:
             await asyncio.gather(
                 *(async_push_image(*args) for args in push_targets)

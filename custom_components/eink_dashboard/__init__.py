@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,8 @@ from homeassistant.helpers import device_registry as dr
 from .const import DEVICE_PRESETS, DOMAIN
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["image", "sensor"]
 
@@ -57,6 +60,7 @@ _FONTS_DIR = Path(__file__).parent / "fonts"
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Register HTTP views and static paths for the integration."""
+    _LOGGER.debug("async_setup: registering HTTP views and static paths")
     hass.data.setdefault(DOMAIN, {})
 
     hass.http.register_view(EinkPublicImageView())
@@ -79,13 +83,22 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         hass,
         "/eink_dashboard/frontend/eink-dashboard-card.js",
     )
+    _LOGGER.debug("async_setup: complete")
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load persisted widgets and forward setup to the image platform."""
+    _LOGGER.debug(
+        "async_setup_entry: entry_id=%s title=%r", entry.entry_id, entry.title
+    )
     store = EinkDashboardStore(hass, entry.entry_id)
     widgets = await store.async_load()
+    _LOGGER.debug(
+        "async_setup_entry: loaded %d widgets for %s",
+        len(widgets),
+        entry.entry_id,
+    )
     hass.data[DOMAIN][entry.entry_id] = {
         "store": store,
         "widgets": widgets,
@@ -96,12 +109,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.debug(
+        "async_setup_entry: platforms forwarded for %s", entry.entry_id
+    )
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload platforms and clean up runtime data for the entry."""
+    _LOGGER.debug("async_unload_entry: %s", entry.entry_id)
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+    _LOGGER.debug("async_unload_entry: %s ok=%s", entry.entry_id, ok)
     return ok

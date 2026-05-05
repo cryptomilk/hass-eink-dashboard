@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -15,6 +16,8 @@ from homeassistant.helpers.device_registry import DeviceInfo
 
 from .const import DOMAIN
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -22,6 +25,7 @@ async def async_setup_entry(
     async_add_entities: Any,
 ) -> None:
     """Create and register the battery sensor entity."""
+    _LOGGER.debug("sensor async_setup_entry: %s", entry.entry_id)
     sensor = EinkDashboardBatterySensor(entry)
     async_add_entities([sensor])
     hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
@@ -50,6 +54,7 @@ class EinkDashboardBatterySensor(RestoreSensor):
         await super().async_added_to_hass()
         last_data = await self.async_get_last_sensor_data()
         if last_data is None:
+            _LOGGER.debug("sensor async_added_to_hass: no previous data")
             return
         self._attr_native_value = last_data.native_value
         last_state = await self.async_get_last_state()
@@ -59,6 +64,10 @@ class EinkDashboardBatterySensor(RestoreSensor):
                 self._attr_extra_state_attributes = {
                     "is_charging": is_charging
                 }
+        _LOGGER.debug(
+            "sensor async_added_to_hass: restored battery=%s",
+            self._attr_native_value,
+        )
 
     def update_battery(self, level: int, is_charging: bool) -> None:
         """Update battery level and charging state, then push to HA."""
