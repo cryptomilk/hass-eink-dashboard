@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
-import io
 from unittest.mock import patch
-
-from PIL import Image
 
 from custom_components.eink_dashboard.const import (
     PADDING,
@@ -14,6 +11,7 @@ from custom_components.eink_dashboard.render import (
     _parse_days_until,
     render_dashboard,
 )
+from tests.helpers import pixel, png_to_image
 
 MOCK_WEATHER_STATE = {
     "weather.home": {
@@ -56,31 +54,21 @@ MOCK_WEATHER_STATE = {
 }
 
 
-def _png_to_image(png_bytes: bytes) -> Image.Image:
-    return Image.open(io.BytesIO(png_bytes))
-
-
-def _pixel(img: Image.Image, x: int, y: int) -> int:
-    val = img.getpixel((x, y))
-    assert isinstance(val, int)
-    return val
-
-
 class TestRenderDashboard:
     def test_empty_widget_list_returns_white_image(self) -> None:
         config = {"width": 100, "height": 100}
         result = render_dashboard([], config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.mode == "L"
         assert img.size == (100, 100)
-        assert _pixel(img, 50, 50) == 255
+        assert pixel(img, 50, 50) == 255
 
     def test_returns_valid_png(self) -> None:
         config = {"width": 200, "height": 300}
         result = render_dashboard([], config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.format == "PNG"
         assert img.size == (200, 300)
 
@@ -88,14 +76,14 @@ class TestRenderDashboard:
         config = {"width": 200, "height": 100, "rotation": 90}
         result = render_dashboard([], config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.size == (100, 200)
 
     def test_rotation_270(self) -> None:
         config = {"width": 200, "height": 100, "rotation": 270}
         result = render_dashboard([], config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.size == (100, 200)
 
     def test_unknown_widget_type_is_skipped(self) -> None:
@@ -103,7 +91,7 @@ class TestRenderDashboard:
         widgets = [{"type": "nonexistent", "x": 10, "y": 10}]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.size == (100, 100)
 
 
@@ -121,9 +109,9 @@ class TestRenderText:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_pixel = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(10, 100)
             for y in range(10, 40)
         )
@@ -143,9 +131,9 @@ class TestRenderText:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_right = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(140, 200)
             for y in range(10, 40)
         )
@@ -165,9 +153,9 @@ class TestRenderText:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_center = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(80, 120)
             for y in range(10, 40)
         )
@@ -187,9 +175,9 @@ class TestRenderText:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_gray_pixel = any(
-            100 < _pixel(img, x, y) < 200
+            100 < pixel(img, x, y) < 200
             for x in range(10, 80)
             for y in range(10, 40)
         )
@@ -211,9 +199,9 @@ class TestRenderLine:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
-        assert _pixel(img, 50, 50) == 0
-        assert _pixel(img, 50, 10) == 255
+        img = png_to_image(result)
+        assert pixel(img, 50, 50) == 0
+        assert pixel(img, 50, 10) == 255
 
     def test_line_custom_color(self) -> None:
         config = {"width": 100, "height": 100}
@@ -229,8 +217,8 @@ class TestRenderLine:
         ]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
-        assert _pixel(img, 50, 50) == 160
+        img = png_to_image(result)
+        assert pixel(img, 50, 50) == 160
 
 
 class TestRenderSeparator:
@@ -239,20 +227,20 @@ class TestRenderSeparator:
         widgets = [{"type": "separator", "y": 50, "color": 0}]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
-        assert _pixel(img, PADDING, 50) == 0
-        assert _pixel(img, 175, 50) == 0
+        img = png_to_image(result)
+        assert pixel(img, PADDING, 50) == 0
+        assert pixel(img, 175, 50) == 0
         # Outside separator range should be white
-        assert _pixel(img, 10, 50) == 255
+        assert pixel(img, 10, 50) == 255
 
     def test_separator_default_color(self) -> None:
         config = {"width": 200, "height": 100}
         widgets = [{"type": "separator", "y": 50}]
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Default is COLOR_LIGHT_GRAY = 180
-        assert _pixel(img, 100, 50) == 180
+        assert pixel(img, 100, 50) == 180
 
 
 class TestRenderWeather:
@@ -276,9 +264,9 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 80, 300)
             for y in range(10, 70)
         )
@@ -296,9 +284,9 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_forecast = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(50, 550)
             for y in range(110, 200)
         )
@@ -315,9 +303,9 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 600, 20)
             for y in range(0, 400, 20)
         )
@@ -347,16 +335,16 @@ class TestRenderWeather:
             widgets,
             {"width": 600, "height": 300, "states": states},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         assert img.size == (600, 300)
         has_icon = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 90)
             for y in range(10, 100)
         )
         assert has_icon
         has_temp = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 80, 300)
             for y in range(10, 70)
         )
@@ -373,9 +361,9 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         icon_area_has_drawing = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 90)
             for y in range(10, 100)
         )
@@ -395,24 +383,24 @@ class TestRenderWeather:
         config = self._config(width=800, height=480)
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Temperature drawn in the left area
         has_temp = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 80, 350)
             for y in range(10, 70)
         )
         assert has_temp
         # Detail chips row (humidity, pressure, wind, cloud)
         has_details = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 400)
             for y in range(80, 100)
         )
         assert has_details
         # Forecast section visible
         has_forecast = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(50, 750)
             for y in range(110, 220)
         )
@@ -432,15 +420,15 @@ class TestRenderWeather:
         config = self._config(width=350, height=250)
         result = render_dashboard(widgets, config)
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_temp = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 80, 300)
             for y in range(10, 70)
         )
         assert has_temp
         has_details = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 326)
             for y in range(80, 100)
         )
@@ -458,9 +446,9 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_details = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 500)
             for y in range(80, 100)
         )
@@ -479,10 +467,10 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Forecast area with hi/lo temps and precipitation
         has_forecast_detail = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(50, 550)
             for y in range(150, 210)
         )
@@ -501,17 +489,17 @@ class TestRenderWeather:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # High temp row (y ~ 162 at s=1: forecast_y+52)
         has_hi = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(50, 550)
             for y in range(155, 175)
         )
         assert has_hi
         # Low temp row (y ~ 180 at s=1: forecast_y+70)
         has_lo = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(50, 550)
             for y in range(175, 195)
         )
@@ -541,9 +529,9 @@ class TestRenderWeather:
             widgets,
             {"width": 600, "height": 200, "states": states},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_drawing = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 90)
             for y in range(10, 100)
         )
@@ -599,14 +587,14 @@ class TestRenderSensorRows:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_row1 = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(10, 40)
         )
         has_dark_row2 = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(40, 70)
         )
@@ -627,9 +615,9 @@ class TestRenderSensorRows:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_title = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(10, 35)
         )
@@ -648,9 +636,9 @@ class TestRenderSensorRows:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_right = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(300, 400)
             for y in range(10, 40)
         )
@@ -672,9 +660,9 @@ class TestRenderSensorRows:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_first_row = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(10, 40)
         )
@@ -691,9 +679,9 @@ class TestRenderSensorRows:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 400, 20)
             for y in range(0, 300, 20)
         )
@@ -713,9 +701,9 @@ class TestRenderDeviceBattery:
     def test_device_battery_draws_fill(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_dark_fill = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 1, PADDING + 16)
             for y in range(33, 42)
         )
@@ -726,9 +714,9 @@ class TestRenderDeviceBattery:
         result = render_dashboard(
             widgets, self._config(device_battery_level=None)
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 400, 20)
             for y in range(0, 100, 20)
         )
@@ -737,9 +725,9 @@ class TestRenderDeviceBattery:
     def test_device_battery_missing_key_is_noop(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, {"width": 400, "height": 100})
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 400, 20)
             for y in range(0, 100, 20)
         )
@@ -748,9 +736,9 @@ class TestRenderDeviceBattery:
     def test_device_battery_draws_percentage_text(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_text = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 28, PADDING + 70)
             for y in range(29, 47)
         )
@@ -759,9 +747,9 @@ class TestRenderDeviceBattery:
     def test_device_battery_draws_nub(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_nub = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING + 23, PADDING + 25)
             for y in range(35, 40)
         )
@@ -772,9 +760,9 @@ class TestRenderDeviceBattery:
         result = render_dashboard(
             widgets, self._config(device_battery_level=0)
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_outline = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 25)
             for y in range(32, 43)
         )
@@ -785,9 +773,9 @@ class TestRenderDeviceBattery:
         result = render_dashboard(
             widgets, self._config(device_battery_level=100)
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_full_fill = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 1, PADDING + 21)
             for y in range(33, 42)
         )
@@ -806,10 +794,10 @@ class TestRenderDeviceBattery:
         result = render_dashboard(
             widgets, self._config(device_battery_level=75)
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Scaled icon body: PADDING to PADDING+44, icon_y=64 to 84
         has_scaled_icon = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 44)
             for y in range(64, 85)
         )
@@ -822,9 +810,9 @@ class TestRenderDeviceBattery:
             [{"type": "device_battery", "x": PADDING, "y": 40}],
             self._config(device_battery_level=75),
         )
-        img_default = _png_to_image(result_default)
+        img_default = png_to_image(result_default)
         assert all(
-            _pixel(img_default, x, y) >= 200
+            pixel(img_default, x, y) >= 200
             for x in range(PADDING + 25, PADDING + 30)
             for y in range(40, 50)
         )
@@ -886,9 +874,9 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_content = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(10, 36)
         )
@@ -906,9 +894,9 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_black = any(
-            _pixel(img, x, y) < 64
+            pixel(img, x, y) < 64
             for x in range(PADDING, PADDING + 13)
             for y in range(14, 27)
         )
@@ -926,17 +914,17 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Interior of the outline square should NOT be solid black
         interior_black = all(
-            _pixel(img, x, y) < 64
+            pixel(img, x, y) < 64
             for x in range(PADDING + 2, PADDING + 11)
             for y in range(16, 25)
         )
         assert not interior_black
         # But the outline itself should have some dark pixels
         has_outline = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, PADDING + 13)
             for y in range(14, 27)
         )
@@ -954,15 +942,15 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_title = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(10, 40)
         )
         assert has_title
         has_icon = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(40, 70)
         )
@@ -982,9 +970,9 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_content = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(10, 36)
         )
@@ -1001,9 +989,9 @@ class TestRenderStatusIcons:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 500, 20)
             for y in range(0, 200, 20)
         )
@@ -1029,9 +1017,9 @@ class TestRenderStatusIcons:
             {"width": 200, "height": 200, "states": MOCK_STATUS_ICON_STATES},
         )
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_second_row = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 180)
             for y in range(36, 80)
         )
@@ -1117,15 +1105,15 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_row1 = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(10, 38)
         )
         assert has_row1
         has_row2 = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(38, 66)
         )
@@ -1145,15 +1133,15 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_title = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 250)
             for y in range(10, 40)
         )
         assert has_title
         has_entity = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(42, 70)
         )
@@ -1175,9 +1163,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_content = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(10, 38)
         )
@@ -1194,9 +1182,9 @@ class TestRenderWasteSchedule:
         ]
         result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 500, 20)
             for y in range(0, 300, 20)
         )
@@ -1216,9 +1204,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = dt.date(2026, 5, 3)
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_black = any(
-            _pixel(img, x, y) < 64
+            pixel(img, x, y) < 64
             for x in range(PADDING, PADDING + 11)
             for y in range(16, 27)
         )
@@ -1238,9 +1226,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_black = any(
-            _pixel(img, x, y) < 64
+            pixel(img, x, y) < 64
             for x in range(PADDING, PADDING + 11)
             for y in range(16, 27)
         )
@@ -1260,17 +1248,17 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         # Interior of circle should NOT be solid black
         interior_black = all(
-            _pixel(img, x, y) < 64
+            pixel(img, x, y) < 64
             for x in range(PADDING + 2, PADDING + 9)
             for y in range(18, 25)
         )
         assert not interior_black
         # But the circle boundary should have some non-white pixels
         has_outline = any(
-            _pixel(img, x, y) < 240
+            pixel(img, x, y) < 240
             for x in range(PADDING, PADDING + 11)
             for y in range(16, 27)
         )
@@ -1289,9 +1277,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config())
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_right_text = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(380, 476)
             for y in range(10, 38)
         )
@@ -1316,9 +1304,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config(states=states))
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_content = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 300)
             for y in range(10, 38)
         )
@@ -1343,9 +1331,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config(states=states))
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 500, 20)
             for y in range(0, 300, 20)
         )
@@ -1371,9 +1359,9 @@ class TestRenderWasteSchedule:
             mock_dt.today.return_value = _TODAY
             result = render_dashboard(widgets, self._config(states=states))
 
-        img = _png_to_image(result)
+        img = png_to_image(result)
         all_white = all(
-            _pixel(img, x, y) == 255
+            pixel(img, x, y) == 255
             for x in range(0, 500, 20)
             for y in range(0, 300, 20)
         )
@@ -1399,16 +1387,16 @@ class TestFontSizeControls:
             widgets,
             {"width": 400, "height": 200, "states": MOCK_WEATHER_STATE},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_temp = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 22, PADDING + 100)
             for y in range(10, 40)
         )
         assert has_temp
         # Detail chips at detail_y=35 (wrong /22 divisor shifts them to y=46)
         has_details = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, PADDING + 200)
             for y in range(35, 46)
         )
@@ -1433,16 +1421,16 @@ class TestFontSizeControls:
             widgets,
             {"width": 400, "height": 200, "states": MOCK_SENSOR_STATES},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_row1 = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(10, 42)
         )
         assert has_row1
         # Row 2 exists at the scaled position
         has_row2 = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, 200)
             for y in range(51, 85)
         )
@@ -1457,9 +1445,9 @@ class TestFontSizeControls:
             widgets,
             {"width": 400, "height": 100, "device_battery_level": 75},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_label = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING + 28, PADDING + 90)
             for y in range(10, 40)
         )
@@ -1481,9 +1469,9 @@ class TestFontSizeControls:
             widgets,
             {"width": 500, "height": 100, "states": MOCK_STATUS_ICON_STATES},
         )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_icon = any(
-            _pixel(img, x, y) < 128
+            pixel(img, x, y) < 128
             for x in range(PADDING, PADDING + 6)
             for y in range(12, 18)
         )
@@ -1491,7 +1479,7 @@ class TestFontSizeControls:
         # Column just past the icon (x=PADDING+7) in the icon's y-band
         # must be white — verifies the icon is smaller than default sz=12.
         icon_not_oversized = all(
-            _pixel(img, PADDING + 7, y) == 255 for y in range(12, 18)
+            pixel(img, PADDING + 7, y) == 255 for y in range(12, 18)
         )
         assert icon_not_oversized
 
@@ -1517,15 +1505,15 @@ class TestFontSizeControls:
                     "states": MOCK_WASTE_SCHEDULE_STATES,
                 },
             )
-        img = _png_to_image(result)
+        img = png_to_image(result)
         has_row1 = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 350)
             for y in range(10, 50)
         )
         assert has_row1
         has_row2 = any(
-            _pixel(img, x, y) < 200
+            pixel(img, x, y) < 200
             for x in range(PADDING, 350)
             for y in range(52, 100)
         )
