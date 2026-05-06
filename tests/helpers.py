@@ -187,6 +187,7 @@ def assert_scales_proportionally(
     h_s = bb_s[3] - bb_s[1]
     h_l = bb_l[3] - bb_l[1]
     assert h_s > 0, "small region content has zero height"
+    assert h_l > 0, "large region content has zero height"
     ratio = h_l / h_s
     assert abs(ratio - expected_ratio) <= tolerance, (
         f"scaling ratio {ratio:.2f}, expected ~{expected_ratio:.2f}"

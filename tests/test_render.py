@@ -12,7 +12,13 @@ from custom_components.eink_dashboard.render import (
     _parse_days_until,
     render_dashboard,
 )
-from tests.helpers import pixel, png_to_image
+from tests.helpers import (
+    assert_all_white,
+    assert_has_dark_pixels,
+    assert_has_gray_pixels,
+    pixel,
+    png_to_image,
+)
 
 MOCK_WEATHER_STATE = {
     "weather.home": {
@@ -111,12 +117,7 @@ class TestRenderText:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        has_dark_pixel = any(
-            pixel(img, x, y) < 128
-            for x in range(10, 100)
-            for y in range(10, 40)
-        )
-        assert has_dark_pixel
+        assert_has_dark_pixels(img, 10, 10, 100, 40)
 
     def test_text_right_align(self) -> None:
         config = {"width": 200, "height": 100}
@@ -133,12 +134,7 @@ class TestRenderText:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        has_dark_right = any(
-            pixel(img, x, y) < 128
-            for x in range(140, 200)
-            for y in range(10, 40)
-        )
-        assert has_dark_right
+        assert_has_dark_pixels(img, 140, 10, 200, 40)
 
     def test_text_center_align(self) -> None:
         config = {"width": 200, "height": 100}
@@ -155,12 +151,7 @@ class TestRenderText:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        has_dark_center = any(
-            pixel(img, x, y) < 128
-            for x in range(80, 120)
-            for y in range(10, 40)
-        )
-        assert has_dark_center
+        assert_has_dark_pixels(img, 80, 10, 120, 40)
 
     def test_text_custom_color(self) -> None:
         config = {"width": 200, "height": 100}
@@ -177,12 +168,7 @@ class TestRenderText:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        has_gray_pixel = any(
-            100 < pixel(img, x, y) < 200
-            for x in range(10, 80)
-            for y in range(10, 40)
-        )
-        assert has_gray_pixel
+        assert_has_gray_pixels(img, 10, 10, 80, 40, low=100, high=200)
 
 
 class TestRenderLine:
@@ -266,12 +252,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_dark = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 80, 300)
-            for y in range(10, 70)
-        )
-        assert has_dark
+        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
 
     def test_weather_draws_forecast(self) -> None:
         widgets = [
@@ -286,12 +267,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_dark_forecast = any(
-            pixel(img, x, y) < 128
-            for x in range(50, 550)
-            for y in range(110, 200)
-        )
-        assert has_dark_forecast
+        assert_has_dark_pixels(img, 50, 110, 550, 200)
 
     def test_weather_missing_entity_is_noop(self) -> None:
         widgets = [
@@ -305,12 +281,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 600, 20)
-            for y in range(0, 400, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 600, 400)
 
     def test_weather_no_forecast(self) -> None:
         states = {
@@ -338,18 +309,10 @@ class TestRenderWeather:
         )
         img = png_to_image(result)
         assert img.size == (600, 300)
-        has_icon = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 90)
-            for y in range(10, 100)
+        assert_has_dark_pixels(
+            img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
-        assert has_icon
-        has_temp = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 80, 300)
-            for y in range(10, 70)
-        )
-        assert has_temp
+        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
 
     def test_weather_icon_sunny(self) -> None:
         widgets = [
@@ -363,12 +326,9 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        icon_area_has_drawing = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 90)
-            for y in range(10, 100)
+        assert_has_dark_pixels(
+            img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
-        assert icon_area_has_drawing
 
     def test_weather_landscape_layout(self) -> None:
         """Weather widget on a wide, short canvas (e.g. TRMNL OG 800x480)."""
@@ -386,26 +346,11 @@ class TestRenderWeather:
 
         img = png_to_image(result)
         # Temperature drawn in the left area
-        has_temp = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 80, 350)
-            for y in range(10, 70)
-        )
-        assert has_temp
+        assert_has_dark_pixels(img, PADDING + 80, 10, 350, 70)
         # Detail chips row (humidity, pressure, wind, cloud)
-        has_details = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 400)
-            for y in range(80, 100)
-        )
-        assert has_details
+        assert_has_dark_pixels(img, PADDING, 80, 400, 100)
         # Forecast section visible
-        has_forecast = any(
-            pixel(img, x, y) < 128
-            for x in range(50, 750)
-            for y in range(110, 220)
-        )
-        assert has_forecast
+        assert_has_dark_pixels(img, 50, 110, 750, 220)
 
     def test_weather_narrow_layout(self) -> None:
         """Weather widget on a narrow display still renders temp and
@@ -422,18 +367,8 @@ class TestRenderWeather:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        has_temp = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 80, 300)
-            for y in range(10, 70)
-        )
-        assert has_temp
-        has_details = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 326)
-            for y in range(80, 100)
-        )
-        assert has_details
+        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
+        assert_has_dark_pixels(img, PADDING, 80, 326, 100)
 
     def test_weather_draws_detail_chips(self) -> None:
         """Detail row shows humidity, pressure, wind, cloud coverage."""
@@ -448,12 +383,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_details = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 500)
-            for y in range(80, 100)
-        )
-        assert has_details
+        assert_has_dark_pixels(img, PADDING, 80, 500, 100)
 
     def test_weather_forecast_precipitation(self) -> None:
         """Precipitation amounts appear under forecast days when > 0."""
@@ -470,12 +400,7 @@ class TestRenderWeather:
 
         img = png_to_image(result)
         # Forecast area with hi/lo temps and precipitation
-        has_forecast_detail = any(
-            pixel(img, x, y) < 128
-            for x in range(50, 550)
-            for y in range(150, 210)
-        )
-        assert has_forecast_detail
+        assert_has_dark_pixels(img, 50, 150, 550, 210)
 
     def test_weather_forecast_separate_hilo(self) -> None:
         """High and low temps are on separate lines in forecast."""
@@ -492,19 +417,9 @@ class TestRenderWeather:
 
         img = png_to_image(result)
         # High temp row (y ~ 162 at s=1: forecast_y+52)
-        has_hi = any(
-            pixel(img, x, y) < 128
-            for x in range(50, 550)
-            for y in range(155, 175)
-        )
-        assert has_hi
+        assert_has_dark_pixels(img, 50, 155, 550, 175)
         # Low temp row (y ~ 180 at s=1: forecast_y+70)
-        has_lo = any(
-            pixel(img, x, y) < 200
-            for x in range(50, 550)
-            for y in range(175, 195)
-        )
-        assert has_lo
+        assert_has_dark_pixels(img, 50, 175, 550, 195, threshold=200)
 
     def test_weather_rainy_condition(self) -> None:
         states = {
@@ -531,12 +446,9 @@ class TestRenderWeather:
             {"width": 600, "height": 200, "states": states},
         )
         img = png_to_image(result)
-        has_drawing = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 90)
-            for y in range(10, 100)
+        assert_has_dark_pixels(
+            img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
-        assert has_drawing
 
 
 MOCK_SENSOR_STATES = {
@@ -589,18 +501,8 @@ class TestRenderSensorRows:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_dark_row1 = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(10, 40)
-        )
-        has_dark_row2 = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(40, 70)
-        )
-        assert has_dark_row1
-        assert has_dark_row2
+        assert_has_dark_pixels(img, PADDING, 10, 200, 40)
+        assert_has_dark_pixels(img, PADDING, 40, 200, 70)
 
     def test_sensor_rows_with_title(self) -> None:
         widgets = [
@@ -617,12 +519,7 @@ class TestRenderSensorRows:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_title = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(10, 35)
-        )
-        assert has_title
+        assert_has_dark_pixels(img, PADDING, 10, 200, 35)
 
     def test_sensor_rows_values_right_aligned(
         self,
@@ -638,12 +535,7 @@ class TestRenderSensorRows:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_dark_right = any(
-            pixel(img, x, y) < 128
-            for x in range(300, 400)
-            for y in range(10, 40)
-        )
-        assert has_dark_right
+        assert_has_dark_pixels(img, 300, 10, 400, 40)
 
     def test_sensor_rows_missing_entity_skipped(
         self,
@@ -662,12 +554,7 @@ class TestRenderSensorRows:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_dark_first_row = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(10, 40)
-        )
-        assert has_dark_first_row
+        assert_has_dark_pixels(img, PADDING, 10, 200, 40)
 
     def test_sensor_rows_empty_entities(self) -> None:
         widgets = [
@@ -681,12 +568,7 @@ class TestRenderSensorRows:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 400, 20)
-            for y in range(0, 300, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 400, 300)
 
 
 class TestRenderDeviceBattery:
@@ -703,12 +585,7 @@ class TestRenderDeviceBattery:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
-        has_dark_fill = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 1, PADDING + 16)
-            for y in range(33, 42)
-        )
-        assert has_dark_fill
+        assert_has_dark_pixels(img, PADDING + 1, 33, PADDING + 16, 42)
 
     def test_device_battery_none_is_noop(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
@@ -716,45 +593,27 @@ class TestRenderDeviceBattery:
             widgets, self._config(device_battery_level=None)
         )
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 400, 20)
-            for y in range(0, 100, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 400, 100)
 
     def test_device_battery_missing_key_is_noop(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, {"width": 400, "height": 100})
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 400, 20)
-            for y in range(0, 100, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 400, 100)
 
     def test_device_battery_draws_percentage_text(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
-        has_text = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 28, PADDING + 70)
-            for y in range(29, 47)
-        )
-        assert has_text
+        assert_has_dark_pixels(img, PADDING + 28, 29, PADDING + 70, 47)
 
     def test_device_battery_draws_nub(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
-        has_nub = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING + 23, PADDING + 25)
-            for y in range(35, 40)
+        assert_has_dark_pixels(
+            img, PADDING + 23, 35, PADDING + 25, 40, threshold=200
         )
-        assert has_nub
 
     def test_device_battery_zero_percent(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
@@ -762,12 +621,9 @@ class TestRenderDeviceBattery:
             widgets, self._config(device_battery_level=0)
         )
         img = png_to_image(result)
-        has_outline = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 25)
-            for y in range(32, 43)
+        assert_has_dark_pixels(
+            img, PADDING, 32, PADDING + 25, 43, threshold=200
         )
-        assert has_outline
 
     def test_device_battery_100_percent(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
@@ -775,12 +631,7 @@ class TestRenderDeviceBattery:
             widgets, self._config(device_battery_level=100)
         )
         img = png_to_image(result)
-        has_full_fill = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 1, PADDING + 21)
-            for y in range(33, 42)
-        )
-        assert has_full_fill
+        assert_has_dark_pixels(img, PADDING + 1, 33, PADDING + 21, 42)
 
     def test_device_battery_icon_scales_with_font_size(self) -> None:
         # font_size=48 → s=2 → icon is 44×20 instead of default 22×10
@@ -797,12 +648,9 @@ class TestRenderDeviceBattery:
         )
         img = png_to_image(result)
         # Scaled icon body: PADDING to PADDING+44, icon_y=64 to 84
-        has_scaled_icon = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 44)
-            for y in range(64, 85)
+        assert_has_dark_pixels(
+            img, PADDING, 64, PADDING + 44, 85, threshold=200
         )
-        assert has_scaled_icon
 
         # At default font_size, the gap between nub-end (PADDING+24) and
         # label-start (PADDING+30) is clear — proving the scaled icon actually
@@ -876,12 +724,7 @@ class TestRenderStatusIcons:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_content = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(10, 36)
-        )
-        assert has_content
+        assert_has_dark_pixels(img, PADDING, 10, 300, 36, threshold=200)
 
     def test_status_icons_problem_fills_square(self) -> None:
         # front_door: state=on, device_class=door → problem → filled square
@@ -896,12 +739,9 @@ class TestRenderStatusIcons:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_black = any(
-            pixel(img, x, y) < 64
-            for x in range(PADDING, PADDING + 13)
-            for y in range(14, 27)
+        assert_has_dark_pixels(
+            img, PADDING, 14, PADDING + 13, 27, threshold=64
         )
-        assert has_black
 
     def test_status_icons_ok_draws_outline(self) -> None:
         # kitchen_window: state=off → not a problem → outline only
@@ -924,12 +764,9 @@ class TestRenderStatusIcons:
         )
         assert not interior_black
         # But the outline itself should have some dark pixels
-        has_outline = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, PADDING + 13)
-            for y in range(14, 27)
+        assert_has_dark_pixels(
+            img, PADDING, 14, PADDING + 13, 27, threshold=200
         )
-        assert has_outline
 
     def test_status_icons_with_title(self) -> None:
         widgets = [
@@ -944,18 +781,8 @@ class TestRenderStatusIcons:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_title = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(10, 40)
-        )
-        assert has_title
-        has_icon = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(40, 70)
-        )
-        assert has_icon
+        assert_has_dark_pixels(img, PADDING, 10, 200, 40)
+        assert_has_dark_pixels(img, PADDING, 40, 200, 70)
 
     def test_status_icons_missing_entity_skipped(self) -> None:
         widgets = [
@@ -972,12 +799,7 @@ class TestRenderStatusIcons:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_content = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(10, 36)
-        )
-        assert has_content
+        assert_has_dark_pixels(img, PADDING, 10, 300, 36, threshold=200)
 
     def test_status_icons_empty_entities_is_noop(self) -> None:
         widgets = [
@@ -991,12 +813,7 @@ class TestRenderStatusIcons:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 500, 20)
-            for y in range(0, 200, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 500, 200)
 
     def test_status_icons_wraps_to_next_row(self) -> None:
         # Narrow canvas forces wrapping after first entity
@@ -1019,12 +836,7 @@ class TestRenderStatusIcons:
         )
 
         img = png_to_image(result)
-        has_second_row = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 180)
-            for y in range(36, 80)
-        )
-        assert has_second_row
+        assert_has_dark_pixels(img, PADDING, 36, 180, 80, threshold=200)
 
 
 MOCK_WASTE_SCHEDULE_STATES = {
@@ -1107,18 +919,8 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_row1 = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(10, 38)
-        )
-        assert has_row1
-        has_row2 = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(38, 66)
-        )
-        assert has_row2
+        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
+        assert_has_dark_pixels(img, PADDING, 38, 300, 66, threshold=200)
 
     def test_waste_schedule_with_title(self) -> None:
         widgets = [
@@ -1135,18 +937,8 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_title = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 250)
-            for y in range(10, 40)
-        )
-        assert has_title
-        has_entity = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(42, 70)
-        )
-        assert has_entity
+        assert_has_dark_pixels(img, PADDING, 10, 250, 40)
+        assert_has_dark_pixels(img, PADDING, 42, 300, 70, threshold=200)
 
     def test_waste_schedule_missing_entity_skipped(self) -> None:
         widgets = [
@@ -1165,12 +957,7 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_content = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(10, 38)
-        )
-        assert has_content
+        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
 
     def test_waste_schedule_empty_entities_is_noop(self) -> None:
         widgets = [
@@ -1184,12 +971,7 @@ class TestRenderWasteSchedule:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 500, 20)
-            for y in range(0, 300, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 500, 300)
 
     def test_waste_schedule_today_fills_circle(self) -> None:
         widgets = [
@@ -1206,12 +988,9 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_black = any(
-            pixel(img, x, y) < 64
-            for x in range(PADDING, PADDING + 11)
-            for y in range(16, 27)
+        assert_has_dark_pixels(
+            img, PADDING, 16, PADDING + 11, 27, threshold=64
         )
-        assert has_black
 
     def test_waste_schedule_tomorrow_fills_circle(self) -> None:
         widgets = [
@@ -1228,12 +1007,9 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_black = any(
-            pixel(img, x, y) < 64
-            for x in range(PADDING, PADDING + 11)
-            for y in range(16, 27)
+        assert_has_dark_pixels(
+            img, PADDING, 16, PADDING + 11, 27, threshold=64
         )
-        assert has_black
 
     def test_waste_schedule_future_draws_outline(self) -> None:
         widgets = [
@@ -1258,12 +1034,9 @@ class TestRenderWasteSchedule:
         )
         assert not interior_black
         # But the circle boundary should have some non-white pixels
-        has_outline = any(
-            pixel(img, x, y) < 240
-            for x in range(PADDING, PADDING + 11)
-            for y in range(16, 27)
+        assert_has_dark_pixels(
+            img, PADDING, 16, PADDING + 11, 27, threshold=240
         )
-        assert has_outline
 
     def test_waste_schedule_date_right_aligned(self) -> None:
         widgets = [
@@ -1279,12 +1052,7 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        has_right_text = any(
-            pixel(img, x, y) < 200
-            for x in range(380, 476)
-            for y in range(10, 38)
-        )
-        assert has_right_text
+        assert_has_dark_pixels(img, 380, 10, 476, 38, threshold=200)
 
     def test_waste_schedule_integer_state(self) -> None:
         states = {
@@ -1306,12 +1074,7 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config(states=states))
 
         img = png_to_image(result)
-        has_content = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 300)
-            for y in range(10, 38)
-        )
-        assert has_content
+        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
 
     def test_waste_schedule_past_date_skipped(self) -> None:
         states = {
@@ -1333,12 +1096,7 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config(states=states))
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 500, 20)
-            for y in range(0, 300, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 500, 300)
 
     def test_waste_schedule_beyond_3_days_skipped(self) -> None:
         states = {
@@ -1361,12 +1119,7 @@ class TestRenderWasteSchedule:
             result = render_dashboard(widgets, self._config(states=states))
 
         img = png_to_image(result)
-        all_white = all(
-            pixel(img, x, y) == 255
-            for x in range(0, 500, 20)
-            for y in range(0, 300, 20)
-        )
-        assert all_white
+        assert_all_white(img, 0, 0, 500, 300)
 
 
 class TestFontSizeControls:
@@ -1389,19 +1142,9 @@ class TestFontSizeControls:
             {"width": 400, "height": 200, "states": MOCK_WEATHER_STATE},
         )
         img = png_to_image(result)
-        has_temp = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 22, PADDING + 100)
-            for y in range(10, 40)
-        )
-        assert has_temp
+        assert_has_dark_pixels(img, PADDING + 22, 10, PADDING + 100, 40)
         # Detail chips at detail_y=35 (wrong /22 divisor shifts them to y=46)
-        has_details = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, PADDING + 200)
-            for y in range(35, 46)
-        )
-        assert has_details
+        assert_has_dark_pixels(img, PADDING, 35, PADDING + 200, 46)
 
     def test_sensor_rows_custom_font_size(self) -> None:
         # font_size=30 → s≈1.364; row_height=41
@@ -1423,19 +1166,9 @@ class TestFontSizeControls:
             {"width": 400, "height": 200, "states": MOCK_SENSOR_STATES},
         )
         img = png_to_image(result)
-        has_row1 = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(10, 42)
-        )
-        assert has_row1
+        assert_has_dark_pixels(img, PADDING, 10, 200, 42)
         # Row 2 exists at the scaled position
-        has_row2 = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, 200)
-            for y in range(51, 85)
-        )
-        assert has_row2
+        assert_has_dark_pixels(img, PADDING, 51, 200, 85)
 
     def test_device_battery_custom_font_size(self) -> None:
         # font_size=20 — larger percentage label
@@ -1447,12 +1180,7 @@ class TestFontSizeControls:
             {"width": 400, "height": 100, "device_battery_level": 75},
         )
         img = png_to_image(result)
-        has_label = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING + 28, PADDING + 90)
-            for y in range(10, 40)
-        )
-        assert has_label
+        assert_has_dark_pixels(img, PADDING + 28, 10, PADDING + 90, 40)
 
     def test_status_icons_custom_font_size(self) -> None:
         # font_size=14 → s=14/28=0.5; sz=round(12*0.5)=6
@@ -1471,12 +1199,7 @@ class TestFontSizeControls:
             {"width": 500, "height": 100, "states": MOCK_STATUS_ICON_STATES},
         )
         img = png_to_image(result)
-        has_icon = any(
-            pixel(img, x, y) < 128
-            for x in range(PADDING, PADDING + 6)
-            for y in range(12, 18)
-        )
-        assert has_icon
+        assert_has_dark_pixels(img, PADDING, 12, PADDING + 6, 18)
         # Column just past the icon (x=PADDING+7) in the icon's y-band
         # must be white — verifies the icon is smaller than default sz=12.
         icon_not_oversized = all(
@@ -1507,18 +1230,8 @@ class TestFontSizeControls:
                 },
             )
         img = png_to_image(result)
-        has_row1 = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 350)
-            for y in range(10, 50)
-        )
-        assert has_row1
-        has_row2 = any(
-            pixel(img, x, y) < 200
-            for x in range(PADDING, 350)
-            for y in range(52, 100)
-        )
-        assert has_row2
+        assert_has_dark_pixels(img, PADDING, 10, 350, 50, threshold=200)
+        assert_has_dark_pixels(img, PADDING, 52, 350, 100, threshold=200)
 
 
 class TestLoadFont:
