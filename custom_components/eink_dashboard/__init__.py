@@ -12,6 +12,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
 from .const import DEVICE_PRESETS, DOMAIN
@@ -21,6 +22,8 @@ from .store import EinkDashboardStore
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["image", "sensor"]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 def _area_name(hass: HomeAssistant, area_id: str | None) -> str | None:

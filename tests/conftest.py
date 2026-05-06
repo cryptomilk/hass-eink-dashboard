@@ -159,6 +159,9 @@ aiohttp_client_mod.async_get_clientsession = MagicMock()  # type: ignore[attr-de
 event_mod = sys.modules["homeassistant.helpers.event"]
 event_mod.async_track_time_interval = MagicMock()  # type: ignore[attr-defined]
 
+cv_mod = sys.modules["homeassistant.helpers.config_validation"]
+cv_mod.config_entry_only_config_schema = lambda domain: None  # type: ignore[attr-defined]
+
 area_reg_mod = sys.modules["homeassistant.helpers.area_registry"]
 area_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
 
