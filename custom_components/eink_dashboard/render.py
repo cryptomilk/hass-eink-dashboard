@@ -6,6 +6,7 @@ import functools
 import io
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,11 @@ def _load_font(
 def _load_font_cached(
     size: int, medium: bool
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    """Load a font at the given size (unclamped, cached).
+
+    Separated from _load_font so that size=0 and size=1 produce distinct
+    cache entries instead of colliding after the clamp.
+    """
     filename = "Roboto-Medium.ttf" if medium else "Roboto-Regular.ttf"
     ttf_path = _FONTS_DIR / filename
     if ttf_path.exists():
@@ -115,6 +121,60 @@ def _load_icon(
     gray = icon.convert("L")
     mask = icon.split()[3]
     return (gray, mask)
+
+
+@dataclass(frozen=True, slots=True)
+class WidgetMetrics:
+    """Proportional layout dimensions derived from a widget's row height.
+
+    All fields are pixel values computed as fixed ratios of the row height,
+    with minimum clamps on fields that would become illegible at small sizes.
+
+    Attributes:
+        border: Stroke width for card outlines.
+        padding: Inner padding between card edge and content.
+        radius: Corner radius for rounded card rectangles.
+        icon_dia: Diameter of circular status/category icons.
+        font_primary: Font size for main labels and values.
+        font_secondary: Font size for secondary text (dates, units).
+        divider: Thickness of horizontal divider lines between rows.
+        inner_gap: Horizontal gap between icon and adjacent text.
+        left_bar: Width of the vertical accent bar on card left edges.
+    """
+
+    border: int
+    padding: int
+    radius: int
+    icon_dia: int
+    font_primary: int
+    font_secondary: int
+    divider: int
+    inner_gap: int
+    left_bar: int
+
+
+def _compute_metrics(row_h: int) -> WidgetMetrics:
+    """Compute proportional widget dimensions from a row height.
+
+    Args:
+        row_h: Height of a single row in pixels. All layout dimensions
+            are derived as fixed ratios of this value.
+
+    Returns:
+        A WidgetMetrics instance with all derived pixel sizes.  See
+        WidgetMetrics for field descriptions.
+    """
+    return WidgetMetrics(
+        border=max(2, round(row_h * 0.04)),
+        padding=round(row_h * 0.21),
+        radius=round(row_h * 0.21),
+        icon_dia=round(row_h * 0.64),
+        font_primary=max(10, round(row_h * 0.32)),
+        font_secondary=max(10, round(row_h * 0.25)),
+        divider=max(2, round(row_h * 0.07)),
+        inner_gap=round(row_h * 0.21),
+        left_bar=max(2, round(row_h * 0.07)),
+    )
 
 
 def render_text(

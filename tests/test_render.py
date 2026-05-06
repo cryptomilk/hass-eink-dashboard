@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from unittest.mock import patch
+
+import pytest
 
 from custom_components.eink_dashboard.const import (
     PADDING,
 )
 from custom_components.eink_dashboard.render import (
+    WidgetMetrics,
+    _compute_metrics,
     _format_relative_date,
     _load_font,
     _parse_days_until,
@@ -1252,3 +1257,59 @@ class TestLoadFont:
         assert _load_font(-5) is not None
         assert _load_font(0, medium=True) is not None
         assert _load_font(-5, medium=True) is not None
+
+
+class TestComputeMetrics:
+    def test_returns_frozen_dataclass(self) -> None:
+        m = _compute_metrics(56)
+        assert isinstance(m, WidgetMetrics)
+        with pytest.raises(AttributeError):
+            m.border = 99  # type: ignore[misc]
+
+    def test_reference_baseline_h56(self) -> None:
+        m = _compute_metrics(56)
+        assert m.border == 2
+        assert m.padding == 12
+        assert m.radius == 12
+        assert m.icon_dia == 36
+        assert m.font_primary == 18
+        assert m.font_secondary == 14
+        assert m.divider == 4
+        assert m.inner_gap == 12
+        assert m.left_bar == 4
+
+    def test_minimum_clamps_small_row_h(self) -> None:
+        m = _compute_metrics(10)
+        assert m.border == 2
+        assert m.font_primary == 10
+        assert m.font_secondary == 10
+        assert m.divider == 2
+        assert m.left_bar == 2
+
+    def test_unclamped_fields_small_row_h(self) -> None:
+        m = _compute_metrics(10)
+        assert m.padding == 2
+        assert m.radius == 2
+        assert m.icon_dia == 6
+        assert m.inner_gap == 2
+
+    def test_scales_at_large_row_h(self) -> None:
+        m = _compute_metrics(200)
+        assert m.border == 8
+        assert m.padding == 42
+        assert m.radius == 42
+        assert m.icon_dia == 128
+        assert m.font_primary == 64
+        assert m.font_secondary == 50
+        assert m.divider == 14
+        assert m.inner_gap == 42
+        assert m.left_bar == 14
+
+    def test_clamp_boundary_border(self) -> None:
+        assert _compute_metrics(37).border == 2  # clamped: round(1.48) = 1 < 2
+        assert _compute_metrics(100).border == 4  # natural: round(4.0) = 4 > 2
+
+    def test_all_fields_present(self) -> None:
+        m = _compute_metrics(56)
+        for f in dataclasses.fields(WidgetMetrics):
+            assert isinstance(getattr(m, f.name), int), f"{f.name} is not int"
