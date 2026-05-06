@@ -5,13 +5,16 @@ import datetime as dt
 from unittest.mock import patch
 
 import pytest
+from PIL import Image, ImageDraw
 
 from custom_components.eink_dashboard.const import (
+    COLOR_GRAY,
     PADDING,
 )
 from custom_components.eink_dashboard.render import (
     WidgetMetrics,
     _compute_metrics,
+    _draw_card_container,
     _format_relative_date,
     _load_font,
     _parse_days_until,
@@ -1313,3 +1316,209 @@ class TestComputeMetrics:
         m = _compute_metrics(56)
         for f in dataclasses.fields(WidgetMetrics):
             assert isinstance(getattr(m, f.name), int), f"{f.name} is not int"
+
+
+class TestDrawCardContainer:
+    # Canvas 400x200, card at (10, 10)-(310, 110), metrics from row_h=56.
+    _X, _Y, _W, _H = 10, 10, 300, 100
+
+    def _blank(self) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("L", (400, 200), 255)
+        return img, ImageDraw.Draw(img)
+
+    def _m(self) -> WidgetMetrics:
+        return _compute_metrics(
+            56
+        )  # border=2, padding=12, radius=12, left_bar=4
+
+    def test_border_draws_dark_pixels_on_all_edges(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
+        assert_has_dark_pixels(
+            img,
+            self._X + m.radius,
+            self._Y,
+            self._X + self._W - m.radius,
+            self._Y + m.border,
+        )
+        assert_has_dark_pixels(
+            img,
+            self._X + m.radius,
+            self._Y + self._H - m.border,
+            self._X + self._W - m.radius,
+            self._Y + self._H,
+        )
+        assert_has_dark_pixels(
+            img,
+            self._X,
+            self._Y + m.radius,
+            self._X + m.border,
+            self._Y + self._H - m.radius,
+        )
+        assert_has_dark_pixels(
+            img,
+            self._X + self._W - m.border,
+            self._Y + m.radius,
+            self._X + self._W,
+            self._Y + self._H - m.radius,
+        )
+
+    def test_border_interior_is_white(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
+        inset = m.border + 1  # +1 for Pillow anti-aliasing at the border edge
+        assert_all_white(
+            img,
+            self._X + inset,
+            self._Y + m.radius,  # skip rounded corners
+            self._X + self._W - inset,
+            self._Y + self._H - m.radius,
+        )
+
+    def test_border_returns_zero_offset(self) -> None:
+        _, draw = self._blank()
+        m = self._m()
+        offset = _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m
+        )
+        assert offset == 0
+
+    def test_left_bar_draws_gray_on_left(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="left_bar"
+        )
+        assert_has_gray_pixels(
+            img,
+            self._X,
+            self._Y + 10,
+            self._X + m.left_bar,
+            self._Y + self._H - 10,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+
+    def test_left_bar_right_edge_is_white(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="left_bar"
+        )
+        # Area to the right of bar + padding should have no decoration
+        right_start = self._X + m.left_bar + m.padding + 1
+        assert_all_white(
+            img, right_start, self._Y, self._X + self._W, self._Y + 1
+        )
+        assert_all_white(
+            img,
+            right_start,
+            self._Y + 10,
+            self._X + self._W,
+            self._Y + self._H - 10,
+        )
+
+    def test_left_bar_returns_offset(self) -> None:
+        _, draw = self._blank()
+        m = self._m()
+        offset = _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="left_bar"
+        )
+        assert offset == m.left_bar + m.padding
+
+    def test_none_leaves_canvas_white(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="none"
+        )
+        assert_all_white(
+            img, self._X, self._Y, self._X + self._W, self._Y + self._H
+        )
+
+    def test_none_returns_zero_offset(self) -> None:
+        _, draw = self._blank()
+        m = self._m()
+        offset = _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="none"
+        )
+        assert offset == 0
+
+    def test_left_bar_widens_for_2_level_display(self) -> None:
+        img, draw = self._blank()
+        m = self._m()  # left_bar=4
+        offset = _draw_card_container(
+            draw,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            card_style="left_bar",
+            grayscale_levels=2,
+        )
+        # At h=56: widened bar = max(10, 4*3) = 12px.
+        # Gray should extend to pixel 12.
+        widened = max(10, m.left_bar * 3)
+        assert_has_gray_pixels(
+            img,
+            self._X + m.left_bar,
+            self._Y + 10,
+            self._X + widened,
+            self._Y + self._H - 10,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        assert offset == widened + m.padding
+
+    def test_left_bar_standard_width_without_2_level(self) -> None:
+        img, draw = self._blank()
+        m = self._m()  # left_bar=4
+        _draw_card_container(
+            draw,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            card_style="left_bar",
+            grayscale_levels=16,
+        )
+        # Pixel just past the normal bar width (4px) should be white.
+        assert_all_white(
+            img,
+            self._X + m.left_bar + 1,
+            self._Y + 1,
+            self._X + 10,
+            self._Y + self._H - 1,
+        )
+
+    def test_left_bar_no_config_uses_standard_width(self) -> None:
+        img, draw = self._blank()
+        m = self._m()  # left_bar=4
+        _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="left_bar"
+        )
+        # Pixel just past the normal bar width (4px) should be white.
+        assert_all_white(
+            img,
+            self._X + m.left_bar + 1,
+            self._Y + 1,
+            self._X + 10,
+            self._Y + self._H - 1,
+        )
+
+    def test_default_card_style_is_border(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
+        # Default should behave identically to card_style="border".
+        assert_has_dark_pixels(
+            img,
+            self._X + m.radius,
+            self._Y,
+            self._X + self._W - m.radius,
+            self._Y + m.border,
+        )

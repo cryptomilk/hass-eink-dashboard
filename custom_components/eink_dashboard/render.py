@@ -177,6 +177,62 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
     )
 
 
+def _draw_card_container(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    m: WidgetMetrics,
+    card_style: str = "border",
+    grayscale_levels: int = 16,
+) -> int:
+    """Draw card container decoration and return the content x-offset.
+
+    Renders the card's visual frame based on ``card_style``.  Callers use
+    the returned offset to position content so it clears the left bar
+    (``"left_bar"``) or starts at the card edge (``"border"`` / ``"none"``).
+
+    Args:
+        draw: PIL ImageDraw context.
+        x: Left edge of the card area in pixels.
+        y: Top edge of the card area in pixels.
+        w: Total width of the card area in pixels.
+        h: Total height of the card area in pixels.
+        m: Pre-computed layout metrics from ``_compute_metrics()``.
+        card_style: One of ``"border"``, ``"left_bar"``, or ``"none"``.
+        grayscale_levels: Number of gray levels on the display.  When ``<= 2``
+            the left bar is widened so the dithered dot pattern is clearly
+            visible on 2-level displays.  Pass
+            ``config.get("grayscale_levels", 16)`` from the caller.
+
+    Returns:
+        Horizontal pixel offset from ``x`` where content should start.
+        Zero for ``"border"`` and ``"none"``; positive for ``"left_bar"``.
+    """
+    if card_style == "border":
+        draw.rounded_rectangle(
+            [x, y, x + w, y + h],
+            radius=m.radius,
+            outline=COLOR_BLACK,
+            width=m.border,
+        )
+        return 0
+    elif card_style == "left_bar":
+        bar_w = m.left_bar
+        # On 2-level displays (TRMNL), widen the bar so the dithered dot
+        # pattern forms a clearly visible stripe.
+        if grayscale_levels <= 2:
+            bar_w = max(10, m.left_bar * 3)
+        draw.rectangle(
+            [x, y, x + bar_w, y + h],
+            fill=COLOR_GRAY,
+        )
+        return bar_w + m.padding
+    else:  # "none"
+        return 0
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
