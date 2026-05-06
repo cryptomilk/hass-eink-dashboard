@@ -37,6 +37,7 @@ ARCHIVE="${DIST_DIR}/eink_dashboard-${VERSION}.tar.gz"
 
 FRONTEND_DIR="${COMPONENT_DIR}/frontend"
 ROBOTO_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
+ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Medium.ttf"
 
 cleanup() {
     echo "Cleaning up generated assets..."
@@ -58,6 +59,13 @@ if [ -f "${FONTS_DIR}/Roboto-Regular.ttf" ]; then
 else
     echo "==> Downloading Roboto-Regular.ttf (Apache 2.0)..."
     curl -fsSL "${ROBOTO_URL}" -o "${FONTS_DIR}/Roboto-Regular.ttf"
+fi
+
+if [ -f "${FONTS_DIR}/Roboto-Medium.ttf" ]; then
+    echo "==> Roboto-Medium.ttf already exists, skipping download"
+else
+    echo "==> Downloading Roboto-Medium.ttf (Apache 2.0)..."
+    curl -fsSL "${ROBOTO_MEDIUM_URL}" -o "${FONTS_DIR}/Roboto-Medium.ttf"
 fi
 
 mkdir -p "${DIST_DIR}"

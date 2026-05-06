@@ -34,6 +34,7 @@ const COLOR_GRAY = 120;
 const COLOR_LIGHT_GRAY = 180;
 const FONT_FAMILY = "Roboto, sans-serif";
 const ROBOTO_URL = "/eink_dashboard/fonts/Roboto-Regular.ttf";
+const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
@@ -50,6 +51,17 @@ async function _loadRoboto(): Promise<void> {
     await face.load();
     document.fonts.add(face);
     _robotoLoaded = true;
+  } catch (_) { /* fall back to sans-serif */ }
+}
+
+let _robotoMediumLoaded = false;
+async function _loadRobotoMedium(): Promise<void> {
+  if (_robotoMediumLoaded) return;
+  try {
+    const face = new FontFace("Roboto", `url(${ROBOTO_MEDIUM_URL})`, { weight: "500" });
+    await face.load();
+    document.fonts.add(face);
+    _robotoMediumLoaded = true;
   } catch (_) { /* fall back to sans-serif */ }
 }
 
@@ -484,6 +496,7 @@ class EinkDashboardCard extends HTMLElement {
     this._fetching = true;
     try {
       await _loadRoboto();
+      await _loadRobotoMedium();
       if (gen !== this._fetchGeneration) return;
 
       const entryId = await this._resolveEntryId();

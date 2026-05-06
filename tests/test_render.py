@@ -8,6 +8,7 @@ from custom_components.eink_dashboard.const import (
 )
 from custom_components.eink_dashboard.render import (
     _format_relative_date,
+    _load_font,
     _parse_days_until,
     render_dashboard,
 )
@@ -1518,3 +1519,23 @@ class TestFontSizeControls:
             for y in range(52, 100)
         )
         assert has_row2
+
+
+class TestLoadFont:
+    def test_medium_returns_different_object(self) -> None:
+        regular = _load_font(18)
+        medium = _load_font(18, medium=True)
+        assert regular is not medium
+        assert "Medium" in str(getattr(medium, "path", ""))
+
+    def test_regular_is_cached(self) -> None:
+        assert _load_font(18) is _load_font(18)
+
+    def test_medium_is_cached(self) -> None:
+        assert _load_font(18, medium=True) is _load_font(18, medium=True)
+
+    def test_size_clamped_to_minimum(self) -> None:
+        assert _load_font(0) is not None
+        assert _load_font(-5) is not None
+        assert _load_font(0, medium=True) is not None
+        assert _load_font(-5, medium=True) is not None
