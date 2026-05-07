@@ -989,18 +989,28 @@ class EinkDashboardCard extends HTMLElement {
     return s || null;
   }
 
+  // ── Widget helpers ────────────────────────────────────────────────────────
+
+  /** Extract base coordinates shared by most widget renderers. */
+  private _getWidgetBase(widget: Widget, defaultFontSize: number): {
+    x: number; y: number; fontSize: number; width: number; rightEdge: number;
+  } {
+    const x = widget.x ?? PADDING;
+    const y = widget.y ?? 0;
+    const fontSize = Math.max(1, widget.font_size ?? defaultFontSize);
+    const width = this._layout!.display.width;
+    const rightEdge = widget.w != null ? (x + widget.w) : width;
+    return { x, y, fontSize, width, rightEdge };
+  }
+
   // ── Widget renderers ──────────────────────────────────────────────────────
 
   // mirrors render.py: render_text (lines 77-100)
   private _renderText(ctx: CanvasRenderingContext2D, widget: TextWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const y = widget.y ?? 0;
+    const { x, y, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_TEXT);
     const text = String(widget.text ?? "");
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_TEXT);
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
-    const width = this._layout!.display.width;
-    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     ctx.font = `${fontSize}px ${FONT_FAMILY}`;
     ctx.fillStyle = grayColor(color);
@@ -1064,16 +1074,12 @@ class EinkDashboardCard extends HTMLElement {
   private _renderWeather(ctx: CanvasRenderingContext2D, widget: WeatherWidget): WidgetBounds {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
-    const x = widget.x ?? PADDING;
-    const origY = widget.y ?? 0;
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WEATHER);
+    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_WEATHER);
     const s = fontSize / FONT_SIZE_WEATHER;
     if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
     let y = origY;
     const forecastDays = widget.forecast_days ?? 5;
-    const width = this._layout!.display.width;
-    const rightEdge = widget.w != null ? (x + widget.w) : width;
 
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes as Record<string, string | number | null>;
@@ -1195,15 +1201,11 @@ class EinkDashboardCard extends HTMLElement {
 
   // mirrors render.py: render_sensor_rows
   private _renderSensorRows(ctx: CanvasRenderingContext2D, widget: SensorRowsWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const origY = widget.y ?? 0;
+    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_SENSOR_ROWS);
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_SENSOR_ROWS);
     const sc = fontSize / FONT_SIZE_SENSOR_ROWS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout!.display.width;
-    const rightEdge = widget.w != null ? (x + widget.w) : width;
     const rowHeight = Math.round(SENSOR_ROW_HEIGHT * sc);
 
     ctx.textBaseline = "top";
@@ -1238,9 +1240,7 @@ class EinkDashboardCard extends HTMLElement {
 
   // mirrors render.py: render_device_battery
   private _renderDeviceBattery(ctx: CanvasRenderingContext2D, widget: DeviceBatteryWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const y = widget.y ?? 0;
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_DEVICE_BATTERY);
+    const { x, y, fontSize } = this._getWidgetBase(widget, FONT_SIZE_DEVICE_BATTERY);
     const color = widget.color ?? COLOR_BLACK;
 
     const rawLevel = this._layout?.device?.device_battery_level;
@@ -1291,15 +1291,11 @@ class EinkDashboardCard extends HTMLElement {
 
   // mirrors render.py: render_status_icons
   private _renderStatusIcons(ctx: CanvasRenderingContext2D, widget: StatusIconsWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const origY = widget.y ?? 0;
+    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_STATUS_ICONS);
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_STATUS_ICONS);
     const sc = fontSize / FONT_SIZE_STATUS_ICONS;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout!.display.width;
-    const rightEdge = widget.w != null ? (x + widget.w) : width;
     const sz = Math.round(STATUS_ICON_SIZE * sc);
     const rowH = Math.round(STATUS_ROW_HEIGHT * sc);
 
@@ -1352,15 +1348,11 @@ class EinkDashboardCard extends HTMLElement {
 
   // mirrors render.py: render_waste_schedule
   private _renderWasteSchedule(ctx: CanvasRenderingContext2D, widget: WasteScheduleWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const origY = widget.y ?? 0;
+    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_WASTE_SCHEDULE);
     let y = origY;
-    const fontSize = Math.max(1, widget.font_size ?? FONT_SIZE_WASTE_SCHEDULE);
     const sc = fontSize / FONT_SIZE_WASTE_SCHEDULE;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const width = this._layout!.display.width;
-    const rightEdge = widget.w != null ? (x + widget.w) : width;
     const sz = Math.round(WASTE_ICON_SIZE * sc);
     const rowH = Math.round(WASTE_ROW_HEIGHT * sc);
 
