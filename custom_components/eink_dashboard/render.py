@@ -574,6 +574,35 @@ def _extract_multi_entity_params(
     )
 
 
+def _draw_section_title(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    title: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    advance: float,
+    scale: float,
+) -> int:
+    """Draw an optional section title and return the updated y.
+
+    Args:
+        draw: PIL ImageDraw context.
+        x: Left x-coordinate for the title text.
+        y: Current y-coordinate.
+        title: Title string; when empty, y is returned unchanged.
+        font: Font to render the title with.
+        advance: Base vertical advance after the title (unscaled).
+        scale: Scaling factor applied to the advance.
+
+    Returns:
+        Updated y-coordinate after the title (or unchanged if empty).
+    """
+    if not title:
+        return y
+    draw.text((x, y), title, fill=COLOR_BLACK, font=font)
+    return y + round(advance * scale)
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -902,9 +931,9 @@ def render_sensor_rows(
     font_md = _load_font(font_size)
     row_height = round(_SENSOR_ROW_HEIGHT * s)
 
-    if title:
-        draw.text((x, y), title, fill=COLOR_BLACK, font=font_md)
-        y += round(_SENSOR_TITLE_ADVANCE * s)
+    y = _draw_section_title(
+        draw, x, y, title, font_md, _SENSOR_TITLE_ADVANCE, s
+    )
 
     for entity_id in entity_ids:
         state = states.get(entity_id)
@@ -1034,9 +1063,9 @@ def render_status_icons(
     sz = round(_STATUS_ICON_SIZE * s)
     row_height = round(_STATUS_ROW_HEIGHT * s)
 
-    if title:
-        draw.text((x, y), title, fill=COLOR_BLACK, font=font_title)
-        y += round(_STATUS_TITLE_ADVANCE * s)
+    y = _draw_section_title(
+        draw, x, y, title, font_title, _STATUS_TITLE_ADVANCE, s
+    )
 
     cur_x = x
     for entity_id in entity_ids:
@@ -1124,9 +1153,9 @@ def render_waste_schedule(
     sz = round(_WASTE_ICON_SIZE * s)
     row_height = round(_WASTE_ROW_HEIGHT * s)
 
-    if title:
-        draw.text((x, y), title, fill=COLOR_BLACK, font=font_md)
-        y += round(_WASTE_TITLE_ADVANCE * s)
+    y = _draw_section_title(
+        draw, x, y, title, font_md, _WASTE_TITLE_ADVANCE, s
+    )
 
     today = date.today()
     for entity_id in entity_ids:
