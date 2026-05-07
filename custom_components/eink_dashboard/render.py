@@ -639,6 +639,27 @@ def _resolve_entity(
     return _EntityInfo(state, attrs, label)
 
 
+def _draw_indicator(
+    draw: ImageDraw.ImageDraw,
+    bbox: list[int | float],
+    filled: bool,
+    shape: str = "rectangle",
+) -> None:
+    """Draw a filled or outlined indicator shape.
+
+    Args:
+        draw: PIL ImageDraw context.
+        bbox: Bounding box ``[x0, y0, x1, y1]`` for the shape.
+        filled: When True, fill with black; otherwise outline in gray.
+        shape: ``"rectangle"`` or ``"ellipse"``.
+    """
+    fn = draw.ellipse if shape == "ellipse" else draw.rectangle
+    if filled:
+        fn(bbox, fill=COLOR_BLACK)
+    else:
+        fn(bbox, outline=COLOR_GRAY)
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -1120,16 +1141,11 @@ def render_status_icons(
             y += row_height
 
         icon_top = y + round(4 * s)
-        if is_problem:
-            draw.rectangle(
-                [cur_x, icon_top, cur_x + sz, icon_top + sz],
-                fill=COLOR_BLACK,
-            )
-        else:
-            draw.rectangle(
-                [cur_x, icon_top, cur_x + sz, icon_top + sz],
-                outline=COLOR_GRAY,
-            )
+        _draw_indicator(
+            draw,
+            [cur_x, icon_top, cur_x + sz, icon_top + sz],
+            is_problem,
+        )
 
         draw.text(
             (cur_x + sz + round(6 * s), y), label, fill=COLOR_BLACK, font=font
@@ -1199,16 +1215,12 @@ def render_waste_schedule(
         if days is not None and (days < 0 or days > 3):
             continue
         icon_top = y + round(6 * s)
-        if days is not None and days <= 1:
-            draw.ellipse(
-                [x, icon_top, x + sz, icon_top + sz],
-                fill=COLOR_BLACK,
-            )
-        else:
-            draw.ellipse(
-                [x, icon_top, x + sz, icon_top + sz],
-                outline=COLOR_GRAY,
-            )
+        _draw_indicator(
+            draw,
+            [x, icon_top, x + sz, icon_top + sz],
+            days is not None and days <= 1,
+            shape="ellipse",
+        )
 
         draw.text(
             (x + sz + round(8 * s), y),
