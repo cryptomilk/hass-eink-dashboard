@@ -68,22 +68,42 @@ const COLOR_OPTIONS = [
   { value: "255", label: "White" },
 ];
 
+/** Position selectors for x and y coordinates. */
+function posXY(d: DisplayConfig): HaFormSchema[] {
+  return [
+    { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+    { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+  ];
+}
+
+/** Position selectors for x, y, and optional width override. */
+function posXYW(d: DisplayConfig): HaFormSchema[] {
+  return [
+    ...posXY(d),
+    { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+  ];
+}
+
+/** Font size number selector with the given default. */
+function fontSizeSelector(defaultSize: number): HaFormSchema {
+  return { name: "font_size", default: defaultSize, selector: { number: { min: 8, max: 72, mode: "box" } } };
+}
+
+/** Color dropdown selector with the given default (0=black). */
+function colorSelector(defaultColor: number = 0): HaFormSchema {
+  return { name: "color", default: defaultColor, selector: { select: {
+    options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
+  } } };
+}
+
 export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   text: (d) => [
     { name: "text", required: true, selector: { text: {} } },
+    { type: "grid", name: "", schema: posXYW(d) },
     {
       type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-      ],
-    },
-    {
-      type: "grid", name: "", schema: [
-        { name: "font_size", default: FONT_SIZE_TEXT, selector: { number: { min: 8, max: 72, mode: "box" } } },
-        { name: "color", default: 0, selector: { select: {
-          options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
-        } } },
+        fontSizeSelector(FONT_SIZE_TEXT),
+        colorSelector(),
         { name: "align", default: "left", selector: { select: {
           options: [
             { value: "left", label: "Left" },
@@ -96,12 +116,7 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   ],
 
   line: (d) => [
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: posXY(d) },
     {
       type: "grid", name: "", schema: [
         { name: "x2", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
@@ -110,9 +125,7 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
     },
     {
       type: "grid", name: "", schema: [
-        { name: "color", default: 210, selector: { select: {
-          options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
-        } } },
+        colorSelector(210),
         { name: "width", default: 1, selector: { number: { min: 1, max: 20, mode: "box" } } },
       ],
     },
@@ -126,81 +139,40 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
         { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
       ],
     },
-    { name: "color", default: 210, selector: { select: {
-      options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
-    } } },
+    colorSelector(210),
   ],
 
   weather: (d) => [
     { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: posXYW(d) },
     {
       type: "grid", name: "", schema: [
         { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
-        { name: "font_size", default: FONT_SIZE_WEATHER, selector: { number: { min: 8, max: 72, mode: "box" } } },
+        fontSizeSelector(FONT_SIZE_WEATHER),
       ],
     },
   ],
 
   sensor_rows: (d) => [
     { name: "title", selector: { text: {} } },
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: FONT_SIZE_SENSOR_ROWS, selector: { number: { min: 8, max: 72, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_SENSOR_ROWS)] },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   device_battery: (d) => [
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-      ],
-    },
-    {
-      type: "grid", name: "", schema: [
-        { name: "color", default: 0, selector: { select: {
-          options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
-        } } },
-        { name: "font_size", default: FONT_SIZE_DEVICE_BATTERY, selector: { number: { min: 8, max: 72, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: posXY(d) },
+    { type: "grid", name: "", schema: [colorSelector(), fontSizeSelector(FONT_SIZE_DEVICE_BATTERY)] },
   ],
 
   status_icons: (d) => [
     { name: "title", selector: { text: {} } },
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: FONT_SIZE_STATUS_ICONS, selector: { number: { min: 8, max: 72, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_STATUS_ICONS)] },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   waste_schedule: (d) => [
     { name: "title", selector: { text: {} } },
-    {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "font_size", default: FONT_SIZE_WASTE_SCHEDULE, selector: { number: { min: 8, max: 72, mode: "box" } } },
-      ],
-    },
+    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 };
