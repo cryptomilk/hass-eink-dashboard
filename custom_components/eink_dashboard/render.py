@@ -603,6 +603,42 @@ def _draw_section_title(
     return y + round(advance * scale)
 
 
+class _EntityInfo(NamedTuple):
+    """Resolved entity state, attributes, and display label."""
+
+    state: dict[str, Any]
+    attrs: dict[str, Any]
+    label: str
+
+
+def _resolve_entity(
+    entity_id: str,
+    states: dict[str, Any],
+    renderer_name: str,
+) -> _EntityInfo | None:
+    """Look up an entity and return its info, or None if missing.
+
+    Args:
+        entity_id: Home Assistant entity identifier.
+        states: Mapping of entity IDs to state dicts.
+        renderer_name: Name of the calling renderer (for debug logs).
+
+    Returns:
+        An _EntityInfo tuple, or None when the entity is absent.
+    """
+    state = states.get(entity_id)
+    if state is None:
+        _LOGGER.debug(
+            "%s: entity %r not in states",
+            renderer_name,
+            entity_id,
+        )
+        return None
+    attrs = state.get("attributes", {})
+    label = attrs.get("friendly_name", entity_id)
+    return _EntityInfo(state, attrs, label)
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -936,20 +972,18 @@ def render_sensor_rows(
     )
 
     for entity_id in entity_ids:
-        state = states.get(entity_id)
-        if state is None:
-            _LOGGER.debug(
-                "render_sensor_rows: entity %r not in states", entity_id
-            )
+        info = _resolve_entity(entity_id, states, "render_sensor_rows")
+        if info is None:
             continue
-        attrs = state.get("attributes", {})
-        label = attrs.get("friendly_name", entity_id)
-        value = state.get("state", "")
-        unit = attrs.get("unit_of_measurement", "")
+        value = info.state.get("state", "")
+        unit = info.attrs.get("unit_of_measurement", "")
         display_val = f"{value}{unit}" if unit else value
 
         draw.text(
-            (x + round(16 * s), y), label, fill=COLOR_BLACK, font=font_md
+            (x + round(16 * s), y),
+            info.label,
+            fill=COLOR_BLACK,
+            font=font_md,
         )
         bbox = draw.textbbox((0, 0), display_val, font=font_md)
         text_w = bbox[2] - bbox[0]
@@ -1069,16 +1103,12 @@ def render_status_icons(
 
     cur_x = x
     for entity_id in entity_ids:
-        state = states.get(entity_id)
-        if state is None:
-            _LOGGER.debug(
-                "render_status_icons: entity %r not in states", entity_id
-            )
+        info = _resolve_entity(entity_id, states, "render_status_icons")
+        if info is None:
             continue
-        attrs = state.get("attributes", {})
-        label = attrs.get("friendly_name", entity_id)
-        is_on = state.get("state") == "on"
-        device_class = attrs.get("device_class", "")
+        label = info.label
+        is_on = info.state.get("state") == "on"
+        device_class = info.attrs.get("device_class", "")
         is_problem = is_on and device_class in _PROBLEM_DEVICE_CLASSES
 
         bbox = draw.textbbox((0, 0), label, font=font)
@@ -1159,15 +1189,11 @@ def render_waste_schedule(
 
     today = date.today()
     for entity_id in entity_ids:
-        state = states.get(entity_id)
-        if state is None:
-            _LOGGER.debug(
-                "render_waste_schedule: entity %r not in states", entity_id
-            )
+        info = _resolve_entity(entity_id, states, "render_waste_schedule")
+        if info is None:
             continue
-        attrs = state.get("attributes", {})
-        label = attrs.get("friendly_name", entity_id)
-        raw = state.get("state", "")
+        label = info.label
+        raw = info.state.get("state", "")
 
         days = _parse_days_until(raw, today)
         if days is not None and (days < 0 or days > 3):
