@@ -15,6 +15,7 @@ from custom_components.eink_dashboard.render import (
     WidgetMetrics,
     _compute_metrics,
     _draw_card_container,
+    _draw_card_row,
     _format_relative_date,
     _load_font,
     _parse_days_until,
@@ -24,6 +25,9 @@ from tests.helpers import (
     assert_all_white,
     assert_has_dark_pixels,
     assert_has_gray_pixels,
+    assert_scales_proportionally,
+    assert_vertically_centered,
+    content_bbox,
     pixel,
     png_to_image,
 )
@@ -1521,4 +1525,219 @@ class TestDrawCardContainer:
             self._Y,
             self._X + self._W - m.radius,
             self._Y + m.border,
+        )
+
+
+class TestDrawCardRow:
+    # Canvas 400x200, row at (10, 10), width 300, row_h 56 (reference size).
+    _X, _Y, _W, _H = 10, 10, 300, 56
+
+    def _blank(self) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("L", (400, 200), 255)
+        return img, ImageDraw.Draw(img)
+
+    def _m(self) -> WidgetMetrics:
+        # padding=12, icon_dia=36, inner_gap=12,
+        # font_primary=18, font_secondary=14
+        return _compute_metrics(56)
+
+    def test_icon_circle_drawn(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw, img, self._X, self._Y, self._W, self._H, m, primary="Hello"
+        )
+        # Icon circle: cx=10+12=22, circle_y=10+(56-36)//2=20, dia=36
+        assert_has_gray_pixels(img, 22, 20, 58, 56, low=100, high=140)
+
+    def test_letter_fallback(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            primary="Temperature",
+        )
+        # Gray circle is drawn
+        assert_has_gray_pixels(img, 24, 22, 56, 54, low=100, high=140)
+        # White letter pixels exist inside the circle
+        # (letter on gray background)
+        center_x = 22 + m.icon_dia // 2
+        center_y = 20 + m.icon_dia // 2
+        has_white = any(
+            pixel(img, x, y) == 255
+            for x in range(center_x - 6, center_x + 6)
+            for y in range(center_y - 6, center_y + 6)
+        )
+        assert has_white, "no white letter pixels found inside icon circle"
+
+    def test_primary_text_drawn(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw, img, self._X, self._Y, self._W, self._H, m, primary="Hello"
+        )
+        # Text starts at x=22+36+12=70
+        assert_has_dark_pixels(img, 70, self._Y, 250, self._Y + self._H)
+
+    def test_secondary_text_drawn(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            primary="Hello",
+            secondary="world",
+        )
+        # Primary (black) in the upper half, secondary (gray) below it.
+        assert_has_dark_pixels(img, 70, 22, 250, 40)
+        assert_has_gray_pixels(img, 70, 40, 250, 56, low=100, high=140)
+
+    def test_primary_only_centered(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw, img, self._X, self._Y, self._W, self._H, m, primary="Hello"
+        )
+        # Single-line primary should be vertically centered in the row.
+        # Tolerance of 5px allows for PIL ascender/descender space that
+        # may not contain rendered pixels, shifting the glyph center.
+        text_bb = content_bbox(
+            img, 70, self._Y, self._X + self._W, self._Y + self._H
+        )
+        assert text_bb is not None, "no text content found"
+        text_cy = (text_bb[1] + text_bb[3]) / 2
+        row_cy = self._Y + self._H / 2  # 10 + 28 = 38
+        assert abs(text_cy - row_cy) <= 5, (
+            f"primary text not centered: "
+            f"text_cy={text_cy:.1f}, row_cy={row_cy:.1f}"
+        )
+
+    def test_value_right_aligned(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            primary="Hello",
+            value="today",
+        )
+        # Value text near right edge (x+w-padding = 298)
+        assert_has_gray_pixels(
+            img,
+            240,
+            self._Y,
+            self._X + self._W,
+            self._Y + self._H,
+            low=100,
+            high=140,
+        )
+
+    def test_icon_vertically_centered_with_text(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            primary="Hello",
+            secondary="world",
+        )
+        # Tolerance of 4px accounts for font metric vs rendered-pixel
+        # center offset.
+        assert_vertically_centered(
+            img,
+            icon_region=(22, self._Y, 58, self._Y + self._H),
+            text_region=(70, self._Y, 250, self._Y + self._H),
+            tolerance=4.0,
+        )
+
+    def test_no_value_area_is_white(self) -> None:
+        img, draw = self._blank()
+        m = self._m()
+        _draw_card_row(
+            draw, img, self._X, self._Y, self._W, self._H, m, primary="Hi"
+        )
+        # Area near right padding edge should be white when no value provided
+        right_area_start = self._X + self._W - m.padding - 20
+        assert_all_white(
+            img,
+            right_area_start,
+            self._Y,
+            self._X + self._W,
+            self._Y + self._H,
+        )
+
+    def test_icon_scales_with_row_h(self) -> None:
+        # Render at row_h=56 (small) and row_h=112 (large, 2×).
+        row_h_s = 56
+        img_s, draw_s = self._blank()
+        m_s = _compute_metrics(row_h_s)
+        _draw_card_row(
+            draw_s,
+            img_s,
+            self._X,
+            self._Y,
+            self._W,
+            row_h_s,
+            m_s,
+            primary="Hello",
+        )
+        icon_x_s = self._X + m_s.padding
+        cy_s = self._Y + (row_h_s - m_s.icon_dia) // 2
+        region_s = (
+            icon_x_s,
+            cy_s,
+            icon_x_s + m_s.icon_dia,
+            cy_s + m_s.icon_dia,
+        )
+
+        row_h_l = 112
+        img_l = Image.new("L", (800, 400), 255)
+        draw_l = ImageDraw.Draw(img_l)
+        m_l = _compute_metrics(row_h_l)
+        _draw_card_row(
+            draw_l,
+            img_l,
+            self._X,
+            self._Y,
+            self._W * 2,
+            row_h_l,
+            m_l,
+            primary="Hello",
+        )
+        icon_x_l = self._X + m_l.padding
+        cy_l = self._Y + (row_h_l - m_l.icon_dia) // 2
+        region_l = (
+            icon_x_l,
+            cy_l,
+            icon_x_l + m_l.icon_dia,
+            cy_l + m_l.icon_dia,
+        )
+
+        assert_scales_proportionally(
+            img_s,
+            img_l,
+            region_s,
+            region_l,
+            expected_ratio=2.0,
         )

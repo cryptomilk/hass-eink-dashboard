@@ -111,6 +111,7 @@ def _load_icon(
 ) -> tuple[Image.Image, Image.Image] | None:
     """Load and resize a PNG icon, returning (gray, mask) or None."""
     if name not in _KNOWN_CONDITIONS and name not in _DETAIL_ICONS:
+        _LOGGER.debug("_load_icon: %r not in allowlist, skipping", name)
         return None
     path = _ICONS_DIR / f"{name}.png"
     if not path.exists():
@@ -231,6 +232,127 @@ def _draw_card_container(
         return bar_w + m.padding
     else:  # "none"
         return 0
+
+
+def _draw_card_row(
+    draw: ImageDraw.ImageDraw,
+    img: Image.Image,
+    x: int,
+    y: int,
+    w: int,
+    row_h: int,
+    m: WidgetMetrics,
+    *,
+    primary: str,
+    secondary: str = "",
+    value: str = "",
+    icon: tuple[Image.Image, Image.Image] | None = None,
+    icon_fill: int = COLOR_GRAY,
+) -> None:
+    """Draw one row inside a card container.
+
+    Renders a single entity row with a circular icon area on the left,
+    primary and optional secondary text in the center, and an optional
+    right-aligned value string.  Used by SENSOR_ROWS, WASTE_SCHEDULE,
+    PERSON, and ALARM widget renderers.
+
+    Args:
+        draw: PIL ImageDraw context for shapes and text.
+        img: PIL Image for pasting icon PNGs via ``img.paste()``.
+        x: Left edge of the row area in pixels.
+        y: Top edge of the row area in pixels.
+        w: Width of the row area in pixels.
+        row_h: Height of the row in pixels.
+        m: Pre-computed layout metrics from ``_compute_metrics()``.
+        primary: Main text label (entity friendly name).  Drawn with
+            Roboto Medium at ``m.font_primary`` size.
+        secondary: Sub-text (state + unit), drawn below primary in gray.
+            When empty, primary text is vertically centered alone.
+        value: Right-aligned text (e.g. relative date).  Drawn in gray
+            at ``m.font_secondary`` size.
+        icon: ``(gray, mask)`` tuple from ``_load_icon()``, or
+            ``None`` for letter fallback (first letter of
+            ``primary``).  Resized internally to 60 % of
+            ``m.icon_dia``; pass the raw original-size icon.
+        icon_fill: Fill color for the icon circle background.
+    """
+    font_p = _load_font(m.font_primary, medium=True)
+    font_s = _load_font(m.font_secondary)
+    icon_x = x + m.padding
+
+    # Draw icon circle, then place the PNG icon or a letter fallback
+    # centered inside it.
+    circle_y = y + (row_h - m.icon_dia) // 2
+    draw.ellipse(
+        [icon_x, circle_y, icon_x + m.icon_dia, circle_y + m.icon_dia],
+        fill=icon_fill,
+    )
+    if icon is not None:
+        icon_sz = round(m.icon_dia * 0.6)
+        gray, mask = icon
+        resized_g = gray.resize((icon_sz, icon_sz), Image.Resampling.LANCZOS)
+        resized_m = mask.resize((icon_sz, icon_sz), Image.Resampling.LANCZOS)
+        offset = (m.icon_dia - icon_sz) // 2
+        img.paste(
+            resized_g,
+            (icon_x + offset, circle_y + offset),
+            resized_m,
+        )
+    else:
+        letter = primary[0].upper() if primary else "?"
+        font_letter = _load_font(round(m.icon_dia * 0.5))
+        # Measure at origin so lw/lh are pure glyph dimensions; font
+        # size includes ascender/descender space that would shift the
+        # letter off-center inside the circle.
+        bbox = draw.textbbox((0, 0), letter, font=font_letter)
+        lw, lh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.text(
+            (
+                icon_x + (m.icon_dia - lw) // 2,
+                circle_y + (m.icon_dia - lh) // 2,
+            ),
+            letter,
+            fill=COLOR_WHITE,
+            font=font_letter,
+        )
+    text_x = icon_x + m.icon_dia + m.inner_gap
+
+    # Text block (vertically centered in row)
+    if secondary:
+        p_bb = draw.textbbox((0, 0), primary, font=font_p)
+        s_bb = draw.textbbox((0, 0), secondary, font=font_s)
+        p_h = p_bb[3] - p_bb[1]
+        s_h = s_bb[3] - s_bb[1]
+        text_block_h = p_h + s_h
+        text_y = y + (row_h - text_block_h) // 2
+        draw.text((text_x, text_y), primary, fill=COLOR_BLACK, font=font_p)
+        draw.text(
+            (text_x, text_y + p_h),
+            secondary,
+            fill=COLOR_GRAY,
+            font=font_s,
+        )
+    else:
+        bbox = draw.textbbox((0, 0), primary, font=font_p)
+        text_h = bbox[3] - bbox[1]
+        draw.text(
+            (text_x, y + (row_h - text_h) // 2),
+            primary,
+            fill=COLOR_BLACK,
+            font=font_p,
+        )
+
+    # Right-aligned value
+    if value:
+        bbox = draw.textbbox((0, 0), value, font=font_s)
+        vw = bbox[2] - bbox[0]
+        vh = bbox[3] - bbox[1]
+        draw.text(
+            (x + w - m.padding - vw, y + (row_h - vh) // 2),
+            value,
+            fill=COLOR_GRAY,
+            font=font_s,
+        )
 
 
 def render_text(
