@@ -517,6 +517,24 @@ def _draw_chip_flow(
     return cur_y + h
 
 
+def _compute_right_edge(x: int, widget: Widget, config_width: int) -> int:
+    """Return the right boundary for content layout.
+
+    Uses the widget's explicit width override if set, otherwise
+    falls back to the full display width.
+
+    Args:
+        x: Left x-coordinate of the widget.
+        widget: Widget configuration dict.
+        config_width: Display width from the config.
+
+    Returns:
+        Right-edge x-coordinate.
+    """
+    w = widget.get("w")
+    return (x + w) if w is not None else config_width
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -531,8 +549,7 @@ def render_text(
     align = widget.get("align", Align.LEFT)
 
     font = _load_font(font_size)
-    w_override = widget.get("w")
-    right_edge = x + w_override if w_override is not None else config["width"]
+    right_edge = _compute_right_edge(x, widget, config["width"])
 
     if align in (Align.RIGHT, Align.CENTER):
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -652,8 +669,7 @@ def render_weather(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
-    w_override = widget.get("w")
-    right_edge = (x + w_override) if w_override is not None else width
+    right_edge = _compute_right_edge(x, widget, width)
 
     s = font_size / FONT_SIZE_WEATHER
     font_xl = _load_font(round(48 * s))
@@ -846,8 +862,7 @@ def render_sensor_rows(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
-    w_override = widget.get("w")
-    right_edge = (x + w_override) if w_override is not None else width
+    right_edge = _compute_right_edge(x, widget, width)
 
     s = font_size / FONT_SIZE_SENSOR_ROWS
     font_md = _load_font(font_size)
@@ -982,8 +997,7 @@ def render_status_icons(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
-    w_override = widget.get("w")
-    right_edge = (x + w_override) if w_override is not None else width
+    right_edge = _compute_right_edge(x, widget, width)
 
     s = font_size / FONT_SIZE_STATUS_ICONS
     font = _load_font(font_size)
@@ -1078,8 +1092,7 @@ def render_waste_schedule(
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     width = config["width"]
-    w_override = widget.get("w")
-    right_edge = (x + w_override) if w_override is not None else width
+    right_edge = _compute_right_edge(x, widget, width)
 
     s = font_size / FONT_SIZE_WASTE_SCHEDULE
     font_md = _load_font(round(22 * s))
