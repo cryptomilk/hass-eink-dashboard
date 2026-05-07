@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -535,6 +535,45 @@ def _compute_right_edge(x: int, widget: Widget, config_width: int) -> int:
     return (x + w) if w is not None else config_width
 
 
+class _MultiEntityParams(NamedTuple):
+    """Common fields shared by multi-entity widget renderers."""
+
+    x: int
+    y: int
+    font_size: int
+    title: str
+    entity_ids: list[str]
+    states: dict[str, Any]
+    right_edge: int
+
+
+def _extract_multi_entity_params(
+    widget: Widget,
+    config: DisplayConfig,
+    default_font_size: int,
+) -> _MultiEntityParams:
+    """Extract common fields shared by multi-entity renderers.
+
+    Args:
+        widget: Widget configuration dict.
+        config: Display configuration dict.
+        default_font_size: Default font size for this widget type.
+
+    Returns:
+        A _MultiEntityParams tuple with the extracted values.
+    """
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    font_size = widget.get("font_size", default_font_size)
+    title = widget.get("title", "")
+    entity_ids: list[str] = widget.get("entities", [])
+    states = config.get("states", {})
+    right_edge = _compute_right_edge(x, widget, config["width"])
+    return _MultiEntityParams(
+        x, y, font_size, title, entity_ids, states, right_edge
+    )
+
+
 def render_text(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -855,14 +894,9 @@ def render_sensor_rows(
     config: DisplayConfig,
 ) -> None:
     """Draw a labelled list of sensor values with right-aligned readings."""
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    font_size = widget.get("font_size", FONT_SIZE_SENSOR_ROWS)
-    title = widget.get("title", "")
-    entity_ids: list[str] = widget.get("entities", [])
-    states = config.get("states", {})
-    width = config["width"]
-    right_edge = _compute_right_edge(x, widget, width)
+    (x, y, font_size, title, entity_ids, states, right_edge) = (
+        _extract_multi_entity_params(widget, config, FONT_SIZE_SENSOR_ROWS)
+    )
 
     s = font_size / FONT_SIZE_SENSOR_ROWS
     font_md = _load_font(font_size)
@@ -990,14 +1024,9 @@ def render_status_icons(
     config: DisplayConfig,
 ) -> None:
     """Draw binary-sensor status icons, highlighting problem states."""
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    font_size = widget.get("font_size", FONT_SIZE_STATUS_ICONS)
-    title = widget.get("title", "")
-    entity_ids: list[str] = widget.get("entities", [])
-    states = config.get("states", {})
-    width = config["width"]
-    right_edge = _compute_right_edge(x, widget, width)
+    (x, y, font_size, title, entity_ids, states, right_edge) = (
+        _extract_multi_entity_params(widget, config, FONT_SIZE_STATUS_ICONS)
+    )
 
     s = font_size / FONT_SIZE_STATUS_ICONS
     font = _load_font(font_size)
@@ -1085,14 +1114,9 @@ def render_waste_schedule(
     config: DisplayConfig,
 ) -> None:
     """Draw upcoming waste-collection entries due within the next 3 days."""
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    font_size = widget.get("font_size", FONT_SIZE_WASTE_SCHEDULE)
-    title = widget.get("title", "")
-    entity_ids: list[str] = widget.get("entities", [])
-    states = config.get("states", {})
-    width = config["width"]
-    right_edge = _compute_right_edge(x, widget, width)
+    (x, y, font_size, title, entity_ids, states, right_edge) = (
+        _extract_multi_entity_params(widget, config, FONT_SIZE_WASTE_SCHEDULE)
+    )
 
     s = font_size / FONT_SIZE_WASTE_SCHEDULE
     font_md = _load_font(round(22 * s))
