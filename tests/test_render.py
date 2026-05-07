@@ -31,6 +31,7 @@ from tests.helpers import (
     assert_scales_proportionally,
     assert_vertically_centered,
     content_bbox,
+    make_config,
     pixel,
     png_to_image,
 )
@@ -246,14 +247,14 @@ class TestRenderSeparator:
 
 
 class TestRenderWeather:
+    _DEFAULTS: dict[str, object] = {
+        "width": 600,
+        "height": 400,
+        "states": MOCK_WEATHER_STATE,
+    }
+
     def _config(self, **overrides: object) -> dict[str, object]:
-        base: dict[str, object] = {
-            "width": 600,
-            "height": 400,
-            "states": MOCK_WEATHER_STATE,
-        }
-        base.update(overrides)
-        return base
+        return make_config(self._DEFAULTS, **overrides)
 
     def test_weather_draws_temperature(self) -> None:
         widgets = [
@@ -492,14 +493,14 @@ MOCK_SENSOR_STATES = {
 
 
 class TestRenderSensorRows:
+    _DEFAULTS: dict[str, object] = {
+        "width": 400,
+        "height": 300,
+        "states": MOCK_SENSOR_STATES,
+    }
+
     def _config(self, **overrides: object) -> dict[str, object]:
-        base: dict[str, object] = {
-            "width": 400,
-            "height": 300,
-            "states": MOCK_SENSOR_STATES,
-        }
-        base.update(overrides)
-        return base
+        return make_config(self._DEFAULTS, **overrides)
 
     def test_sensor_rows_draws_labels(self) -> None:
         widgets = [
@@ -587,14 +588,14 @@ class TestRenderSensorRows:
 
 
 class TestRenderDeviceBattery:
+    _DEFAULTS: dict[str, object] = {
+        "width": 400,
+        "height": 100,
+        "device_battery_level": 75,
+    }
+
     def _config(self, **overrides: object) -> dict[str, object]:
-        base: dict[str, object] = {
-            "width": 400,
-            "height": 100,
-            "device_battery_level": 75,
-        }
-        base.update(overrides)
-        return base
+        return make_config(self._DEFAULTS, **overrides)
 
     def test_device_battery_draws_fill(self) -> None:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
@@ -715,14 +716,14 @@ MOCK_STATUS_ICON_STATES = {
 
 
 class TestRenderStatusIcons:
+    _DEFAULTS: dict[str, object] = {
+        "width": 500,
+        "height": 200,
+        "states": MOCK_STATUS_ICON_STATES,
+    }
+
     def _config(self, **overrides: object) -> dict[str, object]:
-        base: dict[str, object] = {
-            "width": 500,
-            "height": 200,
-            "states": MOCK_STATUS_ICON_STATES,
-        }
-        base.update(overrides)
-        return base
+        return make_config(self._DEFAULTS, **overrides)
 
     def test_status_icons_draws_entities(self) -> None:
         widgets = [
@@ -908,14 +909,14 @@ class TestWasteDateHelpers:
 
 
 class TestRenderWasteSchedule:
+    _DEFAULTS: dict[str, object] = {
+        "width": 500,
+        "height": 300,
+        "states": MOCK_WASTE_SCHEDULE_STATES,
+    }
+
     def _config(self, **overrides: object) -> dict[str, object]:
-        base: dict[str, object] = {
-            "width": 500,
-            "height": 300,
-            "states": MOCK_WASTE_SCHEDULE_STATES,
-        }
-        base.update(overrides)
-        return base
+        return make_config(self._DEFAULTS, **overrides)
 
     def test_waste_schedule_draws_entities(self) -> None:
         widgets = [

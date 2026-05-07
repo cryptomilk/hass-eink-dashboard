@@ -1,8 +1,24 @@
 from __future__ import annotations
 
 import io
+from typing import Any
 
 from PIL import Image, ImageChops
+
+
+def make_config(defaults: dict[str, Any], **overrides: Any) -> dict[str, Any]:
+    """Build a display config dict from defaults with overrides.
+
+    Args:
+        defaults: Base config dict (not mutated).
+        **overrides: Keys to add or replace in the base config.
+
+    Returns:
+        Merged config dict.
+    """
+    cfg = dict(defaults)
+    cfg.update(overrides)
+    return cfg
 
 
 def png_to_image(png_bytes: bytes) -> Image.Image:
