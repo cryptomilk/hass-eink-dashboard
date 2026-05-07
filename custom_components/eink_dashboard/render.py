@@ -11,7 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from .const import (
     COLOR_BLACK,
@@ -353,6 +353,168 @@ def _draw_card_row(
             fill=COLOR_GRAY,
             font=font_s,
         )
+
+
+def _draw_chip(
+    draw: ImageDraw.ImageDraw,
+    img: Image.Image,
+    x: int,
+    y: int,
+    h: int,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    border: int,
+    *,
+    icon: tuple[Image.Image, Image.Image] | None = None,
+    inverted: bool = False,
+) -> int:
+    """Draw a pill-shaped chip and return the x coordinate after it.
+
+    Renders a rounded-rectangle container whose end-caps are perfect
+    semicircles (``radius = h // 2``).  The chip width is computed from
+    the text measurement plus horizontal padding and, when present, an
+    icon.  All internal dimensions are proportional to ``h``.
+
+    Args:
+        draw: PIL ImageDraw context for shapes and text.
+        img: PIL Image for pasting icon PNGs via ``img.paste()``.
+        x: Left edge of the chip in pixels.
+        y: Top edge of the chip in pixels.
+        h: Chip height in pixels (also controls all internal sizing).
+        text: Label text drawn inside the chip.
+        font: Font used for ``text`` measurement and rendering.
+        border: Outline stroke width in pixels.
+        icon: ``(gray, mask)`` tuple from ``_load_icon()``, or
+            ``None`` for a text-only chip.  Resized internally
+            to ``round(h * 0.29)`` pixels; callers should load
+            icons at a size at least this large to avoid
+            upscaling artifacts.
+        inverted: When ``True``, fill the chip black and draw text and
+            icon in white (used for problem / urgent states).
+
+    Returns:
+        The x coordinate immediately to the right of the chip
+        (``x + chip_w``), suitable for placing the next chip.
+    """
+    bbox = draw.textbbox((0, 0), text, font=font)
+    # int() narrows the PIL stub type (int | float) to int so that
+    # chip_w stays int and the return type matches.
+    text_w = int(bbox[2] - bbox[0])
+    pad_h = round(h * 0.18)
+    icon_sz = round(h * 0.29)
+    icon_gap = round(h * 0.14)
+    chip_w = pad_h * 2 + text_w
+    if icon is not None:
+        chip_w += icon_sz + icon_gap
+    radius = h // 2
+
+    bg = COLOR_BLACK if inverted else COLOR_WHITE
+    fg = COLOR_WHITE if inverted else COLOR_BLACK
+
+    draw.rounded_rectangle(
+        [x, y, x + chip_w, y + h],
+        radius=radius,
+        fill=bg,
+        outline=COLOR_BLACK,
+        width=border,
+    )
+    cx = x + pad_h
+    if icon is not None:
+        icon_y = y + (h - icon_sz) // 2
+        gray, mask = icon
+        resized_gray = gray.resize(
+            (icon_sz, icon_sz), Image.Resampling.LANCZOS
+        )
+        resized_mask = mask.resize(
+            (icon_sz, icon_sz), Image.Resampling.LANCZOS
+        )
+        if inverted:
+            resized_gray = ImageOps.invert(resized_gray)
+        img.paste(resized_gray, (cx, icon_y), resized_mask)
+        cx += icon_sz + icon_gap
+    # Vertically center the text glyph within the chip using the
+    # measured bounding box height (not the nominal font size, which
+    # includes ascender/descender space that would shift the glyph
+    # upward).
+    text_h = bbox[3] - bbox[1]
+    text_y = y + (h - text_h) // 2
+    draw.text((cx, text_y), text, fill=fg, font=font)
+    return x + chip_w
+
+
+def _draw_chip_flow(
+    draw: ImageDraw.ImageDraw,
+    img: Image.Image,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    chips: list[dict[str, Any]],
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    border: int,
+) -> int:
+    """Lay out chips in a horizontal flow with wrapping.
+
+    Draws each chip from ``chips`` left-to-right.  When a chip would
+    extend past ``x + w``, it wraps to the next line.  The first chip
+    on a new line is never skipped — a chip wider than ``w`` is drawn
+    at the left edge and will overflow.
+
+    Args:
+        draw: PIL ImageDraw context for shapes and text.
+        img: PIL Image for icon pasting (forwarded to ``_draw_chip``).
+        x: Left edge of the flow container.
+        y: Top edge of the flow container.
+        w: Maximum width of the flow container in pixels.
+        h: Height of each chip row in pixels.
+        chips: Sequence of chip descriptors.  Each dict may contain:
+            ``text`` (str, required), ``icon`` (``(gray, mask)`` tuple,
+            optional), ``inverted`` (bool, optional, default False).
+        font: Font used for text measurement and rendering.
+        border: Outline stroke width forwarded to ``_draw_chip``.
+
+    Returns:
+        The y coordinate at the bottom of the last chip row
+        (``last_row_y + h``).
+    """
+    if not chips:
+        return y
+    # Chip-to-chip gap — same ratio as icon_sz by coincidence.
+    gap = round(h * 0.29)
+    cur_x = x
+    cur_y = y
+    for chip in chips:
+        # Measure chip width for wrapping — must stay in sync
+        # with _draw_chip()'s chip_w calculation.
+        bbox = draw.textbbox((0, 0), chip["text"], font=font)
+        text_w = bbox[2] - bbox[0]
+        pad_h = round(h * 0.18)
+        has_icon = chip.get("icon") is not None
+        icon_sz = round(h * 0.29) if has_icon else 0
+        icon_gap = round(h * 0.14) if has_icon else 0
+        chip_w = pad_h * 2 + text_w + icon_sz + icon_gap
+
+        # Wrap when the chip would overflow AND this is not the
+        # first chip on the current line.  Note: cur_x includes
+        # the trailing gap from the previous chip, so wrapping
+        # is slightly eager (by one gap width).
+        if cur_x + chip_w > x + w and cur_x > x:
+            cur_x = x
+            cur_y += h + gap
+        cur_x = _draw_chip(
+            draw,
+            img,
+            cur_x,
+            cur_y,
+            h,
+            chip["text"],
+            font,
+            border,
+            icon=chip.get("icon"),
+            inverted=chip.get("inverted", False),
+        )
+        cur_x += gap
+    return cur_y + h
 
 
 def render_text(

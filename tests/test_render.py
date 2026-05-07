@@ -5,9 +5,10 @@ import datetime as dt
 from unittest.mock import patch
 
 import pytest
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from custom_components.eink_dashboard.const import (
+    COLOR_BLACK,
     COLOR_GRAY,
     PADDING,
 )
@@ -16,6 +17,8 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     _draw_card_container,
     _draw_card_row,
+    _draw_chip,
+    _draw_chip_flow,
     _format_relative_date,
     _load_font,
     _parse_days_until,
@@ -1740,4 +1743,292 @@ class TestDrawCardRow:
             region_s,
             region_l,
             expected_ratio=2.0,
+        )
+
+
+class TestDrawChip:
+    # Canvas 400x200; chip at (20, 20) with h=40.
+    _X, _Y, _H = 20, 20, 40
+
+    def _blank(self) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("L", (400, 200), 255)
+        return img, ImageDraw.Draw(img)
+
+    def _font(self) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        return _load_font(14)
+
+    def _border(self) -> int:
+        # border = max(2, round(40 * 0.04)) = 2
+        return max(2, round(self._H * 0.04))
+
+    def test_pill_shape_corners_white(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip(
+            draw, img, self._X, self._Y, self._H, "OK", font, self._border()
+        )
+        # The extreme corner pixels of the chip bounding box should be white
+        # because the pill shape clips them away (radius = h // 2 = 20).
+        assert pixel(img, self._X, self._Y) == 255, (
+            "top-left corner should be white (pill clips it)"
+        )
+        assert pixel(img, self._X, self._Y + self._H - 1) == 255, (
+            "bottom-left corner should be white (pill clips it)"
+        )
+
+    def test_pill_border_drawn(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip(
+            draw, img, self._X, self._Y, self._H, "OK", font, self._border()
+        )
+        # The top-center of the pill must have border pixels (past the radius
+        # zone on each side); radius=20 so center is well past the arc zone.
+        radius = self._H // 2
+        mid_x = self._X + radius + 5
+        assert_has_dark_pixels(img, mid_x, self._Y, mid_x + 10, self._Y + 3)
+
+    def test_text_drawn_inside_chip(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip(
+            draw, img, self._X, self._Y, self._H, "OK", font, self._border()
+        )
+        # Text "OK" should produce dark pixels somewhere inside the chip
+        # interior (well inward from the pill border).
+        pad_h = round(self._H * 0.18)
+        text_x = self._X + pad_h
+        assert_has_dark_pixels(
+            img,
+            text_x,
+            self._Y + 4,
+            text_x + 30,
+            self._Y + self._H - 4,
+        )
+
+    def test_normal_mode_white_interior(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip(
+            draw, img, self._X, self._Y, self._H, "X", font, self._border()
+        )
+        # A horizontal strip at the vertical center (between border pixels)
+        # that avoids the text column should be white in normal mode.
+        # Text "X" is narrow; check the right half of the chip interior.
+        mid_y = self._Y + self._H // 2
+        # Right of text: measure text width to find a safe white zone.
+        bbox = draw.textbbox((0, 0), "X", font=font)
+        text_w = bbox[2] - bbox[0]
+        pad_h = round(self._H * 0.18)
+        text_right = self._X + pad_h + text_w
+        chip_right = text_right + pad_h
+        # There must be a white region between text end and chip right edge.
+        assert_all_white(
+            img,
+            text_right + 2,
+            mid_y - 2,
+            chip_right - 2,
+            mid_y + 2,
+        )
+
+    def test_inverted_mode_dark_fill(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._H,
+            "OK",
+            font,
+            self._border(),
+            inverted=True,
+        )
+        # Check a pixel in the fill area that is left of the text column
+        # so it is not overdrawn by white text.
+        # Text starts at cx = x + pad_h = 20 + round(40*0.18) = 20+7 = 27.
+        # A pixel at x=24 (inside pill, before text) must be black fill.
+        mid_y = self._Y + self._H // 2
+        assert pixel(img, self._X + 4, mid_y) == COLOR_BLACK, (
+            "inverted chip interior (left of text) should be black"
+        )
+
+    def test_returns_correct_x(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        result = _draw_chip(
+            draw, img, self._X, self._Y, self._H, "OK", font, self._border()
+        )
+        bbox = draw.textbbox((0, 0), "OK", font=font)
+        text_w = bbox[2] - bbox[0]
+        pad_h = round(self._H * 0.18)
+        expected_chip_w = pad_h * 2 + text_w
+        assert result == self._X + expected_chip_w, (
+            f"expected {self._X + expected_chip_w}, got {result}"
+        )
+
+
+class TestDrawChipFlow:
+    # Canvas 500x400; flow at (20, 20), width 350, chip h=40.
+    _X, _Y, _W, _H = 20, 20, 350, 40
+
+    def _blank(self) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("L", (500, 400), 255)
+        return img, ImageDraw.Draw(img)
+
+    def _font(self) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        return _load_font(14)
+
+    def _border(self) -> int:
+        return max(2, round(self._H * 0.04))
+
+    def test_single_chip(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            [{"text": "OK"}],
+            font,
+            self._border(),
+        )
+        # A chip must be drawn at the starting position.
+        assert_has_dark_pixels(
+            img, self._X, self._Y, self._X + 80, self._Y + self._H
+        )
+        # No chips should appear on the second row.
+        gap = round(self._H * 0.29)
+        row2_y = self._Y + self._H + gap
+        assert_all_white(
+            img, self._X, row2_y, self._X + self._W, row2_y + self._H
+        )
+
+    def test_multiple_chips_with_gaps(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            [{"text": "A"}, {"text": "B"}],
+            font,
+            self._border(),
+        )
+        # Both chips must be drawn on the first row.
+        assert_has_dark_pixels(
+            img, self._X, self._Y, self._X + 40, self._Y + self._H
+        )
+        # Measure where first chip ends to find the gap region.
+        bbox_a = draw.textbbox((0, 0), "A", font=font)
+        text_w_a = bbox_a[2] - bbox_a[0]
+        pad_h = round(self._H * 0.18)
+        chip_w_a = pad_h * 2 + text_w_a
+        gap = round(self._H * 0.29)
+        gap_start = self._X + chip_w_a
+        gap_end = gap_start + gap
+        # Vertical center strip of the gap region should be white.
+        mid_y = self._Y + self._H // 2
+        if gap > 2:
+            assert_all_white(
+                img,
+                gap_start + 1,
+                mid_y - 2,
+                gap_end - 1,
+                mid_y + 2,
+            )
+
+    def test_wrapping(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        # Use long labels so chips fill the row quickly and wrap.
+        chips = [
+            {"text": "Temperature"},
+            {"text": "Humidity"},
+            {"text": "Pressure"},
+            {"text": "Luminance"},
+        ]
+        _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            chips,
+            font,
+            self._border(),
+        )
+        # At least one chip must appear on the second row.
+        gap = round(self._H * 0.29)
+        row2_y = self._Y + self._H + gap
+        assert_has_dark_pixels(
+            img,
+            self._X,
+            row2_y,
+            self._X + self._W,
+            row2_y + self._H,
+        )
+
+    def test_returns_final_y(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        # Single row of chips: result should be y + h.
+        result = _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            [{"text": "OK"}],
+            font,
+            self._border(),
+        )
+        assert result == self._Y + self._H, (
+            f"single-row flow should return {self._Y + self._H}, got {result}"
+        )
+
+    def test_empty_chips_returns_y(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        result = _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            [],
+            font,
+            self._border(),
+        )
+        assert result == self._Y, (
+            f"empty chips should return y={self._Y}, got {result}"
+        )
+
+    def test_inverted_chip_in_flow(self) -> None:
+        img, draw = self._blank()
+        font = self._font()
+        _draw_chip_flow(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            [{"text": "ALERT", "inverted": True}],
+            font,
+            self._border(),
+        )
+        mid_y = self._Y + self._H // 2
+        assert pixel(img, self._X + 4, mid_y) == COLOR_BLACK, (
+            "inverted chip in flow should have black fill"
         )
