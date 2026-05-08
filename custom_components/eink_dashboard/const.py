@@ -132,6 +132,19 @@ def resolve_display(
     return p.height, p.width, 90, p
 
 
+def apply_screen_portion(
+    width: int,
+    height: int,
+    portion: str,
+) -> tuple[int, int]:
+    """Return (width, height) adjusted for the requested screen portion."""
+    if portion == "half":
+        return width // 2, height
+    if portion == "quarter":
+        return width // 2, height // 2
+    return width, height
+
+
 class Align(StrEnum):
     """Horizontal text alignment options for widget rendering."""
 
