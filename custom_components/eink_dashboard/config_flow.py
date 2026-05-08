@@ -47,28 +47,32 @@ def _is_valid_url(value: str) -> bool:
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-_STEP_USER_SCHEMA = vol.Schema(
-    {
-        vol.Required("name", default="My E-Ink Display"): str,
-        vol.Required("device_model", default="kindle_pw"): SelectSelector(
-            SelectSelectorConfig(
-                options=list(DEVICE_PRESETS.keys()),
-                translation_key="device_model",
-                mode=SelectSelectorMode.DROPDOWN,
-            )
-        ),
-        vol.Required("orientation", default="portrait"): SelectSelector(
-            SelectSelectorConfig(
-                options=["portrait", "landscape"],
-                translation_key="orientation",
-            )
-        ),
-        vol.Optional("area"): AreaSelector(),
-        vol.Required(
-            "update_interval", default=DEFAULT_UPDATE_INTERVAL
-        ): _POSITIVE_INT,
-    }
-)
+def _build_user_schema(
+    default_model: str = "kindle_pw",
+    default_orientation: str = "landscape",
+) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required("name", default="My E-Ink Display"): str,
+            vol.Required("device_model", default=default_model): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(DEVICE_PRESETS.keys()),
+                    translation_key="device_model",
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required("orientation", default=default_orientation): SelectSelector(
+                SelectSelectorConfig(
+                    options=["portrait", "landscape"],
+                    translation_key="orientation",
+                )
+            ),
+            vol.Optional("area"): AreaSelector(),
+            vol.Required(
+                "update_interval", default=DEFAULT_UPDATE_INTERVAL
+            ): _POSITIVE_INT,
+        }
+    )
 
 _STEP_CUSTOM_RESOLUTION_SCHEMA = vol.Schema(
     {
@@ -110,8 +114,19 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial setup step: name, model, and orientation."""
+        existing = self.hass.config_entries.async_entries(DOMAIN)
+        if existing:
+            last_opts = existing[-1].options
+            default_model = last_opts.get("device_model", "kindle_pw")
+            default_orientation = last_opts.get("orientation", "landscape")
+        else:
+            default_model = "kindle_pw"
+            default_orientation = "landscape"
+
+        schema = _build_user_schema(default_model, default_orientation)
+
         if user_input is not None:
-            validated = _STEP_USER_SCHEMA(user_input)
+            validated = schema(user_input)
             self._name = validated["name"]
             device_model = validated["device_model"]
             orientation = validated["orientation"]
@@ -132,7 +147,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_STEP_USER_SCHEMA,
+            data_schema=schema,
         )
 
     async def async_step_screen_portion(
@@ -143,10 +158,13 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         orientation = self._data["orientation"]
         width, height, rotation, preset = resolve_display(device_model, orientation)
 
+        orientation_indicator = "▭  Landscape" if width > height else "▮  Portrait"
+
         options = [
             {"value": "full", "label": f"Full screen ({width}x{height})"},
             {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
             {"value": "quarter", "label": f"Quarter screen ({width // 2}x{height // 2})"},
+            {"value": "custom", "label": "Custom"},
         ]
         schema = vol.Schema(
             {
@@ -161,6 +179,9 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             portion = user_input["screen_portion"]
+            if portion == "custom":
+                self._data.update({"rotation": rotation, "optimize": preset.optimize, "grayscale_levels": preset.grayscale_levels, "screen_portion": "custom"})
+                return await self.async_step_custom_resolution()
             final_width, final_height = apply_screen_portion(width, height, portion)
             self._data.update(
                 {
@@ -179,24 +200,29 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="screen_portion",
             data_schema=schema,
+            description_placeholders={"orientation_info": orientation_indicator},
         )
 
     async def async_step_custom_resolution(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Collect width and height for the custom device model."""
+        """Collect width and height for a custom or custom-portion device."""
         if user_input is not None:
             validated = _STEP_CUSTOM_RESOLUTION_SCHEMA(user_input)
             self._data.update(
                 {
                     "width": validated["width"],
                     "height": validated["height"],
-                    "rotation": 0,
-                    "optimize": DEFAULT_OPTIMIZE,
-                    "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                 }
             )
-            return await self.async_step_push_target()
+            if "rotation" not in self._data:
+                self._data.update({"rotation": 0, "optimize": DEFAULT_OPTIMIZE, "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS})
+            device_model = self._data.get("device_model", "")
+            if device_model.startswith("trmnl_"):
+                return await self.async_step_trmnl_setup()
+            if device_model == "custom":
+                return await self.async_step_push_target()
+            return self._create_pull_entry()
         return self.async_show_form(
             step_id="custom_resolution",
             data_schema=_STEP_CUSTOM_RESOLUTION_SCHEMA,
