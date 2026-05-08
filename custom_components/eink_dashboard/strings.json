@@ -16,8 +16,7 @@
         }
       },
       "screen_portion": {
-        "title": "Screen portion",
-        "description": "Device orientation: {orientation_info}",
+        "title": "Screen portion — {orientation_info}",
         "data": {
           "screen_portion": "Screen portion"
         },
