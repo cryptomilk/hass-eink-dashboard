@@ -7,7 +7,7 @@ import io
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -1241,6 +1241,141 @@ def render_waste_schedule(
         y += row_height
 
 
+def _hex_to_gray_float(hex_color: str) -> float:
+    """Convert a hex color to a matplotlib grayscale float (0.0=black, 1.0=white)."""
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) == 3:
+        hex_color = "".join(c * 2 for c in hex_color)
+    try:
+        r = int(hex_color[0:2], 16)
+        g = int(hex_color[2:4], 16)
+        b = int(hex_color[4:6], 16)
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255.0
+    except (ValueError, IndexError):
+        return 0.0
+
+
+def render_chart(
+    draw: ImageDraw.ImageDraw,
+    widget: Widget,
+    config: DisplayConfig,
+) -> None:
+    """Render an ApexCharts-compatible time-series chart using matplotlib."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.dates as mdates
+        import matplotlib.pyplot as plt
+    except ImportError:
+        x = widget.get("x", PADDING)
+        y = widget.get("y", 0)
+        draw.text(
+            (x, y),
+            "Chart: matplotlib not installed",
+            fill=COLOR_BLACK,
+            font=_load_font(24),
+        )
+        return
+
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    w = widget.get("w", config["width"] - x - PADDING)
+    h = widget.get("h", 200)
+
+    chart_config = widget.get("config", {})
+    series_configs = chart_config.get("series", [])
+    yaxis_configs = chart_config.get("yaxis", [])
+    histories = config.get("histories", {})
+
+    yaxis_map = {ya.get("id", "left"): ya for ya in yaxis_configs}
+
+    # Filter series that should appear in the chart
+    visible = []
+    for s in series_configs:
+        show = s.get("show", {})
+        if isinstance(show, dict) and not show.get("in_chart", True):
+            continue
+        if s.get("opacity", 1) == 0 or s.get("stroke_width", 1) == 0:
+            continue
+        visible.append(s)
+
+    if not visible:
+        return
+
+    right_ids = {
+        s.get("yaxis_id", "")
+        for s in visible
+        if yaxis_map.get(s.get("yaxis_id", ""), {}).get("opposite", False)
+    }
+
+    dpi = 150
+    fig, ax_left = plt.subplots(figsize=(w / dpi, h / dpi), dpi=dpi)
+    fig.patch.set_facecolor("white")
+    ax_left.set_facecolor("white")
+    ax_right = ax_left.twinx() if right_ids else None
+
+    for ax in filter(None, [ax_left, ax_right]):
+        ax.tick_params(colors="black", labelsize=7)
+        for spine in ax.spines.values():
+            spine.set_color("black")
+            spine.set_linewidth(0.5)
+
+    # Apply Y-axis limits and visibility
+    for yid, ya in yaxis_map.items():
+        ax = ax_right if (ya.get("opposite") and ax_right) else ax_left
+        ymin = ya.get("min")
+        ymax = ya.get("max")
+        if ymin is not None or ymax is not None:
+            ax.set_ylim(
+                bottom=ymin if ymin is not None else None,
+                top=ymax if ymax is not None else None,
+            )
+        if not ya.get("show", True) and not ya.get("opposite"):
+            ax_left.yaxis.set_visible(False)
+
+    plotted = 0
+    for s in visible:
+        entity_id = s.get("entity", "")
+        points = histories.get(entity_id, [])
+        if not points:
+            continue
+
+        timestamps = [
+            datetime.fromtimestamp(p["t"], tz=timezone.utc) for p in points
+        ]
+        values = [p["v"] for p in points]
+
+        yaxis_id = s.get("yaxis_id", "")
+        ax = ax_right if (yaxis_id in right_ids and ax_right) else ax_left
+
+        gray = _hex_to_gray_float(s.get("color", "#000000"))
+        lw = max(0.5, min(s.get("stroke_width", 2), 4))
+
+        ax.plot(timestamps, values, color=str(gray), linewidth=lw, label=s.get("name"))
+        plotted += 1
+
+    if plotted == 0:
+        plt.close(fig)
+        return
+
+    ax_left.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    ax_left.xaxis.set_major_locator(mdates.AutoDateLocator())
+    plt.setp(ax_left.xaxis.get_majorticklabels(), rotation=0, ha="center", fontsize=7)
+
+    fig.tight_layout(pad=0.3)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=dpi, facecolor="white")
+    plt.close(fig)
+    buf.seek(0)
+
+    chart_img = Image.open(buf).convert("L")
+    chart_img = chart_img.resize((w, h), Image.Resampling.LANCZOS)
+    img = config.get("_image")
+    if img is not None:
+        img.paste(chart_img, (x, y))
+
+
 _RENDERERS: dict[WidgetType, RendererFn] = {
     WidgetType.TEXT: render_text,
     WidgetType.LINE: render_line,
@@ -1250,6 +1385,7 @@ _RENDERERS: dict[WidgetType, RendererFn] = {
     WidgetType.DEVICE_BATTERY: render_device_battery,
     WidgetType.STATUS_ICONS: render_status_icons,
     WidgetType.WASTE_SCHEDULE: render_waste_schedule,
+    WidgetType.CHART: render_chart,
 }
 
 

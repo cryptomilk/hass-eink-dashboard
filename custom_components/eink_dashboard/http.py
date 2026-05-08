@@ -87,7 +87,7 @@ class EinkLayoutView(HomeAssistantView):
             raise web.HTTPBadRequest(text="Too many widgets")
 
         valid_types = {t.value for t in WidgetType}
-        _allowed_field_types = (str, int, float, bool, list, type(None))
+        _allowed_field_types = (str, int, float, bool, list, dict, type(None))
         for widget in body:
             if not isinstance(widget, dict):
                 raise web.HTTPBadRequest(text="Each widget must be an object")

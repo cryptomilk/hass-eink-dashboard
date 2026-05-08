@@ -163,3 +163,4 @@ class WidgetType(StrEnum):
     DEVICE_BATTERY = "device_battery"
     STATUS_ICONS = "status_icons"
     WASTE_SCHEDULE = "waste_schedule"
+    CHART = "chart"

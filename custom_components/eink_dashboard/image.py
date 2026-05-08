@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import io
 import logging
+import re
 import time
 from collections.abc import Callable
 from datetime import timedelta
@@ -43,6 +44,22 @@ _LOGGER = logging.getLogger(__name__)
 
 PUSH_MIN_INTERVAL = 300
 PUSH_MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+_SPAN_RE = re.compile(r"^(\d+(?:\.\d+)?)\s*([smhd])$")
+
+
+def _parse_graph_span(span: str) -> timedelta:
+    """Parse '6h', '24h', '7d', '30m' into a timedelta."""
+    m = _SPAN_RE.match(span.strip())
+    if not m:
+        return timedelta(hours=24)
+    value, unit = float(m.group(1)), m.group(2)
+    return {
+        "s": timedelta(seconds=value),
+        "m": timedelta(minutes=value),
+        "h": timedelta(hours=value),
+        "d": timedelta(days=value),
+    }[unit]
 
 
 def _is_image_blank(image_bytes: bytes) -> bool:
@@ -165,6 +182,7 @@ class EinkDashboardImage(ImageEntity):
             async with self._refresh_lock:
                 states = self._build_states()
                 await self._async_fetch_forecasts(states)
+                histories = await self._async_fetch_histories()
                 config = {
                     "width": self._entry.options.get("width", DEFAULT_WIDTH),
                     "height": self._entry.options.get(
@@ -184,6 +202,7 @@ class EinkDashboardImage(ImageEntity):
                         "contrast", DEFAULT_CONTRAST
                     ),
                     "states": states,
+                    "histories": histories,
                 }
                 battery_sensor = self.hass.data[DOMAIN][
                     self._entry.entry_id
@@ -291,6 +310,59 @@ class EinkDashboardImage(ImageEntity):
                 states[entity_id]["attributes"]["forecast"] = forecast
             except Exception:
                 _LOGGER.debug("Could not fetch forecast for %s", entity_id)
+
+    async def _async_fetch_histories(self) -> dict[str, list[dict]]:
+        """Fetch recorder history for all chart widget entities."""
+        entity_spans: dict[str, timedelta] = {}
+        for widget in self._widgets:
+            if widget.get("type") != WidgetType.CHART:
+                continue
+            chart_config = widget.get("config", {})
+            span = _parse_graph_span(chart_config.get("graph_span", "24h"))
+            for s in chart_config.get("series", []):
+                eid = s.get("entity")
+                if not eid:
+                    continue
+                if eid not in entity_spans or span > entity_spans[eid]:
+                    entity_spans[eid] = span
+
+        if not entity_spans:
+            return {}
+
+        histories: dict[str, list[dict]] = {}
+        now = dt_util.utcnow()
+
+        try:
+            from homeassistant.components.recorder import get_instance
+            from homeassistant.components.recorder.history import (
+                get_significant_states,
+            )
+
+            for entity_id, span in entity_spans.items():
+                start = now - span
+                raw = await get_instance(self.hass).async_add_executor_job(
+                    get_significant_states,
+                    self.hass,
+                    start,
+                    now,
+                    [entity_id],
+                )
+                points = []
+                for state in raw.get(entity_id, []):
+                    try:
+                        points.append(
+                            {
+                                "t": state.last_changed.timestamp(),
+                                "v": float(state.state),
+                            }
+                        )
+                    except (ValueError, TypeError):
+                        pass
+                histories[entity_id] = points
+        except Exception:
+            _LOGGER.warning("Could not fetch history for chart widgets")
+
+        return histories
 
     def _build_states(self) -> dict[str, Any]:
         """Snapshot all HA states as a plain dict for the renderer."""
