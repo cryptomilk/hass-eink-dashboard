@@ -34,6 +34,7 @@ from .const import (
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    apply_screen_portion,
     resolve_display,
 )
 
@@ -127,27 +128,57 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             if device_model == "custom":
                 return await self.async_step_custom_resolution()
 
-            width, height, rotation, preset = resolve_display(
-                device_model,
-                orientation,
-            )
+            return await self.async_step_screen_portion()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=_STEP_USER_SCHEMA,
+        )
+
+    async def async_step_screen_portion(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select how much of the screen this dashboard occupies."""
+        device_model = self._data["device_model"]
+        orientation = self._data["orientation"]
+        width, height, rotation, preset = resolve_display(device_model, orientation)
+
+        options = [
+            {"value": "full", "label": f"Full screen ({width}x{height})"},
+            {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
+            {"value": "quarter", "label": f"Quarter screen ({width // 2}x{height // 2})"},
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required("screen_portion", default="full"): SelectSelector(
+                    SelectSelectorConfig(
+                        options=options,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+
+        if user_input is not None:
+            portion = user_input["screen_portion"]
+            final_width, final_height = apply_screen_portion(width, height, portion)
             self._data.update(
                 {
-                    "width": width,
-                    "height": height,
+                    "width": final_width,
+                    "height": final_height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "screen_portion": portion,
                 }
             )
-
             if device_model.startswith("trmnl_"):
                 return await self.async_step_trmnl_setup()
             return self._create_pull_entry()
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=_STEP_USER_SCHEMA,
+            step_id="screen_portion",
+            data_schema=schema,
         )
 
     async def async_step_custom_resolution(
@@ -427,29 +458,65 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     return self.async_create_entry(data=new_opts)
                 return await self.async_step_custom_resolution()
 
-            width, height, rotation, preset = resolve_display(
-                device_model, orientation
-            )
+            return await self.async_step_screen_portion_options()
+
+        return self.async_show_form(
+            step_id="device_settings",
+            data_schema=schema,
+        )
+
+    async def async_step_screen_portion_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Update screen portion for a non-custom device model."""
+        if not self._data:
+            return await self.async_step_device_settings()
+
+        device_model = self._data["device_model"]
+        orientation = self._data["orientation"]
+        width, height, rotation, preset = resolve_display(device_model, orientation)
+        opts = self.config_entry.options
+
+        options = [
+            {"value": "full", "label": f"Full screen ({width}x{height})"},
+            {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
+            {"value": "quarter", "label": f"Quarter screen ({width // 2}x{height // 2})"},
+        ]
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "screen_portion",
+                    default=opts.get("screen_portion", "full"),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=options,
+                        mode=SelectSelectorMode.LIST,
+                    )
+                ),
+            }
+        )
+
+        if user_input is not None:
+            portion = user_input["screen_portion"]
+            final_width, final_height = apply_screen_portion(width, height, portion)
             new_opts = deepcopy(dict(opts))
             new_opts.update(
                 {
-                    "device_model": device_model,
-                    "orientation": orientation,
-                    "width": width,
-                    "height": height,
+                    **self._data,
+                    "width": final_width,
+                    "height": final_height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "screen_portion": portion,
                 }
             )
-            if area_id:
-                new_opts["area_id"] = area_id
-            else:
+            if "area_id" not in self._data:
                 new_opts.pop("area_id", None)
             return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
-            step_id="device_settings",
+            step_id="screen_portion_options",
             data_schema=schema,
         )
 

@@ -6,13 +6,22 @@
         "data": {
           "name": "Name",
           "device_model": "Device model",
-          "orientation": "Orientation",
+          "orientation": "Device orientation",
           "area": "Area",
           "update_interval": "Update interval (seconds)"
         },
         "data_description": {
           "device_model": "Select your e-ink display model",
           "orientation": "Portrait or landscape layout"
+        }
+      },
+      "screen_portion": {
+        "title": "Screen portion",
+        "data": {
+          "screen_portion": "Screen portion"
+        },
+        "data_description": {
+          "screen_portion": "Select how much of the screen this dashboard occupies"
         }
       },
       "custom_resolution": {
@@ -75,12 +84,21 @@
         "title": "Device Settings",
         "data": {
           "device_model": "Device model",
-          "orientation": "Orientation",
+          "orientation": "Device orientation",
           "area": "Area"
         },
         "data_description": {
           "device_model": "Select your e-ink display model",
           "orientation": "Portrait or landscape layout"
+        }
+      },
+      "screen_portion_options": {
+        "title": "Screen portion",
+        "data": {
+          "screen_portion": "Screen portion"
+        },
+        "data_description": {
+          "screen_portion": "Select how much of the screen this dashboard occupies"
         }
       },
       "custom_resolution": {
