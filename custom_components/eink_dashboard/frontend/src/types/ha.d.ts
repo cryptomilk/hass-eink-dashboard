@@ -166,6 +166,7 @@ export interface WasteScheduleWidget extends WidgetBase {
 export interface ChartWidget extends WidgetBase {
   type: "chart";
   h?: number;
+  entities?: string[];
   config?: {
     graph_span?: string;
     series?: Record<string, unknown>[];

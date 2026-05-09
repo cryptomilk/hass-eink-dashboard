@@ -324,8 +324,14 @@ class EinkDashboardImage(ImageEntity):
                 or "24h"
             )
             span = _parse_graph_span(raw_span)
-            for s in chart_config.get("series", []):
-                eid = s.get("entity")
+            series = chart_config.get("series", [])
+            series_entities = [s.get("entity") for s in series if s.get("entity")]
+            extra_entities = [
+                e for e in widget.get("entities", [])
+                if e and e not in series_entities
+            ]
+            entity_ids = series_entities + extra_entities
+            for eid in entity_ids:
                 if not eid:
                     continue
                 if eid not in entity_spans or span > entity_spans[eid]:

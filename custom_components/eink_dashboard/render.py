@@ -1274,6 +1274,14 @@ def render_chart(
 
     yaxis_map = {ya.get("id", ""): ya for ya in yaxis_configs}
 
+    series_entities = {s.get("entity") for s in series_configs}
+    extra_series = [
+        {"entity": eid, "yaxis_id": "", "stroke_width": 2, "color": "#000000"}
+        for eid in widget.get("entities", [])
+        if eid and eid not in series_entities
+    ]
+    series_configs = series_configs + extra_series
+
     visible = []
     for s in series_configs:
         show = s.get("show", {})

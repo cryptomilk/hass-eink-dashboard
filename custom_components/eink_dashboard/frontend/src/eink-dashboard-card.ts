@@ -13,6 +13,7 @@ import type {
   DeviceBatteryWidget,
   StatusIconsWidget,
   WasteScheduleWidget,
+  ChartWidget,
   LayoutResponse,
   WidgetBounds,
   IndexedBounds,
@@ -515,6 +516,14 @@ class EinkDashboardCard extends HTMLElement {
         resp.device.has_webhooks,
       ) ? "" : "none";
       this._initCanvas();
+      if (resp.widgets.some((w) => w.type === "chart")) {
+        this._showServerImage = true;
+        this._canvas!.style.display = "none";
+        this._serverImg!.style.display = "block";
+        this._toggleBtn.textContent = "Show canvas preview";
+        this._toggleBtn.classList.add("active");
+        this._serverImg!.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
+      }
       this._fetchForecasts();
       this._scheduleRender();
     } catch (err) {
@@ -870,6 +879,26 @@ class EinkDashboardCard extends HTMLElement {
       line: (w) => this._renderLine(ctx, w as LineWidget),
       separator: (w) => this._renderSeparator(ctx, w as SeparatorWidget),
       weather: (w) => this._renderWeather(ctx, w as WeatherWidget),
+      chart: (w) => {
+        const cw = w as ChartWidget;
+        const x = cw.x ?? PADDING;
+        const y = cw.y ?? 0;
+        const ww = (cw.w || (this._layout!.display.width - x - PADDING));
+        const h = cw.h ?? 200;
+        const span = ((w as unknown as Record<string,unknown>).graph_span ?? cw.config?.graph_span ?? "24h") as string;
+        ctx.save();
+        ctx.strokeStyle = "#aaa";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.strokeRect(x, y, ww, h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#000";
+        ctx.font = `28px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(`Chart (${span})`, x + ww / 2, y + h / 2);
+        ctx.restore();
+        return { x, y, w: ww, h };
+      },
       sensor_rows: (w) => this._renderSensorRows(ctx, w as SensorRowsWidget),
       device_battery: (w) => this._renderDeviceBattery(ctx, w as DeviceBatteryWidget),
       status_icons: (w) => this._renderStatusIcons(ctx, w as StatusIconsWidget),

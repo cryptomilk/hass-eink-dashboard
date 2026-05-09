@@ -158,6 +158,7 @@ export const SCHEMAS = {
             ],
         },
         { name: "graph_span", selector: { text: {} } },
+        { name: "entities", selector: { entity: { multiple: true } } },
     ],
 };
 export const LABELS = {
@@ -206,9 +207,13 @@ export function getSummary(widget) {
         return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
     }
     if (t === "chart") {
-        const span = widget.config?.graph_span ?? "24h";
-        const n = (widget.config?.series ?? []).length;
-        return `${span} — ${n} series`;
+        const span = widget.graph_span
+            ?? widget.config?.graph_span
+            ?? "24h";
+        const seriesCount = (widget.config?.series ?? []).length;
+        const entityCount = (widget.entities ?? []).length;
+        const n = seriesCount || entityCount;
+        return `${span} — ${n} sensor${n !== 1 ? "s" : ""}`;
     }
     if (t === "separator")
         return `y=${widget.y ?? 0}`;

@@ -188,6 +188,7 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
       ],
     },
     { name: "graph_span", selector: { text: {} } },
+    { name: "entities", selector: { entity: { multiple: true } } },
   ],
 };
 
@@ -242,9 +243,13 @@ export function getSummary(widget: Widget): string {
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
   }
   if (t === "chart") {
-    const span = (widget.config as Record<string, unknown>)?.graph_span ?? "24h";
-    const n = ((widget.config as Record<string, unknown>)?.series as unknown[] ?? []).length;
-    return `${span} — ${n} series`;
+    const span = (widget as unknown as Record<string, unknown>).graph_span
+      ?? (widget.config as Record<string, unknown>)?.graph_span
+      ?? "24h";
+    const seriesCount = ((widget.config as Record<string, unknown>)?.series as unknown[] ?? []).length;
+    const entityCount = (widget.entities ?? []).length;
+    const n = seriesCount || entityCount;
+    return `${span} — ${n} sensor${n !== 1 ? "s" : ""}`;
   }
   if (t === "separator") return `y=${widget.y ?? 0}`;
   if (t === "line") {
