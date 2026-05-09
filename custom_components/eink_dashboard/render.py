@@ -1260,23 +1260,7 @@ def render_chart(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
-    """Render an ApexCharts-compatible time-series chart using matplotlib."""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.dates as mdates
-        import matplotlib.pyplot as plt
-    except ImportError:
-        x = widget.get("x", PADDING)
-        y = widget.get("y", 0)
-        draw.text(
-            (x, y),
-            "Chart: matplotlib not installed",
-            fill=COLOR_BLACK,
-            font=_load_font(24),
-        )
-        return
-
+    """Render an ApexCharts-compatible time-series chart using pure PIL."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     w = widget.get("w", config["width"] - x - PADDING)
@@ -1287,9 +1271,8 @@ def render_chart(
     yaxis_configs = chart_config.get("yaxis", [])
     histories = config.get("histories", {})
 
-    yaxis_map = {ya.get("id", "left"): ya for ya in yaxis_configs}
+    yaxis_map = {ya.get("id", ""): ya for ya in yaxis_configs}
 
-    # Filter series that should appear in the chart
     visible = []
     for s in series_configs:
         show = s.get("show", {})
@@ -1308,72 +1291,116 @@ def render_chart(
         if yaxis_map.get(s.get("yaxis_id", ""), {}).get("opposite", False)
     }
 
-    dpi = 150
-    fig, ax_left = plt.subplots(figsize=(w / dpi, h / dpi), dpi=dpi)
-    fig.patch.set_facecolor("white")
-    ax_left.set_facecolor("white")
-    ax_right = ax_left.twinx() if right_ids else None
+    has_right = bool(right_ids)
+    font_sm = _load_font(max(8, round(h * 0.08)))
 
-    for ax in filter(None, [ax_left, ax_right]):
-        ax.tick_params(colors="black", labelsize=7)
-        for spine in ax.spines.values():
-            spine.set_color("black")
-            spine.set_linewidth(0.5)
+    left_margin = 44
+    right_margin = 40 if has_right else 6
+    bottom_margin = 20
 
-    # Apply Y-axis limits and visibility
-    for yid, ya in yaxis_map.items():
-        ax = ax_right if (ya.get("opposite") and ax_right) else ax_left
-        ymin = ya.get("min")
-        ymax = ya.get("max")
-        if ymin is not None or ymax is not None:
-            ax.set_ylim(
-                bottom=ymin if ymin is not None else None,
-                top=ymax if ymax is not None else None,
-            )
-        if not ya.get("show", True) and not ya.get("opposite"):
-            ax_left.yaxis.set_visible(False)
+    px1 = x + left_margin
+    py1 = y + 4
+    px2 = x + w - right_margin
+    py2 = y + h - bottom_margin
+    plot_w = px2 - px1
+    plot_h = py2 - py1
 
-    plotted = 0
-    for s in visible:
-        entity_id = s.get("entity", "")
-        points = histories.get(entity_id, [])
-        if not points:
-            continue
-
-        timestamps = [
-            datetime.fromtimestamp(p["t"], tz=timezone.utc) for p in points
-        ]
-        values = [p["v"] for p in points]
-
-        yaxis_id = s.get("yaxis_id", "")
-        ax = ax_right if (yaxis_id in right_ids and ax_right) else ax_left
-
-        gray = _hex_to_gray_float(s.get("color", "#000000"))
-        lw = max(0.5, min(s.get("stroke_width", 2), 4))
-
-        ax.plot(timestamps, values, color=str(gray), linewidth=lw, label=s.get("name"))
-        plotted += 1
-
-    if plotted == 0:
-        plt.close(fig)
+    if plot_w < 20 or plot_h < 20:
         return
 
-    ax_left.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-    ax_left.xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.setp(ax_left.xaxis.get_majorticklabels(), rotation=0, ha="center", fontsize=7)
+    draw.rectangle([px1, py1, px2, py2], outline=COLOR_LIGHT_GRAY, width=1)
 
-    fig.tight_layout(pad=0.3)
+    def _axis_scale(is_right: bool) -> tuple[float, float] | None:
+        side = [s for s in visible if (s.get("yaxis_id", "") in right_ids) == is_right]
+        if not side:
+            return None
+        yid = side[0].get("yaxis_id", "")
+        ya = yaxis_map.get(yid, {})
+        s_min, s_max = ya.get("min"), ya.get("max")
+        if s_min is not None and s_max is not None:
+            return float(s_min), float(s_max)
+        vals = [
+            p["v"]
+            for s in side
+            for p in histories.get(s.get("entity", ""), [])
+            if p.get("v") is not None
+        ]
+        if not vals:
+            return 0.0, 1.0
+        lo, hi = min(vals), max(vals)
+        if lo == hi:
+            lo, hi = lo - 1.0, hi + 1.0
+        pad = (hi - lo) * 0.05
+        return lo - pad, hi + pad
 
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=dpi, facecolor="white")
-    plt.close(fig)
-    buf.seek(0)
+    left_scale = _axis_scale(False)
+    right_scale = _axis_scale(True) if has_right else None
 
-    chart_img = Image.open(buf).convert("L")
-    chart_img = chart_img.resize((w, h), Image.Resampling.LANCZOS)
-    img = config.get("_image")
-    if img is not None:
-        img.paste(chart_img, (x, y))
+    all_times = [
+        p["t"]
+        for s in visible
+        for p in histories.get(s.get("entity", ""), [])
+        if p.get("t") is not None
+    ]
+    if not all_times:
+        return
+    t_start, t_end = min(all_times), max(all_times)
+    if t_end == t_start:
+        t_end = t_start + 1
+
+    def _tx(t: float) -> int:
+        return round(px1 + (t - t_start) / (t_end - t_start) * plot_w)
+
+    def _vy(v: float, scale: tuple[float, float]) -> int:
+        lo, hi = scale
+        frac = (v - lo) / (hi - lo) if hi != lo else 0.0
+        return round(py2 - frac * plot_h)
+
+    def _draw_yaxis(scale: tuple[float, float], is_right: bool) -> None:
+        lo, hi = scale
+        for i in range(3):
+            frac = i / 2
+            py = round(py2 - frac * plot_h)
+            v = lo + frac * (hi - lo)
+            label = f"{v:.0f}"
+            bbox = draw.textbbox((0, 0), label, font=font_sm)
+            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            if not is_right:
+                draw.line([(px1, py), (px2, py)], fill=COLOR_LIGHT_GRAY, width=1)
+                draw.text((px1 - tw - 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
+            else:
+                draw.text((px2 + 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
+
+    if left_scale is not None:
+        _draw_yaxis(left_scale, False)
+    if right_scale is not None:
+        _draw_yaxis(right_scale, True)
+
+    start_label = datetime.fromtimestamp(t_start).strftime("%H:%M")
+    end_label = datetime.fromtimestamp(t_end).strftime("%H:%M")
+    draw.text((px1, py2 + 3), start_label, fill=COLOR_GRAY, font=font_sm)
+    bbox = draw.textbbox((0, 0), end_label, font=font_sm)
+    draw.text((px2 - (bbox[2] - bbox[0]), py2 + 3), end_label, fill=COLOR_GRAY, font=font_sm)
+
+    for s in visible:
+        entity_id = s.get("entity", "")
+        is_right = s.get("yaxis_id", "") in right_ids
+        scale = right_scale if is_right else left_scale
+        if scale is None:
+            continue
+        data = [p for p in histories.get(entity_id, []) if p.get("v") is not None]
+        if len(data) < 2:
+            continue
+        pil_color = round(_hex_to_gray_float(s.get("color", "#000000")) * 255)
+        lw = max(1, min(round(s.get("stroke_width", 2)), 4))
+        points_px = [
+            (
+                max(px1, min(px2, _tx(p["t"]))),
+                max(py1, min(py2, _vy(p["v"], scale))),
+            )
+            for p in data
+        ]
+        draw.line(points_px, fill=pil_color, width=lw)
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
