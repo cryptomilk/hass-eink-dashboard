@@ -1263,7 +1263,8 @@ def render_chart(
     """Render an ApexCharts-compatible time-series chart using pure PIL."""
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    w = widget.get("w", config["width"] - x - PADDING)
+    w_raw = widget.get("w")
+    w = w_raw if w_raw else config["width"] - x - PADDING
     h = widget.get("h", 200)
 
     chart_config = widget.get("config", {})

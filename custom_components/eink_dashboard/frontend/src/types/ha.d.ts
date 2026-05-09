@@ -163,6 +163,16 @@ export interface WasteScheduleWidget extends WidgetBase {
   entities?: string[];
 }
 
+export interface ChartWidget extends WidgetBase {
+  type: "chart";
+  h?: number;
+  config?: {
+    graph_span?: string;
+    series?: Record<string, unknown>[];
+    yaxis?: Record<string, unknown>[];
+  };
+}
+
 export type Widget =
   | TextWidget
   | LineWidget
@@ -171,7 +181,8 @@ export type Widget =
   | SensorRowsWidget
   | DeviceBatteryWidget
   | StatusIconsWidget
-  | WasteScheduleWidget;
+  | WasteScheduleWidget
+  | ChartWidget;
 
 export interface WidgetTypeMeta {
   label: string;

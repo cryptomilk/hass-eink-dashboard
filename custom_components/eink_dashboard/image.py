@@ -318,7 +318,12 @@ class EinkDashboardImage(ImageEntity):
             if widget.get("type") != WidgetType.CHART:
                 continue
             chart_config = widget.get("config", {})
-            span = _parse_graph_span(chart_config.get("graph_span", "24h"))
+            raw_span = (
+                widget.get("graph_span")
+                or chart_config.get("graph_span")
+                or "24h"
+            )
+            span = _parse_graph_span(raw_span)
             for s in chart_config.get("series", []):
                 eid = s.get("entity")
                 if not eid:

@@ -57,6 +57,10 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
     label: "Waste Schedule",
     defaults: { type: "waste_schedule", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_WASTE_SCHEDULE },
   },
+  chart: {
+    label: "Chart",
+    defaults: { type: "chart", x: 24, y: 0, w: 0, h: 200, config: { graph_span: "24h", series: [], yaxis: [] } },
+  },
 };
 
 // ── ha-form schema builders ──────────────────────────────────────────────────
@@ -175,6 +179,16 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
     { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
+
+  chart: (d) => [
+    {
+      type: "grid", name: "", schema: [
+        ...posXYW(d),
+        { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
+      ],
+    },
+    { name: "graph_span", selector: { text: {} } },
+  ],
 };
 
 export const LABELS: Record<string, string> = {
@@ -189,6 +203,8 @@ export const LABELS: Record<string, string> = {
   align: "Align",
   width: "Line width",
   forecast_days: "Forecast days",
+  graph_span: "Graph span (e.g. 6h, 24h, 7d)",
+  h: "Height",
 };
 
 // ── HA component loader ──────────────────────────────────────────────────────
@@ -224,6 +240,11 @@ export function getSummary(widget: Widget): string {
     const title = widget.title ? `${widget.title} — ` : "";
     const count = (widget.entities || []).length;
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
+  }
+  if (t === "chart") {
+    const span = (widget.config as Record<string, unknown>)?.graph_span ?? "24h";
+    const n = ((widget.config as Record<string, unknown>)?.series as unknown[] ?? []).length;
+    return `${span} — ${n} series`;
   }
   if (t === "separator") return `y=${widget.y ?? 0}`;
   if (t === "line") {
