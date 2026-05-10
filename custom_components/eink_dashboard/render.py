@@ -1306,15 +1306,14 @@ def render_chart(
     ylabel = widget.get("ylabel", "")
     xlabel = widget.get("xlabel", "")
 
-    default_label_size = max(8, round(h * 0.08))
-    font_label = _load_font(widget.get("label_font_size", default_label_size))
-    font_title = _load_font(widget.get("title_font_size", round(default_label_size * 1.25)))
+    font_label = _load_font(widget.get("label_font_size", 18))
+    font_title = _load_font(widget.get("title_font_size", 22))
 
     _tmp_draw = ImageDraw.Draw(Image.new("L", (1, 1)))
     _lbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_label)
-    label_font_h = (_lbb[3] - _lbb[1]) + 6
+    label_font_h = _lbb[3] + 6
     _tbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_title)
-    title_font_h = (_tbb[3] - _tbb[1]) + 6
+    title_font_h = _tbb[3] + 6
     title_h = (title_font_h + 2) if title else 0
     left_margin = 44 + (label_font_h if ylabel else 0)
     right_margin = 40 if has_right else 6
@@ -1442,8 +1441,7 @@ def render_chart(
         if img is not None:
             bbox = draw.textbbox((0, 0), ylabel, font=font_label)
             tw = bbox[2] - bbox[0]
-            th = bbox[3] - bbox[1]
-            tmp = Image.new("L", (tw + 4, th + 4), COLOR_WHITE)
+            tmp = Image.new("L", (tw + 4, bbox[3] + 4), COLOR_WHITE)
             ImageDraw.Draw(tmp).text((2, 2), ylabel, fill=COLOR_BLACK, font=font_label)
             rotated = tmp.rotate(90, expand=True)
             label_y = py1 + (plot_h - rotated.height) // 2

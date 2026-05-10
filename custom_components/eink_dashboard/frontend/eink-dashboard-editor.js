@@ -159,14 +159,14 @@ export const SCHEMAS = {
         },
         { type: "grid", name: "", schema: [
                 { name: "title", selector: { text: {} } },
-                { name: "title_font_size", default: 28, selector: { number: { min: 8, max: 72, mode: "box" } } },
+                { name: "title_font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
             ] },
         { name: "graph_span", selector: { text: {} } },
         { type: "grid", name: "", schema: [
                 { name: "ylabel", selector: { text: {} } },
                 { name: "xlabel", selector: { text: {} } },
             ] },
-        { name: "label_font_size", default: 22, selector: { number: { min: 8, max: 48, mode: "box" } } },
+        { name: "label_font_size", default: 18, selector: { number: { min: 8, max: 48, mode: "box" } } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
 };
