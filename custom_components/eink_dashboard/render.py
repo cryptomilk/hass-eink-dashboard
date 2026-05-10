@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import math
 import io
 import logging
 from collections.abc import Callable
@@ -1241,6 +1242,59 @@ def render_waste_schedule(
         y += row_height
 
 
+def _draw_polyline_dashed(
+    draw: ImageDraw.ImageDraw,
+    points: list[tuple[int, int]],
+    color: int,
+    width: int,
+    dash: tuple[int, int] | None,
+) -> None:
+    """Draw a polyline with an optional dash pattern, maintaining dash state across segments."""
+    if len(points) < 2:
+        return
+    if dash is None:
+        draw.line(points, fill=color, width=width)
+        return
+    on_px, off_px = dash
+    drawing = True
+    remaining = float(on_px)
+    for i in range(len(points) - 1):
+        x1, y1 = points[i]
+        x2, y2 = points[i + 1]
+        dx, dy = x2 - x1, y2 - y1
+        seg = (dx * dx + dy * dy) ** 0.5
+        if seg < 0.1:
+            continue
+        pos = 0.0
+        while pos < seg:
+            step = min(remaining, seg - pos)
+            if drawing:
+                t0, t1 = pos / seg, (pos + step) / seg
+                draw.line(
+                    [
+                        (round(x1 + dx * t0), round(y1 + dy * t0)),
+                        (round(x1 + dx * t1), round(y1 + dy * t1)),
+                    ],
+                    fill=color,
+                    width=width,
+                )
+            pos += step
+            remaining -= step
+            if remaining <= 0.0:
+                drawing = not drawing
+                remaining = float(on_px if drawing else off_px)
+
+
+# (line_width, dash_pattern)
+_SERIES_STYLES: list[tuple[int, tuple[int, int] | None]] = [
+    (2, None),          # solid
+    (2, (10, 5)),       # dashed
+    (1, (3, 4)),        # dotted
+    (2, (14, 4, 3, 4)), # dash-dot — falls back to long-dash
+    (1, None),          # thin solid
+]
+
+
 def _hex_to_gray_float(hex_color: str) -> float:
     """Convert a hex color to a matplotlib grayscale float (0.0=black, 1.0=white)."""
     hex_color = hex_color.lstrip("#")
@@ -1307,17 +1361,26 @@ def render_chart(
     xlabel = widget.get("xlabel", "")
 
     font_label = _load_font(widget.get("label_font_size", 18))
-    font_title = _load_font(widget.get("title_font_size", 22))
+    font_title = _load_font(widget.get("title_font_size", 18))
 
     _tmp_draw = ImageDraw.Draw(Image.new("L", (1, 1)))
     _lbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_label)
     label_font_h = _lbb[3] + 6
     _tbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_title)
     title_font_h = _tbb[3] + 6
-    title_h = (title_font_h + 2) if title else 0
+    legend = widget.get("legend", "none")
+    show_legend = legend != "none"
+    legend_position = legend
+
+    _smbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_sm)
+    legend_row_h = _smbb[3] + 4
+    legend_rows = max(1, math.ceil(len(visible) / max(1, (config["width"] // 120))))
+    legend_h = (legend_row_h * legend_rows + 4) if show_legend else 0
+
+    title_h = (title_font_h + 2 if title else 0) + (legend_h if legend_position == "top" else 0)
     left_margin = 44 + (label_font_h if ylabel else 0)
     right_margin = 40 if has_right else 6
-    bottom_margin = 20 + (label_font_h if xlabel else 0)
+    bottom_margin = 20 + (label_font_h if xlabel else 0) + (legend_h if legend_position == "bottom" and show_legend else 0)
 
     px1 = x + left_margin
     py1 = y + 4 + title_h
@@ -1331,8 +1394,11 @@ def render_chart(
 
     draw.rectangle([px1, py1, px2, py2], outline=COLOR_LIGHT_GRAY, width=1)
 
+    # Titel + legenda bovenaan
+    legend_y = y + 2
     if title:
-        draw.text((px1, y + 2), title, fill=COLOR_BLACK, font=font_title)
+        draw.text((px1, legend_y), title, fill=COLOR_BLACK, font=font_title)
+        legend_y += title_font_h
 
     def _axis_scale(is_right: bool) -> tuple[float, float] | None:
         side = [s for s in visible if (s.get("yaxis_id", "") in right_ids) == is_right]
@@ -1380,33 +1446,115 @@ def render_chart(
         frac = (v - lo) / (hi - lo) if hi != lo else 0.0
         return round(py2 - frac * plot_h)
 
+    def _nice_ticks(lo: float, hi: float, max_ticks: int = 6) -> list[float]:
+        if hi <= lo:
+            return [lo]
+        span = hi - lo
+        rough_step = span / (max_ticks - 1)
+        magnitude = 10 ** math.floor(math.log10(rough_step))
+        step = magnitude
+        for factor in (1, 2, 5, 10):
+            step = magnitude * factor
+            if step >= rough_step:
+                break
+        start = math.ceil(lo / step) * step
+        ticks: list[float] = []
+        v = start
+        while v <= hi + step * 0.001:
+            ticks.append(round(v, 10))
+            v += step
+        return ticks
+
     def _draw_yaxis(scale: tuple[float, float], is_right: bool) -> None:
         lo, hi = scale
-        for i in range(3):
-            frac = i / 2
+        ticks = _nice_ticks(lo, hi)
+        prev_py: int | None = None
+        for v in ticks:
+            if v < lo - (hi - lo) * 0.01 or v > hi + (hi - lo) * 0.01:
+                continue
+            frac = (v - lo) / (hi - lo) if hi != lo else 0.0
             py = round(py2 - frac * plot_h)
-            v = lo + frac * (hi - lo)
-            label = f"{v:.0f}"
+            decimals = 0 if step >= 1 else max(0, -math.floor(math.log10(step)))
+            label = f"{v:.{decimals}f}"
             bbox = draw.textbbox((0, 0), label, font=font_sm)
             tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+            if prev_py is not None and abs(py - prev_py) < th + 2:
+                continue
+            prev_py = py
             if not is_right:
                 draw.line([(px1, py), (px2, py)], fill=COLOR_LIGHT_GRAY, width=1)
                 draw.text((px1 - tw - 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
             else:
                 draw.text((px2 + 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
 
+    step = 1.0
     if left_scale is not None:
+        ticks_left = _nice_ticks(left_scale[0], left_scale[1])
+        if len(ticks_left) >= 2:
+            step = ticks_left[1] - ticks_left[0]
         _draw_yaxis(left_scale, False)
     if right_scale is not None:
         _draw_yaxis(right_scale, True)
 
-    start_label = datetime.fromtimestamp(t_start).strftime("%H:%M")
-    end_label = datetime.fromtimestamp(t_end).strftime("%H:%M")
-    draw.text((px1, py2 + 3), start_label, fill=COLOR_GRAY, font=font_sm)
-    bbox = draw.textbbox((0, 0), end_label, font=font_sm)
-    draw.text((px2 - (bbox[2] - bbox[0]), py2 + 3), end_label, fill=COLOR_GRAY, font=font_sm)
+    span_hours = (t_end - t_start) / 3600.0
+    for divisor in (1, 2, 3, 4, 6, 12, 24):
+        if span_hours / divisor <= 6:
+            hour_step = divisor
+            break
+    else:
+        hour_step = 24
 
-    for s in visible:
+    import math as _math
+    first_hour = _math.ceil(t_start / 3600) * 3600
+    x_ticks = [first_hour + i * hour_step * 3600
+               for i in range(int(span_hours / hour_step) + 2)
+               if t_start <= first_hour + i * hour_step * 3600 <= t_end]
+
+    bbox_ex = draw.textbbox((0, 0), "00:00", font=font_sm)
+    label_w = bbox_ex[2] - bbox_ex[0]
+    prev_tx: int | None = None
+
+    for ts in x_ticks:
+        tx = round(px1 + (ts - t_start) / (t_end - t_start) * plot_w)
+        if tx < px1 + label_w or tx > px2 - label_w:
+            continue
+        if prev_tx is not None and tx - prev_tx < label_w + 8:
+            continue
+        prev_tx = tx
+        lbl = datetime.fromtimestamp(ts).strftime("%H:%M")
+        bbox_l = draw.textbbox((0, 0), lbl, font=font_sm)
+        lw = bbox_l[2] - bbox_l[0]
+        draw.text((tx - lw // 2, py2 + 3), lbl, fill=COLOR_GRAY, font=font_sm)
+        draw.line([(tx, py2), (tx, py2 + 3)], fill=COLOR_LIGHT_GRAY, width=1)
+
+    # Legenda tekenen
+    if show_legend:
+        if legend_position == "bottom":
+            leg_y = py2 + bottom_margin - legend_h + 2
+        else:
+            leg_y = legend_y
+        leg_x = px1
+        states = config.get("states", {})
+        for idx, s in enumerate(visible):
+            lw_style, dash_style = _SERIES_STYLES[idx % len(_SERIES_STYLES)][:2]
+            entity_id = s.get("entity", "")
+            name = s.get("name") or states.get(entity_id, {}).get(
+                "attributes", {}
+            ).get("friendly_name", entity_id)
+            bbox_n = draw.textbbox((0, 0), name, font=font_sm)
+            item_w = 24 + 4 + (bbox_n[2] - bbox_n[0]) + 8
+            if leg_x + item_w > px2 and leg_x > px1:
+                leg_x = px1
+                leg_y += (bbox_n[3] - bbox_n[1]) + 4
+            mid_y = leg_y + (bbox_n[3] - bbox_n[1]) // 2
+            _draw_polyline_dashed(
+                draw, [(leg_x, mid_y), (leg_x + 24, mid_y)],
+                COLOR_BLACK, lw_style, dash_style,
+            )
+            draw.text((leg_x + 28, leg_y), name, fill=COLOR_BLACK, font=font_sm)
+            leg_x += item_w
+
+    for idx, s in enumerate(visible):
         entity_id = s.get("entity", "")
         is_right = s.get("yaxis_id", "") in right_ids
         scale = right_scale if is_right else left_scale
@@ -1415,8 +1563,7 @@ def render_chart(
         data = [p for p in histories.get(entity_id, []) if p.get("v") is not None]
         if len(data) < 2:
             continue
-        pil_color = round(_hex_to_gray_float(s.get("color", "#000000")) * 255)
-        lw = max(1, min(round(s.get("stroke_width", 2)), 4))
+        lw_style, dash_style = _SERIES_STYLES[idx % len(_SERIES_STYLES)][:2]
         points_px = [
             (
                 max(px1, min(px2, _tx(p["t"]))),
@@ -1424,7 +1571,7 @@ def render_chart(
             )
             for p in data
         ]
-        draw.line(points_px, fill=pil_color, width=lw)
+        _draw_polyline_dashed(draw, points_px, COLOR_BLACK, lw_style, dash_style)
 
     if xlabel:
         bbox = draw.textbbox((0, 0), xlabel, font=font_label)

@@ -153,22 +153,30 @@ class EinkDashboardImage(ImageEntity):
     def _resolve_templates(  # must be called from the event loop
         self, widgets: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Render Jinja2 templates in TEXT widget text fields."""
+        """Render Jinja2 templates in widget text fields."""
         resolved = []
         for widget in widgets:
-            if widget.get("type") == WidgetType.TEXT and "text" in widget:
-                tpl = Template(widget["text"], self.hass)
+            widget_type = widget.get("type")
+            fields = []
+            if widget_type == WidgetType.TEXT:
+                fields = ["text"]
+            elif widget_type == WidgetType.CHART:
+                fields = ["title", "xlabel", "ylabel"]
+            for field in fields:
+                if field not in widget:
+                    continue
+                tpl = Template(widget[field], self.hass)
                 if not tpl.is_static:
                     try:
                         rendered = tpl.async_render(parse_result=False)
                     except TemplateError as err:
                         _LOGGER.warning(
                             "Failed to render template %r: %s",
-                            widget["text"],
+                            widget[field],
                             err,
                         )
-                        rendered = widget["text"]
-                    widget = {**widget, "text": str(rendered)}
+                        rendered = widget[field]
+                    widget = {**widget, field: str(rendered)}
             resolved.append(widget)
         return resolved
 

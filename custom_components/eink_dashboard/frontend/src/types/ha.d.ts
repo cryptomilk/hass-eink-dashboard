@@ -60,6 +60,8 @@ export interface CustomCardInfo {
 export interface DisplayConfig {
   width: number;
   height: number;
+  grayscale_levels?: number;
+  optimize?: boolean;
 }
 
 export interface DeviceInfo {
@@ -170,6 +172,7 @@ export interface ChartWidget extends WidgetBase {
   title_font_size?: number;
   label_font_size?: number;
   entities?: string[];
+  legend?: string;
   xlabel?: string;
   ylabel?: string;
   config?: {

@@ -8,7 +8,9 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
 from .const import (
+    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_OPTIMIZE,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
@@ -51,7 +53,14 @@ class EinkLayoutView(HomeAssistantView):
         return web.json_response(
             {
                 "widgets": widgets,
-                "display": {"width": width, "height": height},
+                "display": {
+                    "width": width,
+                    "height": height,
+                    "grayscale_levels": entry.options.get(
+                        "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+                    ),
+                    "optimize": entry.options.get("optimize", DEFAULT_OPTIMIZE),
+                },
                 "device": {
                     "name": entry.title,
                     "model": device_model,

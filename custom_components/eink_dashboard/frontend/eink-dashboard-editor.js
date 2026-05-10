@@ -151,23 +151,31 @@ export const SCHEMAS = {
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     chart: (d) => [
+        { name: "entities", selector: { entity: { multiple: true } } },
+        { name: "graph_span", selector: { text: {} } },
+        { type: "grid", name: "", schema: [
+                { name: "title", selector: { text: {} } },
+                { name: "title_font_size", default: 18, selector: { number: { min: 8, max: 72, mode: "box" } } },
+            ] },
+        { type: "grid", name: "", schema: [
+                { name: "ylabel", selector: { text: {} } },
+                { name: "xlabel", selector: { text: {} } },
+            ] },
+        { name: "label_font_size", default: 18, selector: { number: { min: 8, max: 48, mode: "box" } } },
+        { name: "legend", default: "none", selector: { select: {
+                    options: [
+                        { value: "none", label: "None" },
+                        { value: "top", label: "Top" },
+                        { value: "bottom", label: "Bottom" },
+                    ],
+                    mode: "dropdown",
+                } } },
         {
             type: "grid", name: "", schema: [
                 ...posXYW(d),
                 { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
             ],
         },
-        { type: "grid", name: "", schema: [
-                { name: "title", selector: { text: {} } },
-                { name: "title_font_size", default: 22, selector: { number: { min: 8, max: 72, mode: "box" } } },
-            ] },
-        { name: "graph_span", selector: { text: {} } },
-        { type: "grid", name: "", schema: [
-                { name: "ylabel", selector: { text: {} } },
-                { name: "xlabel", selector: { text: {} } },
-            ] },
-        { name: "label_font_size", default: 18, selector: { number: { min: 8, max: 48, mode: "box" } } },
-        { name: "entities", selector: { entity: { multiple: true } } },
     ],
 };
 export const LABELS = {
@@ -186,8 +194,9 @@ export const LABELS = {
     h: "Height",
     ylabel: "Y-axis label",
     xlabel: "X-axis label",
+    legend: "Legend",
     title_font_size: "Title font size",
-    label_font_size: "Label font size",
+    label_font_size: "Axis label font size",
 };
 export async function loadHaComponents() {
     if (!customElements.get("ha-form")) {

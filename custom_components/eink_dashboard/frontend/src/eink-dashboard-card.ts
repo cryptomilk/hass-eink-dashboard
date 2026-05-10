@@ -949,6 +949,47 @@ class EinkDashboardCard extends HTMLElement {
         ctx.restore();
       }
     }
+
+    const { grayscale_levels, optimize } = this._layout.display;
+    if (optimize && grayscale_levels !== undefined && grayscale_levels <= 2) {
+      this._applyDithering(ctx, width, height);
+    }
+  }
+
+  private _applyDithering(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+  ): void {
+    const imageData = ctx.getImageData(0, 0, w, h);
+    const d = imageData.data;
+    const buf = new Float32Array(w * h);
+
+    for (let i = 0; i < w * h; i++) {
+      buf[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+    }
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const old = buf[i];
+        const nw = old < 128 ? 0 : 255;
+        const err = old - nw;
+        buf[i] = nw;
+        if (x + 1 < w)           buf[i + 1]     += err * 7 / 16;
+        if (y + 1 < h) {
+          if (x > 0)              buf[i + w - 1] += err * 3 / 16;
+                                  buf[i + w]     += err * 5 / 16;
+          if (x + 1 < w)         buf[i + w + 1] += err * 1 / 16;
+        }
+      }
+    }
+
+    for (let i = 0; i < w * h; i++) {
+      const v = Math.max(0, Math.min(255, Math.round(buf[i])));
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v;
+    }
+    ctx.putImageData(imageData, 0, 0);
   }
 
   // ── Server image toggle ───────────────────────────────────────────────────
