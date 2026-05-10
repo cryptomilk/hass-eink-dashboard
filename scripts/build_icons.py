@@ -136,16 +136,18 @@ MDI_SVG_DIR = (
     / "svg"
 )
 MDI_OUT_DIR = OUT_DIR / "mdi"
+WEATHER_OUT_DIR = OUT_DIR / "weather"
 
 
 def _convert_weather_icons() -> None:
     """Convert weather-icons SVGs to PNGs."""
+    WEATHER_OUT_DIR.mkdir(parents=True, exist_ok=True)
     all_icons = {**CONDITION_TO_SVG, **DETAIL_TO_SVG}
     converted = 0
     skipped = 0
     for name, svg_name in all_icons.items():
         svg_path = SVG_DIR / f"{svg_name}.svg"
-        png_path = OUT_DIR / f"{name}.png"
+        png_path = WEATHER_OUT_DIR / f"{name}.png"
 
         if not svg_path.exists():
             print(f"SKIP {svg_name}.svg (not found)")

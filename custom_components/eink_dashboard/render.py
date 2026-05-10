@@ -110,7 +110,7 @@ def _load_icon(
     size: int,
 ) -> tuple[Image.Image, Image.Image] | None:
     """Load and resize a PNG icon, returning (gray, mask) or None."""
-    path = _ICONS_DIR / f"{name}.png"
+    path = _ICONS_DIR / "weather" / f"{name}.png"
     if not path.exists():
         path = _ICONS_DIR / "mdi" / f"{name}.png"
     if not path.exists():
