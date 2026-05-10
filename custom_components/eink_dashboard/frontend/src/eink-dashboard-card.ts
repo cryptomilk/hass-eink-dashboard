@@ -892,10 +892,11 @@ class EinkDashboardCard extends HTMLElement {
         ctx.setLineDash([4, 3]);
         ctx.strokeRect(x, y, ww, h);
         ctx.setLineDash([]);
+        const chartTitle = cw.title ? `Chart: ${cw.title} (${span})` : `Chart (${span})`;
         ctx.fillStyle = "#000";
         ctx.font = `28px sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillText(`Chart (${span})`, x + ww / 2, y + h / 2);
+        ctx.fillText(chartTitle, x + ww / 2, y + h / 2);
         ctx.restore();
         return { x, y, w: ww, h };
       },

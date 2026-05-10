@@ -1302,13 +1302,26 @@ def render_chart(
 
     has_right = bool(right_ids)
     font_sm = _load_font(max(8, round(h * 0.08)))
+    title = widget.get("title", "")
+    ylabel = widget.get("ylabel", "")
+    xlabel = widget.get("xlabel", "")
 
-    left_margin = 44
+    default_label_size = max(8, round(h * 0.08))
+    font_label = _load_font(widget.get("label_font_size", default_label_size))
+    font_title = _load_font(widget.get("title_font_size", round(default_label_size * 1.25)))
+
+    _tmp_draw = ImageDraw.Draw(Image.new("L", (1, 1)))
+    _lbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_label)
+    label_font_h = (_lbb[3] - _lbb[1]) + 6
+    _tbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_title)
+    title_font_h = (_tbb[3] - _tbb[1]) + 6
+    title_h = (title_font_h + 2) if title else 0
+    left_margin = 44 + (label_font_h if ylabel else 0)
     right_margin = 40 if has_right else 6
-    bottom_margin = 20
+    bottom_margin = 20 + (label_font_h if xlabel else 0)
 
     px1 = x + left_margin
-    py1 = y + 4
+    py1 = y + 4 + title_h
     px2 = x + w - right_margin
     py2 = y + h - bottom_margin
     plot_w = px2 - px1
@@ -1318,6 +1331,9 @@ def render_chart(
         return
 
     draw.rectangle([px1, py1, px2, py2], outline=COLOR_LIGHT_GRAY, width=1)
+
+    if title:
+        draw.text((px1, y + 2), title, fill=COLOR_BLACK, font=font_title)
 
     def _axis_scale(is_right: bool) -> tuple[float, float] | None:
         side = [s for s in visible if (s.get("yaxis_id", "") in right_ids) == is_right]
@@ -1410,6 +1426,28 @@ def render_chart(
             for p in data
         ]
         draw.line(points_px, fill=pil_color, width=lw)
+
+    if xlabel:
+        bbox = draw.textbbox((0, 0), xlabel, font=font_label)
+        tw = bbox[2] - bbox[0]
+        draw.text(
+            (px1 + (plot_w - tw) // 2, py2 + round(bottom_margin * 0.45)),
+            xlabel,
+            fill=COLOR_BLACK,
+            font=font_label,
+        )
+
+    if ylabel:
+        img = config.get("_image")
+        if img is not None:
+            bbox = draw.textbbox((0, 0), ylabel, font=font_label)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+            tmp = Image.new("L", (tw + 4, th + 4), COLOR_WHITE)
+            ImageDraw.Draw(tmp).text((2, 2), ylabel, fill=COLOR_BLACK, font=font_label)
+            rotated = tmp.rotate(90, expand=True)
+            label_y = py1 + (plot_h - rotated.height) // 2
+            img.paste(rotated, (x, label_y))
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
