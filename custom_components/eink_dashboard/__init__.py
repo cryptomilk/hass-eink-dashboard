@@ -60,6 +60,7 @@ async def _async_update_listener(
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
 _FONTS_DIR = Path(__file__).parent / "fonts"
+_ICONS_DIR = Path(__file__).parent / "icons"
 _MANIFEST = json.loads(
     (Path(__file__).parent / "manifest.json").read_text(encoding="utf-8")
 )
@@ -83,6 +84,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             StaticPathConfig(
                 "/eink_dashboard/fonts",
                 str(_FONTS_DIR),
+                True,
+            ),
+            StaticPathConfig(
+                "/eink_dashboard/icons",
+                str(_ICONS_DIR),
                 True,
             ),
         ]

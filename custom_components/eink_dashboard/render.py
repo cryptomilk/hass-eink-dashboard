@@ -104,15 +104,38 @@ _DETAIL_ICONS: frozenset[str] = frozenset(
 )
 
 
-@functools.cache
+@functools.lru_cache(maxsize=256)
 def _load_icon(
     name: str,
     size: int,
 ) -> tuple[Image.Image, Image.Image] | None:
-    """Load and resize a PNG icon, returning (gray, mask) or None."""
-    path = _ICONS_DIR / "weather" / f"{name}.png"
-    if not path.exists():
-        path = _ICONS_DIR / "mdi" / f"{name}.png"
+    """Load and resize a PNG icon, returning (gray, mask) or None.
+
+    Names with a colon prefix (e.g. ``"mdi:thermometer"``) resolve
+    directly to ``icons/{prefix}/{bare}.png`` with no fallback.  Bare
+    names (no colon) try ``icons/weather/`` first (backward
+    compatibility for weather-widget callers), then ``icons/mdi/``.
+
+    Args:
+        name: Icon name, optionally prefixed (e.g. ``"mdi:thermometer"``
+            or bare ``"sunny"``).
+        size: Desired square output size in pixels.
+
+    Returns:
+        ``(gray, mask)`` tuple of mode-"L" images, or ``None`` when the
+        icon file cannot be found.
+    """
+    if ":" in name:
+        # Prefixed name: route directly to the named subdirectory.
+        prefix, bare = name.split(":", 1)
+        if not bare:
+            _LOGGER.debug("_load_icon: %r has empty name after prefix", name)
+            return None
+        path = _ICONS_DIR / prefix / f"{bare}.png"
+    else:
+        path = _ICONS_DIR / "weather" / f"{name}.png"
+        if not path.exists():
+            path = _ICONS_DIR / "mdi" / f"{name}.png"
     if not path.exists():
         _LOGGER.debug("_load_icon: %r not found, skipping", name)
         return None
@@ -201,11 +224,11 @@ def _device_class_icon(
 
     For binary sensor entities (``domain == "binary_sensor"``), looks
     up the device_class in the binary sensor mapping and returns the
-    state-appropriate icon from the (off_icon, on_icon) pair.  For
-    all other domains, returns the single icon mapped to the
-    device_class in the sensor mapping.  If the device_class is not
-    in the binary map, the function falls through to the sensor map
-    regardless of domain.
+    state-appropriate icon from the (off_icon, on_icon) pair.  If the
+    device_class is not in the binary map, returns ``None`` (callers
+    fall back to the first-letter label).  For all other domains,
+    returns the single icon mapped to the device_class in the sensor
+    mapping.
 
     Args:
         attrs: Entity attributes dict, expected to contain
@@ -224,6 +247,7 @@ def _device_class_icon(
         pair = _BINARY_SENSOR_DEVICE_CLASS_ICONS.get(dc)
         if pair is not None:
             return pair[1] if state == "on" else pair[0]
+        return None
     return _SENSOR_DEVICE_CLASS_ICONS.get(dc)
 
 
@@ -312,8 +336,9 @@ def _draw_card_container(
 
     Returns:
         Horizontal pixel offset from ``x`` where content should start.
-        Positive for ``"border"`` and ``"left_bar"``; zero for
-        ``"none"``.
+        Add this to ``x`` to get the absolute content x-coordinate.
+        ``"border"`` returns ``m.padding``; ``"left_bar"`` returns
+        ``bar_w + m.padding``; ``"none"`` returns ``0``.
     """
     if card_style == "border":
         draw.rounded_rectangle(
@@ -461,6 +486,14 @@ def _draw_card_row(
         )
 
 
+# Proportional sizing constants for pill-shaped chips.  All three
+# functions (_chip_width, _draw_chip, _draw_chip_flow) must use the
+# same values so width measurement and drawing stay in sync.
+_CHIP_PAD_RATIO: float = 0.18
+_CHIP_ICON_RATIO: float = 0.29
+_CHIP_GAP_RATIO: float = 0.14
+
+
 def _chip_width(
     draw: ImageDraw.ImageDraw,
     h: int,
@@ -486,9 +519,9 @@ def _chip_width(
     """
     bbox = draw.textbbox((0, 0), text, font=font)
     text_w = int(bbox[2] - bbox[0])
-    pad_h = round(h * 0.18)
-    icon_sz = round(h * 0.29) if has_icon else 0
-    icon_gap = round(h * 0.14) if has_icon else 0
+    pad_h = round(h * _CHIP_PAD_RATIO)
+    icon_sz = round(h * _CHIP_ICON_RATIO) if has_icon else 0
+    icon_gap = round(h * _CHIP_GAP_RATIO) if has_icon else 0
     return pad_h * 2 + text_w + icon_sz + icon_gap
 
 
@@ -534,9 +567,9 @@ def _draw_chip(
         (``x + chip_w``), suitable for placing the next chip.
     """
     chip_w = _chip_width(draw, h, text, font, has_icon=icon is not None)
-    pad_h = round(h * 0.18)
-    icon_sz = round(h * 0.29)
-    icon_gap = round(h * 0.14)
+    pad_h = round(h * _CHIP_PAD_RATIO)
+    icon_sz = round(h * _CHIP_ICON_RATIO)
+    icon_gap = round(h * _CHIP_GAP_RATIO)
     radius = h // 2
 
     bg = COLOR_BLACK if inverted else COLOR_WHITE
@@ -601,7 +634,8 @@ def _draw_chip_flow(
         h: Height of each chip row in pixels.
         chips: Sequence of chip descriptors.  Each dict may contain:
             ``text`` (str, required), ``icon`` (``(gray, mask)`` tuple,
-            optional), ``inverted`` (bool, optional, default False).
+            optional — both an absent key and an explicit ``None`` value
+            mean no icon), ``inverted`` (bool, optional, default False).
         font: Font used for text measurement and rendering.
         border: Outline stroke width forwarded to ``_draw_chip``.
 
@@ -613,7 +647,7 @@ def _draw_chip_flow(
         # Nothing drawn: don't advance y.
         return y
     # Chip-to-chip gap — same ratio as icon_sz by coincidence.
-    gap = round(h * 0.29)
+    gap = round(h * _CHIP_ICON_RATIO)
     cur_x = x
     cur_y = y
     for chip in chips:

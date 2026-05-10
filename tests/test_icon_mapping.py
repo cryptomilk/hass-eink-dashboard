@@ -299,12 +299,12 @@ class TestDeviceClassIcon:
 class TestLoadIconMdi:
     """Integration tests: _load_icon resolves MDI icon PNGs."""
 
-    def test_load_mdi_icon_returns_gray_mask_tuple(
+    def test_bare_name_falls_through_to_mdi_subdir(
         self, tmp_path: Path
     ) -> None:
-        # Verifies that after the allowlist removal, _load_icon
-        # finds icons in the mdi/ subdirectory and returns a
-        # valid (gray, mask) tuple resized to the requested size.
+        # Verifies that a bare icon name (no prefix) without a match
+        # in weather/ falls through to mdi/ and returns a valid
+        # (gray, mask) tuple resized to the requested size.
         mdi_dir = tmp_path / "mdi"
         mdi_dir.mkdir()
         icon = Image.new("RGBA", (64, 64), (128, 128, 128, 200))
@@ -340,3 +340,82 @@ class TestLoadIconMdi:
             finally:
                 _load_icon.cache_clear()
         assert result is None
+
+    def test_load_mdi_prefix_resolves_to_mdi_subdir(
+        self, tmp_path: Path
+    ) -> None:
+        # "mdi:thermometer" must resolve to mdi/thermometer.png and
+        # return a valid (gray, mask) tuple at the requested size.
+        mdi_dir = tmp_path / "mdi"
+        mdi_dir.mkdir()
+        icon = Image.new("RGBA", (64, 64), (128, 128, 128, 200))
+        icon.save(mdi_dir / "thermometer.png")
+        with patch(
+            "custom_components.eink_dashboard.render._ICONS_DIR",
+            tmp_path,
+        ):
+            _load_icon.cache_clear()
+            try:
+                result = _load_icon("mdi:thermometer", 36)
+            finally:
+                _load_icon.cache_clear()
+        assert result is not None, (
+            "_load_icon returned None for mdi:thermometer"
+        )
+        gray, mask = result
+        assert gray.mode == "L"
+        assert mask.mode == "L"
+        assert gray.size == (36, 36)
+        assert mask.size == (36, 36)
+
+    def test_mdi_prefix_does_not_fall_through_to_weather(
+        self, tmp_path: Path
+    ) -> None:
+        # "mdi:sunny" must return None when the icon exists only in
+        # weather/, proving the prefix prevents cross-namespace lookup.
+        weather_dir = tmp_path / "weather"
+        weather_dir.mkdir()
+        icon = Image.new("RGBA", (64, 64), (128, 128, 128, 200))
+        icon.save(weather_dir / "sunny.png")
+        with patch(
+            "custom_components.eink_dashboard.render._ICONS_DIR",
+            tmp_path,
+        ):
+            _load_icon.cache_clear()
+            try:
+                result = _load_icon("mdi:sunny", 36)
+            finally:
+                _load_icon.cache_clear()
+        assert result is None, (
+            "mdi: prefix should not fall through to weather/"
+        )
+
+    def test_bare_name_still_resolves_weather_first(
+        self, tmp_path: Path
+    ) -> None:
+        # Bare names without a prefix must prefer weather/ over mdi/
+        # for backward compatibility with the weather widget.
+        weather_dir = tmp_path / "weather"
+        weather_dir.mkdir()
+        mdi_dir = tmp_path / "mdi"
+        mdi_dir.mkdir()
+        # White pixel in weather/ version, black in mdi/ — if
+        # mdi/ were loaded, the assertion below would fail.
+        Image.new("RGBA", (1, 1), (255, 255, 255, 255)).save(
+            weather_dir / "humidity.png"
+        )
+        Image.new("RGBA", (1, 1), (0, 0, 0, 255)).save(
+            mdi_dir / "humidity.png"
+        )
+        with patch(
+            "custom_components.eink_dashboard.render._ICONS_DIR",
+            tmp_path,
+        ):
+            _load_icon.cache_clear()
+            try:
+                result = _load_icon("humidity", 1)
+            finally:
+                _load_icon.cache_clear()
+        assert result is not None
+        gray, _ = result
+        assert gray.getpixel((0, 0)) == 255
