@@ -124,6 +124,109 @@ def _load_icon(
     return (gray, mask)
 
 
+_SENSOR_DEVICE_CLASS_ICONS: dict[str, str] = {
+    "temperature": "thermometer",
+    "humidity": "water-percent",
+    "pressure": "gauge",
+    "battery": "battery",
+    "power": "flash",
+    "energy": "lightning-bolt",
+    "gas": "fire",
+    "illuminance": "brightness-5",
+    "moisture": "water-alert",
+    "apparent_power": "flash-auto",
+    "aqi": "air-filter",
+    "carbon_dioxide": "molecule-co2",
+    "carbon_monoxide": "molecule-co",
+    "current": "current-ac",
+    "data_size": "database",
+    "distance": "ruler",
+    "duration": "timer-outline",
+    "frequency": "sine-wave",
+    "irradiance": "sun-wireless",
+    "monetary": "currency-usd",
+    "nitrogen_dioxide": "smog",
+    "ozone": "weather-dust",
+    "ph": "ph",
+    "pm25": "blur",
+    "signal_strength": "signal",
+    "speed": "speedometer",
+    "voltage": "flash",
+    "volume": "cup-water",
+    "water": "water",
+    "weight": "weight",
+    "wind_speed": "weather-windy",
+}
+
+# (off_icon, on_icon) — index 0 = normal/closed, index 1 = active/open
+_BINARY_SENSOR_DEVICE_CLASS_ICONS: dict[str, tuple[str, str]] = {
+    "door": ("door-closed", "door-open"),
+    "window": (
+        "window-closed-variant",
+        "window-open-variant",
+    ),
+    "garage_door": ("garage", "garage-open"),
+    "lock": ("lock", "lock-open"),
+    "motion": ("motion-sensor-off", "motion-sensor"),
+    "smoke": (
+        "smoke-detector-variant",
+        "smoke-detector-variant-alert",
+    ),
+    "battery": ("battery", "battery-alert"),
+    "battery_charging": ("battery-charging", "battery-charging"),
+    "cold": ("thermometer", "snowflake"),
+    "connectivity": ("wifi-off", "wifi"),
+    "heat": ("thermometer", "fire-alert"),
+    "light": ("brightness-5", "brightness-7"),
+    "occupancy": ("home-outline", "home-account"),
+    "opening": ("square-outline", "square"),
+    "plug": ("power-plug-off", "power-plug"),
+    "presence": ("account-outline", "account"),
+    "problem": ("check-circle", "alert-circle"),
+    "running": ("stop-circle", "play-circle"),
+    "safety": ("shield-check", "shield-alert"),
+    "sound": ("volume-off", "volume-high"),
+    "tamper": ("shield-check", "shield-alert"),
+    "update": ("package", "package-up"),
+    "vibration": ("crop-portrait", "vibrate"),
+}
+
+
+def _device_class_icon(
+    attrs: dict[str, Any],
+    state: str,
+    domain: str = "",
+) -> str | None:
+    """Resolve an MDI icon name from device_class, state, and domain.
+
+    For binary sensor entities (``domain == "binary_sensor"``), looks
+    up the device_class in the binary sensor mapping and returns the
+    state-appropriate icon from the (off_icon, on_icon) pair.  For
+    all other domains, returns the single icon mapped to the
+    device_class in the sensor mapping.  If the device_class is not
+    in the binary map, the function falls through to the sensor map
+    regardless of domain.
+
+    Args:
+        attrs: Entity attributes dict, expected to contain
+            "device_class".
+        state: Entity state string (e.g. "on", "off", "22.1").
+        domain: HA entity domain (e.g. "binary_sensor", "sensor").
+            Only "binary_sensor" triggers the binary icon map;
+            all other values use the sensor map.
+
+    Returns:
+        MDI icon name without the "mdi:" prefix (e.g. "door-open",
+        "thermometer"), or None when no mapping exists.
+    """
+    dc = attrs.get("device_class", "")
+    if domain == "binary_sensor":
+        pair = _BINARY_SENSOR_DEVICE_CLASS_ICONS.get(dc)
+        if pair is not None:
+            return pair[1] if state == "on" else pair[0]
+    return _SENSOR_DEVICE_CLASS_ICONS.get(dc)
+
+
 @dataclass(frozen=True, slots=True)
 class WidgetMetrics:
     """Proportional layout dimensions derived from a widget's row height.
@@ -273,7 +376,8 @@ def _draw_card_row(
         icon: ``(gray, mask)`` tuple from ``_load_icon()``, or
             ``None`` for letter fallback (first letter of
             ``primary``).  Resized internally to 60 % of
-            ``m.icon_dia``; pass the raw original-size icon.
+            ``m.icon_dia``; load at ``m.icon_dia`` or larger
+            to avoid upscaling artifacts.
         icon_fill: Fill color for the icon circle background.
     """
     font_p = _load_font(m.font_primary, medium=True)
@@ -323,11 +427,12 @@ def _draw_card_row(
         s_bb = draw.textbbox((0, 0), secondary, font=font_s)
         p_h = p_bb[3] - p_bb[1]
         s_h = s_bb[3] - s_bb[1]
-        text_block_h = p_h + s_h
+        line_gap = 2
+        text_block_h = p_h + line_gap + s_h
         text_y = y + (row_h - text_block_h) // 2
         draw.text((text_x, text_y), primary, fill=COLOR_BLACK, font=font_p)
         draw.text(
-            (text_x, text_y + p_h),
+            (text_x, text_y + p_h + line_gap),
             secondary,
             fill=COLOR_GRAY,
             font=font_s,
