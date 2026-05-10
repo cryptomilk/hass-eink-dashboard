@@ -110,11 +110,11 @@ def _load_icon(
     size: int,
 ) -> tuple[Image.Image, Image.Image] | None:
     """Load and resize a PNG icon, returning (gray, mask) or None."""
-    if name not in _KNOWN_CONDITIONS and name not in _DETAIL_ICONS:
-        _LOGGER.debug("_load_icon: %r not in allowlist, skipping", name)
-        return None
     path = _ICONS_DIR / f"{name}.png"
     if not path.exists():
+        path = _ICONS_DIR / "mdi" / f"{name}.png"
+    if not path.exists():
+        _LOGGER.debug("_load_icon: %r not found, skipping", name)
         return None
     icon = Image.open(path).convert("RGBA")
     if icon.size != (size, size):
@@ -312,7 +312,8 @@ def _draw_card_container(
 
     Returns:
         Horizontal pixel offset from ``x`` where content should start.
-        Zero for ``"border"`` and ``"none"``; positive for ``"left_bar"``.
+        Positive for ``"border"`` and ``"left_bar"``; zero for
+        ``"none"``.
     """
     if card_style == "border":
         draw.rounded_rectangle(
@@ -321,7 +322,7 @@ def _draw_card_container(
             outline=COLOR_BLACK,
             width=m.border,
         )
-        return 0
+        return m.padding
     elif card_style == "left_bar":
         bar_w = m.left_bar
         # On 2-level displays (TRMNL), widen the bar so the dithered dot
@@ -427,7 +428,7 @@ def _draw_card_row(
         s_bb = draw.textbbox((0, 0), secondary, font=font_s)
         p_h = p_bb[3] - p_bb[1]
         s_h = s_bb[3] - s_bb[1]
-        line_gap = 2
+        line_gap = max(2, round(row_h * 0.04))
         text_block_h = p_h + line_gap + s_h
         text_y = y + (row_h - text_block_h) // 2
         draw.text((text_x, text_y), primary, fill=COLOR_BLACK, font=font_p)
@@ -458,6 +459,37 @@ def _draw_card_row(
             fill=COLOR_GRAY,
             font=font_s,
         )
+
+
+def _chip_width(
+    draw: ImageDraw.ImageDraw,
+    h: int,
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    has_icon: bool,
+) -> int:
+    """Compute the total pixel width of a pill-shaped chip.
+
+    Single source of truth for the chip width formula, shared by
+    ``_draw_chip`` (drawing) and ``_draw_chip_flow`` (wrapping).
+    All dimensions are proportional to ``h``.
+
+    Args:
+        draw: PIL ImageDraw context used for text measurement.
+        h: Chip height in pixels.
+        text: Label text inside the chip.
+        font: Font used for text measurement.
+        has_icon: Whether the chip includes a leading icon.
+
+    Returns:
+        Total chip width in pixels.
+    """
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = int(bbox[2] - bbox[0])
+    pad_h = round(h * 0.18)
+    icon_sz = round(h * 0.29) if has_icon else 0
+    icon_gap = round(h * 0.14) if has_icon else 0
+    return pad_h * 2 + text_w + icon_sz + icon_gap
 
 
 def _draw_chip(
@@ -501,16 +533,10 @@ def _draw_chip(
         The x coordinate immediately to the right of the chip
         (``x + chip_w``), suitable for placing the next chip.
     """
-    bbox = draw.textbbox((0, 0), text, font=font)
-    # int() narrows the PIL stub type (int | float) to int so that
-    # chip_w stays int and the return type matches.
-    text_w = int(bbox[2] - bbox[0])
+    chip_w = _chip_width(draw, h, text, font, has_icon=icon is not None)
     pad_h = round(h * 0.18)
     icon_sz = round(h * 0.29)
     icon_gap = round(h * 0.14)
-    chip_w = pad_h * 2 + text_w
-    if icon is not None:
-        chip_w += icon_sz + icon_gap
     radius = h // 2
 
     bg = COLOR_BLACK if inverted else COLOR_WHITE
@@ -541,6 +567,7 @@ def _draw_chip(
     # measured bounding box height (not the nominal font size, which
     # includes ascender/descender space that would shift the glyph
     # upward).
+    bbox = draw.textbbox((0, 0), text, font=font)
     text_h = bbox[3] - bbox[1]
     text_y = y + (h - text_h) // 2
     draw.text((cx, text_y), text, fill=fg, font=font)
@@ -583,21 +610,20 @@ def _draw_chip_flow(
         (``last_row_y + h``).
     """
     if not chips:
+        # Nothing drawn: don't advance y.
         return y
     # Chip-to-chip gap — same ratio as icon_sz by coincidence.
     gap = round(h * 0.29)
     cur_x = x
     cur_y = y
     for chip in chips:
-        # Measure chip width for wrapping — must stay in sync
-        # with _draw_chip()'s chip_w calculation.
-        bbox = draw.textbbox((0, 0), chip["text"], font=font)
-        text_w = bbox[2] - bbox[0]
-        pad_h = round(h * 0.18)
-        has_icon = chip.get("icon") is not None
-        icon_sz = round(h * 0.29) if has_icon else 0
-        icon_gap = round(h * 0.14) if has_icon else 0
-        chip_w = pad_h * 2 + text_w + icon_sz + icon_gap
+        chip_w = _chip_width(
+            draw,
+            h,
+            chip["text"],
+            font,
+            has_icon=chip.get("icon") is not None,
+        )
 
         # Wrap when the chip would overflow AND this is not the
         # first chip on the current line.  Note: cur_x includes

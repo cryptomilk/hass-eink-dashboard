@@ -1390,13 +1390,15 @@ class TestDrawCardContainer:
             self._Y + self._H - m.radius,
         )
 
-    def test_border_returns_zero_offset(self) -> None:
+    def test_border_returns_padding_offset(self) -> None:
+        # border style should offset content by m.padding, consistent
+        # with left_bar semantics (content clears the frame decoration).
         _, draw = self._blank()
         m = self._m()
         offset = _draw_card_container(
             draw, self._X, self._Y, self._W, self._H, m
         )
-        assert offset == 0
+        assert offset == m.padding
 
     def test_left_bar_draws_gray_on_left(self) -> None:
         img, draw = self._blank()
@@ -1815,6 +1817,10 @@ class TestDrawChip:
     def test_normal_mode_white_interior(self) -> None:
         img, draw = self._blank()
         font = self._font()
+        # Pre-measure text width to locate the white zone past
+        # the text column.
+        bbox = draw.textbbox((0, 0), "X", font=font)
+        text_w = bbox[2] - bbox[0]
         _draw_chip(
             draw, img, self._X, self._Y, self._H, "X", font, self._border()
         )
@@ -1822,9 +1828,6 @@ class TestDrawChip:
         # that avoids the text column should be white in normal mode.
         # Text "X" is narrow; check the right half of the chip interior.
         mid_y = self._Y + self._H // 2
-        # Right of text: measure text width to find a safe white zone.
-        bbox = draw.textbbox((0, 0), "X", font=font)
-        text_w = bbox[2] - bbox[0]
         pad_h = round(self._H * 0.18)
         text_right = self._X + pad_h + text_w
         chip_right = text_right + pad_h

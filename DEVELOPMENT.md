@@ -30,7 +30,7 @@ pnpm --dir custom_components/eink_dashboard/frontend test
 ### Build
 
 ```bash
-python3 scripts/build_icons.py      # regenerate weather icon PNGs from SVG
+python3 scripts/build_icons.py      # regenerate icon PNGs from SVG (weather + MDI)
 bash scripts/build_dist.sh           # build both tar.gz and zip into dist/
 bash scripts/build_dist.sh --zip     # zip only (HACS)
 bash scripts/build_dist.sh --tarball # tar.gz only

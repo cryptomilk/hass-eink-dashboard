@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+from unittest.mock import patch
+
+from PIL import Image
+
 from custom_components.eink_dashboard.render import (
     _device_class_icon,
+    _load_icon,
 )
 
 _EXPECTED_SENSOR_ICONS: dict[str, str] = {
@@ -288,3 +294,49 @@ class TestDeviceClassIcon:
             _device_class_icon({"device_class": "temperature"}, "on")
             == "thermometer"
         )
+
+
+class TestLoadIconMdi:
+    """Integration tests: _load_icon resolves MDI icon PNGs."""
+
+    def test_load_mdi_icon_returns_gray_mask_tuple(
+        self, tmp_path: Path
+    ) -> None:
+        # Verifies that after the allowlist removal, _load_icon
+        # finds icons in the mdi/ subdirectory and returns a
+        # valid (gray, mask) tuple resized to the requested size.
+        mdi_dir = tmp_path / "mdi"
+        mdi_dir.mkdir()
+        icon = Image.new("RGBA", (64, 64), (128, 128, 128, 200))
+        icon.save(mdi_dir / "thermometer.png")
+        with patch(
+            "custom_components.eink_dashboard.render._ICONS_DIR",
+            tmp_path,
+        ):
+            _load_icon.cache_clear()
+            try:
+                result = _load_icon("thermometer", 36)
+            finally:
+                _load_icon.cache_clear()
+        assert result is not None, (
+            "_load_icon returned None for a known MDI icon"
+        )
+        gray, mask = result
+        assert gray.mode == "L"
+        assert mask.mode == "L"
+        assert gray.size == (36, 36)
+        assert mask.size == (36, 36)
+
+    def test_load_icon_missing_returns_none(self, tmp_path: Path) -> None:
+        # An icon name with no corresponding file in either the
+        # top-level or mdi/ subdirectory should return None.
+        with patch(
+            "custom_components.eink_dashboard.render._ICONS_DIR",
+            tmp_path,
+        ):
+            _load_icon.cache_clear()
+            try:
+                result = _load_icon("nonexistent", 36)
+            finally:
+                _load_icon.cache_clear()
+        assert result is None
