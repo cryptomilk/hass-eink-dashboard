@@ -32,6 +32,14 @@ export interface HaFormSchema {
   default?: unknown;
   selector?: Record<string, unknown>;
   schema?: HaFormSchema[];
+  /** When true on expandable/grid, child values stay flat in the data object. */
+  flatten?: boolean;
+  /** Header text shown on an expandable section panel. */
+  title?: string;
+  /** MDI icon name for an expandable section header (e.g. "mdi:palette"). */
+  icon?: string;
+  /** When true, the expandable section starts in the open state. */
+  expanded?: boolean;
 }
 
 export interface HaFormElement extends HTMLElement {

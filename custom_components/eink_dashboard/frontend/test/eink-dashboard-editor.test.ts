@@ -259,6 +259,153 @@ describe("getSummary", () => {
   });
 });
 
+// ── SCHEMAS form grouping ────────────────────────────────────────
+
+function getExpandableSections(schema: HaFormSchema[]): HaFormSchema[] {
+  return schema.filter((s) => s.type === "expandable");
+}
+
+describe("SCHEMAS form grouping", () => {
+  const ALL_TYPES = Object.keys(SCHEMAS);
+
+  it("every schema uses expandable sections", () => {
+    // Each widget form must be split into at least one collapsible
+    // group so fields are not dumped in a flat wall of inputs.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const sections = getExpandableSections(schema);
+      expect(sections.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("all expandable sections have flatten: true", () => {
+    // flatten keeps child values flat in the widget data object so
+    // existing save/load logic does not need to change.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      for (const section of getExpandableSections(schema)) {
+        expect(section.flatten).toBe(true);
+      }
+    }
+  });
+
+  it("first expandable section has expanded: true", () => {
+    // The most important section (content or layout) must be open
+    // by default so users see meaningful fields immediately.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const sections = getExpandableSections(schema);
+      expect(sections[0].expanded).toBe(true);
+    }
+  });
+
+  it("non-first expandable sections do not start expanded", () => {
+    // Secondary sections (layout, appearance) are collapsed by default
+    // to reduce visual clutter in the editor.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const sections = getExpandableSections(schema);
+      for (const section of sections.slice(1)) {
+        expect(section.expanded).toBeFalsy();
+      }
+    }
+  });
+
+  it("all expandable sections have a title and mdi: icon", () => {
+    // Every section must have a readable header label and a visual
+    // icon so users can identify groups without expanding them.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      for (const section of getExpandableSections(schema)) {
+        expect(typeof section.title).toBe("string");
+        expect((section.title as string).length).toBeGreaterThan(0);
+        expect(typeof section.icon).toBe("string");
+        expect((section.icon as string).startsWith("mdi:")).toBe(true);
+      }
+    }
+  });
+
+  it("text content section contains text and align", () => {
+    // Content is the primary group for text widgets: the message and
+    // its alignment belong together separate from position/size.
+    const schema = SCHEMAS.text(DISPLAY);
+    const content = getExpandableSections(schema).find(
+      (s) => s.name === "content"
+    )!;
+    const fields = flattenFields(content.schema!);
+    expect(fields).toContain("text");
+    expect(fields).toContain("align");
+  });
+
+  it("text layout section contains x, y, w", () => {
+    // Layout is the position group: x, y, and optional width override.
+    const schema = SCHEMAS.text(DISPLAY);
+    const layout = getExpandableSections(schema).find(
+      (s) => s.name === "layout"
+    )!;
+    const fields = flattenFields(layout.schema!);
+    expect(fields).toContain("x");
+    expect(fields).toContain("y");
+    expect(fields).toContain("w");
+  });
+
+  it("text appearance section contains font_size and color", () => {
+    // Appearance is the visual styling group: font size and color.
+    const schema = SCHEMAS.text(DISPLAY);
+    const appearance = getExpandableSections(schema).find(
+      (s) => s.name === "appearance"
+    )!;
+    const fields = flattenFields(appearance.schema!);
+    expect(fields).toContain("font_size");
+    expect(fields).toContain("color");
+  });
+
+  it("device_battery has no content section", () => {
+    // device_battery has no entity or text fields, so no content
+    // group is needed.
+    const schema = SCHEMAS.device_battery(DISPLAY);
+    const content = getExpandableSections(schema).find(
+      (s) => s.name === "content"
+    );
+    expect(content).toBeUndefined();
+  });
+
+  it("separator has no appearance section", () => {
+    // separator has no font_size or color fields, so no appearance
+    // group is needed.
+    const schema = SCHEMAS.separator(DISPLAY);
+    const appearance = getExpandableSections(schema).find(
+      (s) => s.name === "appearance"
+    );
+    expect(appearance).toBeUndefined();
+  });
+
+  it("widget schemas with entities put them inside content", () => {
+    // Entities are content, not layout or appearance. Verify for the
+    // three widgets that use a multi-entity selector.
+    for (const type of ["sensor_rows", "status_icons", "waste_schedule"]) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const content = getExpandableSections(schema).find(
+        (s) => s.name === "content"
+      )!;
+      expect(content).toBeDefined();
+      const fields = flattenFields(content.schema!);
+      expect(fields).toContain("entities");
+    }
+  });
+
+  it("weather entity field is inside content section", () => {
+    // The primary entity selector for weather belongs in content so
+    // it is visible by default when the form opens.
+    const schema = SCHEMAS.weather(DISPLAY);
+    const content = getExpandableSections(schema).find(
+      (s) => s.name === "content"
+    )!;
+    const fields = flattenFields(content.schema!);
+    expect(fields).toContain("entity");
+  });
+});
+
 // ── add-widget integration ───────────────────────────────────────
 
 describe("add-widget integration", () => {

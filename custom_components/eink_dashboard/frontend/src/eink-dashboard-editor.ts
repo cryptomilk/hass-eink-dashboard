@@ -209,14 +209,15 @@ export const SCHEMAS: Record<
   (d: DisplayConfig) => HaFormSchema[]
 > = {
   text: (d) => [
-    { name: "text", required: true, selector: { text: {} } },
-    { type: "grid", name: "", schema: posXYW(d) },
     {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:format-text",
       schema: [
-        fontSizeSelector(FONT_SIZE_TEXT),
-        colorSelector(),
+        { name: "text", required: true, selector: { text: {} } },
         {
           name: "align",
           default: "left",
@@ -232,71 +233,112 @@ export const SCHEMAS: Record<
         },
       ],
     },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [
+        {
+          type: "grid",
+          name: "",
+          schema: [fontSizeSelector(FONT_SIZE_TEXT), colorSelector()],
+        },
+      ],
+    },
   ],
 
   separator: (d) => [
     {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:minus",
       schema: [
         {
-          name: "direction",
-          default: "horizontal",
-          selector: {
-            select: {
-              options: [
-                { value: "horizontal", label: "Horizontal" },
-                { value: "vertical", label: "Vertical" },
-              ],
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "direction",
+              default: "horizontal",
+              selector: {
+                select: {
+                  options: [
+                    { value: "horizontal", label: "Horizontal" },
+                    { value: "vertical", label: "Vertical" },
+                  ],
+                },
+              },
             },
-          },
-        },
-        {
-          name: "style",
-          default: "line",
-          selector: {
-            select: {
-              options: [
-                { value: "line", label: "Line" },
-                { value: "bar", label: "Bar" },
-              ],
+            {
+              name: "style",
+              default: "line",
+              selector: {
+                select: {
+                  options: [
+                    { value: "line", label: "Line" },
+                    { value: "bar", label: "Bar" },
+                  ],
+                },
+              },
             },
-          },
+          ],
         },
       ],
     },
     {
-      type: "grid",
-      name: "",
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
       schema: [
         {
-          name: "x",
-          default: 24,
-          selector: {
-            number: {
-              min: 0, max: d.width, step: 8, mode: "box",
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "x",
+              default: 24,
+              selector: {
+                number: {
+                  min: 0, max: d.width, step: 8, mode: "box",
+                },
+              },
             },
-          },
-        },
-        {
-          name: "y",
-          default: 0,
-          selector: {
-            number: {
-              min: 0, max: d.height, step: 8, mode: "box",
+            {
+              name: "y",
+              default: 0,
+              selector: {
+                number: {
+                  min: 0, max: d.height, step: 8, mode: "box",
+                },
+              },
             },
-          },
-        },
-        {
-          name: "length",
-          selector: {
-            number: {
-              min: 0,
-              max: Math.max(d.width, d.height),
-              step: 8,
-              mode: "box",
+            {
+              name: "length",
+              selector: {
+                number: {
+                  min: 0,
+                  max: Math.max(d.width, d.height),
+                  step: 8,
+                  mode: "box",
+                },
+              },
             },
-          },
+          ],
         },
       ],
     },
@@ -304,74 +346,163 @@ export const SCHEMAS: Record<
 
   weather: (d) => [
     {
-      name: "entity",
-      required: true,
-      selector: { entity: { domain: "weather" } },
-    },
-    { type: "grid", name: "", schema: posXYW(d) },
-    {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:weather-partly-cloudy",
       schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: { domain: "weather" } },
+        },
         {
           name: "forecast_days",
           default: 5,
           selector: { number: { min: 0, max: 14, mode: "box" } },
         },
-        fontSizeSelector(FONT_SIZE_WEATHER),
       ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [fontSizeSelector(FONT_SIZE_WEATHER)],
     },
   ],
 
   sensor_rows: (d) => [
-    { name: "title", selector: { text: {} } },
     {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:thermometer",
       schema: [
-        ...posXYW(d),
-        fontSizeSelector(FONT_SIZE_SENSOR_ROWS),
+        { name: "title", selector: { text: {} } },
+        { name: "entities", selector: { entity: { multiple: true } } },
       ],
     },
-    { name: "entities", selector: { entity: { multiple: true } } },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [fontSizeSelector(FONT_SIZE_SENSOR_ROWS)],
+    },
   ],
 
   device_battery: (d) => [
-    { type: "grid", name: "", schema: posXY(d) },
     {
-      type: "grid",
-      name: "",
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXY(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
       schema: [
-        colorSelector(),
-        fontSizeSelector(FONT_SIZE_DEVICE_BATTERY),
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            colorSelector(),
+            fontSizeSelector(FONT_SIZE_DEVICE_BATTERY),
+          ],
+        },
       ],
     },
   ],
 
   status_icons: (d) => [
-    { name: "title", selector: { text: {} } },
     {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:checkbox-marked-circle",
       schema: [
-        ...posXYW(d),
-        fontSizeSelector(FONT_SIZE_STATUS_ICONS),
+        { name: "title", selector: { text: {} } },
+        { name: "entities", selector: { entity: { multiple: true } } },
       ],
     },
-    { name: "entities", selector: { entity: { multiple: true } } },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [fontSizeSelector(FONT_SIZE_STATUS_ICONS)],
+    },
   ],
 
   waste_schedule: (d) => [
-    { name: "title", selector: { text: {} } },
     {
-      type: "grid",
-      name: "",
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:trash-can",
       schema: [
-        ...posXYW(d),
-        fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE),
+        { name: "title", selector: { text: {} } },
+        { name: "entities", selector: { entity: { multiple: true } } },
       ],
     },
-    { name: "entities", selector: { entity: { multiple: true } } },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)],
+    },
   ],
 };
 
