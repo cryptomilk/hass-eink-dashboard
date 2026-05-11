@@ -71,6 +71,117 @@ async function _loadRobotoMedium(): Promise<void> {
   } catch (_) { /* fall back to sans-serif */ }
 }
 
+const ICON_BASE = "/eink_dashboard/icons";
+
+// Condition string → SVG filename under icons/svg/.
+// Mirrors CONDITION_TO_SVG in scripts/build_icons.py.
+const CONDITION_SVG_MAP: Record<string, string> = {
+  "sunny": "wi-day-sunny",
+  "clear-night": "wi-night-clear",
+  "cloudy": "wi-cloudy",
+  "partlycloudy": "wi-day-cloudy",
+  "fog": "wi-fog",
+  "hail": "wi-hail",
+  "lightning": "wi-lightning",
+  "lightning-rainy": "wi-thunderstorm",
+  "pouring": "wi-rain",
+  "rainy": "wi-showers",
+  "snowy": "wi-snow",
+  "snowy-rainy": "wi-rain-mix",
+  "windy": "wi-windy",
+  "windy-variant": "wi-cloudy-windy",
+  "exceptional": "wi-na",
+};
+
+// Detail SVG basenames under icons/svg/. Keyed by HA entity
+// attribute name so _collectWeatherIcons() can check attrs
+// directly. SVG values mirror DETAIL_TO_SVG in
+// scripts/build_icons.py (keys differ because Python uses
+// icon names, not HA attribute names).
+const DETAIL_SVG_MAP: Record<string, string> = {
+  "humidity": "wi-humidity",
+  "pressure": "wi-barometer",
+  "wind_speed": "wi-strong-wind",
+  "cloud_coverage": "wi-cloud",
+};
+
+// Stores the in-flight or resolved Promise for each URL so
+// concurrent loadIcon() calls for the same URL never create
+// more than one Image (TOCTOU prevention). Failed entries are
+// removed on rejection so the next caller gets a fresh attempt.
+const _iconCache = new Map<string, Promise<HTMLImageElement | null>>();
+
+// Populated when a loadIcon() promise resolves successfully.
+// getIcon() reads from here so it never needs to await.
+const _resolvedIcons = new Map<string, HTMLImageElement>();
+
+/**
+ * Load an icon from a URL, returning it from the module-level
+ * cache if it was already loaded.
+ *
+ * The promise is stored before awaiting so concurrent calls
+ * for the same URL share one network request.  On decode
+ * failure the cache entry is removed, allowing a later retry.
+ * Errors are swallowed and null is returned so callers can
+ * fall back to placeholder rendering without crashing.
+ *
+ * @internal Exported for testing only.
+ * @param url - Absolute URL path to the icon file.
+ * @returns The loaded image, or null on network/decode error.
+ */
+export function loadIcon(
+  url: string,
+): Promise<HTMLImageElement | null> {
+  const cached = _iconCache.get(url);
+  if (cached) return cached;
+  const p = (async () => {
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      _resolvedIcons.set(url, img);
+      return img;
+    } catch {
+      // Remove so the next caller can retry.
+      _iconCache.delete(url);
+      return null;
+    }
+  })();
+  _iconCache.set(url, p);
+  return p;
+}
+
+/**
+ * Synchronous cache lookup for a previously loaded icon.
+ *
+ * Returns the HTMLImageElement when loadIcon() has already
+ * resolved successfully for this URL, otherwise null.  All
+ * rendering paths call this after _preloadIcons() so the
+ * cache is always warm by the time drawing starts.
+ *
+ * @internal Exported for testing only.
+ * @param url - URL that was passed to loadIcon().
+ * @returns The cached image, or null if not yet loaded.
+ */
+export function getIcon(
+  url: string,
+): HTMLImageElement | null {
+  return _resolvedIcons.get(url) ?? null;
+}
+
+/**
+ * Clear both icon caches.
+ *
+ * @internal Exported for testing only.
+ */
+export function clearIconCache(): void {
+  _iconCache.clear();
+  _resolvedIcons.clear();
+}
+
+/** One column in the weather detail row (humidity, wind, etc.). */
+interface DetailItem { text: string; svgName: string; }
+
 const SENSOR_ROW_HEIGHT = 30;
 const SENSOR_TITLE_ADVANCE = 32;
 
@@ -105,24 +216,6 @@ export const CHIP_ICON_RATIO = 0.29;
 export const CHIP_GAP_RATIO = 0.14;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-const CONDITION_ICONS: Record<string, string> = {
-  "sunny": "☀",
-  "clear-night": "☾",
-  "cloudy": "☁",
-  "partlycloudy": "⛅",
-  "fog": "▒",
-  "hail": "❄",
-  "lightning": "⚡",
-  "lightning-rainy": "⛈",
-  "pouring": "☂",
-  "rainy": "☔",
-  "snowy": "❄",
-  "snowy-rainy": "☖",
-  "windy": "☴",
-  "windy-variant": "☴",
-  "exceptional": "⚠",
-};
 
 const HANDLE_SIZE = 8;
 const HANDLE_HIT_RADIUS = 10;
@@ -341,11 +434,21 @@ export function drawCardRow(
   ctx.fillStyle = grayColor(iconFill);
   ctx.fill();
 
-  // Letter fallback: first char of primary, white on
-  // the gray circle, centered inside it. When opts.icon
-  // is set the letter is skipped, but no image is drawn
-  // yet (icon loading is not yet implemented).
-  if (!opts.icon) {
+  if (opts.icon) {
+    // Icon image: 60% of circle diameter, centred — mirrors
+    // the icon_sz = round(m.icon_dia * 0.6) ratio in
+    // _draw_card_row() in render.py.
+    const iconSz = Math.round(m.iconDia * 0.6);
+    const offset = Math.floor((m.iconDia - iconSz) / 2);
+    ctx.drawImage(
+      opts.icon,
+      iconX + offset,
+      circleY + offset,
+      iconSz, iconSz,
+    );
+  } else {
+    // Letter fallback: first char of primary, white on
+    // the gray circle, centered inside it.
     const letter = primary[0]?.toUpperCase() ?? "?";
     const letterSz = Math.round(m.iconDia * 0.5);
     ctx.font = `${letterSz}px ${FONT_FAMILY}`;
@@ -461,10 +564,9 @@ export function chipWidth(
  * Renders a rounded-rectangle container whose end-caps
  * are perfect semicircles (radius = floor(h / 2)).  The
  * chip width is computed from text measurement plus
- * horizontal padding and, when an icon identifier is
- * given, an icon placeholder (icon drawing is not yet
- * implemented in the canvas preview).  All internal
- * dimensions are proportional to h.
+ * horizontal padding and, when an icon image is given,
+ * the icon area sized to CHIP_ICON_RATIO * h.  All
+ * internal dimensions are proportional to h.
  *
  * Mirrors _draw_chip() from render.py.
  *
@@ -475,8 +577,8 @@ export function chipWidth(
  * @param text - Label text drawn inside the chip.
  * @param fontSize - Font size in pixels.
  * @param border - Outline stroke width in pixels.
- * @param opts - Optional: inverted mode and icon
- *   identifier.
+ * @param opts - Optional: inverted mode and loaded icon
+ *   image.
  * @returns The x coordinate immediately to the right of
  *   the chip (x + chipW), suitable for the next chip.
  */
@@ -520,11 +622,18 @@ export function drawChip(
 
   let cx = x + padH;
   if (icon != null) {
-    // Draw a placeholder rectangle where the icon will appear
-    // once icon loading is implemented in the canvas preview.
     const iconY = y + Math.floor((h - iconSz) / 2);
-    ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
-    ctx.fillRect(cx, iconY, iconSz, iconSz);
+    if (inverted) {
+      // ctx.filter = "invert(1)" flips black icon pixels
+      // to white, matching Python's ImageOps.invert() in
+      // _draw_chip() for problem/urgent states.
+      ctx.save();
+      ctx.filter = "invert(1)";
+      ctx.drawImage(icon, cx, iconY, iconSz, iconSz);
+      ctx.restore();
+    } else {
+      ctx.drawImage(icon, cx, iconY, iconSz, iconSz);
+    }
     cx += iconSz + iconGap;
   }
 
@@ -645,6 +754,7 @@ class EinkDashboardCard extends HTMLElement {
   private _canvas: HTMLCanvasElement | null = null;
   private _ctx: CanvasRenderingContext2D | null = null;
   private _renderPending = false;
+  private _renderInProgress = false;
   private _connected = false;
   private _fetching = false;
   private _fetchGeneration = 0;
@@ -1365,12 +1475,105 @@ class EinkDashboardCard extends HTMLElement {
     this._renderPending = true;
     requestAnimationFrame(() => {
       this._renderPending = false;
-      this._render();
+      // _render() is async; fire-and-forget is safe here.
+      // _renderInProgress serialises concurrent calls so a
+      // second requestAnimationFrame that fires before the
+      // first _render() resolves is deferred, not dropped.
+      void this._render();
     });
   }
 
-  private _render(): void {
+  /**
+   * Collect icon URLs needed by all weather widgets into
+   * the provided set so _preloadIcons() can batch-load them.
+   *
+   * @param w - Weather widget to collect icons for.
+   * @param urls - Accumulator set of icon URLs.
+   */
+  private _collectWeatherIcons(
+    w: WeatherWidget,
+    urls: Set<string>,
+  ): void {
+    const entity = this._getState(w.entity ?? "");
+    if (!entity) return;
+    const condition = entity.state ?? "";
+    const svg = CONDITION_SVG_MAP[condition];
+    if (svg) urls.add(`${ICON_BASE}/svg/${svg}.svg`);
+    // Preload only the detail icons whose attributes are
+    // present, mirroring the conditional guards in
+    // _renderWeather(). Avoids redundant fetches.
+    const attrs = entity.attributes as Record<string, unknown>;
+    for (const [attr, svgName] of Object.entries(DETAIL_SVG_MAP)) {
+      if (attrs[attr] != null) {
+        urls.add(`${ICON_BASE}/svg/${svgName}.svg`);
+      }
+    }
+    const entityId = w.entity ?? "";
+    const forecast: ForecastDay[] =
+      this._forecasts[entityId]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      || (entity.attributes as any)?.forecast
+      || [];
+    for (const day of forecast) {
+      const dc = day.condition ?? "";
+      const ds = CONDITION_SVG_MAP[dc];
+      if (ds) urls.add(`${ICON_BASE}/svg/${ds}.svg`);
+    }
+  }
+
+  /**
+   * Pre-load all icons needed for the current widget set.
+   *
+   * Inspects every widget and collects icon URLs, then loads
+   * them all in parallel via loadIcon().  Cache hits resolve
+   * immediately so subsequent renders pay no network cost.
+   * Must run before the canvas clear so the visible canvas
+   * retains its previous content during any network wait.
+   */
+  private async _preloadIcons(): Promise<void> {
+    const urls = new Set<string>();
+    for (const widget of this._layout!.widgets) {
+      if (widget.type === "weather") {
+        this._collectWeatherIcons(
+          widget as WeatherWidget, urls,
+        );
+      }
+    }
+    if (urls.size > 0) {
+      await Promise.all([...urls].map(url => loadIcon(url)));
+    }
+  }
+
+  private async _render(): Promise<void> {
     if (!this._ctx || !this._layout || !this._hass) return;
+    // If a render is already in progress, mark a pending
+    // re-render and return — _renderInProgress ensures the
+    // two renders never interleave across await boundaries.
+    if (this._renderInProgress) {
+      this._renderPending = true;
+      return;
+    }
+    this._renderInProgress = true;
+    try {
+      await this._renderBody();
+    } finally {
+      this._renderInProgress = false;
+      // A state change arrived while we were rendering;
+      // kick off one more pass now that we are clear.
+      if (this._renderPending) {
+        this._renderPending = false;
+        void this._render();
+      }
+    }
+  }
+
+  private async _renderBody(): Promise<void> {
+    if (!this._ctx || !this._layout || !this._hass) return;
+
+    // Pre-load icons before clearing canvas so the visible
+    // canvas retains its previous content during any load.
+    await this._preloadIcons();
+
     const ctx = this._ctx;
     const { width, height } = this._layout.display;
 
@@ -1651,13 +1854,20 @@ class EinkDashboardCard extends HTMLElement {
     const iconCx = x + pad + iconSize / 2;
     const iconCy = y + pad + iconSize / 2;
 
-    // Condition icon: emoji centred on (iconCx, iconCy).
-    const icon = CONDITION_ICONS[condition] || "?";
-    ctx.font = `${iconSize}px ${FONT_FAMILY}`;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(icon, iconCx, iconCy);
+    // Condition icon: SVG loaded at preload time, top-left origin.
+    const condSvg = CONDITION_SVG_MAP[condition];
+    const condImg = condSvg
+      ? getIcon(`${ICON_BASE}/svg/${condSvg}.svg`)
+      : null;
+    if (condImg) {
+      ctx.drawImage(condImg, x + pad, y + pad, iconSize, iconSize);
+    } else {
+      ctx.font = `${iconSize}px ${FONT_FAMILY}`;
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillStyle = grayColor(COLOR_BLACK);
+      ctx.fillText("?", iconCx, iconCy);
+    }
 
     // Temperature text vertically centred on the icon.
     // With textBaseline="top", actualBoundingBoxAscent is the
@@ -1714,18 +1924,39 @@ class EinkDashboardCard extends HTMLElement {
       ctx.textAlign = "left";
     }
 
-    // Row 2: plain icon placeholder + text, evenly distributed.
+    // Row 2: detail icon + text, evenly distributed.
     // Text centred on the icon by correcting for canvas ascent offset.
     // Mirrors: text_y = detail_y + icon_h/2 − bbox[1] − text_h/2
     //   where bbox[1] = −actualBoundingBoxAscent (with textBaseline=top).
     const detailY = row1Bottom + Math.round(8 * s);
     const iconH = Math.round(20 * s);
     const iconGap = Math.round(4 * s);
-    const detailItems: string[] = [];
-    if (humidity != null) detailItems.push(`${humidity}%`);
-    if (pressure != null) detailItems.push(`${Math.round(Number(pressure))}${pressureUnit}`);
-    if (wind != null) detailItems.push(`${Math.round(Number(wind))}${windUnit}`);
-    if (cloudCoverage != null) detailItems.push(`${cloudCoverage}%`);
+
+    const detailItems: DetailItem[] = [];
+    if (humidity != null) {
+      detailItems.push({
+        text: `${humidity}%`,
+        svgName: "wi-humidity",
+      });
+    }
+    if (pressure != null) {
+      detailItems.push({
+        text: `${Math.round(Number(pressure))}${pressureUnit}`,
+        svgName: "wi-barometer",
+      });
+    }
+    if (wind != null) {
+      detailItems.push({
+        text: `${Math.round(Number(wind))}${windUnit}`,
+        svgName: "wi-strong-wind",
+      });
+    }
+    if (cloudCoverage != null) {
+      detailItems.push({
+        text: `${cloudCoverage}%`,
+        svgName: "wi-cloud",
+      });
+    }
 
     const detailCols = Math.max(detailItems.length, 1);
     const colW = Math.floor(contentW / detailCols);
@@ -1733,7 +1964,7 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     for (let i = 0; i < detailItems.length; i++) {
-      const text = detailItems[i];
+      const { text, svgName } = detailItems[i];
       const colCx = contentLeft + colW * i + Math.floor(colW / 2);
       ctx.font = `${smFontSize}px ${FONT_FAMILY}`;
       const tm = ctx.measureText(text);
@@ -1742,9 +1973,14 @@ class EinkDashboardCard extends HTMLElement {
         + tm.actualBoundingBoxDescent;
       const itemW = iconH + iconGap + textW2;
       const itemX = colCx - Math.floor(itemW / 2);
-      // Gray rect as icon placeholder (PNG icons not loaded in preview).
-      ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
-      ctx.fillRect(itemX, detailY, iconH, iconH);
+      const detailImg = getIcon(`${ICON_BASE}/svg/${svgName}.svg`);
+      if (detailImg) {
+        ctx.drawImage(detailImg, itemX, detailY, iconH, iconH);
+      } else {
+        // Fallback: gray rectangle when icon not loaded.
+        ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
+        ctx.fillRect(itemX, detailY, iconH, iconH);
+      }
       // Glyph centre aligned to icon centre.
       const textY = detailY + iconH / 2
         + tm.actualBoundingBoxAscent
@@ -1820,11 +2056,26 @@ class EinkDashboardCard extends HTMLElement {
       ctx.fillText(dayLabel, cx, forecastY);
 
       // Condition icon (32 * s — slightly larger than detail icons).
-      const dayIcon = CONDITION_ICONS[day.condition ?? ""] || "?";
-      ctx.font = `${Math.round(32 * s)}px ${FONT_FAMILY}`;
-      ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.textBaseline = "middle";
-      ctx.fillText(dayIcon, cx, forecastY + Math.round(34 * s));
+      const dayIconSz = Math.round(32 * s);
+      const daySvg = CONDITION_SVG_MAP[day.condition ?? ""];
+      const dayImg = daySvg
+        ? getIcon(`${ICON_BASE}/svg/${daySvg}.svg`)
+        : null;
+      if (dayImg) {
+        // Centre the icon on (cx, forecastY + 34*s).
+        const iconTop = forecastY + Math.round(34 * s)
+          - dayIconSz / 2;
+        ctx.drawImage(
+          dayImg,
+          cx - dayIconSz / 2, iconTop,
+          dayIconSz, dayIconSz,
+        );
+      } else {
+        ctx.font = `${dayIconSz}px ${FONT_FAMILY}`;
+        ctx.fillStyle = grayColor(COLOR_BLACK);
+        ctx.textBaseline = "middle";
+        ctx.fillText("?", cx, forecastY + Math.round(34 * s));
+      }
 
       // High temp
       const hi = day.temperature;

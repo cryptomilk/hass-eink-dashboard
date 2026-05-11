@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Convert weather-icons and MDI SVGs to 64x64 RGBA PNGs.
 
-Weather icons are sourced from icons/svg/.  MDI (Material Design
+Weather icon SVGs are sourced from
+custom_components/eink_dashboard/icons/svg/.  MDI (Material Design
 Icons) are sourced from the @mdi/svg npm package installed in the
 frontend's node_modules.
+
+Generated PNGs are written to
+custom_components/eink_dashboard/icons/png/ (gitignored).
 
 Requires: pip install cairosvg
 """
@@ -123,17 +127,13 @@ MDI_ICONS: frozenset[str] = frozenset(
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-SVG_DIR = ROOT / "icons" / "svg"
-OUT_DIR = ROOT / "custom_components" / "eink_dashboard" / "icons"
+COMPONENT_DIR = ROOT / "custom_components" / "eink_dashboard"
+# SVG sources are committed alongside the component.
+SVG_DIR = COMPONENT_DIR / "icons" / "svg"
+# Generated PNGs are gitignored; always rebuilt from SVGs.
+OUT_DIR = COMPONENT_DIR / "icons" / "png"
 MDI_SVG_DIR = (
-    ROOT
-    / "custom_components"
-    / "eink_dashboard"
-    / "frontend"
-    / "node_modules"
-    / "@mdi"
-    / "svg"
-    / "svg"
+    COMPONENT_DIR / "frontend" / "node_modules" / "@mdi" / "svg" / "svg"
 )
 MDI_OUT_DIR = OUT_DIR / "mdi"
 WEATHER_OUT_DIR = OUT_DIR / "weather"

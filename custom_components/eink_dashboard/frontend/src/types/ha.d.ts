@@ -108,11 +108,10 @@ export interface CardRowOpts {
   /** Grayscale fill for the icon circle (0–255).
    *  Defaults to COLOR_GRAY (120). */
   iconFill?: number;
-  /** Icon identifier (e.g. MDI name). When set,
-   *  the letter fallback is skipped.
-   *  @todo Icon loading is not yet implemented in the
-   *  canvas preview. */
-  icon?: string;
+  /** Loaded icon image to draw inside the icon circle.
+   *  When set, the letter fallback is skipped and the
+   *  image is drawn at 60% of iconDia, centred. */
+  icon?: HTMLImageElement;
 }
 
 /** Options for drawChip(). */
@@ -120,20 +119,19 @@ export interface ChipOpts {
   /** When true, fill chip black and draw text white
    *  (used for problem / urgent states). */
   inverted?: boolean;
-  /** Icon identifier (e.g. MDI name).
-   *  @todo Icon loading is not yet implemented in the
-   *  canvas preview. */
-  icon?: string;
+  /** Loaded icon image to draw inside the chip.
+   *  Sized to CHIP_ICON_RATIO * h, vertically centred.
+   *  For inverted chips the image is drawn with
+   *  ctx.filter = "invert(1)" to produce a white icon. */
+  icon?: HTMLImageElement;
 }
 
 /** Descriptor for a single chip in drawChipFlow(). */
 export interface ChipDescriptor {
   text: string;
   inverted?: boolean;
-  /** Icon identifier (e.g. MDI name).
-   *  @todo Icon loading is not yet implemented in the
-   *  canvas preview. */
-  icon?: string;
+  /** Loaded icon image. See ChipOpts.icon. */
+  icon?: HTMLImageElement;
 }
 
 export interface Handle {

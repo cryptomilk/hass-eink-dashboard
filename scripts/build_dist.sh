@@ -41,7 +41,8 @@ ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Rob
 
 cleanup() {
     echo "Cleaning up generated assets..."
-    rm -rf "${ICONS_DIR}"
+    # Remove only generated icon directories, not the committed SVG sources.
+    rm -rf "${ICONS_DIR}/png" "${ICONS_DIR}/mdi"
     rm -f "${FRONTEND_DIR}/eink-dashboard-card.js" "${FRONTEND_DIR}/eink-dashboard-card.js.map"
     rm -f "${FRONTEND_DIR}/eink-dashboard-editor.js" "${FRONTEND_DIR}/eink-dashboard-editor.js.map"
 }

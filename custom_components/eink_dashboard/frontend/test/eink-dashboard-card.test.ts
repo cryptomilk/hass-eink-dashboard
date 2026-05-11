@@ -15,6 +15,9 @@ import {
   chipWidth,
   drawChip,
   drawChipFlow,
+  loadIcon,
+  getIcon,
+  clearIconCache,
 } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
@@ -196,13 +199,15 @@ function createMockCtx(): CanvasRenderingContext2D {
     get font(): string { return _font; },
     set font(v: string) { _font = v; },
     // Drawing spies
+    filter: "none",
     beginPath: vi.fn(),
     roundRect: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
     fillRect: vi.fn(),
-    arc: vi.fn(),
     fillText: vi.fn(),
+    arc: vi.fn(),
+    drawImage: vi.fn(),
     save: vi.fn(),
     restore: vi.fn(),
     // measureText: parse font size from ctx.font and
@@ -673,5 +678,165 @@ describe("drawChipFlow", () => {
     );
     // Background fill must be black.
     expect(fillStyles[0]).toBe(grayColor(0));
+  });
+});
+
+// ── loadIcon / getIcon ────────────────────────────────────────────────────────
+
+describe("loadIcon / getIcon", () => {
+  beforeEach(() => {
+    clearIconCache();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("getIcon returns null for a URL never passed to loadIcon", () => {
+    // Before any load, the cache has no entry for the URL.
+    expect(getIcon("/never-loaded.svg")).toBeNull();
+  });
+
+  it("loadIcon populates cache; getIcon returns the element", async () => {
+    // A successful load must add the image to the cache so
+    // getIcon returns it without another network round-trip.
+    vi.stubGlobal("Image", vi.fn().mockImplementation(() => ({
+      decode: vi.fn().mockResolvedValue(undefined),
+      src: "",
+    })));
+    await loadIcon("/test-cache-A.svg");
+    const cached = getIcon("/test-cache-A.svg");
+    expect(cached).not.toBeNull();
+  });
+
+  it("loadIcon returns null and skips cache on decode error", async () => {
+    // A failed decode must not pollute the cache — callers
+    // use getIcon() returning null as the signal to fall back
+    // to placeholder rendering.
+    vi.stubGlobal("Image", vi.fn().mockImplementation(() => ({
+      decode: vi.fn().mockRejectedValue(new Error("404")),
+      src: "",
+    })));
+    const result = await loadIcon("/test-error.svg");
+    expect(result).toBeNull();
+    expect(getIcon("/test-error.svg")).toBeNull();
+  });
+
+  it("loadIcon constructs Image only once for repeated calls", async () => {
+    // Cache hit on the second call must skip Image construction.
+    const ImageMock = vi.fn().mockImplementation(() => ({
+      decode: vi.fn().mockResolvedValue(undefined),
+      src: "",
+    }));
+    vi.stubGlobal("Image", ImageMock);
+    await loadIcon("/test-cache-B.svg");
+    await loadIcon("/test-cache-B.svg");
+    expect(ImageMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── drawCardRow with icon ─────────────────────────────────────────────────────
+
+describe("drawCardRow icon rendering", () => {
+  it("calls drawImage when opts.icon is provided", () => {
+    // Providing a loaded HTMLImageElement must produce a
+    // drawImage call instead of the letter fallback.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const mockIcon = {} as HTMLImageElement;
+    drawCardRow(ctx, 0, 0, 300, 56, m, {
+      primary: "Test", icon: mockIcon,
+    });
+    expect(ctx.drawImage).toHaveBeenCalledWith(
+      mockIcon,
+      expect.any(Number), expect.any(Number),
+      expect.any(Number), expect.any(Number),
+    );
+  });
+
+  it("letter fallback is not drawn when icon is provided", () => {
+    // When opts.icon is set, the first-letter fallback must
+    // be suppressed so the icon appears alone in the circle.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const mockIcon = {} as HTMLImageElement;
+    drawCardRow(ctx, 0, 0, 300, 56, m, {
+      primary: "Test", icon: mockIcon,
+    });
+    const letterCalls =
+      (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    // The letter "T" must not appear in fillText calls.
+    expect(letterCalls.some((c) => c[0] === "T")).toBe(false);
+  });
+
+  it("icon is drawn at 60% of iconDia, centred in the circle", () => {
+    // Mirrors the icon_sz = round(m.icon_dia * 0.6) formula
+    // from _draw_card_row() in render.py.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const mockIcon = {} as HTMLImageElement;
+    drawCardRow(ctx, 0, 0, 300, 56, m, {
+      primary: "A", icon: mockIcon,
+    });
+    const iconSz = Math.round(m.iconDia * 0.6);
+    const offset = Math.floor((m.iconDia - iconSz) / 2);
+    const iconX = m.padding;
+    const circleY = Math.floor((56 - m.iconDia) / 2);
+    const drawCalls =
+      (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+    expect(drawCalls[0]).toEqual([
+      mockIcon,
+      iconX + offset, circleY + offset,
+      iconSz, iconSz,
+    ]);
+  });
+});
+
+// ── drawChip with icon ────────────────────────────────────────────────────────
+
+describe("drawChip icon rendering", () => {
+  it("calls drawImage and omits placeholder rect when icon provided", () => {
+    // The gray placeholder fillRect must not appear when a
+    // real icon image is passed.
+    const ctx = createMockCtx();
+    const mockIcon = {} as HTMLImageElement;
+    drawChip(ctx, 0, 0, 40, "OK", 16, 2, { icon: mockIcon });
+    expect(ctx.drawImage).toHaveBeenCalledWith(
+      mockIcon,
+      expect.any(Number), expect.any(Number),
+      expect.any(Number), expect.any(Number),
+    );
+    // fillRect is used for the placeholder — must not be called.
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+  });
+
+  it("inverted chip: drawImage is called with invert(1) filter", () => {
+    // ctx.filter must equal "invert(1)" at the time drawImage
+    // fires so the black MDI icon renders as white on the
+    // black chip background, matching Python's ImageOps.invert().
+    const ctx = createMockCtx();
+    let filterAtDraw = "";
+    (ctx.drawImage as ReturnType<typeof vi.fn>).mockImplementation(
+      () => { filterAtDraw = ctx.filter as unknown as string; },
+    );
+    const mockIcon = {} as HTMLImageElement;
+    drawChip(ctx, 0, 0, 40, "OK", 16, 2, {
+      icon: mockIcon, inverted: true,
+    });
+    expect(filterAtDraw).toBe("invert(1)");
+    expect(ctx.save).toHaveBeenCalled();
+    expect(ctx.restore).toHaveBeenCalled();
+  });
+
+  it("non-inverted chip with icon: no filter applied", () => {
+    // A normal chip must not change ctx.filter so existing
+    // canvas state is not disturbed.
+    const ctx = createMockCtx();
+    let filterAtDraw = "none";
+    (ctx.drawImage as ReturnType<typeof vi.fn>).mockImplementation(
+      () => { filterAtDraw = ctx.filter as unknown as string; },
+    );
+    const mockIcon = {} as HTMLImageElement;
+    drawChip(ctx, 0, 0, 40, "OK", 16, 2, { icon: mockIcon });
+    expect(filterAtDraw).toBe("none");
   });
 });

@@ -36,7 +36,7 @@ type DisplayConfig = dict[str, Any]
 type RendererFn = Callable[[ImageDraw.ImageDraw, Widget, DisplayConfig], None]
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
-_ICONS_DIR = Path(__file__).parent / "icons"
+_ICONS_DIR = Path(__file__).parent / "icons" / "png"
 
 _KNOWN_CONDITIONS: frozenset[str] = frozenset(
     {
