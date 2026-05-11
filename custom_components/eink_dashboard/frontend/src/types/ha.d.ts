@@ -221,7 +221,15 @@ export type Widget =
 
 export interface WidgetTypeMeta {
   label: string;
+  /** One-line description shown in the widget picker grid. */
+  description: string;
+  /** MDI icon name (e.g. "mdi:thermometer") shown in the widget picker. */
+  icon: string;
   defaults: Widget;
+}
+
+export interface EinkWidgetPicker extends HTMLElement {
+  open(types: Record<string, WidgetTypeMeta>): void;
 }
 
 // ── Editor element interface ──────────────────────────────────────────────────

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import type { HaFormSchema } from "../src/types/ha.js";
+import type {
+  HaFormSchema,
+  EinkEditorElement,
+  EinkWidgetPicker,
+  Widget,
+} from "../src/types/ha.js";
 import {
   WIDGET_TYPES,
   SCHEMAS,
@@ -7,6 +12,7 @@ import {
   loadHaComponents,
   getSummary,
 } from "../src/eink-dashboard-editor.js";
+import "../src/eink-dashboard-editor.js";
 
 const DISPLAY = { width: 800, height: 480 };
 
@@ -19,7 +25,10 @@ function flattenFields(schema: HaFormSchema[]): string[] {
   return names;
 }
 
-function findField(schema: HaFormSchema[], name: string): HaFormSchema | undefined {
+function findField(
+  schema: HaFormSchema[],
+  name: string,
+): HaFormSchema | undefined {
   for (const field of schema) {
     if (field.name === name) return field;
     if (field.schema) {
@@ -30,13 +39,23 @@ function findField(schema: HaFormSchema[], name: string): HaFormSchema | undefin
   return undefined;
 }
 
-// ── WIDGET_TYPES ──────────────────────────────────────────────────────────────
+// ── WIDGET_TYPES ─────────────────────────────────────────────────
 
 describe("WIDGET_TYPES", () => {
-  const ALL_TYPES = ["text", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
+  const ALL_TYPES = [
+    "text",
+    "separator",
+    "weather",
+    "sensor_rows",
+    "device_battery",
+    "status_icons",
+    "waste_schedule",
+  ];
 
   it("has all 7 widget types", () => {
-    expect(Object.keys(WIDGET_TYPES).sort()).toEqual(ALL_TYPES.sort());
+    expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
+      ALL_TYPES.sort()
+    );
   });
 
   it("each entry has a label and defaults with matching type field", () => {
@@ -46,13 +65,39 @@ describe("WIDGET_TYPES", () => {
       expect(meta.defaults.type).toBe(key);
     }
   });
+
+  it("each entry has a non-empty description string", () => {
+    // Picker grid shows descriptions to help users choose the right
+    // widget.
+    for (const meta of Object.values(WIDGET_TYPES)) {
+      expect(typeof meta.description).toBe("string");
+      expect(meta.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("each entry has an icon in mdi: format", () => {
+    // Picker grid uses these icons as visual indicators per widget type.
+    for (const meta of Object.values(WIDGET_TYPES)) {
+      expect(typeof meta.icon).toBe("string");
+      expect(meta.icon.startsWith("mdi:")).toBe(true);
+    }
+  });
 });
 
-// ── SCHEMAS ───────────────────────────────────────────────────────────────────
+// ── SCHEMAS ──────────────────────────────────────────────────────
 
 describe("SCHEMAS", () => {
+  const ALL_TYPES = [
+    "text",
+    "separator",
+    "weather",
+    "sensor_rows",
+    "device_battery",
+    "status_icons",
+    "waste_schedule",
+  ];
+
   it("has a schema builder for all 7 widget types", () => {
-    const ALL_TYPES = ["text", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -69,7 +114,9 @@ describe("SCHEMAS", () => {
   it("weather entity field uses domain filter 'weather'", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const entityField = findField(schema, "entity");
-    expect(entityField?.selector?.entity).toMatchObject({ domain: "weather" });
+    expect(entityField?.selector?.entity).toMatchObject({
+      domain: "weather",
+    });
   });
 
   it("position fields respect display dimensions as max", () => {
@@ -87,22 +134,28 @@ describe("SCHEMAS", () => {
   });
 
   it("status_icons entities field has multiple: true", () => {
-    const entitiesField = findField(SCHEMAS.status_icons(DISPLAY), "entities");
+    const entitiesField = findField(
+      SCHEMAS.status_icons(DISPLAY), "entities"
+    );
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
   });
 
   it("waste_schedule entities field has multiple: true", () => {
-    const entitiesField = findField(SCHEMAS.waste_schedule(DISPLAY), "entities");
+    const entitiesField = findField(
+      SCHEMAS.waste_schedule(DISPLAY), "entities"
+    );
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
   });
-
 });
 
-// ── LABELS ────────────────────────────────────────────────────────────────────
+// ── LABELS ───────────────────────────────────────────────────────
 
 describe("LABELS", () => {
   it("covers common field names", () => {
-    for (const name of ["text", "entity", "entities", "title", "x", "y", "w", "font_size", "color", "align"]) {
+    for (const name of [
+      "text", "entity", "entities", "title",
+      "x", "y", "w", "font_size", "color", "align",
+    ]) {
       expect(LABELS).toHaveProperty(name);
     }
   });
@@ -118,7 +171,7 @@ describe("LABELS", () => {
   });
 });
 
-// ── loadHaComponents ──────────────────────────────────────────────────────────
+// ── loadHaComponents ─────────────────────────────────────────────
 
 describe("loadHaComponents", () => {
   it("does not throw when HA elements are absent", async () => {
@@ -126,11 +179,13 @@ describe("loadHaComponents", () => {
   });
 });
 
-// ── getSummary ────────────────────────────────────────────────────────────────
+// ── getSummary ───────────────────────────────────────────────────
 
 describe("getSummary", () => {
   it("returns text content for text widget", () => {
-    expect(getSummary({ type: "text", text: "Hello" })).toBe("Hello");
+    expect(getSummary({ type: "text", text: "Hello" })).toBe(
+      "Hello"
+    );
   });
 
   it("truncates long text at 30 chars with ellipsis", () => {
@@ -144,7 +199,9 @@ describe("getSummary", () => {
   });
 
   it("returns entity for weather widget", () => {
-    expect(getSummary({ type: "weather", entity: "weather.home" })).toBe("weather.home");
+    expect(
+      getSummary({ type: "weather", entity: "weather.home" })
+    ).toBe("weather.home");
   });
 
   it("returns '(no entity)' for weather widget with no entity", () => {
@@ -152,31 +209,108 @@ describe("getSummary", () => {
   });
 
   it("returns static text for device_battery widget", () => {
-    expect(getSummary({ type: "device_battery" })).toBe("Device battery");
+    expect(getSummary({ type: "device_battery" })).toBe(
+      "Device battery"
+    );
   });
 
   it("returns entity count for sensor_rows", () => {
-    expect(getSummary({ type: "sensor_rows", entities: ["a", "b"] })).toBe("2 entities");
+    expect(
+      getSummary({ type: "sensor_rows", entities: ["a", "b"] })
+    ).toBe("2 entities");
   });
 
   it("includes title in sensor_rows summary when present", () => {
-    expect(getSummary({ type: "sensor_rows", title: "Temps", entities: ["a"] })).toBe("Temps — 1 entity");
+    expect(
+      getSummary({
+        type: "sensor_rows",
+        title: "Temps",
+        entities: ["a"],
+      })
+    ).toBe("Temps — 1 entity");
   });
 
   it("uses singular 'entity' for count of 1", () => {
-    expect(getSummary({ type: "status_icons", entities: ["x"] })).toBe("1 entity");
+    expect(
+      getSummary({ type: "status_icons", entities: ["x"] })
+    ).toBe("1 entity");
   });
 
   it("returns direction+style summary for separator", () => {
-    expect(getSummary({ type: "separator", y: 200 })).toBe("h line @200");
+    expect(getSummary({ type: "separator", y: 200 })).toBe(
+      "h line @200"
+    );
   });
 
   it("returns vertical bar summary for separator", () => {
-    expect(getSummary({ type: "separator", direction: "vertical", style: "bar", y: 50 })).toBe("v bar @50");
+    expect(
+      getSummary({
+        type: "separator",
+        direction: "vertical",
+        style: "bar",
+        y: 50,
+      })
+    ).toBe("v bar @50");
   });
 
   it("defaults to h line @0 for separator with no fields", () => {
     // direction and style both default to h/line, y defaults to 0
     expect(getSummary({ type: "separator" })).toBe("h line @0");
   });
+});
+
+// ── add-widget integration ───────────────────────────────────────
+
+describe("add-widget integration", () => {
+  it(
+    "appends a widget when a type is selected from the picker",
+    async () => {
+      // jsdom does not implement scrollIntoView; stub it so the
+      // production call in _onTypeSelected does not throw.
+      HTMLElement.prototype.scrollIntoView = () => {};
+      // Exercises: add-btn click -> picker open ->
+      // type-selected -> widget-change event with new widget.
+      const editor = document.createElement(
+        "eink-dashboard-editor"
+      ) as EinkEditorElement;
+      document.body.appendChild(editor);
+      editor.setDisplay({ width: 800, height: 480 });
+      editor.setWidgets([]);
+
+      // Wait for async _buildShell() to complete.
+      await new Promise((r) => setTimeout(r, 0));
+
+      const addBtn = editor.shadowRoot!
+        .querySelector<HTMLButtonElement>(".add-btn");
+      expect(addBtn).toBeTruthy();
+      addBtn!.click();
+
+      // The picker should be created and appended to the shadow root.
+      const picker = editor.shadowRoot!
+        .querySelector<EinkWidgetPicker>("eink-widget-picker");
+      expect(picker).toBeTruthy();
+
+      // Listen for the widget-change event that fires when a widget
+      // is appended.
+      let received: Widget[] | undefined;
+      editor.addEventListener(
+        "widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener
+      );
+
+      // Click the "text" type card in the picker's shadow DOM.
+      const card = picker!.shadowRoot!
+        .querySelector<HTMLElement>(
+          '.type-card[data-type="text"]'
+        );
+      expect(card).toBeTruthy();
+      card!.click();
+
+      expect(received).toBeDefined();
+      expect(received!.length).toBe(1);
+      expect(received![0].type).toBe("text");
+    }
+  );
 });

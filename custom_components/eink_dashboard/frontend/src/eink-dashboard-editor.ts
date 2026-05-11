@@ -5,15 +5,16 @@ import type {
   HomeAssistant,
   HaFormSchema,
   HaFormElement,
-  HaSelectElement,
+  EinkWidgetPicker,
   Widget,
   DisplayConfig,
   WidgetTypeMeta,
 } from "./types/ha.js";
+import "./eink-widget-picker.js";
 
 const EDITOR_TAG = "eink-dashboard-editor";
 
-// ── Constants (mirror const.py) ─────────────────────────────────────────────
+// ── Constants (mirror const.py) ──────────────────────────────────
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
@@ -22,40 +23,102 @@ const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 
-// ── Widget type registry ──────────────────────────────────────────────────────
+// ── Widget type registry ─────────────────────────────────────────
 
 export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   text: {
     label: "Text",
-    defaults: { type: "text", x: 24, y: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0, align: "left" },
+    description: "Custom text or label at any position",
+    icon: "mdi:format-text",
+    defaults: {
+      type: "text",
+      x: 24,
+      y: 0,
+      text: "",
+      font_size: FONT_SIZE_TEXT,
+      color: 0,
+      align: "left",
+    },
   },
   separator: {
     label: "Separator",
-    defaults: { type: "separator", x: 24, y: 0, direction: "horizontal", style: "line" },
+    description: "Horizontal or vertical divider line",
+    icon: "mdi:minus",
+    defaults: {
+      type: "separator",
+      x: 24,
+      y: 0,
+      direction: "horizontal",
+      style: "line",
+    },
   },
   weather: {
     label: "Weather",
-    defaults: { type: "weather", entity: "", x: 24, y: 0, forecast_days: 5, font_size: FONT_SIZE_WEATHER },
+    description: "Forecast with conditions and temperature",
+    icon: "mdi:weather-partly-cloudy",
+    defaults: {
+      type: "weather",
+      entity: "",
+      x: 24,
+      y: 0,
+      forecast_days: 5,
+      font_size: FONT_SIZE_WEATHER,
+    },
   },
   sensor_rows: {
     label: "Sensor Rows",
-    defaults: { type: "sensor_rows", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_SENSOR_ROWS },
+    description: "Entity states in a card with icon rows",
+    icon: "mdi:thermometer",
+    defaults: {
+      type: "sensor_rows",
+      title: "",
+      x: 24,
+      y: 0,
+      entities: [],
+      font_size: FONT_SIZE_SENSOR_ROWS,
+    },
   },
   device_battery: {
     label: "Device Battery",
-    defaults: { type: "device_battery", x: 24, y: 0, color: 0, font_size: FONT_SIZE_DEVICE_BATTERY },
+    description: "Battery level indicator chip",
+    icon: "mdi:battery",
+    defaults: {
+      type: "device_battery",
+      x: 24,
+      y: 0,
+      color: 0,
+      font_size: FONT_SIZE_DEVICE_BATTERY,
+    },
   },
   status_icons: {
     label: "Status Icons",
-    defaults: { type: "status_icons", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_STATUS_ICONS },
+    description: "Binary sensor states as pill-shaped chips",
+    icon: "mdi:checkbox-marked-circle",
+    defaults: {
+      type: "status_icons",
+      title: "",
+      x: 24,
+      y: 0,
+      entities: [],
+      font_size: FONT_SIZE_STATUS_ICONS,
+    },
   },
   waste_schedule: {
     label: "Waste Schedule",
-    defaults: { type: "waste_schedule", title: "", x: 24, y: 0, entities: [], font_size: FONT_SIZE_WASTE_SCHEDULE },
+    description: "Waste collection schedule with relative dates",
+    icon: "mdi:trash-can",
+    defaults: {
+      type: "waste_schedule",
+      title: "",
+      x: 24,
+      y: 0,
+      entities: [],
+      font_size: FONT_SIZE_WASTE_SCHEDULE,
+    },
   },
 };
 
-// ── ha-form schema builders ──────────────────────────────────────────────────
+// ── ha-form schema builders ──────────────────────────────────────
 
 const COLOR_OPTIONS = [
   { value: "0", label: "Black" },
@@ -64,81 +127,197 @@ const COLOR_OPTIONS = [
   { value: "255", label: "White" },
 ];
 
-/** Position selectors for x and y coordinates. */
+/**
+ * Position selectors for x and y coordinates.
+ *
+ * @param d - Display dimensions used as max bounds.
+ * @returns Schema array with x and y number fields.
+ */
 function posXY(d: DisplayConfig): HaFormSchema[] {
   return [
-    { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-    { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+    {
+      name: "x",
+      default: 24,
+      selector: {
+        number: { min: 0, max: d.width, step: 8, mode: "box" },
+      },
+    },
+    {
+      name: "y",
+      default: 0,
+      selector: {
+        number: { min: 0, max: d.height, step: 8, mode: "box" },
+      },
+    },
   ];
 }
 
-/** Position selectors for x, y, and optional width override. */
+/**
+ * Position selectors for x, y, and optional width override.
+ *
+ * @param d - Display dimensions used as max bounds.
+ * @returns Schema array with x, y, and w number fields.
+ */
 function posXYW(d: DisplayConfig): HaFormSchema[] {
   return [
     ...posXY(d),
-    { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+    {
+      name: "w",
+      selector: {
+        number: { min: 0, max: d.width, step: 8, mode: "box" },
+      },
+    },
   ];
 }
 
-/** Font size number selector with the given default. */
+/**
+ * Font size number selector with the given default.
+ *
+ * @param defaultSize - Default font size value.
+ * @returns A single ha-form schema entry.
+ */
 function fontSizeSelector(defaultSize: number): HaFormSchema {
-  return { name: "font_size", default: defaultSize, selector: { number: { min: 8, max: 72, mode: "box" } } };
+  return {
+    name: "font_size",
+    default: defaultSize,
+    selector: { number: { min: 8, max: 72, mode: "box" } },
+  };
 }
 
-/** Color dropdown selector with the given default (0=black). */
+/**
+ * Color dropdown selector defaulting to black (0).
+ *
+ * @param defaultColor - Grayscale value (0–255).
+ * @returns A single ha-form schema entry.
+ */
 function colorSelector(defaultColor: number = 0): HaFormSchema {
-  return { name: "color", default: defaultColor, selector: { select: {
-    options: COLOR_OPTIONS, mode: "dropdown", custom_value: true,
-  } } };
+  return {
+    name: "color",
+    default: defaultColor,
+    selector: {
+      select: {
+        options: COLOR_OPTIONS,
+        mode: "dropdown",
+        custom_value: true,
+      },
+    },
+  };
 }
 
-export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
+export const SCHEMAS: Record<
+  string,
+  (d: DisplayConfig) => HaFormSchema[]
+> = {
   text: (d) => [
     { name: "text", required: true, selector: { text: {} } },
     { type: "grid", name: "", schema: posXYW(d) },
     {
-      type: "grid", name: "", schema: [
+      type: "grid",
+      name: "",
+      schema: [
         fontSizeSelector(FONT_SIZE_TEXT),
         colorSelector(),
-        { name: "align", default: "left", selector: { select: {
-          options: [
-            { value: "left", label: "Left" },
-            { value: "center", label: "Center" },
-            { value: "right", label: "Right" },
-          ],
-        } } },
+        {
+          name: "align",
+          default: "left",
+          selector: {
+            select: {
+              options: [
+                { value: "left", label: "Left" },
+                { value: "center", label: "Center" },
+                { value: "right", label: "Right" },
+              ],
+            },
+          },
+        },
       ],
     },
   ],
 
   separator: (d) => [
     {
-      type: "grid", name: "", schema: [
-        { name: "direction", default: "horizontal", selector: { select: { options: [
-          { value: "horizontal", label: "Horizontal" },
-          { value: "vertical", label: "Vertical" },
-        ] } } },
-        { name: "style", default: "line", selector: { select: { options: [
-          { value: "line", label: "Line" },
-          { value: "bar", label: "Bar" },
-        ] } } },
+      type: "grid",
+      name: "",
+      schema: [
+        {
+          name: "direction",
+          default: "horizontal",
+          selector: {
+            select: {
+              options: [
+                { value: "horizontal", label: "Horizontal" },
+                { value: "vertical", label: "Vertical" },
+              ],
+            },
+          },
+        },
+        {
+          name: "style",
+          default: "line",
+          selector: {
+            select: {
+              options: [
+                { value: "line", label: "Line" },
+                { value: "bar", label: "Bar" },
+              ],
+            },
+          },
+        },
       ],
     },
     {
-      type: "grid", name: "", schema: [
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "length", selector: { number: { min: 0, max: Math.max(d.width, d.height), step: 8, mode: "box" } } },
+      type: "grid",
+      name: "",
+      schema: [
+        {
+          name: "x",
+          default: 24,
+          selector: {
+            number: {
+              min: 0, max: d.width, step: 8, mode: "box",
+            },
+          },
+        },
+        {
+          name: "y",
+          default: 0,
+          selector: {
+            number: {
+              min: 0, max: d.height, step: 8, mode: "box",
+            },
+          },
+        },
+        {
+          name: "length",
+          selector: {
+            number: {
+              min: 0,
+              max: Math.max(d.width, d.height),
+              step: 8,
+              mode: "box",
+            },
+          },
+        },
       ],
     },
   ],
 
   weather: (d) => [
-    { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
+    {
+      name: "entity",
+      required: true,
+      selector: { entity: { domain: "weather" } },
+    },
     { type: "grid", name: "", schema: posXYW(d) },
     {
-      type: "grid", name: "", schema: [
-        { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
+      type: "grid",
+      name: "",
+      schema: [
+        {
+          name: "forecast_days",
+          default: 5,
+          selector: { number: { min: 0, max: 14, mode: "box" } },
+        },
         fontSizeSelector(FONT_SIZE_WEATHER),
       ],
     },
@@ -146,24 +325,52 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
 
   sensor_rows: (d) => [
     { name: "title", selector: { text: {} } },
-    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_SENSOR_ROWS)] },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        ...posXYW(d),
+        fontSizeSelector(FONT_SIZE_SENSOR_ROWS),
+      ],
+    },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   device_battery: (d) => [
     { type: "grid", name: "", schema: posXY(d) },
-    { type: "grid", name: "", schema: [colorSelector(), fontSizeSelector(FONT_SIZE_DEVICE_BATTERY)] },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        colorSelector(),
+        fontSizeSelector(FONT_SIZE_DEVICE_BATTERY),
+      ],
+    },
   ],
 
   status_icons: (d) => [
     { name: "title", selector: { text: {} } },
-    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_STATUS_ICONS)] },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        ...posXYW(d),
+        fontSizeSelector(FONT_SIZE_STATUS_ICONS),
+      ],
+    },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   waste_schedule: (d) => [
     { name: "title", selector: { text: {} } },
-    { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
+    {
+      type: "grid",
+      name: "",
+      schema: [
+        ...posXYW(d),
+        fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE),
+      ],
+    },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 };
@@ -181,22 +388,28 @@ export const LABELS: Record<string, string> = {
   forecast_days: "Forecast days",
 };
 
-// ── HA component loader ──────────────────────────────────────────────────────
+// ── HA component loader ──────────────────────────────────────────
 
-type HaCardClass = CustomElementConstructor & { getConfigElement(): Promise<unknown> };
+type HaCardClass = CustomElementConstructor & {
+  getConfigElement(): Promise<unknown>;
+};
 
 export async function loadHaComponents(): Promise<void> {
   if (!customElements.get("ha-form")) {
-    const cls = customElements.get("hui-tile-card") as HaCardClass | undefined;
+    const cls = customElements.get(
+      "hui-tile-card"
+    ) as HaCardClass | undefined;
     if (cls) await cls.getConfigElement();
   }
   if (!customElements.get("ha-entity-picker")) {
-    const cls = customElements.get("hui-entities-card") as HaCardClass | undefined;
+    const cls = customElements.get(
+      "hui-entities-card"
+    ) as HaCardClass | undefined;
     if (cls) await cls.getConfigElement();
   }
 }
 
-// ── Summary helper (extracted for testability) ────────────────────────────────
+// ── Summary helper (extracted for testability) ───────────────────
 
 export function getSummary(widget: Widget): string {
   const t = widget.type;
@@ -210,7 +423,11 @@ export function getSummary(widget: Widget): string {
   if (t === "device_battery") {
     return "Device battery";
   }
-  if (t === "sensor_rows" || t === "status_icons" || t === "waste_schedule") {
+  if (
+    t === "sensor_rows" ||
+    t === "status_icons" ||
+    t === "waste_schedule"
+  ) {
     const title = widget.title ? `${widget.title} — ` : "";
     const count = (widget.entities || []).length;
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
@@ -223,7 +440,7 @@ export function getSummary(widget: Widget): string {
   return t;
 }
 
-// ── Editor class ──────────────────────────────────────────────────────────────
+// ── Editor class ─────────────────────────────────────────────────
 
 class EinkDashboardEditor extends HTMLElement {
   private _hass: HomeAssistant | null = null;
@@ -237,13 +454,15 @@ class EinkDashboardEditor extends HTMLElement {
     this.attachShadow({ mode: "open" });
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────
 
   set hass(hass: HomeAssistant) {
     this._hass = hass;
-    this.shadowRoot!.querySelectorAll<HaFormElement>("ha-form").forEach((el) => {
-      el.hass = hass;
-    });
+    this.shadowRoot!
+      .querySelectorAll<HaFormElement>("ha-form")
+      .forEach((el) => {
+        el.hass = hass;
+      });
   }
 
   setWidgets(widgets: Widget[]): void {
@@ -254,16 +473,24 @@ class EinkDashboardEditor extends HTMLElement {
 
   setDisplay(display: DisplayConfig): void {
     this._display = display;
-    const info = this.shadowRoot!.querySelector<HTMLElement>(".display-info");
+    const info =
+      this.shadowRoot!.querySelector<HTMLElement>(".display-info");
     if (info) {
       info.textContent = `${display.width} × ${display.height}`;
     }
   }
 
-  // ── Shadow DOM ────────────────────────────────────────────────────────────
+  // ── Shadow DOM ─────────────────────────────────────────────────
 
+  /**
+   * Build the editor outer shell: header with add button, empty
+   * widget list container, and footer with display info and save
+   * button. Called once; subsequent rebuilds skip this step.
+   */
   private async _buildShell(): Promise<void> {
     await loadHaComponents();
+    const size =
+      `${this._display.width} × ${this._display.height}`;
     this.shadowRoot!.innerHTML = `
       <style>
         :host { display: block; font-size: 14px; }
@@ -277,8 +504,11 @@ class EinkDashboardEditor extends HTMLElement {
           align-items: center;
           justify-content: space-between;
           padding: 8px 12px;
-          border-bottom: 1px solid var(--divider-color, #e0e0e0);
-          background: var(--secondary-background-color, #f5f5f5);
+          border-bottom: 1px solid
+            var(--divider-color, #e0e0e0);
+          background: var(
+            --secondary-background-color, #f5f5f5
+          );
         }
         .editor-header span {
           font-weight: 500;
@@ -293,35 +523,13 @@ class EinkDashboardEditor extends HTMLElement {
           background: var(--card-background-color, #fff);
           color: var(--primary-color, #03a9f4);
         }
-        .add-select-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 12px;
-          background: var(--secondary-background-color, #f5f5f5);
-          border-bottom: 1px solid var(--divider-color, #e0e0e0);
-        }
-        .add-select-row label {
-          font-size: 13px;
-          color: var(--secondary-text-color, #757575);
-          white-space: nowrap;
-        }
-        .add-select-row ha-select { flex: 1; }
-        .cancel-add-btn {
-          font-size: 12px;
-          padding: 2px 8px;
-          border: 1px solid var(--divider-color, #ccc);
-          border-radius: 4px;
-          cursor: pointer;
-          background: var(--card-background-color, #fff);
-          color: var(--secondary-text-color, #757575);
-        }
         .widget-list {
           display: flex;
           flex-direction: column;
         }
         .widget-item {
-          border-bottom: 1px solid var(--divider-color, #e8e8e8);
+          border-bottom: 1px solid
+            var(--divider-color, #e8e8e8);
         }
         .widget-header {
           display: flex;
@@ -354,20 +562,31 @@ class EinkDashboardEditor extends HTMLElement {
           line-height: 1;
           border-radius: 3px;
         }
-        .icon-btn:hover { background: var(--divider-color, #e0e0e0); }
-        .icon-btn.delete:hover { color: var(--error-color, #b00020); }
-        .icon-btn.expand { color: var(--primary-color, #03a9f4); }
+        .icon-btn:hover {
+          background: var(--divider-color, #e0e0e0);
+        }
+        .icon-btn.delete:hover {
+          color: var(--error-color, #b00020);
+        }
+        .icon-btn.expand {
+          color: var(--primary-color, #03a9f4);
+        }
         .widget-form {
           padding: 8px 12px 12px 12px;
-          background: var(--secondary-background-color, #fafafa);
+          background: var(
+            --secondary-background-color, #fafafa
+          );
         }
         .editor-footer {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: 8px 12px;
-          border-top: 1px solid var(--divider-color, #e0e0e0);
-          background: var(--secondary-background-color, #f5f5f5);
+          border-top: 1px solid
+            var(--divider-color, #e0e0e0);
+          background: var(
+            --secondary-background-color, #f5f5f5
+          );
         }
         .display-info {
           font-size: 12px;
@@ -390,40 +609,27 @@ class EinkDashboardEditor extends HTMLElement {
           <span>Widgets</span>
           <button class="add-btn">+ Add Widget</button>
         </div>
-        <div class="add-select-row" style="display:none">
-          <label>Type:</label>
-          <ha-select></ha-select>
-          <button class="cancel-add-btn">Cancel</button>
-        </div>
         <div class="widget-list"></div>
         <div class="editor-footer">
-          <span class="display-info">${this._display.width} × ${this._display.height}</span>
+          <span class="display-info">${size}</span>
           <button class="save-btn">Save</button>
         </div>
       </div>
     `;
 
-    this.shadowRoot!.querySelector<HTMLButtonElement>(".add-btn")!.addEventListener(
-      "click", () => this._onAddBtnClick()
-    );
-    this.shadowRoot!.querySelector<HTMLButtonElement>(".cancel-add-btn")!.addEventListener(
-      "click", () => this._cancelAdd()
-    );
-    const typeSelect = this.shadowRoot!.querySelector<HaSelectElement>(".add-select-row ha-select")!;
-    typeSelect.options = Object.entries(WIDGET_TYPES).map(([k, v]) => ({
-      value: k,
-      label: v.label,
-    }));
-    typeSelect.addEventListener("selected", (ev) => {
-      const value = (ev as CustomEvent<{ value?: string }>).detail?.value;
-      if (value) this._onTypeSelected(value);
-    });
-    this.shadowRoot!.querySelector<HTMLButtonElement>(".save-btn")!.addEventListener(
-      "click", () => this._onSave()
-    );
+    this.shadowRoot!
+      .querySelector<HTMLButtonElement>(".add-btn")!
+      .addEventListener("click", () => this._onAddBtnClick());
+    this.shadowRoot!
+      .querySelector<HTMLButtonElement>(".save-btn")!
+      .addEventListener("click", () => this._onSave());
     this._built = true;
   }
 
+  /**
+   * Ensure the shell is built, then re-render the widget list.
+   * Entry point for full UI refreshes after state changes.
+   */
   private async _rebuild(): Promise<void> {
     if (!this._built) {
       await this._buildShell();
@@ -431,17 +637,32 @@ class EinkDashboardEditor extends HTMLElement {
     this._renderWidgetList();
   }
 
-  // ── Widget list rendering ─────────────────────────────────────────────────
+  // ── Widget list rendering ──────────────────────────────────────
 
+  /** Clear and re-populate the widget list container. */
   private _renderWidgetList(): void {
-    const list = this.shadowRoot!.querySelector<HTMLElement>(".widget-list")!;
+    const list =
+      this.shadowRoot!.querySelector<HTMLElement>(
+        ".widget-list"
+      )!;
     list.innerHTML = "";
     this._widgets.forEach((widget, index) => {
       list.appendChild(this._buildWidgetItem(widget, index));
     });
   }
 
-  private _buildWidgetItem(widget: Widget, index: number): HTMLElement {
+  /**
+   * Create the DOM element for a single widget row including
+   * its header controls (move, expand, delete).
+   *
+   * @param widget - Widget data to render.
+   * @param index  - Position in the widget array.
+   * @returns The widget-item div element.
+   */
+  private _buildWidgetItem(
+    widget: Widget,
+    index: number,
+  ): HTMLElement {
     const meta = WIDGET_TYPES[widget.type];
     const typeLabel = meta ? meta.label : widget.type;
     const summary = getSummary(widget);
@@ -489,9 +710,15 @@ class EinkDashboardEditor extends HTMLElement {
     header.append(upBtn, downBtn, badge, labelEl, expandBtn, deleteBtn);
 
     upBtn.addEventListener("click", () => this._onMoveUp(index));
-    downBtn.addEventListener("click", () => this._onMoveDown(index));
-    expandBtn.addEventListener("click", () => this._onToggleExpand(index));
-    deleteBtn.addEventListener("click", () => this._onDelete(index));
+    downBtn.addEventListener(
+      "click", () => this._onMoveDown(index)
+    );
+    expandBtn.addEventListener(
+      "click", () => this._onToggleExpand(index)
+    );
+    deleteBtn.addEventListener(
+      "click", () => this._onDelete(index)
+    );
 
     item.appendChild(header);
 
@@ -502,9 +729,19 @@ class EinkDashboardEditor extends HTMLElement {
     return item;
   }
 
-  // ── Per-widget form ───────────────────────────────────────────────────────
+  // ── Per-widget form ────────────────────────────────────────────
 
-  private _buildWidgetForm(widget: Widget, index: number): HTMLElement {
+  /**
+   * Create the ha-form element for editing a widget's fields.
+   *
+   * @param widget - Widget data used to populate the form.
+   * @param index  - Position in the widget array.
+   * @returns Container div holding the ha-form.
+   */
+  private _buildWidgetForm(
+    widget: Widget,
+    index: number,
+  ): HTMLElement {
     const container = document.createElement("div");
     container.className = "widget-form";
     const schemaFn = SCHEMAS[widget.type];
@@ -515,32 +752,47 @@ class EinkDashboardEditor extends HTMLElement {
       formData.color = String(formData.color);
     }
 
-    const form = document.createElement("ha-form") as unknown as HaFormElement;
+    const form =
+      document.createElement("ha-form") as unknown as HaFormElement;
     form.hass = this._hass;
     form.data = formData;
     form.schema = schemaFn(this._display);
     form.computeLabel = (s) => LABELS[s.name] || s.name;
-    form.addEventListener("value-changed", ((ev: CustomEvent<{ value: Record<string, unknown> }>) => {
-      ev.stopPropagation();
-      const raw = ev.detail.value;
-      const data: Record<string, unknown> = { type: widget.type, ...raw };
-      if ("color" in data && data.color !== undefined) {
-        data.color = parseInt(String(data.color), 10) || 0;
-      }
-      this._widgets[index] = data as unknown as Widget;
-      this._fireWidgetChange();
-      this._updateSummary(index);
-    }) as EventListener);
+    form.addEventListener(
+      "value-changed",
+      ((ev: CustomEvent<{ value: Record<string, unknown> }>) => {
+        ev.stopPropagation();
+        const raw = ev.detail.value;
+        const data: Record<string, unknown> = {
+          type: widget.type,
+          ...raw,
+        };
+        if ("color" in data && data.color !== undefined) {
+          data.color = parseInt(String(data.color), 10) || 0;
+        }
+        this._widgets[index] = data as unknown as Widget;
+        this._fireWidgetChange();
+        this._updateSummary(index);
+      }) as EventListener
+    );
     container.appendChild(form);
     return container;
   }
 
-  // ── Inline summary update (avoid full re-render on field edits) ───────────
+  // ── Inline summary update (avoids full re-render on edits) ────
 
+  /**
+   * Refresh the summary label for a single widget row without
+   * re-rendering the entire list.
+   *
+   * @param index - Index of the widget to update.
+   */
   private _updateSummary(index: number): void {
-    const items = this.shadowRoot!.querySelectorAll<HTMLElement>(".widget-item");
+    const items = this.shadowRoot!
+      .querySelectorAll<HTMLElement>(".widget-item");
     if (!items[index]) return;
-    const label = items[index].querySelector<HTMLElement>(".widget-label");
+    const label =
+      items[index].querySelector<HTMLElement>(".widget-label");
     if (label) {
       const summary = getSummary(this._widgets[index]);
       label.textContent = summary;
@@ -548,28 +800,49 @@ class EinkDashboardEditor extends HTMLElement {
     }
   }
 
-  // ── Event handlers ────────────────────────────────────────────────────────
+  // ── Event handlers ─────────────────────────────────────────────
 
+  /**
+   * Swap a widget with its predecessor and re-render the list.
+   *
+   * @param index - Index of the widget to move up.
+   */
   private _onMoveUp(index: number): void {
     if (index === 0) return;
     [this._widgets[index - 1], this._widgets[index]] =
       [this._widgets[index], this._widgets[index - 1]];
-    if (this._expandedIndex === index) this._expandedIndex = index - 1;
-    else if (this._expandedIndex === index - 1) this._expandedIndex = index;
+    if (this._expandedIndex === index) {
+      this._expandedIndex = index - 1;
+    } else if (this._expandedIndex === index - 1) {
+      this._expandedIndex = index;
+    }
     this._renderWidgetList();
     this._fireWidgetChange();
   }
 
+  /**
+   * Swap a widget with its successor and re-render the list.
+   *
+   * @param index - Index of the widget to move down.
+   */
   private _onMoveDown(index: number): void {
     if (index >= this._widgets.length - 1) return;
     [this._widgets[index], this._widgets[index + 1]] =
       [this._widgets[index + 1], this._widgets[index]];
-    if (this._expandedIndex === index) this._expandedIndex = index + 1;
-    else if (this._expandedIndex === index + 1) this._expandedIndex = index;
+    if (this._expandedIndex === index) {
+      this._expandedIndex = index + 1;
+    } else if (this._expandedIndex === index + 1) {
+      this._expandedIndex = index;
+    }
     this._renderWidgetList();
     this._fireWidgetChange();
   }
 
+  /**
+   * Remove a widget from the list and re-render.
+   *
+   * @param index - Index of the widget to remove.
+   */
   private _onDelete(index: number): void {
     this._widgets.splice(index, 1);
     if (this._expandedIndex === index) this._expandedIndex = -1;
@@ -578,37 +851,61 @@ class EinkDashboardEditor extends HTMLElement {
     this._fireWidgetChange();
   }
 
+  /**
+   * Toggle the expanded/collapsed state of a widget row.
+   *
+   * @param index - Index of the widget to toggle.
+   */
   private _onToggleExpand(index: number): void {
-    this._expandedIndex = this._expandedIndex === index ? -1 : index;
+    this._expandedIndex =
+      this._expandedIndex === index ? -1 : index;
     this._renderWidgetList();
   }
 
+  /**
+   * Open the widget picker dialog. Creates the picker element
+   * on first use and reuses it on subsequent clicks.
+   */
   private _onAddBtnClick(): void {
-    this.shadowRoot!.querySelector<HTMLElement>(".add-select-row")!.style.display = "flex";
-    this.shadowRoot!.querySelector<HTMLElement>(".add-btn")!.style.display = "none";
+    let picker = this.shadowRoot!.querySelector<EinkWidgetPicker>(
+      "eink-widget-picker"
+    );
+    if (!picker) {
+      picker = document.createElement(
+        "eink-widget-picker"
+      ) as EinkWidgetPicker;
+      picker.addEventListener(
+        "type-selected",
+        ((ev: CustomEvent<{ type: string }>) => {
+          this._onTypeSelected(ev.detail.type);
+        }) as EventListener
+      );
+      this.shadowRoot!.appendChild(picker);
+    }
+    picker.open(WIDGET_TYPES);
   }
 
-  private _cancelAdd(): void {
-    this.shadowRoot!.querySelector<HTMLElement>(".add-select-row")!.style.display = "none";
-    this.shadowRoot!.querySelector<HTMLElement>(".add-btn")!.style.display = "";
-    const sel = this.shadowRoot!.querySelector<HaSelectElement>(".add-select-row ha-select")!;
-    sel.value = "";
-  }
-
+  /**
+   * Handle a widget type selection from the picker. Appends a
+   * new widget with default values and expands its form.
+   *
+   * @param type - Widget type key (e.g. "weather").
+   */
   private _onTypeSelected(type: string): void {
     const meta = WIDGET_TYPES[type];
     if (!meta) return;
     const newWidget = { ...meta.defaults };
     this._widgets.push(newWidget);
     this._expandedIndex = this._widgets.length - 1;
-    this._cancelAdd();
     this._renderWidgetList();
     this._fireWidgetChange();
-    const items = this.shadowRoot!.querySelectorAll<HTMLElement>(".widget-item");
+    const items = this.shadowRoot!
+      .querySelectorAll<HTMLElement>(".widget-item");
     const last = items[items.length - 1];
     if (last) last.scrollIntoView({ block: "nearest" });
   }
 
+  /** Emit a "save" event with a snapshot of the widget list. */
   private _onSave(): void {
     this.dispatchEvent(
       new CustomEvent("save", {
@@ -619,6 +916,10 @@ class EinkDashboardEditor extends HTMLElement {
     );
   }
 
+  /**
+   * Emit a "widget-change" event with a shallow copy of the
+   * current widget list.
+   */
   private _fireWidgetChange(): void {
     this.dispatchEvent(
       new CustomEvent("widget-change", {
@@ -630,7 +931,7 @@ class EinkDashboardEditor extends HTMLElement {
   }
 }
 
-// ── Registration ──────────────────────────────────────────────────────────────
+// ── Registration ─────────────────────────────────────────────────
 
 if (!customElements.get(EDITOR_TAG)) {
   customElements.define(EDITOR_TAG, EinkDashboardEditor);
