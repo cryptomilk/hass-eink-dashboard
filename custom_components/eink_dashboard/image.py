@@ -71,6 +71,7 @@ def _is_image_blank(image_bytes: bytes) -> bool:
             img = img.convert("L")
         return not any(b < 200 for b in img.tobytes())
     except Exception:
+        _LOGGER.debug("Could not check if image is blank", exc_info=True)
         return False
 
 
