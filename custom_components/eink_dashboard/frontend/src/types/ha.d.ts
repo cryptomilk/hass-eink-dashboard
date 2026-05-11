@@ -60,6 +60,7 @@ export interface CustomCardInfo {
 export interface DisplayConfig {
   width: number;
   height: number;
+  rotation: number;
   grayscale_levels?: number;
   optimize?: boolean;
 }

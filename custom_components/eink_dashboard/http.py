@@ -56,6 +56,7 @@ class EinkLayoutView(HomeAssistantView):
                 "display": {
                     "width": width,
                     "height": height,
+                    "rotation": entry.options.get("rotation", 0),
                     "grayscale_levels": entry.options.get(
                         "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
                     ),

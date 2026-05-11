@@ -285,7 +285,7 @@ export function getSummary(widget: Widget): string {
 class EinkDashboardEditor extends HTMLElement {
   private _hass: HomeAssistant | null = null;
   private _widgets: Widget[] = [];
-  private _display: DisplayConfig = { width: 0, height: 0 };
+  private _display: DisplayConfig = { width: 0, height: 0, rotation: 0 };
   private _expandedIndex = -1;
   private _built = false;
 

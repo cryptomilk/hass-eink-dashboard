@@ -330,7 +330,9 @@ class TestEinkLayoutView:
         assert response.status == 200
         body = json.loads(response.text)
         assert body["widgets"] == widgets
-        assert body["display"] == {"width": 758, "height": 1024}
+        assert body["display"]["width"] == 758
+        assert body["display"]["height"] == 1024
+        assert body["display"]["rotation"] == 0
         assert body["device"]["name"] == "Test Dashboard"
         assert body["device"]["model"] == "kindle_pw"
         assert body["device"]["model_label"] == "Kindle Paperwhite 1/2/3"
@@ -558,12 +560,13 @@ class TestEinkLayoutViewPost:
         with pytest.raises(web.HTTPBadRequest):
             await view.post(request, "test_entry")
 
-    async def test_post_nested_dict_field_raises_400(self) -> None:
-        widgets = [{"type": "text", "text": {"nested": "bad"}}]
+    async def test_post_dict_field_value_is_accepted(self) -> None:
+        # dict-typed field values are allowed so chart widgets can pass config objects
+        widgets = [{"type": "chart", "config": {"series": []}}]
         view = EinkLayoutView()
         request = _make_layout_request(
             body=widgets, store=_make_store(), entity=_make_post_entity()
         )
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        response = await view.post(request, "test_entry")
+        assert response.status == 200

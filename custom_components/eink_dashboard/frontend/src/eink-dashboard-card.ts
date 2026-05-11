@@ -994,6 +994,50 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Server image toggle ───────────────────────────────────────────────────
 
+  private _applyServerImageRotation(): void {
+    const rotation = this._layout!.display.rotation ?? 0;
+    if (rotation === 0) return;
+
+    // The server PNG is the portrait canvas rotated 90 deg CCW by PIL (e.g. 800x480 for TRMNL OG
+    // portrait). Rotate it 90 deg CW via CSS so it appears portrait, matching the physical device.
+    const sW = this._layout!.display.height; // landscape width of server image
+    const sH = this._layout!.display.width;  // landscape height of server image
+    const C = this._container.clientWidth;
+    if (C === 0) return;
+
+    const scale = C / sH;
+    const imgElW = sW * scale;
+    const imgElH = sH * scale; // equals C
+    const containerH = sW * scale;
+    const imgLeft = (C - imgElW) / 2;
+    const imgTop = (containerH - imgElH) / 2;
+
+    this._container.style.height = `${containerH}px`;
+    this._container.style.overflow = "hidden";
+
+    const img = this._serverImg!;
+    img.style.position = "absolute";
+    img.style.width = `${imgElW}px`;
+    img.style.height = `${imgElH}px`;
+    img.style.left = `${imgLeft}px`;
+    img.style.top = `${imgTop}px`;
+    img.style.transform = "rotate(90deg)";
+    img.style.transformOrigin = "center center";
+  }
+
+  private _resetServerImageStyles(): void {
+    const img = this._serverImg!;
+    img.style.position = "";
+    img.style.width = "";
+    img.style.height = "";
+    img.style.left = "";
+    img.style.top = "";
+    img.style.transform = "";
+    img.style.transformOrigin = "";
+    this._container.style.height = "";
+    this._container.style.overflow = "";
+  }
+
   private async _onToggle(): Promise<void> {
     if (!this._canvas) return;
     this._showServerImage = !this._showServerImage;
@@ -1018,9 +1062,11 @@ class EinkDashboardCard extends HTMLElement {
       this._serverImg!.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
       this._canvas.style.display = "none";
       this._serverImg!.style.display = "block";
+      this._applyServerImageRotation();
       this._toggleBtn.textContent = "Show canvas preview";
       this._toggleBtn.classList.add("active");
     } else {
+      this._resetServerImageStyles();
       this._serverImg!.style.display = "none";
       this._canvas.style.display = "block";
       this._toggleBtn.textContent = "Show rendered image";
