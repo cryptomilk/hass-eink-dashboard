@@ -561,7 +561,7 @@ class TestEinkLayoutViewPost:
             await view.post(request, "test_entry")
 
     async def test_post_dict_field_value_is_accepted(self) -> None:
-        # dict-typed field values are allowed so chart widgets can pass config objects
+        # dict fields allowed so chart widget config objects pass validation
         widgets = [{"type": "chart", "config": {"series": []}}]
         view = EinkLayoutView()
         request = _make_layout_request(

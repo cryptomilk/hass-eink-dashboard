@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import io
 import logging
@@ -371,15 +372,13 @@ class EinkDashboardImage(ImageEntity):
                 )
                 points = []
                 for state in raw.get(entity_id, []):
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         points.append(
                             {
                                 "t": state.last_changed.timestamp(),
                                 "v": float(state.state),
                             }
                         )
-                    except (ValueError, TypeError):
-                        pass
                 histories[entity_id] = points
         except Exception:
             _LOGGER.warning("Could not fetch history for chart widgets")

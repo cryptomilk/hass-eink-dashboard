@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import functools
-import math
 import io
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -1249,7 +1249,7 @@ def _draw_polyline_dashed(
     width: int,
     dash: tuple[int, int] | None,
 ) -> None:
-    """Draw a polyline with an optional dash pattern, maintaining dash state across segments."""
+    """Draw a polyline with an optional dash pattern."""
     if len(points) < 2:
         return
     if dash is None:
@@ -1296,7 +1296,7 @@ _SERIES_STYLES: list[tuple[int, tuple[int, int] | None]] = [
 
 
 def _hex_to_gray_float(hex_color: str) -> float:
-    """Convert a hex color to a matplotlib grayscale float (0.0=black, 1.0=white)."""
+    """Convert a hex color string to a matplotlib grayscale float."""
     hex_color = hex_color.lstrip("#")
     if len(hex_color) == 3:
         hex_color = "".join(c * 2 for c in hex_color)
@@ -1309,7 +1309,7 @@ def _hex_to_gray_float(hex_color: str) -> float:
         return 0.0
 
 
-def render_chart(
+def render_chart(  # noqa: C901
     draw: ImageDraw.ImageDraw,
     widget: Widget,
     config: DisplayConfig,
