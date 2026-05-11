@@ -688,6 +688,44 @@ def render_text(
     draw.text((x, y), text, fill=color, font=font)
 
 
+def render_text_multiline(
+    draw: ImageDraw.ImageDraw,
+    widget: Widget,
+    config: DisplayConfig,
+) -> None:
+    """Draw a word-wrapped text widget, breaking at word boundaries."""
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    text = str(widget.get("text", ""))
+    font_size = widget.get("font_size", FONT_SIZE_TEXT)
+    color = widget.get("color", COLOR_BLACK)
+    right_edge = _compute_right_edge(x, widget, config["width"])
+    max_width = right_edge - x
+    line_height = int(widget.get("line_height", font_size + 6))
+
+    font = _load_font(font_size)
+
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = (current + " " + word).strip()
+        bbox = draw.textbbox((0, 0), candidate, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+
+    cur_y = y
+    for line in lines:
+        draw.text((x, cur_y), line, fill=color, font=font)
+        cur_y += line_height
+
+
 def render_line(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -1639,6 +1677,7 @@ def render_chart(  # noqa: C901
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
     WidgetType.TEXT: render_text,
+    WidgetType.TEXT_MULTILINE: render_text_multiline,
     WidgetType.LINE: render_line,
     WidgetType.SEPARATOR: render_separator,
     WidgetType.WEATHER: render_weather,

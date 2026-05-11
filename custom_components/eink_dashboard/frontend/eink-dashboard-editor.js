@@ -11,11 +11,15 @@ const FONT_SIZE_WASTE_SCHEDULE = 28;
 // ── Widget type registry ──────────────────────────────────────────────────────
 export const WIDGET_TYPES = {
     text: {
-        label: "Text",
+        label: "Text (single line)",
         defaults: { type: "text", x: 24, y: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0, align: "left" },
     },
+    text_multiline: {
+        label: "Text (multiline)",
+        defaults: { type: "text_multiline", x: 24, y: 0, w: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0 },
+    },
     line: {
-        label: "Line",
+        label: "Divider",
         defaults: { type: "line", x: 24, y: 0, x2: 24, y2: 0, color: 210, width: 1 },
     },
     separator: {
@@ -80,8 +84,8 @@ function colorSelector(defaultColor = 0) {
 }
 export const SCHEMAS = {
     text: (d) => [
-        { name: "text", required: true, selector: { text: {} } },
         { type: "grid", name: "", schema: posXYW(d) },
+        { name: "text", required: true, selector: { text: {} } },
         {
             type: "grid", name: "", schema: [
                 fontSizeSelector(FONT_SIZE_TEXT),
@@ -93,6 +97,17 @@ export const SCHEMAS = {
                                 { value: "right", label: "Right" },
                             ],
                         } } },
+            ],
+        },
+    ],
+    text_multiline: (d) => [
+        { type: "grid", name: "", schema: posXYW(d) },
+        { name: "text", required: true, selector: { text: { multiline: true } } },
+        {
+            type: "grid", name: "", schema: [
+                fontSizeSelector(FONT_SIZE_TEXT),
+                colorSelector(),
+                { name: "line_height", selector: { number: { min: 8, max: 120, mode: "box" } } },
             ],
         },
     ],
@@ -122,8 +137,8 @@ export const SCHEMAS = {
         colorSelector(210),
     ],
     weather: (d) => [
-        { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
         { type: "grid", name: "", schema: posXYW(d) },
+        { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
         {
             type: "grid", name: "", schema: [
                 { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
@@ -132,8 +147,8 @@ export const SCHEMAS = {
         },
     ],
     sensor_rows: (d) => [
-        { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_SENSOR_ROWS)] },
+        { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     device_battery: (d) => [
@@ -141,16 +156,22 @@ export const SCHEMAS = {
         { type: "grid", name: "", schema: [colorSelector(), fontSizeSelector(FONT_SIZE_DEVICE_BATTERY)] },
     ],
     status_icons: (d) => [
-        { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_STATUS_ICONS)] },
+        { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     waste_schedule: (d) => [
-        { name: "title", selector: { text: {} } },
         { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
+        { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     chart: (d) => [
+        {
+            type: "grid", name: "", schema: [
+                ...posXYW(d),
+                { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
+            ],
+        },
         { name: "entities", selector: { entity: { multiple: true } } },
         { name: "graph_span", selector: { text: {} } },
         { type: "grid", name: "", schema: [
@@ -170,12 +191,6 @@ export const SCHEMAS = {
                     ],
                     mode: "dropdown",
                 } } },
-        {
-            type: "grid", name: "", schema: [
-                ...posXYW(d),
-                { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
-            ],
-        },
     ],
 };
 export const LABELS = {
@@ -213,7 +228,7 @@ export async function loadHaComponents() {
 // ── Summary helper (extracted for testability) ────────────────────────────────
 export function getSummary(widget) {
     const t = widget.type;
-    if (t === "text") {
+    if (t === "text" || t === "text_multiline") {
         const s = String(widget.text || "");
         return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
     }

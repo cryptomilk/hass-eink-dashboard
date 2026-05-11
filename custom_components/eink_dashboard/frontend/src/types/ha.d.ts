@@ -127,6 +127,12 @@ export interface TextWidget extends WidgetBase {
   align?: "left" | "center" | "right";
 }
 
+export interface TextMultilineWidget extends WidgetBase {
+  type: "text_multiline";
+  text?: string;
+  line_height?: number;
+}
+
 export interface LineWidget extends WidgetBase {
   type: "line";
   x2?: number;
@@ -185,6 +191,7 @@ export interface ChartWidget extends WidgetBase {
 
 export type Widget =
   | TextWidget
+  | TextMultilineWidget
   | LineWidget
   | SeparatorWidget
   | WeatherWidget

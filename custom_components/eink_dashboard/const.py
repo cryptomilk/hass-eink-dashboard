@@ -156,6 +156,7 @@ class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 
     TEXT = "text"
+    TEXT_MULTILINE = "text_multiline"
     LINE = "line"
     SEPARATOR = "separator"
     WEATHER = "weather"

@@ -6,6 +6,7 @@ import type {
   HassEntity,
   Widget,
   TextWidget,
+  TextMultilineWidget,
   LineWidget,
   SeparatorWidget,
   WeatherWidget,
@@ -913,6 +914,7 @@ class EinkDashboardCard extends HTMLElement {
 
     const dispatch: Partial<Record<string, (w: Widget) => WidgetBounds>> = {
       text: (w) => this._renderText(ctx, w as TextWidget),
+      text_multiline: (w) => this._renderTextMultiline(ctx, w as TextMultilineWidget),
       line: (w) => this._renderLine(ctx, w as LineWidget),
       separator: (w) => this._renderSeparator(ctx, w as SeparatorWidget),
       weather: (w) => this._renderWeather(ctx, w as WeatherWidget),
@@ -1184,6 +1186,43 @@ class EinkDashboardCard extends HTMLElement {
     const bx = Math.min(drawX, x);
     const boundsW = widget.w != null ? widget.w : Math.max(drawX + tw - bx, 20);
     return { x: bx, y, w: boundsW, h: fontSize };
+  }
+
+  // mirrors render.py: render_text_multiline
+  private _renderTextMultiline(ctx: CanvasRenderingContext2D, widget: TextMultilineWidget): WidgetBounds {
+    const { x, y, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_TEXT);
+    const text = String(widget.text ?? "");
+    const color = widget.color ?? COLOR_BLACK;
+    const lineHeight = widget.line_height ?? (fontSize + 6);
+    const maxWidth = rightEdge - x;
+
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.fillStyle = grayColor(color);
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let current = "";
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width <= maxWidth) {
+        current = candidate;
+      } else {
+        if (current) lines.push(current);
+        current = word;
+      }
+    }
+    if (current) lines.push(current);
+
+    let curY = y;
+    for (const line of lines) {
+      ctx.fillText(line, x, curY);
+      curY += lineHeight;
+    }
+
+    const totalH = lines.length * lineHeight;
+    return { x, y, w: maxWidth, h: totalH };
   }
 
   // mirrors render.py: render_line (lines 103-114)

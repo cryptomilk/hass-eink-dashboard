@@ -7,6 +7,7 @@ import type {
   HaFormElement,
   HaSelectElement,
   Widget,
+  TextWidget,
   DisplayConfig,
   WidgetTypeMeta,
 } from "./types/ha.js";
@@ -26,11 +27,15 @@ const FONT_SIZE_WASTE_SCHEDULE = 28;
 
 export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   text: {
-    label: "Text",
+    label: "Text (single line)",
     defaults: { type: "text", x: 24, y: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0, align: "left" },
   },
+  text_multiline: {
+    label: "Text (multiline)",
+    defaults: { type: "text_multiline", x: 24, y: 0, w: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0 } as unknown as import("./types/ha.js").Widget,
+  },
   line: {
-    label: "Line",
+    label: "Divider",
     defaults: { type: "line", x: 24, y: 0, x2: 24, y2: 0, color: 210, width: 1 },
   },
   separator: {
@@ -115,6 +120,18 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
             { value: "right", label: "Right" },
           ],
         } } },
+      ],
+    },
+  ],
+
+  text_multiline: (d) => [
+    { type: "grid", name: "", schema: posXYW(d) },
+    { name: "text", required: true, selector: { text: { multiline: true } } },
+    {
+      type: "grid", name: "", schema: [
+        fontSizeSelector(FONT_SIZE_TEXT),
+        colorSelector(),
+        { name: "line_height", selector: { number: { min: 8, max: 120, mode: "box" } } },
       ],
     },
   ],
@@ -249,8 +266,8 @@ export async function loadHaComponents(): Promise<void> {
 
 export function getSummary(widget: Widget): string {
   const t = widget.type;
-  if (t === "text") {
-    const s = String(widget.text || "");
+  if (t === "text" || t === "text_multiline") {
+    const s = String((widget as TextWidget).text || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
   if (t === "weather") {
