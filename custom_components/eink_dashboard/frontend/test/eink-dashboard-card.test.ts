@@ -9,6 +9,12 @@ import {
   computeMetrics,
   drawCardContainer,
   drawCardRow,
+  CHIP_PAD_RATIO,
+  CHIP_ICON_RATIO,
+  CHIP_GAP_RATIO,
+  chipWidth,
+  drawChip,
+  drawChipFlow,
 } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
@@ -459,6 +465,213 @@ describe("drawCardRow", () => {
       { primary: "Test", iconFill: 0 },
     );
     // The first fill() call (circle) must use black (0,0,0).
+    expect(fillStyles[0]).toBe(grayColor(0));
+  });
+});
+
+// ── chip constants ───────────────────────────────────────────────────────────
+
+describe("chip constants", () => {
+  it("CHIP_PAD_RATIO matches Python _CHIP_PAD_RATIO", () => {
+    // Python render.py defines _CHIP_PAD_RATIO = 0.18.
+    expect(CHIP_PAD_RATIO).toBe(0.18);
+  });
+
+  it("CHIP_ICON_RATIO matches Python _CHIP_ICON_RATIO", () => {
+    // Python render.py defines _CHIP_ICON_RATIO = 0.29.
+    expect(CHIP_ICON_RATIO).toBe(0.29);
+  });
+
+  it("CHIP_GAP_RATIO matches Python _CHIP_GAP_RATIO", () => {
+    // Python render.py defines _CHIP_GAP_RATIO = 0.14.
+    expect(CHIP_GAP_RATIO).toBe(0.14);
+  });
+});
+
+// ── chipWidth ────────────────────────────────────────────────────────────────
+
+describe("chipWidth", () => {
+  it("returns positive width for simple text", () => {
+    // Basic sanity: any text chip has a positive width.
+    const ctx = createMockCtx();
+    const w = chipWidth(ctx, 40, "OK", 16, false);
+    // padH*2 = 14, textW = floor(2*16*0.6)=19, total=33
+    expect(w).toBe(33);
+  });
+
+  it("with icon is wider than without", () => {
+    // Adding an icon increases width by iconSz + iconGap.
+    const ctx = createMockCtx();
+    const withoutIcon = chipWidth(ctx, 40, "OK", 16, false);
+    const withIcon = chipWidth(ctx, 40, "OK", 16, true);
+    const iconSz = Math.round(40 * CHIP_ICON_RATIO);
+    const iconGap = Math.round(40 * CHIP_GAP_RATIO);
+    expect(withIcon - withoutIcon).toBe(iconSz + iconGap);
+  });
+
+  it("width increases with h", () => {
+    // Larger chip height produces larger chip width
+    // because padH scales with h.
+    const ctx = createMockCtx();
+    const small = chipWidth(ctx, 40, "Test", 16, false);
+    const large = chipWidth(ctx, 80, "Test", 16, false);
+    expect(large).toBeGreaterThan(small);
+  });
+});
+
+// ── drawChip ─────────────────────────────────────────────────────────────────
+
+describe("drawChip", () => {
+  it("returns x + chipW", () => {
+    // Return value must equal the x coordinate after
+    // the chip so callers can chain chips.
+    const ctx = createMockCtx();
+    const cw = chipWidth(ctx, 40, "OK", 16, false);
+    const result = drawChip(ctx, 10, 20, 40, "OK", 16, 2);
+    expect(result).toBe(10 + cw);
+  });
+
+  it("draws roundRect with pill radius floor(h/2)", () => {
+    // End-caps must be perfect semicircles: radius = h/2.
+    const ctx = createMockCtx();
+    const h = 40;
+    drawChip(ctx, 0, 0, h, "Hi", 16, 2);
+    const radius = Math.floor(h / 2);
+    const cw = chipWidth(ctx, h, "Hi", 16, false);
+    expect(ctx.roundRect).toHaveBeenCalledWith(
+      0, 0, cw, h, radius,
+    );
+  });
+
+  it("draws label text via fillText", () => {
+    // The label must appear in the fillText calls.
+    const ctx = createMockCtx();
+    drawChip(ctx, 0, 0, 40, "Hello", 16, 2);
+    const calls =
+      (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some((c) => c[0] === "Hello")).toBe(true);
+  });
+
+  it("inverted: fill is black, text is white", () => {
+    // inverted=true swaps background to black and
+    // foreground to white.
+    const ctx = createMockCtx();
+    const fillStyles: Array<
+      string | CanvasGradient | CanvasPattern
+    > = [];
+    (ctx as unknown as Record<string, unknown>).fill =
+      vi.fn(() => { fillStyles.push(ctx.fillStyle); });
+    const textStyles: Array<
+      string | CanvasGradient | CanvasPattern
+    > = [];
+    (ctx as unknown as Record<string, unknown>).fillText =
+      vi.fn((t: string) => {
+        if (t === "OK") textStyles.push(ctx.fillStyle);
+      });
+    drawChip(
+      ctx, 0, 0, 40, "OK", 16, 2, { inverted: true },
+    );
+    // Background fill must be black.
+    expect(fillStyles[0]).toBe(grayColor(0));
+    // Text fill must be white.
+    expect(textStyles[0]).toBe(grayColor(255));
+  });
+
+  it("uses the provided fontSize in ctx.font", () => {
+    // The font string for label text must contain the
+    // given fontSize.
+    const ctx = createMockCtx();
+    const fontLog: Array<[string, string]> = [];
+    (ctx as unknown as Record<string, unknown>).fillText =
+      vi.fn((text: string) => {
+        fontLog.push([text, ctx.font]);
+      });
+    drawChip(ctx, 0, 0, 40, "Hi", 24, 2);
+    const entry = fontLog.find(([t]) => t === "Hi");
+    expect(entry).toBeDefined();
+    expect(entry![1]).toContain("24px");
+  });
+
+  it("stroke outline is always COLOR_BLACK", () => {
+    // Even when inverted, the border outline must be
+    // black (COLOR_BLACK = 0).
+    const ctx = createMockCtx();
+    drawChip(
+      ctx, 0, 0, 40, "OK", 16, 2, { inverted: true },
+    );
+    expect(ctx.strokeStyle).toBe(grayColor(0));
+  });
+});
+
+// ── drawChipFlow ──────────────────────────────────────────────────────────────
+
+describe("drawChipFlow", () => {
+  it("empty chips returns y unchanged", () => {
+    // An empty chip list must not advance the cursor.
+    const ctx = createMockCtx();
+    const result = drawChipFlow(
+      ctx, 0, 50, 400, 40, [], 16, 2,
+    );
+    expect(result).toBe(50);
+  });
+
+  it("single chip returns y + h", () => {
+    // One chip occupies exactly one row.
+    const ctx = createMockCtx();
+    const result = drawChipFlow(
+      ctx, 0, 50, 400, 40, [{ text: "OK" }], 16, 2,
+    );
+    expect(result).toBe(50 + 40);
+  });
+
+  it("wraps to next row when chips exceed width", () => {
+    // With a narrow container, the second chip must wrap
+    // to a new row, pushing the return value past y+h.
+    const ctx = createMockCtx();
+    // h=40, fontSize=16:
+    // "Hello" chipW = 7*2 + floor(5*16*0.6) = 14+48 = 62
+    // gap = round(40*0.29) = 12
+    // After first chip: curX = 62
+    // "Hi" chipW = 7*2 + floor(2*16*0.6) = 14+19 = 33
+    // curX(62) > x(0): check 62+12+33=107 > w=100: wrap
+    const result = drawChipFlow(
+      ctx, 0, 0, 100, 40,
+      [{ text: "Hello" }, { text: "Hi" }],
+      16, 2,
+    );
+    // Wrapped: curY = 0+40+12=52, return = 52+40 = 92
+    expect(result).toBeGreaterThan(40);
+  });
+
+  it("first chip not skipped even if wider than w", () => {
+    // The first chip on a row is always drawn, even if
+    // wider than the container (overflow, not dropped).
+    const ctx = createMockCtx();
+    // Very narrow container (w=10) with a wide chip.
+    drawChipFlow(
+      ctx, 0, 0, 10, 40, [{ text: "AAAAAA" }], 16, 2,
+    );
+    // Chip must have been drawn (roundRect called).
+    expect(ctx.roundRect).toHaveBeenCalled();
+  });
+
+  it("passes inverted flag to drawChip", () => {
+    // inverted: true in the chip descriptor must
+    // produce a black background fill.
+    const ctx = createMockCtx();
+    const fillStyles: Array<
+      string | CanvasGradient | CanvasPattern
+    > = [];
+    (ctx as unknown as Record<string, unknown>).fill =
+      vi.fn(() => {
+        fillStyles.push(ctx.fillStyle);
+      });
+    drawChipFlow(
+      ctx, 0, 0, 400, 40,
+      [{ text: "Alert", inverted: true }],
+      16, 2,
+    );
+    // Background fill must be black.
     expect(fillStyles[0]).toBe(grayColor(0));
   });
 });

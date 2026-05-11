@@ -18,6 +18,8 @@ import type {
   WidgetMetrics,
   CardStyle,
   CardRowOpts,
+  ChipOpts,
+  ChipDescriptor,
   IndexedBounds,
   Handle,
   ForecastDay,
@@ -88,6 +90,18 @@ const PROBLEM_DEVICE_CLASSES = new Set([
 const WASTE_ROW_HEIGHT = 28;
 const WASTE_TITLE_ADVANCE = 32;
 const WASTE_ICON_SIZE = 10;
+
+// Proportional sizing constants for pill-shaped chips.
+// All three chip functions must use the same values so
+// width measurement and drawing stay in sync.
+// Mirrors _CHIP_PAD_RATIO/_CHIP_ICON_RATIO/_CHIP_GAP_RATIO
+// from render.py.
+/** @internal Exported for testing only. */
+export const CHIP_PAD_RATIO = 0.18;
+/** @internal Exported for testing only. */
+export const CHIP_ICON_RATIO = 0.29;
+/** @internal Exported for testing only. */
+export const CHIP_GAP_RATIO = 0.14;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -355,6 +369,194 @@ export function drawCardRow(
       y + Math.floor((rowH - vh) / 2),
     );
   }
+}
+
+/**
+ * Compute the total pixel width of a pill-shaped chip.
+ *
+ * Single source of truth for the chip width formula,
+ * shared by drawChip() (drawing) and drawChipFlow()
+ * (wrapping).  All dimensions are proportional to h.
+ * Uses Math.floor() on the text width to match Python's
+ * int() truncation in _chip_width().
+ *
+ * @param ctx - Canvas 2D context used for text
+ *   measurement.
+ * @param h - Chip height in pixels.
+ * @param text - Label text inside the chip.
+ * @param fontSize - Font size in pixels for measurement.
+ * @param hasIcon - Whether the chip includes an icon.
+ * @returns Total chip width in pixels.
+ */
+export function chipWidth(
+  ctx: CanvasRenderingContext2D,
+  h: number,
+  text: string,
+  fontSize: number,
+  hasIcon: boolean,
+): number {
+  ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+  const textW = Math.floor(ctx.measureText(text).width);
+  const padH = Math.round(h * CHIP_PAD_RATIO);
+  const iconSz = hasIcon
+    ? Math.round(h * CHIP_ICON_RATIO) : 0;
+  const iconGap = hasIcon
+    ? Math.round(h * CHIP_GAP_RATIO) : 0;
+  return padH * 2 + textW + iconSz + iconGap;
+}
+
+/**
+ * Draw a pill-shaped chip and return the x coordinate
+ * after it.
+ *
+ * Renders a rounded-rectangle container whose end-caps
+ * are perfect semicircles (radius = floor(h / 2)).  The
+ * chip width is computed from text measurement plus
+ * horizontal padding and, when an icon identifier is
+ * given, an icon placeholder (actual icon drawing is
+ * deferred to Phase 6).  All internal dimensions are
+ * proportional to h.
+ *
+ * Mirrors _draw_chip() from render.py.
+ *
+ * @param ctx - Canvas 2D rendering context.
+ * @param x - Left edge of the chip in pixels.
+ * @param y - Top edge of the chip in pixels.
+ * @param h - Chip height in pixels.
+ * @param text - Label text drawn inside the chip.
+ * @param fontSize - Font size in pixels.
+ * @param border - Outline stroke width in pixels.
+ * @param opts - Optional: inverted mode and icon
+ *   identifier.
+ * @returns The x coordinate immediately to the right of
+ *   the chip (x + chipW), suitable for the next chip.
+ */
+export function drawChip(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  h: number,
+  text: string,
+  fontSize: number,
+  border: number,
+  opts?: ChipOpts,
+): number {
+  const inverted = opts?.inverted ?? false;
+  const icon = opts?.icon;
+  const chipW = chipWidth(
+    ctx, h, text, fontSize, icon != null,
+  );
+  const padH = Math.round(h * CHIP_PAD_RATIO);
+  const iconSz = icon != null
+    ? Math.round(h * CHIP_ICON_RATIO) : 0;
+  const iconGap = icon != null
+    ? Math.round(h * CHIP_GAP_RATIO) : 0;
+  // Pill shape: radius = floor(h/2) produces
+  // perfect semicircle end-caps.
+  const radius = Math.floor(h / 2);
+
+  const bg = inverted ? COLOR_BLACK : COLOR_WHITE;
+  const fg = inverted ? COLOR_WHITE : COLOR_BLACK;
+
+  // Canvas requires separate fill + stroke so the fill
+  // does not overdraw the border pixels.  Python's
+  // rounded_rectangle() handles this in one call.
+  ctx.beginPath();
+  ctx.roundRect(x, y, chipW, h, radius);
+  ctx.fillStyle = grayColor(bg);
+  ctx.fill();
+  ctx.strokeStyle = grayColor(COLOR_BLACK);
+  ctx.lineWidth = border;
+  ctx.stroke();
+
+  let cx = x + padH;
+  if (icon != null) {
+    // Draw a placeholder rectangle where the icon will
+    // appear in Phase 6 (async icon loading).
+    const iconY = y + Math.floor((h - iconSz) / 2);
+    ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
+    ctx.fillRect(cx, iconY, iconSz, iconSz);
+    cx += iconSz + iconGap;
+  }
+
+  // Vertically center text using measured glyph height
+  // (not nominal font size, which includes
+  // ascender/descender whitespace that would shift the
+  // visible glyph upward).
+  ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+  ctx.textBaseline = "top";
+  const tm = ctx.measureText(text);
+  const textH = tm.actualBoundingBoxAscent
+    + tm.actualBoundingBoxDescent;
+  const textY = y + Math.floor((h - textH) / 2);
+  ctx.fillStyle = grayColor(fg);
+  ctx.fillText(text, cx, textY);
+
+  return x + chipW;
+}
+
+/**
+ * Lay out chips in a horizontal flow with wrapping.
+ *
+ * Draws each chip left-to-right.  When a chip would
+ * extend past x + w, it wraps to the next line.  The
+ * first chip on a new line is never skipped — a chip
+ * wider than w is drawn at the left edge and overflows.
+ *
+ * Mirrors _draw_chip_flow() from render.py.
+ *
+ * @param ctx - Canvas 2D rendering context.
+ * @param x - Left edge of the flow container.
+ * @param y - Top edge of the flow container.
+ * @param w - Maximum width of the flow container.
+ * @param h - Height of each chip row in pixels.
+ * @param chips - Array of chip descriptors (text,
+ *   optional inverted, optional icon identifier).
+ * @param fontSize - Font size in pixels.
+ * @param border - Outline stroke width in pixels.
+ * @returns The y coordinate at the bottom of the last
+ *   chip row (last_row_y + h).
+ */
+export function drawChipFlow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  chips: ChipDescriptor[],
+  fontSize: number,
+  border: number,
+): number {
+  if (chips.length === 0) {
+    // Nothing drawn: don't advance y.
+    return y;
+  }
+  // Chip-to-chip gap — same ratio as icon size, by design.
+  const gap = Math.round(h * CHIP_ICON_RATIO);
+  let curX = x;
+  let curY = y;
+  for (const chip of chips) {
+    const cw = chipWidth(
+      ctx, h, chip.text, fontSize, chip.icon != null,
+    );
+    // Add inter-chip gap and wrap when the chip would
+    // overflow.  The gap is skipped for the first chip
+    // on each line (curX === x).
+    if (curX > x) {
+      if (curX + gap + cw > x + w) {
+        curX = x;
+        curY += h + gap;
+      } else {
+        curX += gap;
+      }
+    }
+    curX = drawChip(
+      ctx, curX, curY, h, chip.text,
+      fontSize, border,
+      { inverted: chip.inverted, icon: chip.icon },
+    );
+  }
+  return curY + h;
 }
 
 // ── Card class ────────────────────────────────────────────────────────────────

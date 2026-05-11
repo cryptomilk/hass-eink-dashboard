@@ -113,6 +113,25 @@ export interface CardRowOpts {
   icon?: string;
 }
 
+/** Options for drawChip(). */
+export interface ChipOpts {
+  /** When true, fill chip black and draw text white
+   *  (used for problem / urgent states). */
+  inverted?: boolean;
+  /** Icon identifier (e.g. MDI name). Icon loading
+   *  is not yet implemented in the canvas preview. */
+  icon?: string;
+}
+
+/** Descriptor for a single chip in drawChipFlow(). */
+export interface ChipDescriptor {
+  text: string;
+  inverted?: boolean;
+  /** Icon identifier (e.g. MDI name). Icon loading
+   *  is not yet implemented in the canvas preview. */
+  icon?: string;
+}
+
 export interface Handle {
   id: string;
   cx: number;

@@ -518,6 +518,7 @@ def _chip_width(
         Total chip width in pixels.
     """
     bbox = draw.textbbox((0, 0), text, font=font)
+    # int() truncates to match canvas Math.floor() behavior.
     text_w = int(bbox[2] - bbox[0])
     pad_h = round(h * _CHIP_PAD_RATIO)
     icon_sz = round(h * _CHIP_ICON_RATIO) if has_icon else 0
@@ -568,8 +569,6 @@ def _draw_chip(
     """
     chip_w = _chip_width(draw, h, text, font, has_icon=icon is not None)
     pad_h = round(h * _CHIP_PAD_RATIO)
-    icon_sz = round(h * _CHIP_ICON_RATIO)
-    icon_gap = round(h * _CHIP_GAP_RATIO)
     radius = h // 2
 
     bg = COLOR_BLACK if inverted else COLOR_WHITE
@@ -584,6 +583,8 @@ def _draw_chip(
     )
     cx = x + pad_h
     if icon is not None:
+        icon_sz = round(h * _CHIP_ICON_RATIO)
+        icon_gap = round(h * _CHIP_GAP_RATIO)
         icon_y = y + (h - icon_sz) // 2
         gray, mask = icon
         resized_gray = gray.resize(
@@ -646,7 +647,7 @@ def _draw_chip_flow(
     if not chips:
         # Nothing drawn: don't advance y.
         return y
-    # Chip-to-chip gap — same ratio as icon_sz by coincidence.
+    # Chip-to-chip gap — same ratio as icon size, by design.
     gap = round(h * _CHIP_ICON_RATIO)
     cur_x = x
     cur_y = y
@@ -659,13 +660,15 @@ def _draw_chip_flow(
             has_icon=chip.get("icon") is not None,
         )
 
-        # Wrap when the chip would overflow AND this is not the
-        # first chip on the current line.  Note: cur_x includes
-        # the trailing gap from the previous chip, so wrapping
-        # is slightly eager (by one gap width).
-        if cur_x + chip_w > x + w and cur_x > x:
-            cur_x = x
-            cur_y += h + gap
+        # Add inter-chip gap and wrap when the chip would
+        # overflow.  The gap is skipped for the first chip on
+        # each line (cur_x == x).
+        if cur_x > x:
+            if cur_x + gap + chip_w > x + w:
+                cur_x = x
+                cur_y += h + gap
+            else:
+                cur_x += gap
         cur_x = _draw_chip(
             draw,
             img,
@@ -678,7 +681,6 @@ def _draw_chip_flow(
             icon=chip.get("icon"),
             inverted=chip.get("inverted", False),
         )
-        cur_x += gap
     return cur_y + h
 
 
