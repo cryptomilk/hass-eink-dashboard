@@ -753,6 +753,8 @@ class EinkDashboardCard extends HTMLElement {
   private _layout: LayoutResponse | null = null;
   private _canvas: HTMLCanvasElement | null = null;
   private _ctx: CanvasRenderingContext2D | null = null;
+  private _offscreen: OffscreenCanvas | null = null;
+  private _offCtx: CanvasRenderingContext2D | null = null;
   private _renderPending = false;
   private _renderInProgress = false;
   private _connected = false;
@@ -800,6 +802,8 @@ class EinkDashboardCard extends HTMLElement {
       this._layout = null;
       this._canvas = null;
       this._ctx = null;
+      this._offscreen = null;
+      this._offCtx = null;
       this._serverImg = null;
       this._fetching = false;
       this._fetchGeneration++;
@@ -1127,7 +1131,24 @@ class EinkDashboardCard extends HTMLElement {
     canvas.height = height;
     canvas.style.touchAction = "none";
     this._canvas = canvas;
-    this._ctx = canvas.getContext("2d");
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) throw new Error("2D context unavailable");
+    this._ctx = ctx2d;
+
+    // Offscreen canvas for double-buffered rendering: draw
+    // here first, then blit the completed frame onto the
+    // visible canvas in a single drawImage() call so no
+    // intermediate state is ever visible to the user.
+    // Dimensions always match the visible canvas — both are
+    // created here together in _initCanvas.
+    const offscreen = new OffscreenCanvas(width, height);
+    const offCtx2d = offscreen.getContext("2d");
+    if (!offCtx2d) throw new Error("2D context unavailable");
+    this._offscreen = offscreen;
+    // Cast: OffscreenCanvasRenderingContext2D shares all
+    // drawing APIs with CanvasRenderingContext2D; the two
+    // DOM-only methods we don't use are the only difference.
+    this._offCtx = offCtx2d as unknown as CanvasRenderingContext2D;
 
     canvas.addEventListener("pointerdown", (e) => this._onPointerDown(e));
     canvas.addEventListener("pointermove", (e) => this._onPointerMove(e));
@@ -1572,9 +1593,13 @@ class EinkDashboardCard extends HTMLElement {
 
     // Pre-load icons before clearing canvas so the visible
     // canvas retains its previous content during any load.
+    const gen = this._fetchGeneration;
     await this._preloadIcons();
+    if (gen !== this._fetchGeneration) return;
 
-    const ctx = this._ctx;
+    // Draw to the offscreen canvas; the visible canvas keeps
+    // its last complete frame until the blit at the end.
+    const ctx = this._offCtx!;
     const { width, height } = this._layout.display;
 
     ctx.fillStyle = grayColor(COLOR_WHITE);
@@ -1640,6 +1665,11 @@ class EinkDashboardCard extends HTMLElement {
         ctx.restore();
       }
     }
+
+    // Blit the completed offscreen frame onto the visible
+    // canvas in one atomic drawImage() call — no partial
+    // state is ever visible to the user.
+    this._ctx!.drawImage(this._offscreen!, 0, 0);
   }
 
   // ── Server image toggle ───────────────────────────────────────────────────
