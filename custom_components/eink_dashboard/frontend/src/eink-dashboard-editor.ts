@@ -102,8 +102,8 @@ function colorSelector(defaultColor: number = 0): HaFormSchema {
 
 export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   text: (d) => [
-    { name: "text", required: true, selector: { text: {} } },
     { type: "grid", name: "", schema: posXYW(d) },
+    { name: "text", required: true, selector: { text: {} } },
     {
       type: "grid", name: "", schema: [
         fontSizeSelector(FONT_SIZE_TEXT),
@@ -147,8 +147,8 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   ],
 
   weather: (d) => [
-    { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
     { type: "grid", name: "", schema: posXYW(d) },
+    { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
     {
       type: "grid", name: "", schema: [
         { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
@@ -158,8 +158,8 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   ],
 
   sensor_rows: (d) => [
-    { name: "title", selector: { text: {} } },
     { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_SENSOR_ROWS)] },
+    { name: "title", selector: { text: {} } },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
@@ -169,18 +169,24 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   ],
 
   status_icons: (d) => [
-    { name: "title", selector: { text: {} } },
     { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_STATUS_ICONS)] },
+    { name: "title", selector: { text: {} } },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   waste_schedule: (d) => [
-    { name: "title", selector: { text: {} } },
     { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
+    { name: "title", selector: { text: {} } },
     { name: "entities", selector: { entity: { multiple: true } } },
   ],
 
   chart: (d) => [
+    {
+      type: "grid", name: "", schema: [
+        ...posXYW(d),
+        { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
+      ],
+    },
     { name: "entities", selector: { entity: { multiple: true } } },
     { name: "graph_span", selector: { text: {} } },
     { type: "grid", name: "", schema: [
@@ -200,12 +206,6 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
       ],
       mode: "dropdown",
     }}},
-    {
-      type: "grid", name: "", schema: [
-        ...posXYW(d),
-        { name: "h", default: 200, selector: { number: { min: 50, max: d.height, step: 8, mode: "box" } } },
-      ],
-    },
   ],
 };
 
