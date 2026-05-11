@@ -33,9 +33,9 @@ function findField(schema: HaFormSchema[], name: string): HaFormSchema | undefin
 // ── WIDGET_TYPES ──────────────────────────────────────────────────────────────
 
 describe("WIDGET_TYPES", () => {
-  const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
+  const ALL_TYPES = ["text", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
 
-  it("has all 8 widget types", () => {
+  it("has all 7 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -51,8 +51,8 @@ describe("WIDGET_TYPES", () => {
 // ── SCHEMAS ───────────────────────────────────────────────────────────────────
 
 describe("SCHEMAS", () => {
-  it("has a schema builder for all 8 widget types", () => {
-    const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
+  it("has a schema builder for all 7 widget types", () => {
+    const ALL_TYPES = ["text", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -96,15 +96,6 @@ describe("SCHEMAS", () => {
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
   });
 
-  it("line schema has x, y, x2, y2, color, width fields", () => {
-    const fields = flattenFields(SCHEMAS.line(DISPLAY));
-    expect(fields).toContain("x");
-    expect(fields).toContain("y");
-    expect(fields).toContain("x2");
-    expect(fields).toContain("y2");
-    expect(fields).toContain("color");
-    expect(fields).toContain("width");
-  });
 });
 
 // ── LABELS ────────────────────────────────────────────────────────────────────
@@ -182,10 +173,6 @@ describe("getSummary", () => {
 
   it("returns vertical bar summary for separator", () => {
     expect(getSummary({ type: "separator", direction: "vertical", style: "bar", y: 50 })).toBe("v bar @50");
-  });
-
-  it("returns coordinate arrow for line", () => {
-    expect(getSummary({ type: "line", x: 0, y: 0, x2: 100, y2: 200 })).toBe("(0,0) → (100,200)");
   });
 
   it("defaults to h line @0 for separator with no fields", () => {

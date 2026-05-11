@@ -187,43 +187,6 @@ class TestRenderText:
         assert_has_gray_pixels(img, 10, 10, 80, 40, low=100, high=200)
 
 
-class TestRenderLine:
-    def test_horizontal_line(self) -> None:
-        config = {"width": 100, "height": 100}
-        widgets = [
-            {
-                "type": "line",
-                "x": 10,
-                "y": 50,
-                "x2": 90,
-                "y2": 50,
-                "color": 0,
-            }
-        ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
-        assert pixel(img, 50, 50) == 0
-        assert pixel(img, 50, 10) == 255
-
-    def test_line_custom_color(self) -> None:
-        config = {"width": 100, "height": 100}
-        widgets = [
-            {
-                "type": "line",
-                "x": 0,
-                "y": 50,
-                "x2": 99,
-                "y2": 50,
-                "color": 160,
-            }
-        ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
-        assert pixel(img, 50, 50) == 160
-
-
 class TestRenderSeparator:
     _CONFIG = {"width": 300, "height": 200}
 

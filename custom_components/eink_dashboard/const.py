@@ -143,7 +143,6 @@ class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 
     TEXT = "text"
-    LINE = "line"
     SEPARATOR = "separator"
     WEATHER = "weather"
     SENSOR_ROWS = "sensor_rows"

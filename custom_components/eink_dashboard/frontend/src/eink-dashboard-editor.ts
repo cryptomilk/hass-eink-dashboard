@@ -29,10 +29,6 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
     label: "Text",
     defaults: { type: "text", x: 24, y: 0, text: "", font_size: FONT_SIZE_TEXT, color: 0, align: "left" },
   },
-  line: {
-    label: "Line",
-    defaults: { type: "line", x: 24, y: 0, x2: 24, y2: 0, color: 210, width: 1 },
-  },
   separator: {
     label: "Separator",
     defaults: { type: "separator", x: 24, y: 0, direction: "horizontal", style: "line" },
@@ -115,22 +111,6 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
     },
   ],
 
-  line: (d) => [
-    { type: "grid", name: "", schema: posXY(d) },
-    {
-      type: "grid", name: "", schema: [
-        { name: "x2", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "y2", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-      ],
-    },
-    {
-      type: "grid", name: "", schema: [
-        colorSelector(210),
-        { name: "width", default: 1, selector: { number: { min: 1, max: 20, mode: "box" } } },
-      ],
-    },
-  ],
-
   separator: (d) => [
     {
       type: "grid", name: "", schema: [
@@ -195,11 +175,9 @@ export const LABELS: Record<string, string> = {
   title: "Title",
   x: "X", y: "Y", w: "Width",
   direction: "Direction", style: "Style", length: "Length",
-  x2: "X2", y2: "Y2",
   font_size: "Font size",
   color: "Color",
   align: "Align",
-  width: "Line width",
   forecast_days: "Forecast days",
 };
 
@@ -241,9 +219,6 @@ export function getSummary(widget: Widget): string {
     const dir = widget.direction === "vertical" ? "v" : "h";
     const sty = widget.style === "bar" ? "bar" : "line";
     return `${dir} ${sty} @${widget.y ?? 0}`;
-  }
-  if (t === "line") {
-    return `(${widget.x ?? 0},${widget.y ?? 0}) → (${widget.x2 ?? 0},${widget.y2 ?? 0})`;
   }
   return t;
 }

@@ -862,21 +862,6 @@ def render_text(
     draw.text((x, y), text, fill=color, font=font)
 
 
-def render_line(
-    draw: ImageDraw.ImageDraw,
-    widget: Widget,
-    _config: DisplayConfig,
-) -> None:
-    """Draw a straight line between two points defined by the widget."""
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    x2 = widget.get("x2", x)
-    y2 = widget.get("y2", y)
-    color = widget.get("color", COLOR_LIGHT_GRAY)
-    width = widget.get("width", 1)
-    draw.line([(x, y), (x2, y2)], fill=color, width=width)
-
-
 def render_separator(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
@@ -1477,7 +1462,6 @@ def render_waste_schedule(
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
     WidgetType.TEXT: render_text,
-    WidgetType.LINE: render_line,
     WidgetType.SEPARATOR: render_separator,
     WidgetType.WEATHER: render_weather,
     WidgetType.SENSOR_ROWS: render_sensor_rows,

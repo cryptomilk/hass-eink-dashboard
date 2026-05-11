@@ -6,7 +6,6 @@ import type {
   HassEntity,
   Widget,
   TextWidget,
-  LineWidget,
   SeparatorWidget,
   WeatherWidget,
   SensorRowsWidget,
@@ -1015,12 +1014,6 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   private _getHandles(bounds: WidgetBounds, widget: Widget): Handle[] {
-    if (widget.type === "line") {
-      return [
-        { id: "p1", cx: widget.x ?? 0, cy: widget.y ?? 0 },
-        { id: "p2", cx: widget.x2 ?? 0, cy: widget.y2 ?? 0 },
-      ];
-    }
     if (widget.type === "separator") {
       const dir = (widget as SeparatorWidget).direction ?? "horizontal";
       if (dir === "vertical") {
@@ -1341,7 +1334,6 @@ class EinkDashboardCard extends HTMLElement {
 
     const dispatch: Partial<Record<string, (w: Widget) => WidgetBounds>> = {
       text: (w) => this._renderText(ctx, w as TextWidget),
-      line: (w) => this._renderLine(ctx, w as LineWidget),
       separator: (w) => this._renderSeparator(ctx, w as SeparatorWidget),
       weather: (w) => this._renderWeather(ctx, w as WeatherWidget),
       sensor_rows: (w) => this._renderSensorRows(ctx, w as SensorRowsWidget),
@@ -1379,16 +1371,9 @@ class EinkDashboardCard extends HTMLElement {
           ctx.fillStyle = "rgba(3, 169, 244, 0.9)";
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 1;
-          if (widget.type === "line") {
-            ctx.beginPath();
-            ctx.arc(h.cx, h.cy, HANDLE_SIZE / 2 + 1, 0, 2 * Math.PI);
-            ctx.fill();
-            ctx.stroke();
-          } else {
-            const hs = HANDLE_SIZE;
-            ctx.fillRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
-            ctx.strokeRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
-          }
+          const hs = HANDLE_SIZE;
+          ctx.fillRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
+          ctx.strokeRect(h.cx - hs / 2, h.cy - hs / 2, hs, hs);
         }
         ctx.restore();
       }
@@ -1503,29 +1488,6 @@ class EinkDashboardCard extends HTMLElement {
     const bx = Math.min(drawX, x);
     const boundsW = widget.w != null ? widget.w : Math.max(drawX + tw - bx, 20);
     return { x: bx, y, w: boundsW, h: fontSize };
-  }
-
-  // mirrors render.py: render_line (lines 103-114)
-  private _renderLine(ctx: CanvasRenderingContext2D, widget: LineWidget): WidgetBounds {
-    const x = widget.x ?? PADDING;
-    const y = widget.y ?? 0;
-    const x2 = widget.x2 ?? x;
-    const y2 = widget.y2 ?? y;
-    const color = widget.color ?? COLOR_LIGHT_GRAY;
-    const lineWidth = widget.width ?? 1;
-
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = grayColor(color);
-    ctx.lineWidth = lineWidth;
-    ctx.stroke();
-    return {
-      x: Math.min(x, x2),
-      y: Math.min(y, y2) - 4,
-      w: Math.max(Math.abs(x2 - x), 8),
-      h: Math.max(Math.abs(y2 - y), 8) + 8,
-    };
   }
 
   // mirrors render.py: render_separator

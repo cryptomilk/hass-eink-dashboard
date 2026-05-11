@@ -174,13 +174,6 @@ export interface TextWidget extends WidgetBase {
   align?: "left" | "center" | "right";
 }
 
-export interface LineWidget extends WidgetBase {
-  type: "line";
-  x2?: number;
-  y2?: number;
-  width?: number;
-}
-
 export interface SeparatorWidget extends WidgetBase {
   type: "separator";
   direction?: "horizontal" | "vertical";
@@ -218,7 +211,6 @@ export interface WasteScheduleWidget extends WidgetBase {
 
 export type Widget =
   | TextWidget
-  | LineWidget
   | SeparatorWidget
   | WeatherWidget
   | SensorRowsWidget
