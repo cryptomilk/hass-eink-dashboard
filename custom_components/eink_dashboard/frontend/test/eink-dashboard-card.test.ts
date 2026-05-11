@@ -18,6 +18,7 @@ import {
   loadIcon,
   getIcon,
   clearIconCache,
+  deviceClassIcon,
 } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
@@ -838,5 +839,68 @@ describe("drawChip icon rendering", () => {
     const mockIcon = {} as HTMLImageElement;
     drawChip(ctx, 0, 0, 40, "OK", 16, 2, { icon: mockIcon });
     expect(filterAtDraw).toBe("none");
+  });
+});
+
+describe("deviceClassIcon", () => {
+  it("sensor device_class returns correct icon", () => {
+    // Temperature sensor maps to thermometer.
+    expect(deviceClassIcon(
+      "temperature", "22.5", "sensor",
+    )).toBe("thermometer");
+  });
+
+  it("sensor humidity returns water-percent", () => {
+    expect(deviceClassIcon(
+      "humidity", "45", "sensor",
+    )).toBe("water-percent");
+  });
+
+  it("unknown sensor device_class returns null", () => {
+    expect(deviceClassIcon(
+      "unknown_class", "42", "sensor",
+    )).toBeNull();
+  });
+
+  it("empty device_class returns null", () => {
+    expect(deviceClassIcon(
+      "", "42", "sensor",
+    )).toBeNull();
+  });
+
+  it("binary_sensor off state returns off icon", () => {
+    // Door off → door-closed.
+    expect(deviceClassIcon(
+      "door", "off", "binary_sensor",
+    )).toBe("door-closed");
+  });
+
+  it("binary_sensor on state returns on icon", () => {
+    // Door on → door-open.
+    expect(deviceClassIcon(
+      "door", "on", "binary_sensor",
+    )).toBe("door-open");
+  });
+
+  it("binary_sensor window state-dependent", () => {
+    expect(deviceClassIcon(
+      "window", "off", "binary_sensor",
+    )).toBe("window-closed-variant");
+    expect(deviceClassIcon(
+      "window", "on", "binary_sensor",
+    )).toBe("window-open-variant");
+  });
+
+  it("binary_sensor unknown class returns null", () => {
+    expect(deviceClassIcon(
+      "unknown_class", "on", "binary_sensor",
+    )).toBeNull();
+  });
+
+  it("non-sensor domain uses sensor map", () => {
+    // Person, lock, etc. fall through to sensor map.
+    expect(deviceClassIcon(
+      "temperature", "22", "person",
+    )).toBe("thermometer");
   });
 });

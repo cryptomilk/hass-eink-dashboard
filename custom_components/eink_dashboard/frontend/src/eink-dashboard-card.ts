@@ -105,6 +105,111 @@ const DETAIL_SVG_MAP: Record<string, string> = {
   "cloud_coverage": "wi-cloud",
 };
 
+// Sensor device_class → MDI icon name (without prefix/extension).
+// Mirrors _SENSOR_DEVICE_CLASS_ICONS in render.py.
+const SENSOR_DEVICE_CLASS_ICONS: Record<string, string> = {
+  "temperature": "thermometer",
+  "humidity": "water-percent",
+  "pressure": "gauge",
+  "battery": "battery",
+  "power": "flash",
+  "energy": "lightning-bolt",
+  "gas": "fire",
+  "illuminance": "brightness-5",
+  "moisture": "water-alert",
+  "apparent_power": "flash-auto",
+  "aqi": "air-filter",
+  "carbon_dioxide": "molecule-co2",
+  "carbon_monoxide": "molecule-co",
+  "current": "current-ac",
+  "data_size": "database",
+  "distance": "ruler",
+  "duration": "timer-outline",
+  "frequency": "sine-wave",
+  "irradiance": "sun-wireless",
+  "monetary": "currency-usd",
+  "nitrogen_dioxide": "smog",
+  "ozone": "weather-dust",
+  "ph": "ph",
+  "pm25": "blur",
+  "signal_strength": "signal",
+  "speed": "speedometer",
+  "voltage": "flash",
+  "volume": "cup-water",
+  "water": "water",
+  "weight": "weight",
+  "wind_speed": "weather-windy",
+};
+
+// Binary sensor device_class → [off_icon, on_icon].
+// Mirrors _BINARY_SENSOR_DEVICE_CLASS_ICONS in render.py.
+const BINARY_SENSOR_DEVICE_CLASS_ICONS: Record<
+  string,
+  [string, string]
+> = {
+  "door": ["door-closed", "door-open"],
+  "window": [
+    "window-closed-variant",
+    "window-open-variant",
+  ],
+  "garage_door": ["garage", "garage-open"],
+  "lock": ["lock", "lock-open"],
+  "motion": ["motion-sensor-off", "motion-sensor"],
+  "smoke": [
+    "smoke-detector-variant",
+    "smoke-detector-variant-alert",
+  ],
+  "battery": ["battery", "battery-alert"],
+  "battery_charging": [
+    "battery-charging",
+    "battery-charging",
+  ],
+  "cold": ["thermometer", "snowflake"],
+  "connectivity": ["wifi-off", "wifi"],
+  "heat": ["thermometer", "fire-alert"],
+  "light": ["brightness-5", "brightness-7"],
+  "occupancy": ["home-outline", "home-account"],
+  "opening": ["square-outline", "square"],
+  "plug": ["power-plug-off", "power-plug"],
+  "presence": ["account-outline", "account"],
+  "problem": ["check-circle", "alert-circle"],
+  "running": ["stop-circle", "play-circle"],
+  "safety": ["shield-check", "shield-alert"],
+  "sound": ["volume-off", "volume-high"],
+  "tamper": ["shield-check", "shield-alert"],
+  "update": ["package", "package-up"],
+  "vibration": ["crop-portrait", "vibrate"],
+};
+
+/**
+ * Resolve an MDI icon name from device_class, state, and
+ * entity domain.
+ *
+ * For binary sensors, returns the state-appropriate icon
+ * (off or on).  For all other domains, returns the single
+ * icon mapped to the device_class.  Mirrors
+ * _device_class_icon() in render.py.
+ *
+ * @param deviceClass - HA device_class attribute value.
+ * @param state - Entity state string (e.g. "on", "off").
+ * @param domain - HA entity domain (e.g. "binary_sensor").
+ * @returns MDI icon name without prefix, or null.
+ */
+export function deviceClassIcon(
+  deviceClass: string,
+  state: string,
+  domain: string,
+): string | null {
+  if (domain === "binary_sensor") {
+    const pair = BINARY_SENSOR_DEVICE_CLASS_ICONS[
+      deviceClass
+    ];
+    if (!pair) return null;
+    return state === "on" ? pair[1] : pair[0];
+  }
+  return SENSOR_DEVICE_CLASS_ICONS[deviceClass] ?? null;
+}
+
 // Stores the in-flight or resolved Promise for each URL so
 // concurrent loadIcon() calls for the same URL never create
 // more than one Image (TOCTOU prevention). Failed entries are
@@ -1543,6 +1648,37 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   /**
+   * Collect MDI icon URLs for entity-based widgets.
+   *
+   * Resolves each entity's device_class to an MDI icon name
+   * via deviceClassIcon() and adds the SVG URL to the set.
+   *
+   * @param entities - Entity IDs from the widget config.
+   * @param urls - Accumulator set of icon URLs.
+   */
+  private _collectMdiIcons(
+    entities: string[],
+    urls: Set<string>,
+  ): void {
+    for (const entityId of entities) {
+      const entity = this._getState(entityId);
+      if (!entity) continue;
+      const attrs = entity.attributes as Record<
+        string,
+        unknown
+      >;
+      const dc = (attrs.device_class as string) ?? "";
+      const domain = entityId.split(".")[0];
+      const icon = deviceClassIcon(
+        dc, entity.state ?? "", domain,
+      );
+      if (icon) {
+        urls.add(`${ICON_BASE}/svg/mdi/${icon}.svg`);
+      }
+    }
+  }
+
+  /**
    * Pre-load all icons needed for the current widget set.
    *
    * Inspects every widget and collects icon URLs, then loads
@@ -1559,9 +1695,20 @@ class EinkDashboardCard extends HTMLElement {
           widget as WeatherWidget, urls,
         );
       }
+      // Collect MDI icons for entity-based widgets.
+      if ("entities" in widget) {
+        const entities = (
+          widget as { entities?: string[] }
+        ).entities;
+        if (entities?.length) {
+          this._collectMdiIcons(entities, urls);
+        }
+      }
     }
     if (urls.size > 0) {
-      await Promise.all([...urls].map(url => loadIcon(url)));
+      await Promise.all(
+        [...urls].map(url => loadIcon(url)),
+      );
     }
   }
 

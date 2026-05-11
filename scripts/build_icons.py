@@ -3,8 +3,8 @@
 
 Weather icon SVGs are sourced from
 custom_components/eink_dashboard/icons/svg/.  MDI (Material Design
-Icons) are sourced from the @mdi/svg npm package installed in the
-frontend's node_modules.
+Icons) SVGs are committed alongside at icons/svg/mdi/ (curated
+subset, sourced from @mdi/svg under the Pictogrammers Free License).
 
 Generated PNGs are written to
 custom_components/eink_dashboard/icons/png/ (gitignored).
@@ -132,9 +132,8 @@ COMPONENT_DIR = ROOT / "custom_components" / "eink_dashboard"
 SVG_DIR = COMPONENT_DIR / "icons" / "svg"
 # Generated PNGs are gitignored; always rebuilt from SVGs.
 OUT_DIR = COMPONENT_DIR / "icons" / "png"
-MDI_SVG_DIR = (
-    COMPONENT_DIR / "frontend" / "node_modules" / "@mdi" / "svg" / "svg"
-)
+# MDI SVGs are committed alongside the weather icons.
+MDI_SVG_DIR = COMPONENT_DIR / "icons" / "svg" / "mdi"
 MDI_OUT_DIR = OUT_DIR / "mdi"
 WEATHER_OUT_DIR = OUT_DIR / "weather"
 
@@ -166,11 +165,11 @@ def _convert_weather_icons() -> None:
 
 
 def _convert_mdi_icons() -> None:
-    """Convert MDI SVGs to PNGs.
+    """Convert committed MDI SVGs to PNGs.
 
-    Sources SVGs from the @mdi/svg npm package.  Skips all MDI
-    conversion when the package is not installed (node_modules
-    absent).
+    Sources SVGs from icons/svg/mdi/ (curated subset committed
+    to the repo).  Skips all MDI conversion when the directory
+    is absent.
     """
     if not MDI_SVG_DIR.is_dir():
         print("SKIP MDI icons (@mdi/svg not installed)")
