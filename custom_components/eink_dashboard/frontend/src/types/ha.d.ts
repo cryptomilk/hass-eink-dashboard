@@ -83,6 +83,19 @@ export interface IndexedBounds extends WidgetBounds {
   index: number;
 }
 
+/** Proportional layout dimensions derived from a widget's row height. */
+export interface WidgetMetrics {
+  border: number;
+  padding: number;
+  radius: number;
+  iconDia: number;
+  fontPrimary: number;
+  fontSecondary: number;
+  divider: number;
+  innerGap: number;
+  leftBar: number;
+}
+
 export interface Handle {
   id: string;
   cx: number;

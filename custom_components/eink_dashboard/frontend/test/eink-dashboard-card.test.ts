@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { snap, grayColor, parseDaysUntil, formatRelativeDate, buildHeaderText, shouldShowCopyUrl } from "../src/eink-dashboard-card.js";
+import { snap, grayColor, parseDaysUntil, formatRelativeDate, buildHeaderText, shouldShowCopyUrl, computeMetrics } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
   it("snaps 0 to 0", () => expect(snap(0)).toBe(0));
@@ -98,4 +98,59 @@ describe("shouldShowCopyUrl", () => {
   it("returns false for custom with webhooks", () => expect(shouldShowCopyUrl("custom", true)).toBe(false));
   it("returns false for trmnl_og", () => expect(shouldShowCopyUrl("trmnl_og", false)).toBe(false));
   it("returns false for trmnl_x", () => expect(shouldShowCopyUrl("trmnl_x", true)).toBe(false));
+});
+
+describe("computeMetrics", () => {
+  it("computes correct values for reference rowH=56", () => {
+    // Verifies each ratio against the baseline from REDESIGN_WIDGETS.md.
+    const m = computeMetrics(56);
+    expect(m.border).toBe(2);          // max(2, round(56*0.04=2.24)→2)
+    expect(m.padding).toBe(12);        // round(56*0.21)=11.76→12
+    expect(m.radius).toBe(12);         // round(56*0.21)=11.76→12
+    expect(m.iconDia).toBe(36);        // round(56*0.64)=35.84→36
+    expect(m.fontPrimary).toBe(18);    // max(10, round(56*0.32)=17.92→18)
+    expect(m.fontSecondary).toBe(14);  // max(10, round(56*0.25)=14)
+    expect(m.divider).toBe(4);         // max(2, round(56*0.07)=3.92→4)
+    expect(m.innerGap).toBe(12);       // round(56*0.21)=11.76→12
+    expect(m.leftBar).toBe(4);         // max(2, round(56*0.07)=3.92→4)
+  });
+
+  it("clamps minimums for small rowH=10", () => {
+    // border, fontPrimary, fontSecondary, divider, leftBar all have min clamps.
+    const m = computeMetrics(10);
+    expect(m.border).toBe(2);
+    expect(m.fontPrimary).toBe(10);
+    expect(m.fontSecondary).toBe(10);
+    expect(m.divider).toBe(2);
+    expect(m.leftBar).toBe(2);
+    // Unclamped fields must not gain accidental clamps.
+    expect(m.padding).toBe(2);    // round(10*0.21=2.1)→2, no clamp
+    expect(m.radius).toBe(2);     // round(10*0.21=2.1)→2, no clamp
+    expect(m.iconDia).toBe(6);    // round(10*0.64=6.4)→6, no clamp
+    expect(m.innerGap).toBe(2);   // round(10*0.21=2.1)→2, no clamp
+  });
+
+  it("returns integer values for all fields", () => {
+    // Fractional pixels cause misalignment; all fields must be whole numbers.
+    for (const rowH of [10, 28, 56, 100, 112]) {
+      const m = computeMetrics(rowH);
+      for (const [k, v] of Object.entries(m)) {
+        expect(Number.isInteger(v), `${k} at rowH=${rowH}`).toBe(true);
+      }
+    }
+  });
+
+  it("unclamped fields scale exactly when rowH doubles", () => {
+    // Proportional scaling: doubling rowH doubles all unclamped dimensions.
+    const m1 = computeMetrics(56);
+    const m2 = computeMetrics(112);
+    expect(m2.padding).toBe(m1.padding * 2);
+    expect(m2.radius).toBe(m1.radius * 2);
+    expect(m2.iconDia).toBe(m1.iconDia * 2);
+    expect(m2.innerGap).toBe(m1.innerGap * 2);
+    expect(m2.fontPrimary).toBe(m1.fontPrimary * 2);
+    expect(m2.fontSecondary).toBe(m1.fontSecondary * 2);
+    expect(m2.divider).toBe(m1.divider * 2);
+    expect(m2.leftBar).toBe(m1.leftBar * 2);
+  });
 });

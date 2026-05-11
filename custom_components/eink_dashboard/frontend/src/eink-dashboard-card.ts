@@ -15,6 +15,7 @@ import type {
   WasteScheduleWidget,
   LayoutResponse,
   WidgetBounds,
+  WidgetMetrics,
   IndexedBounds,
   Handle,
   ForecastDay,
@@ -152,6 +153,30 @@ export function shouldShowCopyUrl(model: string, hasWebhooks: boolean): boolean 
   if (model === "custom" && !hasWebhooks) return true;
   // TRMNL devices are push-only (always have webhooks); no URL needed.
   return false;
+}
+
+/**
+ * Compute proportional widget layout dimensions from a row height.
+ *
+ * Mirrors `_compute_metrics()` from render.py with the same ratio
+ * factors and minimum clamps so that canvas previews match the PIL
+ * renderer.
+ *
+ * @param rowH - Height of a single row in pixels.
+ * @returns A WidgetMetrics object with all derived pixel sizes.
+ */
+export function computeMetrics(rowH: number): WidgetMetrics {
+  return {
+    border: Math.max(2, Math.round(rowH * 0.04)),
+    padding: Math.round(rowH * 0.21),
+    radius: Math.round(rowH * 0.21),
+    iconDia: Math.round(rowH * 0.64),
+    fontPrimary: Math.max(10, Math.round(rowH * 0.32)),
+    fontSecondary: Math.max(10, Math.round(rowH * 0.25)),
+    divider: Math.max(2, Math.round(rowH * 0.07)),
+    innerGap: Math.round(rowH * 0.21),
+    leftBar: Math.max(2, Math.round(rowH * 0.07)),
+  };
 }
 
 // ── Card class ────────────────────────────────────────────────────────────────
