@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.4)"
+        required: true
 
 jobs:
   validate:
@@ -69,7 +74,8 @@ jobs:
       - run: pip install cairosvg
       - name: Stamp version from tag
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          REF="${{ inputs.tag || github.ref_name }}"
+          VERSION="${REF#v}"
           jq ".version = \"${VERSION}\"" custom_components/eink_dashboard/manifest.json > manifest.tmp
           mv manifest.tmp custom_components/eink_dashboard/manifest.json
       - run: bash scripts/build_dist.sh
@@ -90,6 +96,7 @@ jobs:
           path: dist
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             dist/eink_dashboard.zip
             dist/eink_dashboard-*.tar.gz
