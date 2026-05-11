@@ -309,7 +309,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, self._config())
 
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
+        assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
 
     def test_weather_draws_forecast(self) -> None:
         widgets = [
@@ -369,7 +369,7 @@ class TestRenderWeather:
         assert_has_dark_pixels(
             img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
-        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
+        assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
 
     def test_weather_icon_sunny(self) -> None:
         widgets = [
@@ -403,7 +403,7 @@ class TestRenderWeather:
 
         img = png_to_image(result)
         # Temperature drawn in the left area
-        assert_has_dark_pixels(img, PADDING + 80, 10, 350, 70)
+        assert_has_dark_pixels(img, PADDING + 106, 10, 350, 70)
         # Detail chips row (humidity, pressure, wind, cloud)
         assert_has_dark_pixels(img, PADDING, 80, 400, 100)
         # Forecast section visible
@@ -424,7 +424,7 @@ class TestRenderWeather:
         result = render_dashboard(widgets, config)
 
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 80, 10, 300, 70)
+        assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
         assert_has_dark_pixels(img, PADDING, 80, 326, 100)
 
     def test_weather_draws_detail_chips(self) -> None:
@@ -506,6 +506,111 @@ class TestRenderWeather:
         assert_has_dark_pixels(
             img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
+
+    def test_weather_icon_anchors_text(self) -> None:
+        # Temperature text is drawn right of the icon and
+        # within the icon's vertical band.
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Icon area: starts at x + icon_pad, y + icon_pad.
+        # At s=1, icon_pad=10, icon_size=80.
+        assert_has_dark_pixels(
+            img,
+            PADDING,
+            10,
+            PADDING + 100,
+            110,
+            threshold=200,
+        )
+        # Temperature text: starts after icon + right pad.
+        # At s=1, temp_x = 24 + 10 + 80 + 16 = 130.
+        assert_has_dark_pixels(
+            img,
+            PADDING + 100,
+            20,
+            350,
+            100,
+        )
+
+    def test_weather_compact_forecast_3_days(self) -> None:
+        # 3 days in a 5-column grid: columns 1 and 3 empty.
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+                "forecast_days": 3,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Natural width at s=1: right_edge = 24 + 380 = 404.
+        # available_w = 404 - 24 - 24 = 356.
+        # n_cols=5, col_width = 356 // 5 = 71.
+        # Col 1 spans [95, 166], col 3 spans [237, 308].
+        # Forecast starts at ~y=154.
+        assert_all_white(img, 105, 160, 155, 260)
+        assert_all_white(img, 250, 160, 295, 260)
+        # Filled column 0 should have content.
+        assert_has_dark_pixels(
+            img,
+            30,
+            160,
+            90,
+            260,
+        )
+
+    def test_weather_hilo_right_aligned(self) -> None:
+        # Hi/lo/precip text is right-aligned at right_edge.
+        # At s=1, right_edge = 24 + 380 = 404.
+        # The hi "24°" text (~30px) should end near x=404,
+        # so dark pixels appear in the range [360, 404].
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Hi/lo text near right edge (x=360..404, y=20..80).
+        assert_has_dark_pixels(img, 360, 20, 404, 80)
+        # Area between temperature end (~280) and hi/lo
+        # start (~360) should be mostly white.
+        assert_all_white(img, 290, 20, 350, 40)
+
+    def test_weather_separator_matches_content(self) -> None:
+        # Separator width equals n_cols * col_width, not
+        # the full display width.
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": PADDING,
+                "y": 10,
+                "forecast_days": 3,
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Natural width: right_edge = 404.
+        # pad=10, content_left=34, content_w=360.
+        # n_cols=5, col_width=72, content_width=360.
+        # Separator ends at 34 + 360 = 394.
+        # Pixels beyond 400 on separator line (~y=145)
+        # should be white.
+        assert_all_white(img, 400, 140, 600, 155)
 
 
 MOCK_SENSOR_STATES = {
@@ -1916,6 +2021,42 @@ class TestDrawChip:
         expected_chip_w = pad_h * 2 + text_w
         assert result == self._X + expected_chip_w, (
             f"expected {self._X + expected_chip_w}, got {result}"
+        )
+
+    def test_chip_with_icon_draws_icon_area(self) -> None:
+        # Verify the icon paste branch is reached and draws dark
+        # pixels in the icon area (left of the text column).
+        img, draw = self._blank()
+        font = self._font()
+        icon_sz = 64
+        # A solid black grayscale image and a fully opaque mask
+        # guarantee dark pixels are pasted onto the canvas.
+        gray = Image.new("L", (icon_sz, icon_sz), 0)
+        mask = Image.new("L", (icon_sz, icon_sz), 255)
+        _draw_chip(
+            draw,
+            img,
+            self._X,
+            self._Y,
+            self._H,
+            "X",
+            font,
+            self._border(),
+            icon=(gray, mask),
+        )
+        # The icon is placed at pad_h + icon_x inside the chip,
+        # vertically centered.  Any pixel in the icon cell must
+        # be darker than the white background (255).
+        pad_h = round(self._H * 0.18)
+        icon_render_sz = round(self._H * 0.29)
+        icon_left = self._X + pad_h
+        icon_top = self._Y + (self._H - icon_render_sz) // 2
+        assert_has_dark_pixels(
+            img,
+            icon_left,
+            icon_top,
+            icon_left + icon_render_sz,
+            icon_top + icon_render_sz,
         )
 
 

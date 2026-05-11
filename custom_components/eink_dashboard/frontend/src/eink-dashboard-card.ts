@@ -46,6 +46,8 @@ const FONT_SIZE_SENSOR_ROWS = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
+const MIN_RESIZE_FONT_SIZE = 8;
+const MAX_RESIZE_FONT_SIZE = 72;
 
 let _robotoLoaded = false;
 async function _loadRoboto(): Promise<void> {
@@ -127,6 +129,44 @@ const HANDLE_HIT_RADIUS = 10;
 const GRID = 8;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Scale font_size proportionally by the diagonal distance
+ * change during a corner resize drag.
+ *
+ * @param handle - Corner handle id ("nw"|"ne"|"sw"|"se").
+ * @param dx - Horizontal drag delta in canvas pixels.
+ * @param dy - Vertical drag delta in canvas pixels.
+ * @param startFs - font_size at drag start.
+ * @param renderedW - Widget width at drag start.
+ * @param renderedH - Widget height at drag start.
+ * @param minFs - Minimum allowed font_size.
+ * @param maxFs - Maximum allowed font_size.
+ * @returns New font_size clamped to [minFs, maxFs].
+ */
+function diagScaleFontSize(
+  handle: string,
+  dx: number,
+  dy: number,
+  startFs: number,
+  renderedW: number,
+  renderedH: number,
+  minFs: number,
+  maxFs: number,
+): number {
+  const sdx = (handle === "ne" || handle === "se")
+    ? dx : -dx;
+  const sdy = (handle === "nw" || handle === "ne")
+    ? -dy : dy;
+  const startDiag = Math.sqrt(
+    renderedW ** 2 + renderedH ** 2,
+  );
+  const newDiag = Math.sqrt(
+    (renderedW + sdx) ** 2 + (renderedH + sdy) ** 2,
+  );
+  return Math.max(minFs, Math.min(maxFs,
+    Math.round(startFs * newDiag / startDiag)));
+}
 
 export function snap(v: number): number { return Math.round(v / GRID) * GRID; }
 
@@ -266,6 +306,9 @@ export function drawCardContainer(
  * secondary text (gray) vertically centered in the
  * middle, and an optional right-aligned value string.
  *
+ * @todo Icon loading is not yet implemented in the canvas
+ *   preview; the circle shows a letter fallback regardless
+ *   of opts.icon.
  * @param ctx - Canvas 2D rendering context.
  * @param x - Left edge of the row area in pixels.
  * @param y - Top edge of the row area in pixels.
@@ -299,8 +342,9 @@ export function drawCardRow(
   ctx.fill();
 
   // Letter fallback: first char of primary, white on
-  // the gray circle, centered inside it. Skipped when
-  // opts.icon is provided (loading not yet implemented).
+  // the gray circle, centered inside it. When opts.icon
+  // is set the letter is skipped, but no image is drawn
+  // yet (icon loading is not yet implemented).
   if (!opts.icon) {
     const letter = primary[0]?.toUpperCase() ?? "?";
     const letterSz = Math.round(m.iconDia * 0.5);
@@ -418,9 +462,9 @@ export function chipWidth(
  * are perfect semicircles (radius = floor(h / 2)).  The
  * chip width is computed from text measurement plus
  * horizontal padding and, when an icon identifier is
- * given, an icon placeholder (actual icon drawing is
- * deferred to Phase 6).  All internal dimensions are
- * proportional to h.
+ * given, an icon placeholder (icon drawing is not yet
+ * implemented in the canvas preview).  All internal
+ * dimensions are proportional to h.
  *
  * Mirrors _draw_chip() from render.py.
  *
@@ -476,8 +520,8 @@ export function drawChip(
 
   let cx = x + padH;
   if (icon != null) {
-    // Draw a placeholder rectangle where the icon will
-    // appear in Phase 6 (async icon loading).
+    // Draw a placeholder rectangle where the icon will appear
+    // once icon loading is implemented in the canvas preview.
     const iconY = y + Math.floor((h - iconSz) / 2);
     ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
     ctx.fillRect(cx, iconY, iconSz, iconSz);
@@ -1065,7 +1109,10 @@ class EinkDashboardCard extends HTMLElement {
       const dir = (widget as SeparatorWidget).direction ?? "horizontal";
       return dir === "vertical" ? "ns-resize" : "ew-resize";
     }
-    if (widget?.type === "device_battery") return "nwse-resize";
+    if (
+      widget?.type === "device_battery"
+      || widget?.type === "weather"
+    ) return "nwse-resize";
     return "ew-resize";
   }
 
@@ -1135,7 +1182,7 @@ class EinkDashboardCard extends HTMLElement {
       const w = this._layout.widgets[this._resizeIndex] as MutableWidget;
       const s = this._resizeWidgetStart!;
       const { width: dw, height: dh } = this._layout.display;
-      const handle = this._resizeHandle;
+      const handle = this._resizeHandle!;
 
       if (handle === "p1") {
         w.x = snap(Math.max(0, Math.min(dw - 1, s.x + dx)));
@@ -1166,16 +1213,28 @@ class EinkDashboardCard extends HTMLElement {
           const delta = dir === "vertical" ? dy : dx;
           sw.length = snap(Math.max(20, sLen + delta));
         }
-      } else if (w.type === "device_battery" && s.renderedW != null && s.renderedH != null) {
-        const startFs = s.font_size ?? FONT_SIZE_DEVICE_BATTERY;
-        const sdx = (handle === "ne" || handle === "se") ? dx : -dx;
-        const sdy = (handle === "nw" || handle === "ne") ? -dy : dy;
-        const startDiag = Math.sqrt(s.renderedW ** 2 + s.renderedH ** 2);
-        const newDiag = Math.sqrt(
-          (s.renderedW + sdx) ** 2 + (s.renderedH + sdy) ** 2
+      } else if (
+        w.type === "device_battery"
+        && s.renderedW != null
+        && s.renderedH != null
+      ) {
+        w.font_size = diagScaleFontSize(
+          handle, dx, dy,
+          s.font_size ?? FONT_SIZE_DEVICE_BATTERY,
+          s.renderedW, s.renderedH,
+          MIN_RESIZE_FONT_SIZE, MAX_RESIZE_FONT_SIZE,
         );
-        w.font_size = Math.max(8, Math.min(72,
-          Math.round(startFs * newDiag / startDiag)));
+      } else if (
+        w.type === "weather"
+        && s.renderedW != null
+        && s.renderedH != null
+      ) {
+        w.font_size = diagScaleFontSize(
+          handle, dx, dy,
+          s.font_size ?? FONT_SIZE_WEATHER,
+          s.renderedW, s.renderedH,
+          MIN_RESIZE_FONT_SIZE, MAX_RESIZE_FONT_SIZE,
+        );
       } else if (handle === "ne" || handle === "se") {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
@@ -1542,13 +1601,17 @@ class EinkDashboardCard extends HTMLElement {
   private _renderWeather(ctx: CanvasRenderingContext2D, widget: WeatherWidget): WidgetBounds {
     const entityId = widget.entity ?? "";
     const stateObj = this._getState(entityId);
-    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_WEATHER);
+    const { x, y: origY, fontSize, width: dispW } = this._getWidgetBase(widget, FONT_SIZE_WEATHER);
     const s = fontSize / FONT_SIZE_WEATHER;
+    // Natural width scales with font_size so diagonal resize
+    // grows/shrinks the entire widget, not just the text.
+    const rightEdge = widget.w != null
+      ? (x + widget.w)
+      : Math.min(x + Math.round(380 * s), dispW);
     if (!stateObj) return { x, y: origY, w: 200, h: Math.round(90 * s) };
 
-    let y = origY;
+    const y = origY;
     const forecastDays = widget.forecast_days ?? 5;
-
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes as Record<string, string | number | null>;
     const temp = attrs.temperature ?? "--";
@@ -1559,67 +1622,189 @@ class EinkDashboardCard extends HTMLElement {
     const pressure = attrs.pressure;
     const pressureUnit = attrs.pressure_unit ?? "hPa";
     const cloudCoverage = attrs.cloud_coverage;
+    const precipUnit = String(attrs.precipitation_unit ?? "mm");
+    const forecast = this._forecasts[entityId]
+      || (attrs.forecast as ForecastDay[] | null)
+      || [];
 
-    // Row 1: condition icon + temperature
-    const iconSize = Math.round(64 * s);
+    // Row 1: condition icon + temperature + today hi/lo.
+    //
+    // The icon is the anchor element — sized independently of text
+    // metrics, with equal padding on top/left/bottom and slightly
+    // more on the right before the temperature text.
+    const xlFontSize = Math.round(64 * s);
+    const tempText = `${temp}${tempUnit}`;
+    ctx.font = `${xlFontSize}px ${FONT_FAMILY}`;
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    const tempM = ctx.measureText(tempText);
+    const tempH = tempM.actualBoundingBoxAscent
+      + tempM.actualBoundingBoxDescent;
+
+    const iconSize = Math.round(80 * s);
+    const pad = Math.round(10 * s);
+    const iconRightPad = Math.round(16 * s);
+    // Symmetric content area: pad inset on both sides.
+    const contentLeft = x + pad;
+    const contentW = rightEdge - x - 2 * pad;
+
+    const iconCx = x + pad + iconSize / 2;
+    const iconCy = y + pad + iconSize / 2;
+
+    // Condition icon: emoji centred on (iconCx, iconCy).
     const icon = CONDITION_ICONS[condition] || "?";
     ctx.font = `${iconSize}px ${FONT_FAMILY}`;
     ctx.textBaseline = "middle";
     ctx.textAlign = "center";
     ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(icon, x + iconSize / 2, y + iconSize / 2);
+    ctx.fillText(icon, iconCx, iconCy);
 
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "left";
-    ctx.font = `${Math.round(48 * s)}px ${FONT_FAMILY}`;
-    ctx.fillStyle = grayColor(COLOR_BLACK);
-    ctx.fillText(`${temp}${tempUnit}`, x + iconSize + Math.round(12 * s), y + iconSize / 2);
-
-    // Row 2: detail chips
-    const detailY = y + iconSize + Math.round(8 * s);
-    const chipGap = Math.round(20 * s);
-    ctx.font = `${Math.round(16 * s)}px ${FONT_FAMILY}`;
-    ctx.fillStyle = grayColor(COLOR_BLACK);
+    // Temperature text vertically centred on the icon.
+    // With textBaseline="top", actualBoundingBoxAscent is the
+    // offset from draw anchor to visible glyph top.
+    const tempX = x + pad + iconSize + iconRightPad;
+    const tempY = iconCy
+      + tempM.actualBoundingBoxAscent
+      - tempH / 2;
+    ctx.font = `${xlFontSize}px ${FONT_FAMILY}`;
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
+    ctx.fillStyle = grayColor(COLOR_BLACK);
+    ctx.fillText(tempText, tempX, tempY);
 
-    const DETAIL_ICONS = { humidity: "\u{1F4A7}", barometer: "◉", wind: "\u{1F32C}︎", cloud: "☁" };
-    const chips: Array<{ sym: string; text: string }> = [];
-    if (humidity != null) chips.push({ sym: DETAIL_ICONS.humidity, text: `${humidity}%` });
-    if (pressure != null) chips.push({ sym: DETAIL_ICONS.barometer, text: `${pressure}${pressureUnit}` });
-    if (wind != null) chips.push({ sym: DETAIL_ICONS.wind, text: `${wind}${windUnit}` });
-    if (cloudCoverage != null) chips.push({ sym: DETAIL_ICONS.cloud, text: `${cloudCoverage}%` });
+    const visTop = tempY - tempM.actualBoundingBoxAscent;
+    const row1Bottom = Math.max(
+      y + pad + iconSize + pad,
+      tempY + tempM.actualBoundingBoxDescent,
+    );
 
-    let chipX = x;
-    for (const chip of chips) {
-      ctx.fillText(chip.sym, chipX, detailY);
-      const symW = ctx.measureText(chip.sym).width;
-      ctx.fillText(chip.text, chipX + symW + 4, detailY);
-      chipX += symW + 4 + ctx.measureText(chip.text).width + chipGap;
+    // Today's hi/lo/precip right-aligned at the widget's right edge.
+    const smFontSize = Math.round(16 * s);
+    const xsFontSize = Math.round(14 * s);
+    if (forecast.length > 0) {
+      const today = forecast[0];
+      const hi = today.temperature;
+      const lo = today.templow;
+      const precip = today.precipitation;
+      const hiloRight = rightEdge - pad;
+      ctx.textBaseline = "top";
+      ctx.textAlign = "right";
+      if (hi != null) {
+        ctx.font = `${smFontSize}px ${FONT_FAMILY}`;
+        ctx.fillStyle = grayColor(COLOR_BLACK);
+        ctx.fillText(`${hi}°`, hiloRight, visTop);
+      }
+      if (lo != null) {
+        ctx.font = `${smFontSize}px ${FONT_FAMILY}`;
+        ctx.fillStyle = grayColor(COLOR_GRAY);
+        ctx.fillText(
+          `${lo}°`, hiloRight,
+          visTop + Math.round(tempH * 0.4),
+        );
+      }
+      if (precip != null) {
+        ctx.font = `${xsFontSize}px ${FONT_FAMILY}`;
+        ctx.fillStyle = grayColor(COLOR_GRAY);
+        ctx.fillText(
+          `${precip}${precipUnit}`,
+          hiloRight,
+          visTop + Math.round(tempH * 0.72),
+        );
+      }
+      ctx.textAlign = "left";
     }
 
-    // Forecast
-    const forecast = this._forecasts[entityId] || (attrs.forecast as ForecastDay[] | null) || [];
+    // Row 2: plain icon placeholder + text, evenly distributed.
+    // Text centred on the icon by correcting for canvas ascent offset.
+    // Mirrors: text_y = detail_y + icon_h/2 − bbox[1] − text_h/2
+    //   where bbox[1] = −actualBoundingBoxAscent (with textBaseline=top).
+    const detailY = row1Bottom + Math.round(8 * s);
+    const iconH = Math.round(20 * s);
+    const iconGap = Math.round(4 * s);
+    const detailItems: string[] = [];
+    if (humidity != null) detailItems.push(`${humidity}%`);
+    if (pressure != null) detailItems.push(`${Math.round(Number(pressure))}${pressureUnit}`);
+    if (wind != null) detailItems.push(`${Math.round(Number(wind))}${windUnit}`);
+    if (cloudCoverage != null) detailItems.push(`${cloudCoverage}%`);
+
+    const detailCols = Math.max(detailItems.length, 1);
+    const colW = Math.floor(contentW / detailCols);
+
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    for (let i = 0; i < detailItems.length; i++) {
+      const text = detailItems[i];
+      const colCx = contentLeft + colW * i + Math.floor(colW / 2);
+      ctx.font = `${smFontSize}px ${FONT_FAMILY}`;
+      const tm = ctx.measureText(text);
+      const textW2 = tm.width;
+      const textH2 = tm.actualBoundingBoxAscent
+        + tm.actualBoundingBoxDescent;
+      const itemW = iconH + iconGap + textW2;
+      const itemX = colCx - Math.floor(itemW / 2);
+      // Gray rect as icon placeholder (PNG icons not loaded in preview).
+      ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
+      ctx.fillRect(itemX, detailY, iconH, iconH);
+      // Glyph centre aligned to icon centre.
+      const textY = detailY + iconH / 2
+        + tm.actualBoundingBoxAscent
+        - textH2 / 2;
+      ctx.fillStyle = grayColor(COLOR_BLACK);
+      ctx.fillText(text, itemX + iconH + iconGap, textY);
+    }
+
+    const detailBottom = detailY + iconH;
+
+    // Separator and forecast.
     if (!forecast.length || forecastDays <= 0) {
-      return { x, y: origY, w: rightEdge - x, h: detailY + Math.round(20 * s) - origY };
+      return {
+        x, y: origY, w: rightEdge - x,
+        h: detailBottom + Math.round(4 * s) - origY,
+      };
     }
 
-    // Separator
-    const separatorY = detailY + Math.round(22 * s);
+    // Always use at least 5 columns so <=5 forecast days
+    // stay compact instead of stretching across the width.
+    const nCols = Math.max(forecastDays, 5);
+    const colWidth = Math.floor(contentW / nCols);
+    const contentWidth = nCols * colWidth;
+
+    const separatorY = detailBottom + Math.round(8 * s);
     ctx.beginPath();
-    ctx.moveTo(x, separatorY);
-    ctx.lineTo(rightEdge - PADDING, separatorY);
-    ctx.strokeStyle = grayColor(COLOR_LIGHT_GRAY);
-    ctx.lineWidth = 1;
+    ctx.moveTo(contentLeft, separatorY);
+    ctx.lineTo(contentLeft + contentWidth, separatorY);
+    ctx.strokeStyle = grayColor(COLOR_GRAY);
+    ctx.lineWidth = Math.max(2, Math.round(3 * s));
     ctx.stroke();
 
-    const forecastY = separatorY + Math.round(6 * s);
-    const colWidth = Math.floor((rightEdge - x - PADDING) / forecastDays);
-    const precipUnit = String(attrs.precipitation_unit ?? "mm");
+    const forecastY = separatorY + Math.round(8 * s);
 
-    for (let i = 0; i < Math.min(forecastDays, forecast.length); i++) {
+    // Spread entries evenly when fewer than nCols.
+    let positions: number[];
+    if (forecastDays >= nCols) {
+      positions = Array.from(
+        { length: forecastDays }, (_, i) => i,
+      );
+    } else if (forecastDays <= 1) {
+      positions = [Math.floor(nCols / 2)];
+    } else {
+      positions = Array.from(
+        { length: forecastDays },
+        (_, i) => Math.round(
+          i * (nCols - 1) / (forecastDays - 1),
+        ),
+      );
+    }
+
+    for (
+      let i = 0;
+      i < Math.min(forecastDays, forecast.length);
+      i++
+    ) {
       const day = forecast[i];
-      const cx = x + colWidth * i + Math.floor(colWidth / 2);
+      const colI = positions[i];
+      const cx = contentLeft + colWidth * colI
+        + Math.floor(colWidth / 2);
 
       // Day label
       let dayLabel = "";
@@ -1634,37 +1819,53 @@ class EinkDashboardCard extends HTMLElement {
       ctx.textAlign = "center";
       ctx.fillText(dayLabel, cx, forecastY);
 
-      // Condition icon
+      // Condition icon (32 * s — slightly larger than detail icons).
       const dayIcon = CONDITION_ICONS[day.condition ?? ""] || "?";
-      ctx.font = `${Math.round(28 * s)}px ${FONT_FAMILY}`;
+      ctx.font = `${Math.round(32 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "middle";
       ctx.fillText(dayIcon, cx, forecastY + Math.round(34 * s));
 
       // High temp
-      const hi = day.temperature ?? "";
+      const hi = day.temperature;
       ctx.font = `${Math.round(16 * s)}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_BLACK);
       ctx.textBaseline = "top";
-      ctx.fillText(hi !== "" ? `${hi}°` : "", cx, forecastY + Math.round(52 * s));
+      ctx.fillText(
+        hi != null ? `${hi}°` : "",
+        cx, forecastY + Math.round(52 * s),
+      );
 
       // Low temp
-      const lo = day.templow ?? "";
+      const lo = day.templow;
       ctx.fillStyle = grayColor(COLOR_GRAY);
-      ctx.fillText(lo !== "" ? `${lo}°` : "", cx, forecastY + Math.round(70 * s));
+      ctx.fillText(
+        lo != null ? `${lo}°` : "",
+        cx, forecastY + Math.round(70 * s),
+      );
 
       // Precipitation
       const precip = day.precipitation;
       if (precip != null && precip > 0) {
         ctx.font = `${Math.round(14 * s)}px ${FONT_FAMILY}`;
         ctx.fillStyle = grayColor(COLOR_GRAY);
-        ctx.fillText(`${precip}${precipUnit}`, cx, forecastY + Math.round(88 * s));
+        ctx.fillText(
+          `${precip}${precipUnit}`,
+          cx, forecastY + Math.round(88 * s),
+        );
       }
     }
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    return { x, y: origY, w: rightEdge - x, h: Math.round(200 * s) };
+    // Precipitation text is the lowest element in the forecast.
+    // 16*s accounts for the 14*s font height plus descent.
+    const forecastBottom = forecastY
+      + Math.round(88 * s) + Math.round(16 * s);
+    return {
+      x, y: origY, w: rightEdge - x,
+      h: forecastBottom - origY,
+    };
   }
 
   // mirrors render.py: render_sensor_rows

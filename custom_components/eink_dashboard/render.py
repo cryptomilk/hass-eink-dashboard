@@ -16,7 +16,6 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
-    COLOR_LIGHT_GRAY,
     COLOR_WHITE,
     FONT_SIZE_DEVICE_BATTERY,
     FONT_SIZE_SENSOR_ROWS,
@@ -97,11 +96,6 @@ def _fmt_temp(value: str | float | int) -> str:
     """Format a temperature value, omitting the decimal when it is zero."""
     n = float(value)
     return str(int(n)) if n == int(n) else str(n)
-
-
-_DETAIL_ICONS: frozenset[str] = frozenset(
-    {"humidity", "barometer", "wind", "cloud", "raindrop"}
-)
 
 
 @functools.lru_cache(maxsize=256)
@@ -338,7 +332,8 @@ def _draw_card_container(
         Horizontal pixel offset from ``x`` where content should start.
         Add this to ``x`` to get the absolute content x-coordinate.
         ``"border"`` returns ``m.padding``; ``"left_bar"`` returns
-        ``bar_w + m.padding``; ``"none"`` returns ``0``.
+        ``bar_w + m.padding``; ``"none"`` returns ``0`` (no padding
+        — callers that need a margin must add it themselves).
     """
     if card_style == "border":
         draw.rounded_rectangle(
@@ -407,9 +402,10 @@ def _draw_card_row(
             at ``m.font_secondary`` size.
         icon: ``(gray, mask)`` tuple from ``_load_icon()``, or
             ``None`` for letter fallback (first letter of
-            ``primary``).  Resized internally to 60 % of
-            ``m.icon_dia``; load at ``m.icon_dia`` or larger
-            to avoid upscaling artifacts.
+            ``primary``).  Internally downscaled to
+            ``round(m.icon_dia * 0.6)`` so the circle
+            background shows a visible ring; load at
+            ``m.icon_dia`` (the function then downscales).
         icon_fill: Fill color for the icon circle background.
     """
     font_p = _load_font(m.font_primary, medium=True)
@@ -442,8 +438,8 @@ def _draw_card_row(
         # Measure at origin so lw/lh are pure glyph dimensions; font
         # size includes ascender/descender space that would shift the
         # letter off-center inside the circle.
-        bbox = draw.textbbox((0, 0), letter, font=font_letter)
-        lw, lh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        letter_bb = draw.textbbox((0, 0), letter, font=font_letter)
+        lw, lh = letter_bb[2] - letter_bb[0], letter_bb[3] - letter_bb[1]
         draw.text(
             (
                 icon_x + (m.icon_dia - lw) // 2,
@@ -455,7 +451,11 @@ def _draw_card_row(
         )
     text_x = icon_x + m.icon_dia + m.inner_gap
 
-    # Text block (vertically centered in row)
+    # Text block (vertically centered in row).
+    # Actual glyph heights from textbbox are used instead of nominal
+    # font sizes so the block is centered on visible ink, not on the
+    # font's ascender/descender envelope.  The spec pseudocode uses
+    # m.font_primary + m.font_secondary as an approximation.
     if secondary:
         p_bb = draw.textbbox((0, 0), primary, font=font_p)
         s_bb = draw.textbbox((0, 0), secondary, font=font_s)
@@ -472,8 +472,8 @@ def _draw_card_row(
             font=font_s,
         )
     else:
-        bbox = draw.textbbox((0, 0), primary, font=font_p)
-        text_h = bbox[3] - bbox[1]
+        p_bb = draw.textbbox((0, 0), primary, font=font_p)
+        text_h = p_bb[3] - p_bb[1]
         draw.text(
             (text_x, y + (row_h - text_h) // 2),
             primary,
@@ -483,9 +483,9 @@ def _draw_card_row(
 
     # Right-aligned value
     if value:
-        bbox = draw.textbbox((0, 0), value, font=font_s)
-        vw = bbox[2] - bbox[0]
-        vh = bbox[3] - bbox[1]
+        v_bb = draw.textbbox((0, 0), value, font=font_s)
+        vw = v_bb[2] - v_bb[0]
+        vh = v_bb[3] - v_bb[1]
         draw.text(
             (x + w - m.padding - vw, y + (row_h - vh) // 2),
             value,
@@ -640,7 +640,10 @@ def _draw_chip_flow(
         x: Left edge of the flow container.
         y: Top edge of the flow container.
         w: Maximum width of the flow container in pixels.
-        h: Height of each chip row in pixels.
+        h: Height of each chip row in pixels.  Also controls
+            the inter-chip gap (``round(h * 0.29)``), which
+            equals the icon size by design so the gaps feel
+            proportional to the chip content.
         chips: Sequence of chip descriptors.  Each dict may contain:
             ``text`` (str, required), ``icon`` (``(gray, mask)`` tuple,
             optional — both an absent key and an explicit ``None`` value
@@ -968,37 +971,21 @@ def _draw_weather_icon(
         )
 
 
-def _draw_detail_chip(
-    img: Image.Image | None,
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    text_y: int,
-    icon_name: str,
-    text: str,
-    icon_size: int,
-    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-) -> int:
-    """Draw an icon-plus-text chip and return the x coordinate after it."""
-    bbox = draw.textbbox((0, 0), text, font=font)
-    text_h = bbox[3] - bbox[1]
-    icon_y = int(text_y + (text_h - icon_size) // 2)
-    if img is not None:
-        result = _load_icon(icon_name, icon_size)
-        if result is not None:
-            gray, mask = result
-            img.paste(gray, (x, icon_y), mask)
-    text_x = x + icon_size + round(icon_size * 0.25)
-    draw.text((text_x, text_y), text, fill=COLOR_BLACK, font=font)
-    text_w = int(bbox[2] - bbox[0])
-    return text_x + text_w
-
-
 def render_weather(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
-    """Draw current conditions, detail chips, and a multi-day forecast."""
+    """Draw current conditions, a plain detail row, and a forecast.
+
+    Layout (top to bottom):
+    - Row 1: condition icon (height-matched to temperature) + large
+      temperature + today's high/low stacked to the right
+    - Row 2: plain icon + text for each detail attribute (no pill
+      borders)
+    - Separator line
+    - Forecast columns: day label, condition icon, hi/lo, precipitation
+    """
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
     if state is None:
@@ -1013,10 +1000,17 @@ def render_weather(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
-    right_edge = _compute_right_edge(x, widget, width)
 
     s = font_size / FONT_SIZE_WEATHER
-    font_xl = _load_font(round(48 * s))
+
+    # Natural width scales with font_size so diagonal resize
+    # grows/shrinks the entire widget, not just the text.
+    w_override = widget.get("w")
+    if w_override is not None:
+        right_edge = x + w_override
+    else:
+        right_edge = min(x + round(380 * s), width)
+    font_xl = _load_font(round(64 * s))
     font_sm = _load_font(round(16 * s))
     font_xs = _load_font(round(14 * s))
 
@@ -1031,97 +1025,191 @@ def render_weather(
     pressure_unit = attrs.get("pressure_unit", "hPa")
     cloud_coverage = attrs.get("cloud_coverage")
 
-    img = config.get("_image")
+    # Extract forecast early — first entry provides today hi/lo for Row 1.
+    forecast = attrs.get("forecast", [])
 
-    # Row 1: condition icon + temperature
-    icon_size = round(64 * s)
-    icon_cx = x + icon_size // 2
-    icon_cy = y + icon_size // 2
-    if img is not None:
-        _draw_weather_icon(img, draw, icon_cx, icon_cy, icon_size, condition)
+    img: Image.Image = config["_image"]
 
+    # Row 1: condition icon + temperature + today hi/lo
+    #
+    # The icon is the anchor element — sized independently of text
+    # metrics, with equal padding on top/left/bottom and slightly
+    # more on the right before the temperature text.
     temp_text = f"{_fmt_temp(temp)}{temp_unit}"
     temp_bbox = draw.textbbox((0, 0), temp_text, font=font_xl)
     temp_h = temp_bbox[3] - temp_bbox[1]
-    temp_y = y + (icon_size - temp_h) // 2
+
+    icon_size = round(80 * s)
+    pad = round(10 * s)
+    icon_right_pad = round(16 * s)
+    # Symmetric content area: pad inset on both sides.
+    content_left = x + pad
+    content_w = right_edge - x - 2 * pad
+
+    icon_cx = x + pad + icon_size // 2
+    icon_cy = y + pad + icon_size // 2
+    _draw_weather_icon(
+        img,
+        draw,
+        icon_cx,
+        icon_cy,
+        icon_size,
+        condition,
+    )
+
+    # Temperature text vertically centred on the icon.
+    # temp_bbox[1] is the offset from draw anchor to visible
+    # glyph top; subtracting it and half the glyph height
+    # centres the visible ink on icon_cy.
+    temp_x = x + pad + icon_size + icon_right_pad
+    temp_y = icon_cy - temp_bbox[1] - temp_h // 2
     draw.text(
-        (x + icon_size + round(12 * s), temp_y),
+        (temp_x, temp_y),
         temp_text,
         fill=COLOR_BLACK,
         font=font_xl,
     )
 
-    # Row 2: detail chips with small icons
-    detail_y = y + icon_size + round(8 * s)
-    detail_icon_size = round(18 * s)
-    chip_x = x
-    chip_gap = round(20 * s)
+    # Today hi/lo/precip right-aligned at the widget's right edge.
+    vis_top = temp_y + temp_bbox[1]
+    row1_bottom = max(
+        y + pad + icon_size + pad,
+        temp_y + temp_bbox[3],
+    )
+    if forecast:
+        today = forecast[0]
+        hi = today.get("temperature")
+        lo = today.get("templow")
+        precip = today.get("precipitation")
+        precip_unit = attrs.get("precipitation_unit", "mm")
+        hilo_right = right_edge - pad
+        if hi is not None:
+            hi_text = f"{_fmt_temp(hi)}°"
+            hi_bbox = draw.textbbox(
+                (0, 0),
+                hi_text,
+                font=font_sm,
+            )
+            hi_w = hi_bbox[2] - hi_bbox[0]
+            draw.text(
+                (hilo_right - hi_w, vis_top),
+                hi_text,
+                fill=COLOR_BLACK,
+                font=font_sm,
+            )
+        if lo is not None:
+            lo_text = f"{_fmt_temp(lo)}°"
+            lo_bbox = draw.textbbox(
+                (0, 0),
+                lo_text,
+                font=font_sm,
+            )
+            lo_w = lo_bbox[2] - lo_bbox[0]
+            draw.text(
+                (
+                    hilo_right - lo_w,
+                    vis_top + round(temp_h * 0.4),
+                ),
+                lo_text,
+                fill=COLOR_GRAY,
+                font=font_sm,
+            )
+        if precip is not None:
+            precip_text = f"{precip}{precip_unit}"
+            p_bbox = draw.textbbox(
+                (0, 0),
+                precip_text,
+                font=font_xs,
+            )
+            p_w = p_bbox[2] - p_bbox[0]
+            draw.text(
+                (
+                    hilo_right - p_w,
+                    vis_top + round(temp_h * 0.72),
+                ),
+                precip_text,
+                fill=COLOR_GRAY,
+                font=font_xs,
+            )
 
+    # Row 2: detail icons + text, evenly distributed across the full width.
+    # Text is vertically centred on the icon by correcting for bbox[1].
+    detail_y = row1_bottom + round(8 * s)
+    icon_h = round(20 * s)
+    icon_gap = round(4 * s)
+
+    details: list[tuple[str, str]] = []
     if humidity is not None:
-        chip_x = _draw_detail_chip(
-            img,
-            draw,
-            chip_x,
-            detail_y,
-            "humidity",
-            f"{humidity}%",
-            detail_icon_size,
-            font_sm,
-        )
-        chip_x += chip_gap
+        details.append(("humidity", f"{humidity}%"))
     if pressure is not None:
-        chip_x = _draw_detail_chip(
-            img,
-            draw,
-            chip_x,
-            detail_y,
-            "barometer",
-            f"{pressure}{pressure_unit}",
-            detail_icon_size,
-            font_sm,
-        )
-        chip_x += chip_gap
+        details.append(("barometer", f"{round(pressure)}{pressure_unit}"))
     if wind is not None:
-        chip_x = _draw_detail_chip(
-            img,
-            draw,
-            chip_x,
-            detail_y,
-            "wind",
-            f"{wind}{wind_unit}",
-            detail_icon_size,
-            font_sm,
-        )
-        chip_x += chip_gap
+        details.append(("wind", f"{round(wind)}{wind_unit}"))
     if cloud_coverage is not None:
-        _draw_detail_chip(
-            img,
-            draw,
-            chip_x,
-            detail_y,
-            "cloud",
-            f"{cloud_coverage}%",
-            detail_icon_size,
-            font_sm,
-        )
+        details.append(("cloud", f"{cloud_coverage}%"))
+
+    detail_cols = max(len(details), 1)
+    col_w = content_w // detail_cols
+
+    for i, (icon_name, text) in enumerate(details):
+        col_cx = content_left + col_w * i + col_w // 2
+
+        text_bbox = draw.textbbox((0, 0), text, font=font_sm)
+        text_w_i = text_bbox[2] - text_bbox[0]
+        text_h_i = text_bbox[3] - text_bbox[1]
+
+        result = _load_icon(icon_name, icon_h)
+        has_icon = result is not None
+        item_w = (icon_h + icon_gap if has_icon else 0) + text_w_i
+        item_x = col_cx - item_w // 2
+
+        if has_icon:
+            gray, mask = result
+            img.paste(gray, (item_x, detail_y), mask)
+            item_x += icon_h + icon_gap
+
+        # Align visible glyph centre with icon centre.
+        text_y = detail_y + icon_h // 2 - text_bbox[1] - text_h_i // 2
+        draw.text((item_x, text_y), text, fill=COLOR_BLACK, font=font_sm)
+
+    detail_bottom = detail_y + icon_h
 
     # Forecast
-    forecast = attrs.get("forecast", [])
     if not forecast or forecast_days <= 0:
         return
 
-    separator_y = detail_y + round(22 * s)
+    # Always use at least 5 columns so <=5 forecast days
+    # stay compact instead of stretching across the width.
+    forecast_cols = max(forecast_days, 5)
+    col_width = content_w // forecast_cols
+    content_width = forecast_cols * col_width
+
+    separator_y = detail_bottom + round(8 * s)
     draw.line(
-        [(x, separator_y), (right_edge - PADDING, separator_y)],
-        fill=COLOR_LIGHT_GRAY,
-        width=1,
+        [
+            (content_left, separator_y),
+            (content_left + content_width, separator_y),
+        ],
+        fill=COLOR_GRAY,
+        width=max(2, round(3 * s)),
     )
 
-    forecast_y = separator_y + round(6 * s)
-    col_width = (right_edge - x - PADDING) // forecast_days
+    forecast_y = separator_y + round(8 * s)
 
-    for i, day in enumerate(forecast[:forecast_days]):
-        cx = x + col_width * i + col_width // 2
+    # Spread entries evenly when fewer than forecast_cols.
+    if forecast_days >= forecast_cols:
+        positions = list(range(forecast_days))
+    elif forecast_days <= 1:
+        positions = [forecast_cols // 2]
+    else:
+        positions = [
+            round(i * (forecast_cols - 1) / (forecast_days - 1))
+            for i in range(forecast_days)
+        ]
+
+    for idx, day in enumerate(forecast[:forecast_days]):
+        col_i = positions[idx]
+        cx = content_left + col_width * col_i + col_width // 2
 
         # Day label
         dt_str = day.get("datetime")
@@ -1140,15 +1228,14 @@ def render_weather(
         )
 
         # Condition icon
-        if img is not None:
-            _draw_weather_icon(
-                img,
-                draw,
-                cx,
-                forecast_y + round(34 * s),
-                round(28 * s),
-                day.get("condition", ""),
-            )
+        _draw_weather_icon(
+            img,
+            draw,
+            cx,
+            forecast_y + round(34 * s),
+            round(32 * s),
+            day.get("condition", ""),
+        )
 
         # High temp
         hi = day.get("temperature", "")

@@ -109,8 +109,9 @@ export interface CardRowOpts {
    *  Defaults to COLOR_GRAY (120). */
   iconFill?: number;
   /** Icon identifier (e.g. MDI name). When set,
-   *  the letter fallback is skipped. Icon loading
-   *  is not yet implemented in the canvas preview. */
+   *  the letter fallback is skipped.
+   *  @todo Icon loading is not yet implemented in the
+   *  canvas preview. */
   icon?: string;
 }
 
@@ -119,8 +120,9 @@ export interface ChipOpts {
   /** When true, fill chip black and draw text white
    *  (used for problem / urgent states). */
   inverted?: boolean;
-  /** Icon identifier (e.g. MDI name). Icon loading
-   *  is not yet implemented in the canvas preview. */
+  /** Icon identifier (e.g. MDI name).
+   *  @todo Icon loading is not yet implemented in the
+   *  canvas preview. */
   icon?: string;
 }
 
@@ -128,8 +130,9 @@ export interface ChipOpts {
 export interface ChipDescriptor {
   text: string;
   inverted?: boolean;
-  /** Icon identifier (e.g. MDI name). Icon loading
-   *  is not yet implemented in the canvas preview. */
+  /** Icon identifier (e.g. MDI name).
+   *  @todo Icon loading is not yet implemented in the
+   *  canvas preview. */
   icon?: string;
 }
 
