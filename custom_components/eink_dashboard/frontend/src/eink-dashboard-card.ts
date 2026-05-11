@@ -1021,7 +1021,7 @@ class EinkDashboardCard extends HTMLElement {
     img.style.height = `${imgElH}px`;
     img.style.left = `${imgLeft}px`;
     img.style.top = `${imgTop}px`;
-    img.style.transform = "rotate(90deg)";
+    img.style.transform = "rotate(-90deg)";
     img.style.transformOrigin = "center center";
   }
 
