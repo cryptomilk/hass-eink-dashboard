@@ -185,6 +185,7 @@ class EinkDashboardCard extends HTMLElement {
   private _config: CardConfig | null = null;
   private _hass: HomeAssistant | null = null;
   private _layout: LayoutResponse | null = null;
+  private _resolvedTemplates: Record<string, string> = {};
   private _canvas: HTMLCanvasElement | null = null;
   private _ctx: CanvasRenderingContext2D | null = null;
   private _renderPending = false;
@@ -492,6 +493,41 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Layout fetch ──────────────────────────────────────────────────────────
 
+  private _applyResolvedTemplates(widget: Widget, index: number): Widget {
+    const resolved = this._resolvedTemplates;
+    const entries = Object.entries(widget).filter(
+      ([field, value]) => typeof value === "string" && `${index}.${field}` in resolved,
+    );
+    if (entries.length === 0) return widget;
+    const copy = { ...widget } as Record<string, unknown>;
+    for (const [field] of entries) copy[field] = resolved[`${index}.${field}`];
+    return copy as unknown as Widget;
+  }
+
+  private _resolveTemplates(): void {
+    if (!this._layout || !this._hass) return;
+    const gen = this._fetchGeneration;
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < this._layout.widgets.length; i++) {
+      const w = this._layout.widgets[i];
+      for (const [field, value] of Object.entries(w)) {
+        if (typeof value !== "string" || !value.includes("{{")) continue;
+        const key = `${i}.${field}`;
+        const template = value;
+        promises.push(
+          (this._hass!.callApi("POST", "template", { template }) as Promise<string>)
+            .then((resolved) => {
+              if (gen !== this._fetchGeneration) return;
+              this._resolvedTemplates[key] = resolved;
+              this._scheduleRender();
+            })
+            .catch(() => {}),
+        );
+      }
+    }
+    if (promises.length > 0) Promise.all(promises);
+  }
+
   private async _fetchLayout(): Promise<void> {
     const gen = ++this._fetchGeneration;
     this._fetching = true;
@@ -525,6 +561,7 @@ class EinkDashboardCard extends HTMLElement {
         this._serverImg!.src = `/api/eink_dashboard/${entryId}/image.png?_t=${Date.now()}`;
       }
       this._fetchForecasts();
+      this._resolveTemplates();
       this._scheduleRender();
     } catch (err) {
       if (gen !== this._fetchGeneration) return;
@@ -908,7 +945,8 @@ class EinkDashboardCard extends HTMLElement {
 
     this._widgetBounds = [];
     for (let i = 0; i < this._layout.widgets.length; i++) {
-      const widget = this._layout.widgets[i];
+      const raw = this._layout.widgets[i];
+      const widget = this._applyResolvedTemplates(raw, i);
       const fn = dispatch[widget.type];
       if (!fn) continue;
       const bounds = fn(widget);
