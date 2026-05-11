@@ -1,5 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { snap, grayColor, parseDaysUntil, formatRelativeDate, buildHeaderText, shouldShowCopyUrl, computeMetrics } from "../src/eink-dashboard-card.js";
+import {
+  snap,
+  grayColor,
+  parseDaysUntil,
+  formatRelativeDate,
+  buildHeaderText,
+  shouldShowCopyUrl,
+  computeMetrics,
+  drawCardContainer,
+  drawCardRow,
+} from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
   it("snaps 0 to 0", () => expect(snap(0)).toBe(0));
@@ -140,8 +150,10 @@ describe("computeMetrics", () => {
     }
   });
 
-  it("unclamped fields scale exactly when rowH doubles", () => {
-    // Proportional scaling: doubling rowH doubles all unclamped dimensions.
+  it("unclamped fields scale exactly when rowH doubles (56 → 112)", () => {
+    // These inputs are chosen so round(v * 2) yields
+    // exact 2x multiples — other pairs may diverge by
+    // ±1 px due to Math.round rounding.
     const m1 = computeMetrics(56);
     const m2 = computeMetrics(112);
     expect(m2.padding).toBe(m1.padding * 2);
@@ -152,5 +164,301 @@ describe("computeMetrics", () => {
     expect(m2.fontSecondary).toBe(m1.fontSecondary * 2);
     expect(m2.divider).toBe(m1.divider * 2);
     expect(m2.leftBar).toBe(m1.leftBar * 2);
+  });
+});
+
+// ── Mock canvas context factory ──────────────────────────────────────────────
+
+/**
+ * Create a minimal mock of CanvasRenderingContext2D
+ * with vi.fn() spies on all methods used by
+ * drawCardContainer and drawCardRow.  measureText
+ * returns width and bounding-box heights derived
+ * from the current font size so centering arithmetic
+ * produces deterministic, verifiable positions.
+ */
+function createMockCtx(): CanvasRenderingContext2D {
+  let _font = "16px Roboto, sans-serif";
+  const ctx = {
+    // Writable state properties
+    fillStyle: "" as string | CanvasGradient | CanvasPattern,
+    strokeStyle: "" as string | CanvasGradient | CanvasPattern,
+    lineWidth: 1,
+    textBaseline: "alphabetic" as CanvasTextBaseline,
+    textAlign: "start" as CanvasTextAlign,
+    // font is a property so measureText can read it
+    get font(): string { return _font; },
+    set font(v: string) { _font = v; },
+    // Drawing spies
+    beginPath: vi.fn(),
+    roundRect: vi.fn(),
+    stroke: vi.fn(),
+    fill: vi.fn(),
+    fillRect: vi.fn(),
+    arc: vi.fn(),
+    fillText: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    // measureText: parse font size from ctx.font and
+    // return proportional width and bounding box values
+    // so vertical-centering math in drawCardRow is
+    // deterministic.
+    measureText: vi.fn((text: string): TextMetrics => {
+      const match = _font.match(/(\d+)px/);
+      const fs = match ? parseInt(match[1], 10) : 16;
+      return {
+        width: text.length * fs * 0.6,
+        actualBoundingBoxAscent: fs * 0.8,
+        actualBoundingBoxDescent: fs * 0.2,
+        // Unused TextMetrics fields — zero-fill
+        actualBoundingBoxLeft: 0,
+        actualBoundingBoxRight: text.length * fs * 0.6,
+        fontBoundingBoxAscent: fs,
+        fontBoundingBoxDescent: 0,
+        hangingBaseline: 0,
+        alphabeticBaseline: 0,
+        ideographicBaseline: 0,
+        emHeightAscent: fs,
+        emHeightDescent: 0,
+      } as TextMetrics;
+    }),
+  };
+  return ctx as unknown as CanvasRenderingContext2D;
+}
+
+// ── drawCardContainer tests ──────────────────────────────────────────────────
+
+describe("drawCardContainer", () => {
+  it("border: returns m.padding", () => {
+    // "border" style content starts at the padding inset.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const offset = drawCardContainer(ctx, 0, 0, 200, 300, m, "border");
+    expect(offset).toBe(m.padding);
+  });
+
+  it("border: calls roundRect with correct args", () => {
+    // Rounded rect must match the card area exactly.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardContainer(ctx, 10, 20, 200, 300, m, "border");
+    expect(ctx.roundRect).toHaveBeenCalledWith(10, 20, 200, 300, m.radius);
+    expect(ctx.stroke).toHaveBeenCalled();
+  });
+
+  it("border: stroke color is COLOR_BLACK and lineWidth is m.border", () => {
+    // Outline must be black with the metric-derived width.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardContainer(ctx, 0, 0, 200, 300, m, "border");
+    expect(ctx.strokeStyle).toBe(grayColor(0));
+    expect(ctx.lineWidth).toBe(m.border);
+  });
+
+  it("left_bar: returns m.leftBar + m.padding (normal grayscale)", () => {
+    // Standard 16-level display uses the normal bar width.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const offset = drawCardContainer(
+      ctx, 0, 0, 200, 300, m, "left_bar",
+    );
+    expect(offset).toBe(m.leftBar + m.padding);
+  });
+
+  it("left_bar: draws gray filled rect for the bar", () => {
+    // The bar is a filled gray rectangle on the left edge.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardContainer(ctx, 10, 20, 200, 300, m, "left_bar");
+    expect(ctx.fillRect).toHaveBeenCalledWith(10, 20, m.leftBar, 300);
+    expect(ctx.fillStyle).toBe(grayColor(120));
+  });
+
+  it("left_bar: widens bar when grayscale <= 2", () => {
+    // On 2-level displays, bar = max(10, leftBar * 3).
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const widened = Math.max(10, m.leftBar * 3);
+    const offset = drawCardContainer(
+      ctx, 0, 0, 200, 300, m, "left_bar", 2,
+    );
+    expect(offset).toBe(widened + m.padding);
+    expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, widened, 300);
+  });
+
+  it("left_bar: does not widen when grayscale is 16", () => {
+    // Explicit 16-level: normal bar width, no widening.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const offset = drawCardContainer(
+      ctx, 0, 0, 200, 300, m, "left_bar", 16,
+    );
+    expect(offset).toBe(m.leftBar + m.padding);
+    expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, m.leftBar, 300);
+  });
+
+  it("left_bar: grayscaleLevels defaults to 16 (no widening)", () => {
+    // Omitting grayscaleLevels must behave like passing 16.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const offsetDefault = drawCardContainer(
+      ctx, 0, 0, 200, 300, m, "left_bar",
+    );
+    const ctx2 = createMockCtx();
+    const offsetExplicit = drawCardContainer(
+      ctx2, 0, 0, 200, 300, m, "left_bar", 16,
+    );
+    expect(offsetDefault).toBe(offsetExplicit);
+  });
+
+  it("none: returns 0", () => {
+    // No decoration means zero content offset.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const offset = drawCardContainer(ctx, 0, 0, 200, 300, m, "none");
+    expect(offset).toBe(0);
+  });
+
+  it("none: does not call any drawing method", () => {
+    // The "none" style must not draw anything at all.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardContainer(ctx, 0, 0, 200, 300, m, "none");
+    expect(ctx.roundRect).not.toHaveBeenCalled();
+    expect(ctx.fillRect).not.toHaveBeenCalled();
+    expect(ctx.stroke).not.toHaveBeenCalled();
+    expect(ctx.fill).not.toHaveBeenCalled();
+  });
+});
+
+// ── drawCardRow tests ────────────────────────────────────────────────────────
+
+describe("drawCardRow", () => {
+  it("draws the icon circle via arc()", () => {
+    // The gray circle is drawn with arc() + fill().
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(ctx, 0, 0, 300, 56, m, { primary: "Test" });
+    expect(ctx.arc).toHaveBeenCalled();
+    expect(ctx.fill).toHaveBeenCalled();
+  });
+
+  it("letter fallback: first char uppercased", () => {
+    // Lowercase primary -> uppercase letter in circle.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(ctx, 0, 0, 300, 56, m, { primary: "test" });
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    const letterCall = calls.find((c) => c[0] === "T");
+    expect(letterCall).toBeDefined();
+  });
+
+  it("letter fallback: empty primary uses '?'", () => {
+    // When primary is empty, the fallback character is "?".
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(ctx, 0, 0, 300, 56, m, { primary: "" });
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    const qCall = calls.find((c) => c[0] === "?");
+    expect(qCall).toBeDefined();
+  });
+
+  it("draws the primary label text", () => {
+    // Primary text must appear in the fillText calls.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(ctx, 0, 0, 300, 56, m, { primary: "Hello" });
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some((c) => c[0] === "Hello")).toBe(true);
+  });
+
+  it("draws secondary text when provided", () => {
+    // Secondary text must appear when opts.secondary is set.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(
+      ctx, 0, 0, 300, 56, m,
+      { primary: "Name", secondary: "23°C" },
+    );
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.some((c) => c[0] === "23°C")).toBe(true);
+  });
+
+  it("secondary y-position is greater than primary y", () => {
+    // Secondary text must be drawn below primary.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(
+      ctx, 0, 0, 300, 56, m,
+      { primary: "Name", secondary: "Sub" },
+    );
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    const primY = calls.find((c) => c[0] === "Name")?.[2] as number;
+    const secY = calls.find((c) => c[0] === "Sub")?.[2] as number;
+    expect(typeof primY).toBe("number");
+    expect(typeof secY).toBe("number");
+    expect(secY).toBeGreaterThan(primY);
+  });
+
+  it("right-aligned value appears near the right edge", () => {
+    // Value x must be less than x+w-m.padding (right-aligned).
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(
+      ctx, 0, 0, 300, 56, m,
+      { primary: "Name", value: "today" },
+    );
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    const valCall = calls.find((c) => c[0] === "today");
+    expect(valCall).toBeDefined();
+    // Value x must be right-of-center and left of the right edge.
+    const valX = valCall![1] as number;
+    expect(valX).toBeLessThan(300 - m.padding);
+    expect(valX).toBeGreaterThan(0);
+  });
+
+  it("no secondary: primary y is vertically within the row", () => {
+    // Single-line primary must be centered within [y, y+rowH].
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    drawCardRow(ctx, 0, 100, 300, 56, m, { primary: "Solo" });
+    const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+    const primCall = calls.find((c) => c[0] === "Solo");
+    const primY = primCall?.[2] as number;
+    expect(primY).toBeGreaterThan(100);
+    expect(primY).toBeLessThan(100 + 56);
+  });
+
+  it("primary text uses medium weight (500) font", () => {
+    // Capture ctx.font at each fillText call, then
+    // assert the font for "Hello" contains "500".
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    const fontLog: Array<[string, string]> = [];
+    (ctx as unknown as Record<string, unknown>).fillText =
+      vi.fn((text: string) => {
+        fontLog.push([text, ctx.font]);
+      });
+    drawCardRow(ctx, 0, 0, 300, 56, m, { primary: "Hello" });
+    const entry = fontLog.find(([t]) => t === "Hello");
+    expect(entry).toBeDefined();
+    expect(entry![1]).toContain("500");
+  });
+
+  it("custom iconFill changes the circle fill color", () => {
+    // Passing iconFill=0 (black) overrides the default gray.
+    const m = computeMetrics(56);
+    const ctx = createMockCtx();
+    // Capture fillStyle at time of fill() call by tracking changes.
+    const fillStyles: Array<string | CanvasGradient | CanvasPattern> = [];
+    (ctx as unknown as Record<string, unknown>).fill = vi.fn(() => {
+      fillStyles.push(ctx.fillStyle);
+    });
+    drawCardRow(
+      ctx, 0, 0, 300, 56, m,
+      { primary: "Test", iconFill: 0 },
+    );
+    // The first fill() call (circle) must use black (0,0,0).
+    expect(fillStyles[0]).toBe(grayColor(0));
   });
 });

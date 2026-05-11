@@ -96,6 +96,23 @@ export interface WidgetMetrics {
   leftBar: number;
 }
 
+/** Card decoration style for card-style widgets. */
+export type CardStyle = "border" | "left_bar" | "none";
+
+/** Options for drawCardRow(). */
+export interface CardRowOpts {
+  primary: string;
+  secondary?: string;
+  value?: string;
+  /** Grayscale fill for the icon circle (0–255).
+   *  Defaults to COLOR_GRAY (120). */
+  iconFill?: number;
+  /** Icon identifier (e.g. MDI name). When set,
+   *  the letter fallback is skipped. Icon loading
+   *  is not yet implemented in the canvas preview. */
+  icon?: string;
+}
+
 export interface Handle {
   id: string;
   cx: number;

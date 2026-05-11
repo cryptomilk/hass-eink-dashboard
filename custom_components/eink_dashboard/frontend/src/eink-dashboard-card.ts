@@ -16,6 +16,8 @@ import type {
   LayoutResponse,
   WidgetBounds,
   WidgetMetrics,
+  CardStyle,
+  CardRowOpts,
   IndexedBounds,
   Handle,
   ForecastDay,
@@ -177,6 +179,182 @@ export function computeMetrics(rowH: number): WidgetMetrics {
     innerGap: Math.round(rowH * 0.21),
     leftBar: Math.max(2, Math.round(rowH * 0.07)),
   };
+}
+
+/**
+ * Draw card container decoration and return the
+ * content x-offset.
+ *
+ * Mirrors _draw_card_container() from render.py.
+ * Three decoration styles:
+ * - "border": rounded rect outline, returns m.padding
+ * - "left_bar": filled gray rect on the left edge,
+ *   returns barW + m.padding
+ * - "none": no decoration, returns 0
+ *
+ * @param ctx - Canvas 2D rendering context.
+ * @param x - Left edge of the card area in pixels.
+ * @param y - Top edge of the card area in pixels.
+ * @param w - Total width of the card area in pixels.
+ * @param h - Total height of the card area in pixels.
+ * @param m - Pre-computed layout metrics.
+ * @param cardStyle - Card decoration style.
+ * @param grayscaleLevels - Display gray levels; when
+ *   <= 2 the left bar is widened so the dithered dot
+ *   pattern is clearly visible. Defaults to 16.
+ * @returns Horizontal pixel offset from x where
+ *   content should start.
+ */
+export function drawCardContainer(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  m: WidgetMetrics,
+  cardStyle: CardStyle,
+  grayscaleLevels?: number,
+): number {
+  if (cardStyle === "border") {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, m.radius);
+    ctx.strokeStyle = grayColor(COLOR_BLACK);
+    ctx.lineWidth = m.border;
+    ctx.stroke();
+    return m.padding;
+  }
+  if (cardStyle === "left_bar") {
+    let barW = m.leftBar;
+    // On 2-level displays (TRMNL), widen the bar so
+    // the dithered dot pattern forms a visible stripe.
+    if ((grayscaleLevels ?? 16) <= 2) {
+      barW = Math.max(10, m.leftBar * 3);
+    }
+    ctx.fillStyle = grayColor(COLOR_GRAY);
+    ctx.fillRect(x, y, barW, h);
+    return barW + m.padding;
+  }
+  // "none" — no decoration
+  return 0;
+}
+
+/**
+ * Draw one row inside a card container.
+ *
+ * Mirrors _draw_card_row() from render.py. Renders a
+ * gray filled icon circle with letter fallback on the
+ * left, primary text (Roboto Medium) and optional
+ * secondary text (gray) vertically centered in the
+ * middle, and an optional right-aligned value string.
+ *
+ * @param ctx - Canvas 2D rendering context.
+ * @param x - Left edge of the row area in pixels.
+ * @param y - Top edge of the row area in pixels.
+ * @param w - Width of the row area in pixels.
+ * @param rowH - Height of the row in pixels.
+ * @param m - Pre-computed layout metrics.
+ * @param opts - Row content: primary label, optional
+ *   secondary sub-label, optional right-aligned value,
+ *   and optional icon circle fill color (default gray).
+ */
+export function drawCardRow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  rowH: number,
+  m: WidgetMetrics,
+  opts: CardRowOpts,
+): void {
+  const { primary, secondary, value } = opts;
+  const iconFill = opts.iconFill ?? COLOR_GRAY;
+
+  // Icon circle — vertically centered in the row
+  const iconX = x + m.padding;
+  const circleY = y + Math.floor((rowH - m.iconDia) / 2);
+  const cx = iconX + m.iconDia / 2;
+  const cy = circleY + m.iconDia / 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, m.iconDia / 2, 0, 2 * Math.PI);
+  ctx.fillStyle = grayColor(iconFill);
+  ctx.fill();
+
+  // Letter fallback: first char of primary, white on
+  // the gray circle, centered inside it. Skipped when
+  // opts.icon is provided (loading not yet implemented).
+  if (!opts.icon) {
+    const letter = primary[0]?.toUpperCase() ?? "?";
+    const letterSz = Math.round(m.iconDia * 0.5);
+    ctx.font = `${letterSz}px ${FONT_FAMILY}`;
+    ctx.textBaseline = "top";
+    const lm = ctx.measureText(letter);
+    const lw = lm.width;
+    const lh = lm.actualBoundingBoxAscent
+      + lm.actualBoundingBoxDescent;
+    ctx.fillStyle = grayColor(COLOR_WHITE);
+    ctx.fillText(
+      letter,
+      iconX + Math.floor((m.iconDia - lw) / 2),
+      circleY + Math.floor((m.iconDia - lh) / 2),
+    );
+  }
+
+  // Text block starts right of the icon + gap
+  const textX = iconX + m.iconDia + m.innerGap;
+
+  ctx.textBaseline = "top";
+  if (secondary) {
+    // Primary + secondary: compute combined block
+    // height, then vertically center the block.
+    ctx.font = `500 ${m.fontPrimary}px ${FONT_FAMILY}`;
+    const pm = ctx.measureText(primary);
+    const pH = pm.actualBoundingBoxAscent
+      + pm.actualBoundingBoxDescent;
+
+    ctx.font = `${m.fontSecondary}px ${FONT_FAMILY}`;
+    const sm = ctx.measureText(secondary);
+    const sH = sm.actualBoundingBoxAscent
+      + sm.actualBoundingBoxDescent;
+
+    // Small gap between the two text lines, matching
+    // the Python line_gap formula.
+    const lineGap = Math.max(2, Math.round(rowH * 0.04));
+    const blockH = pH + lineGap + sH;
+    const textY = y + Math.floor((rowH - blockH) / 2);
+
+    ctx.font = `500 ${m.fontPrimary}px ${FONT_FAMILY}`;
+    ctx.fillStyle = grayColor(COLOR_BLACK);
+    ctx.fillText(primary, textX, textY);
+
+    ctx.font = `${m.fontSecondary}px ${FONT_FAMILY}`;
+    ctx.fillStyle = grayColor(COLOR_GRAY);
+    ctx.fillText(secondary, textX, textY + pH + lineGap);
+  } else {
+    // Primary only — vertically center it alone.
+    ctx.font = `500 ${m.fontPrimary}px ${FONT_FAMILY}`;
+    const pm = ctx.measureText(primary);
+    const pH = pm.actualBoundingBoxAscent
+      + pm.actualBoundingBoxDescent;
+    const textY = y + Math.floor((rowH - pH) / 2);
+    ctx.fillStyle = grayColor(COLOR_BLACK);
+    ctx.fillText(primary, textX, textY);
+  }
+
+  // Right-aligned value, vertically centered
+  if (value) {
+    ctx.font = `${m.fontSecondary}px ${FONT_FAMILY}`;
+    ctx.textBaseline = "top";
+    const vm = ctx.measureText(value);
+    const vw = vm.width;
+    const vh = vm.actualBoundingBoxAscent
+      + vm.actualBoundingBoxDescent;
+    ctx.fillStyle = grayColor(COLOR_GRAY);
+    ctx.fillText(
+      value,
+      x + w - m.padding - vw,
+      y + Math.floor((rowH - vh) / 2),
+    );
+  }
 }
 
 // ── Card class ────────────────────────────────────────────────────────────────
