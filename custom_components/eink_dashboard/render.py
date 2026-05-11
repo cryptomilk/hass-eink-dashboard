@@ -359,7 +359,13 @@ def _draw_card_container(
             fill=COLOR_GRAY,
         )
         return bar_w + m.padding
-    else:  # "none"
+    elif card_style == "none":
+        return 0
+    else:
+        _LOGGER.warning(
+            "_draw_card_container: unknown card_style %r, treating as 'none'",
+            card_style,
+        )
         return 0
 
 
@@ -418,6 +424,8 @@ def _draw_card_row(
         fill=icon_fill,
     )
     if icon is not None:
+        # Shrink to 60 % so the circle background shows
+        # a visible ring around the icon.
         icon_sz = round(m.icon_dia * 0.6)
         gray, mask = icon
         resized_g = gray.resize((icon_sz, icon_sz), Image.Resampling.LANCZOS)

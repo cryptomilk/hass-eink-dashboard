@@ -1401,7 +1401,7 @@ class TestComputeMetrics:
 
     def test_clamp_boundary_border(self) -> None:
         assert _compute_metrics(37).border == 2  # clamped: round(1.48) = 1 < 2
-        assert _compute_metrics(100).border == 4  # natural: round(4.0) = 4 > 2
+        assert _compute_metrics(100).border == 4  # natural: round(4) = 4 > 2
 
     def test_all_fields_present(self) -> None:
         m = _compute_metrics(56)

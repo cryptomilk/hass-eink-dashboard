@@ -194,6 +194,7 @@ export const LABELS: Record<string, string> = {
   entities: "Entities",
   title: "Title",
   x: "X", y: "Y", w: "Width",
+  direction: "Direction", style: "Style", length: "Length",
   x2: "X2", y2: "Y2",
   font_size: "Font size",
   color: "Color",

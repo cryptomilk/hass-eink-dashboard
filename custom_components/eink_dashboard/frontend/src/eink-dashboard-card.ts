@@ -248,7 +248,13 @@ export function drawCardContainer(
     ctx.fillRect(x, y, barW, h);
     return barW + m.padding;
   }
-  // "none" — no decoration
+  if (cardStyle === "none") {
+    return 0;
+  }
+  console.warn(
+    `drawCardContainer: unknown cardStyle ${JSON.stringify(cardStyle)},`
+    + " treating as 'none'",
+  );
   return 0;
 }
 
@@ -581,6 +587,10 @@ interface ResizeStart {
   font_size?: number;
   renderedW?: number;
   renderedH?: number;
+  /** Effective (computed) length for separator resize math. */
+  length?: number;
+  /** Raw widget.length before resize (undefined = default span). */
+  rawLength?: number;
 }
 
 type MutableWidget = Widget & { x2?: number; y2?: number };
@@ -1011,6 +1021,23 @@ class EinkDashboardCard extends HTMLElement {
         { id: "p2", cx: widget.x2 ?? 0, cy: widget.y2 ?? 0 },
       ];
     }
+    if (widget.type === "separator") {
+      const dir = (widget as SeparatorWidget).direction ?? "horizontal";
+      if (dir === "vertical") {
+        // Handles at the top and bottom centre of the bar.
+        const hcx = bounds.x + bounds.w / 2;
+        return [
+          { id: "start", cx: hcx, cy: bounds.y },
+          { id: "end",   cx: hcx, cy: bounds.y + bounds.h },
+        ];
+      }
+      // Horizontal: handles at the left and right centre.
+      const hcy = bounds.y + bounds.h / 2;
+      return [
+        { id: "start", cx: bounds.x,           cy: hcy },
+        { id: "end",   cx: bounds.x + bounds.w, cy: hcy },
+      ];
+    }
     if (widget.type === "device_battery") {
       return [
         { id: "se", cx: bounds.x + bounds.w, cy: bounds.y + bounds.h },
@@ -1041,6 +1068,10 @@ class EinkDashboardCard extends HTMLElement {
 
   private _getResizeCursor(handleId: string, widget?: Widget): string {
     if (handleId === "p1" || handleId === "p2") return "crosshair";
+    if (widget?.type === "separator") {
+      const dir = (widget as SeparatorWidget).direction ?? "horizontal";
+      return dir === "vertical" ? "ns-resize" : "ew-resize";
+    }
     if (widget?.type === "device_battery") return "nwse-resize";
     return "ew-resize";
   }
@@ -1059,7 +1090,7 @@ class EinkDashboardCard extends HTMLElement {
       this._resizeStartCX = cx;
       this._resizeStartCY = cy;
       const wb = this._widgetBounds.find(b => b.index === handleHit.index);
-      this._resizeWidgetStart = {
+      const s: ResizeStart = {
         x: w.x ?? 0, y: w.y ?? 0,
         x2: w.x2 ?? 0, y2: w.y2 ?? 0,
         w: w.w,
@@ -1067,6 +1098,18 @@ class EinkDashboardCard extends HTMLElement {
         renderedW: wb?.w,
         renderedH: wb?.h,
       };
+      if (w.type === "separator") {
+        const sw = w as SeparatorWidget;
+        const { width: dw, height: dh } = this._layout!.display;
+        const dir = sw.direction ?? "horizontal";
+        s.rawLength = sw.length;
+        // Compute the effective length so resize math has a concrete
+        // starting value even when the widget uses the default full span.
+        s.length = sw.length ?? (dir === "vertical"
+          ? dh - PADDING - (sw.y ?? 0)
+          : dw - PADDING - (sw.x ?? PADDING));
+      }
+      this._resizeWidgetStart = s;
       this._canvas!.style.cursor = this._getResizeCursor(handleHit.handleId, w);
       return;
     }
@@ -1107,6 +1150,29 @@ class EinkDashboardCard extends HTMLElement {
       } else if (handle === "p2") {
         w.x2 = snap(Math.max(0, Math.min(dw - 1, s.x2 + dx)));
         w.y2 = snap(Math.max(0, Math.min(dh - 1, s.y2 + dy)));
+      } else if (w.type === "separator") {
+        const sw = w as SeparatorWidget;
+        const dir = sw.direction ?? "horizontal";
+        const sLen = s.length ?? 0;
+        if (handle === "start") {
+          if (dir === "vertical") {
+            // Keep end fixed: move start up/down and stretch length.
+            const endY = s.y + sLen;
+            const newY = snap(Math.max(0, Math.min(endY - 20, s.y + dy)));
+            sw.y = newY;
+            sw.length = endY - newY;
+          } else {
+            // Keep end fixed: move start left/right and stretch length.
+            const endX = s.x + sLen;
+            const newX = snap(Math.max(0, Math.min(endX - 20, s.x + dx)));
+            sw.x = newX;
+            sw.length = endX - newX;
+          }
+        } else if (handle === "end") {
+          // Move end only: adjust length along the primary axis.
+          const delta = dir === "vertical" ? dy : dx;
+          sw.length = snap(Math.max(20, sLen + delta));
+        }
       } else if (w.type === "device_battery" && s.renderedW != null && s.renderedH != null) {
         const startFs = s.font_size ?? FONT_SIZE_DEVICE_BATTERY;
         const sdx = (handle === "ne" || handle === "se") ? dx : -dx;
@@ -1203,6 +1269,9 @@ class EinkDashboardCard extends HTMLElement {
       w.x2 = s.x2;
       w.y2 = s.y2;
       w.font_size = s.font_size;
+      if (w.type === "separator") {
+        (w as SeparatorWidget).length = s.rawLength;
+      }
       this._resizeIndex = -1;
       this._resizeHandle = null;
       this._resizeWidgetStart = null;

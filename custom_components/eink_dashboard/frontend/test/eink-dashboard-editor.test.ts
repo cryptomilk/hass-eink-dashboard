@@ -115,6 +115,16 @@ describe("LABELS", () => {
       expect(LABELS).toHaveProperty(name);
     }
   });
+
+  it("covers separator-specific field names", () => {
+    // direction, style, and length must have readable labels so the
+    // editor form does not display raw field names to the user.
+    for (const name of ["direction", "style", "length"]) {
+      expect(LABELS).toHaveProperty(name);
+      expect(typeof LABELS[name]).toBe("string");
+      expect((LABELS[name] as string).length).toBeGreaterThan(0);
+    }
+  });
 });
 
 // ── loadHaComponents ──────────────────────────────────────────────────────────
