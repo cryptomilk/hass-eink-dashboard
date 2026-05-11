@@ -1247,7 +1247,7 @@ def _draw_polyline_dashed(
     points: list[tuple[int, int]],
     color: int,
     width: int,
-    dash: tuple[int, int] | None,
+    dash: tuple[int, ...] | None,
 ) -> None:
     """Draw a polyline with an optional dash pattern."""
     if len(points) < 2:
@@ -1286,7 +1286,7 @@ def _draw_polyline_dashed(
 
 
 # (line_width, dash_pattern)
-_SERIES_STYLES: list[tuple[int, tuple[int, int] | None]] = [
+_SERIES_STYLES: list[tuple[int, tuple[int, ...] | None]] = [
     (2, None),  # solid
     (2, (10, 5)),  # dashed
     (1, (3, 4)),  # dotted
@@ -1628,7 +1628,7 @@ def render_chart(  # noqa: C901
         if img is not None:
             bbox = draw.textbbox((0, 0), ylabel, font=font_label)
             tw = bbox[2] - bbox[0]
-            tmp = Image.new("L", (tw + 4, bbox[3] + 4), COLOR_WHITE)
+            tmp = Image.new("L", (int(tw) + 4, int(bbox[3]) + 4), COLOR_WHITE)
             ImageDraw.Draw(tmp).text(
                 (2, 2), ylabel, fill=COLOR_BLACK, font=font_label
             )
