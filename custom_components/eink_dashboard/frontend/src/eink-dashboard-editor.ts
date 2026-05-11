@@ -35,7 +35,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   },
   separator: {
     label: "Separator",
-    defaults: { type: "separator", y: 0, x: 24, color: 210 },
+    defaults: { type: "separator", x: 24, y: 0, direction: "horizontal", style: "line" },
   },
   weather: {
     label: "Weather",
@@ -134,12 +134,23 @@ export const SCHEMAS: Record<string, (d: DisplayConfig) => HaFormSchema[]> = {
   separator: (d) => [
     {
       type: "grid", name: "", schema: [
-        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
-        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
-        { name: "w", selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "direction", default: "horizontal", selector: { select: { options: [
+          { value: "horizontal", label: "Horizontal" },
+          { value: "vertical", label: "Vertical" },
+        ] } } },
+        { name: "style", default: "line", selector: { select: { options: [
+          { value: "line", label: "Line" },
+          { value: "bar", label: "Bar" },
+        ] } } },
       ],
     },
-    colorSelector(210),
+    {
+      type: "grid", name: "", schema: [
+        { name: "x", default: 24, selector: { number: { min: 0, max: d.width, step: 8, mode: "box" } } },
+        { name: "y", default: 0, selector: { number: { min: 0, max: d.height, step: 8, mode: "box" } } },
+        { name: "length", selector: { number: { min: 0, max: Math.max(d.width, d.height), step: 8, mode: "box" } } },
+      ],
+    },
   ],
 
   weather: (d) => [
@@ -225,7 +236,11 @@ export function getSummary(widget: Widget): string {
     const count = (widget.entities || []).length;
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
   }
-  if (t === "separator") return `y=${widget.y ?? 0}`;
+  if (t === "separator") {
+    const dir = widget.direction === "vertical" ? "v" : "h";
+    const sty = widget.style === "bar" ? "bar" : "line";
+    return `${dir} ${sty} @${widget.y ?? 0}`;
+  }
   if (t === "line") {
     return `(${widget.x ?? 0},${widget.y ?? 0}) → (${widget.x2 ?? 0},${widget.y2 ?? 0})`;
   }

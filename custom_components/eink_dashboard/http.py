@@ -51,7 +51,11 @@ class EinkLayoutView(HomeAssistantView):
         return web.json_response(
             {
                 "widgets": widgets,
-                "display": {"width": width, "height": height},
+                "display": {
+                    "width": width,
+                    "height": height,
+                    "grayscale_levels": preset.grayscale_levels,
+                },
                 "device": {
                     "name": entry.title,
                     "model": device_model,

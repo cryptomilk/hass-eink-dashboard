@@ -330,7 +330,11 @@ class TestEinkLayoutView:
         assert response.status == 200
         body = json.loads(response.text)
         assert body["widgets"] == widgets
-        assert body["display"] == {"width": 758, "height": 1024}
+        assert body["display"] == {
+            "width": 758,
+            "height": 1024,
+            "grayscale_levels": 16,
+        }
         assert body["device"]["name"] == "Test Dashboard"
         assert body["device"]["model"] == "kindle_pw"
         assert body["device"]["model_label"] == "Kindle Paperwhite 1/2/3"

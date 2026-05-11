@@ -1459,20 +1459,52 @@ class EinkDashboardCard extends HTMLElement {
     };
   }
 
-  // mirrors render.py: render_separator (lines 117-126)
+  // mirrors render.py: render_separator
   private _renderSeparator(ctx: CanvasRenderingContext2D, widget: SeparatorWidget): WidgetBounds {
+    const direction = widget.direction ?? "horizontal";
+    const style = widget.style ?? "line";
+    const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
-    const color = widget.color ?? COLOR_LIGHT_GRAY;
-    const x0 = widget.x ?? PADDING;
-    const x1 = widget.w != null ? (x0 + widget.w) : (this._layout!.display.width - PADDING);
+    const displayW = this._layout!.display.width;
+    const displayH = this._layout!.display.height;
 
-    ctx.beginPath();
-    ctx.moveTo(x0, y);
-    ctx.lineTo(x1, y);
-    ctx.strokeStyle = grayColor(color);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    return { x: x0, y: y - 4, w: x1 - x0, h: 8 };
+    const color = style === "line" ? COLOR_BLACK : COLOR_GRAY;
+    const levels = this._layout!.display.grayscale_levels ?? 16;
+    const thickness = style === "line" ? 2 : levels <= 2 ? 10 : 6;
+
+    const len = widget.length != null
+      ? widget.length
+      : direction === "vertical"
+        ? displayH - PADDING - y
+        : displayW - PADDING - x;
+
+    if (direction === "vertical") {
+      if (style === "bar") {
+        ctx.fillStyle = grayColor(color);
+        ctx.fillRect(x, y, thickness, len);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x, y + len);
+        ctx.strokeStyle = grayColor(color);
+        ctx.lineWidth = thickness;
+        ctx.stroke();
+      }
+      return { x: x - 1, y, w: thickness + 2, h: len };
+    } else {
+      if (style === "bar") {
+        ctx.fillStyle = grayColor(color);
+        ctx.fillRect(x, y, len, thickness);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len, y);
+        ctx.strokeStyle = grayColor(color);
+        ctx.lineWidth = thickness;
+        ctx.stroke();
+      }
+      return { x, y: y - 1, w: len, h: thickness + 2 };
+    }
   }
 
   // mirrors render.py: render_weather

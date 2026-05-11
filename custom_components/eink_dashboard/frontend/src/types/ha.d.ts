@@ -60,6 +60,7 @@ export interface CustomCardInfo {
 export interface DisplayConfig {
   width: number;
   height: number;
+  grayscale_levels?: number;
 }
 
 export interface DeviceInfo {
@@ -182,6 +183,9 @@ export interface LineWidget extends WidgetBase {
 
 export interface SeparatorWidget extends WidgetBase {
   type: "separator";
+  direction?: "horizontal" | "vertical";
+  style?: "line" | "bar";
+  length?: number;
 }
 
 export interface WeatherWidget extends WidgetBase {

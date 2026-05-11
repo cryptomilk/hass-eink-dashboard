@@ -166,16 +166,20 @@ describe("getSummary", () => {
     expect(getSummary({ type: "status_icons", entities: ["x"] })).toBe("1 entity");
   });
 
-  it("returns y= for separator", () => {
-    expect(getSummary({ type: "separator", y: 200 })).toBe("y=200");
+  it("returns direction+style summary for separator", () => {
+    expect(getSummary({ type: "separator", y: 200 })).toBe("h line @200");
+  });
+
+  it("returns vertical bar summary for separator", () => {
+    expect(getSummary({ type: "separator", direction: "vertical", style: "bar", y: 50 })).toBe("v bar @50");
   });
 
   it("returns coordinate arrow for line", () => {
     expect(getSummary({ type: "line", x: 0, y: 0, x2: 100, y2: 200 })).toBe("(0,0) → (100,200)");
   });
 
-  it("falls back to type name for unknown-ish type", () => {
-    // separator with no y defaults to 0
-    expect(getSummary({ type: "separator" })).toBe("y=0");
+  it("defaults to h line @0 for separator with no fields", () => {
+    // direction and style both default to h/line, y defaults to 0
+    expect(getSummary({ type: "separator" })).toBe("h line @0");
   });
 });
