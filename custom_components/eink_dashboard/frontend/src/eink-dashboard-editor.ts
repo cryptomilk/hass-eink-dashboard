@@ -393,7 +393,15 @@ export const SCHEMAS: Record<
       icon: "mdi:thermometer",
       schema: [
         { name: "title", selector: { text: {} } },
-        { name: "entities", selector: { entity: { multiple: true } } },
+        {
+          name: "entities",
+          selector: {
+            entity: {
+              multiple: true,
+              domain: ["sensor", "binary_sensor"],
+            },
+          },
+        },
       ],
     },
     {
@@ -453,7 +461,15 @@ export const SCHEMAS: Record<
       icon: "mdi:checkbox-marked-circle",
       schema: [
         { name: "title", selector: { text: {} } },
-        { name: "entities", selector: { entity: { multiple: true } } },
+        {
+          name: "entities",
+          selector: {
+            entity: {
+              multiple: true,
+              domain: "binary_sensor",
+            },
+          },
+        },
       ],
     },
     {
