@@ -333,9 +333,12 @@ class EinkDashboardImage(ImageEntity):
             )
             span = _parse_graph_span(raw_span)
             series = chart_config.get("series", [])
-            series_entities = [s.get("entity") for s in series if s.get("entity")]
+            series_entities = [
+                s.get("entity") for s in series if s.get("entity")
+            ]
             extra_entities = [
-                e for e in widget.get("entities", [])
+                e
+                for e in widget.get("entities", [])
                 if e and e not in series_entities
             ]
             entity_ids = series_entities + extra_entities

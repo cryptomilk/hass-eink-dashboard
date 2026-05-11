@@ -64,7 +64,9 @@ class TestEinkDashboardConfigFlow:
     async def test_kindle_creates_entry(self) -> None:
         flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_KINDLE)
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         assert result["title"] == "Kitchen"
@@ -85,7 +87,9 @@ class TestEinkDashboardConfigFlow:
         await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "orientation": "landscape"},
         )
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         opts = result["options"]
@@ -98,7 +102,9 @@ class TestEinkDashboardConfigFlow:
         await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "device_model": "kindle_pw4"},
         )
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         opts = result["options"]
@@ -108,7 +114,9 @@ class TestEinkDashboardConfigFlow:
     async def test_user_with_area(self) -> None:
         flow = _make_config_flow()
         await flow.async_step_user({**_USER_INPUT_KINDLE, "area": "kitchen"})
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         assert result["options"]["area_id"] == "kitchen"
@@ -116,14 +124,18 @@ class TestEinkDashboardConfigFlow:
     async def test_user_without_area(self) -> None:
         flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_KINDLE)
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert "area_id" not in result["options"]
 
     async def test_trmnl_advances_to_setup(self) -> None:
         flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
-        result = await flow.async_step_screen_portion({"screen_portion": "full"})
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "form"
         assert result["step_id"] == "trmnl_setup"

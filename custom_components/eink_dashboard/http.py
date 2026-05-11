@@ -60,7 +60,9 @@ class EinkLayoutView(HomeAssistantView):
                     "grayscale_levels": entry.options.get(
                         "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
                     ),
-                    "optimize": entry.options.get("optimize", DEFAULT_OPTIMIZE),
+                    "optimize": entry.options.get(
+                        "optimize", DEFAULT_OPTIMIZE
+                    ),
                 },
                 "device": {
                     "name": entry.title,

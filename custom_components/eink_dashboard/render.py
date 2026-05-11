@@ -1287,11 +1287,11 @@ def _draw_polyline_dashed(
 
 # (line_width, dash_pattern)
 _SERIES_STYLES: list[tuple[int, tuple[int, int] | None]] = [
-    (2, None),          # solid
-    (2, (10, 5)),       # dashed
-    (1, (3, 4)),        # dotted
-    (2, (14, 4, 3, 4)), # dash-dot — falls back to long-dash
-    (1, None),          # thin solid
+    (2, None),  # solid
+    (2, (10, 5)),  # dashed
+    (1, (3, 4)),  # dotted
+    (2, (14, 4, 3, 4)),  # dash-dot — falls back to long-dash
+    (1, None),  # thin solid
 ]
 
 
@@ -1374,13 +1374,21 @@ def render_chart(
 
     _smbb = _tmp_draw.textbbox((0, 0), "Ag", font=font_sm)
     legend_row_h = _smbb[3] + 4
-    legend_rows = max(1, math.ceil(len(visible) / max(1, (config["width"] // 120))))
+    legend_rows = max(
+        1, math.ceil(len(visible) / max(1, (config["width"] // 120)))
+    )
     legend_h = (legend_row_h * legend_rows + 4) if show_legend else 0
 
-    title_h = (title_font_h + 2 if title else 0) + (legend_h if legend_position == "top" else 0)
+    title_h = (title_font_h + 2 if title else 0) + (
+        legend_h if legend_position == "top" else 0
+    )
     left_margin = 44 + (label_font_h if ylabel else 0)
     right_margin = 40 if has_right else 6
-    bottom_margin = 20 + (label_font_h if xlabel else 0) + (legend_h if legend_position == "bottom" and show_legend else 0)
+    bottom_margin = (
+        20
+        + (label_font_h if xlabel else 0)
+        + (legend_h if legend_position == "bottom" and show_legend else 0)
+    )
 
     px1 = x + left_margin
     py1 = y + 4 + title_h
@@ -1401,7 +1409,11 @@ def render_chart(
         legend_y += title_font_h
 
     def _axis_scale(is_right: bool) -> tuple[float, float] | None:
-        side = [s for s in visible if (s.get("yaxis_id", "") in right_ids) == is_right]
+        side = [
+            s
+            for s in visible
+            if (s.get("yaxis_id", "") in right_ids) == is_right
+        ]
         if not side:
             return None
         yid = side[0].get("yaxis_id", "")
@@ -1474,7 +1486,9 @@ def render_chart(
                 continue
             frac = (v - lo) / (hi - lo) if hi != lo else 0.0
             py = round(py2 - frac * plot_h)
-            decimals = 0 if step >= 1 else max(0, -math.floor(math.log10(step)))
+            decimals = (
+                0 if step >= 1 else max(0, -math.floor(math.log10(step)))
+            )
             label = f"{v:.{decimals}f}"
             bbox = draw.textbbox((0, 0), label, font=font_sm)
             tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
@@ -1482,10 +1496,22 @@ def render_chart(
                 continue
             prev_py = py
             if not is_right:
-                draw.line([(px1, py), (px2, py)], fill=COLOR_LIGHT_GRAY, width=1)
-                draw.text((px1 - tw - 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
+                draw.line(
+                    [(px1, py), (px2, py)], fill=COLOR_LIGHT_GRAY, width=1
+                )
+                draw.text(
+                    (px1 - tw - 4, py - th // 2),
+                    label,
+                    fill=COLOR_GRAY,
+                    font=font_sm,
+                )
             else:
-                draw.text((px2 + 4, py - th // 2), label, fill=COLOR_GRAY, font=font_sm)
+                draw.text(
+                    (px2 + 4, py - th // 2),
+                    label,
+                    fill=COLOR_GRAY,
+                    font=font_sm,
+                )
 
     step = 1.0
     if left_scale is not None:
@@ -1505,10 +1531,13 @@ def render_chart(
         hour_step = 24
 
     import math as _math
+
     first_hour = _math.ceil(t_start / 3600) * 3600
-    x_ticks = [first_hour + i * hour_step * 3600
-               for i in range(int(span_hours / hour_step) + 2)
-               if t_start <= first_hour + i * hour_step * 3600 <= t_end]
+    x_ticks = [
+        first_hour + i * hour_step * 3600
+        for i in range(int(span_hours / hour_step) + 2)
+        if t_start <= first_hour + i * hour_step * 3600 <= t_end
+    ]
 
     bbox_ex = draw.textbbox((0, 0), "00:00", font=font_sm)
     label_w = bbox_ex[2] - bbox_ex[0]
@@ -1536,7 +1565,9 @@ def render_chart(
         leg_x = px1
         states = config.get("states", {})
         for idx, s in enumerate(visible):
-            lw_style, dash_style = _SERIES_STYLES[idx % len(_SERIES_STYLES)][:2]
+            lw_style, dash_style = _SERIES_STYLES[idx % len(_SERIES_STYLES)][
+                :2
+            ]
             entity_id = s.get("entity", "")
             name = s.get("name") or states.get(entity_id, {}).get(
                 "attributes", {}
@@ -1548,10 +1579,15 @@ def render_chart(
                 leg_y += (bbox_n[3] - bbox_n[1]) + 4
             mid_y = leg_y + (bbox_n[3] - bbox_n[1]) // 2
             _draw_polyline_dashed(
-                draw, [(leg_x, mid_y), (leg_x + 24, mid_y)],
-                COLOR_BLACK, lw_style, dash_style,
+                draw,
+                [(leg_x, mid_y), (leg_x + 24, mid_y)],
+                COLOR_BLACK,
+                lw_style,
+                dash_style,
             )
-            draw.text((leg_x + 28, leg_y), name, fill=COLOR_BLACK, font=font_sm)
+            draw.text(
+                (leg_x + 28, leg_y), name, fill=COLOR_BLACK, font=font_sm
+            )
             leg_x += item_w
 
     for idx, s in enumerate(visible):
@@ -1560,7 +1596,9 @@ def render_chart(
         scale = right_scale if is_right else left_scale
         if scale is None:
             continue
-        data = [p for p in histories.get(entity_id, []) if p.get("v") is not None]
+        data = [
+            p for p in histories.get(entity_id, []) if p.get("v") is not None
+        ]
         if len(data) < 2:
             continue
         lw_style, dash_style = _SERIES_STYLES[idx % len(_SERIES_STYLES)][:2]
@@ -1571,7 +1609,9 @@ def render_chart(
             )
             for p in data
         ]
-        _draw_polyline_dashed(draw, points_px, COLOR_BLACK, lw_style, dash_style)
+        _draw_polyline_dashed(
+            draw, points_px, COLOR_BLACK, lw_style, dash_style
+        )
 
     if xlabel:
         bbox = draw.textbbox((0, 0), xlabel, font=font_label)
@@ -1589,7 +1629,9 @@ def render_chart(
             bbox = draw.textbbox((0, 0), ylabel, font=font_label)
             tw = bbox[2] - bbox[0]
             tmp = Image.new("L", (tw + 4, bbox[3] + 4), COLOR_WHITE)
-            ImageDraw.Draw(tmp).text((2, 2), ylabel, fill=COLOR_BLACK, font=font_label)
+            ImageDraw.Draw(tmp).text(
+                (2, 2), ylabel, fill=COLOR_BLACK, font=font_label
+            )
             rotated = tmp.rotate(90, expand=True)
             label_y = py1 + (plot_h - rotated.height) // 2
             img.paste(rotated, (x, label_y))

@@ -33,9 +33,9 @@ function findField(schema: HaFormSchema[], name: string): HaFormSchema | undefin
 // ── WIDGET_TYPES ──────────────────────────────────────────────────────────────
 
 describe("WIDGET_TYPES", () => {
-  const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
+  const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule", "chart"];
 
-  it("has all 8 widget types", () => {
+  it("has all 9 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -51,8 +51,8 @@ describe("WIDGET_TYPES", () => {
 // ── SCHEMAS ───────────────────────────────────────────────────────────────────
 
 describe("SCHEMAS", () => {
-  it("has a schema builder for all 8 widget types", () => {
-    const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule"];
+  it("has a schema builder for all 9 widget types", () => {
+    const ALL_TYPES = ["text", "line", "separator", "weather", "sensor_rows", "device_battery", "status_icons", "waste_schedule", "chart"];
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 

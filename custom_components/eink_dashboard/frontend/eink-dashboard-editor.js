@@ -250,7 +250,7 @@ class EinkDashboardEditor extends HTMLElement {
         super();
         this._hass = null;
         this._widgets = [];
-        this._display = { width: 0, height: 0 };
+        this._display = { width: 0, height: 0, rotation: 0 };
         this._expandedIndex = -1;
         this._built = false;
         this.attachShadow({ mode: "open" });
