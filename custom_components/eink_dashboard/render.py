@@ -121,7 +121,9 @@ def _load_icon(
 
     Returns:
         ``(gray, mask)`` tuple of mode-"L" images, or ``None`` when the
-        icon file cannot be found.
+        icon file cannot be found.  The images are cached — callers must
+        not mutate them in place; call ``.copy()`` or ``.resize()``
+        (which returns a new image) before any modification.
     """
     if ":" in name:
         # Prefixed name: route directly to the named subdirectory.
@@ -310,7 +312,7 @@ def _draw_card_container(
     w: int,
     h: int,
     m: WidgetMetrics,
-    card_style: str = "border",
+    card_style: str = "none",
     grayscale_levels: int = 16,
 ) -> int:
     """Draw card container decoration and return the content x-offset.
@@ -1559,12 +1561,13 @@ def render_status_icons(
     (device_class in ``_PROBLEM_DEVICE_CLASSES`` and
     state ``"on"``) use inverted chips (black fill, white
     text and icon).  Layout wraps horizontally via
-    ``_draw_chip_flow()``.
+    ``_draw_chip_flow()``.  An optional card container
+    (``card_style``) frames the chip flow.
 
     Args:
         draw: PIL ImageDraw context.
         widget: Widget config with x, y, w, h, entities,
-            and optional title.
+            optional title and card_style.
         config: Display config with states and _image.
     """
     img: Image.Image = config["_image"]
@@ -1573,8 +1576,10 @@ def render_status_icons(
     w = widget.get("w", config["width"] - x)
     h = widget.get("h", 40)
     title = widget.get("title", "")
+    card_style = widget.get("card_style", "none")
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
 
     if not entity_ids:
         return
@@ -1589,6 +1594,14 @@ def render_status_icons(
         h -= title_advance
 
     m = _compute_metrics(h)
+    x_off = _draw_card_container(
+        draw, x, y, w, h, m, card_style, grayscale_levels
+    )
+    cx, cw = x + x_off, w - x_off
+    # Mirror the left inset on the right so chips stay inside
+    # the border stroke.
+    if card_style == "border":
+        cw -= m.padding
     chip_font_sz = max(10, round(h * _CHIP_FONT_RATIO))
     font = _load_font(chip_font_sz)
 
@@ -1626,7 +1639,7 @@ def render_status_icons(
             }
         )
 
-    _draw_chip_flow(draw, img, x, y, w, h, chips, font, m.border)
+    _draw_chip_flow(draw, img, cx, y, cw, h, chips, font, m.border)
 
 
 def _parse_days_until(raw: str, today: date) -> int | None:

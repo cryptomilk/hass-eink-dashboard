@@ -221,6 +221,7 @@ export interface StatusIconsWidget extends WidgetBase {
   type: "status_icons";
   title?: string;
   entities?: string[];
+  card_style?: CardStyle;
 }
 
 export interface WasteScheduleEntry {

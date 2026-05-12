@@ -2129,6 +2129,7 @@ class EinkDashboardCard extends HTMLElement {
     if (m !== null) {
       const xOff = drawCardContainer(
         ctx, x, y, cardW, totalH, m, cardStyle,
+        this._layout!.display.grayscale_levels ?? 16,
       );
       contentLeft = x + xOff;
       contentW = cardW - xOff;
@@ -2443,6 +2444,7 @@ class EinkDashboardCard extends HTMLElement {
     const m = computeMetrics(rowH);
     const xOff = drawCardContainer(
       ctx, x, y, width, height, m, cardStyle,
+      this._layout!.display.grayscale_levels ?? 16,
     );
     const cx = x + xOff;
     let cw = width - xOff;
@@ -2677,7 +2679,18 @@ class EinkDashboardCard extends HTMLElement {
       height -= titleAdv;
     }
 
+    const cardStyle = widget.card_style ?? "none";
     const m = computeMetrics(height);
+    const xOff = drawCardContainer(
+      ctx, x, y, width, height, m, cardStyle,
+      this._layout!.display.grayscale_levels ?? 16,
+    );
+    const cx = x + xOff;
+    // Mirror left inset on right so chips stay within the
+    // border stroke.
+    let cw = width - xOff;
+    if (cardStyle === "border") cw -= m.padding;
+
     const chipFontSz = Math.max(
       10, Math.round(height * CHIP_FONT_RATIO),
     );
@@ -2715,7 +2728,7 @@ class EinkDashboardCard extends HTMLElement {
     }
 
     const endY = drawChipFlow(
-      ctx, x, y, width, height, chips,
+      ctx, cx, y, cw, height, chips,
       chipFontSz, m.border,
     );
     return {
@@ -2819,6 +2832,7 @@ class EinkDashboardCard extends HTMLElement {
       const m = computeMetrics(rowH);
       const xOff = drawCardContainer(
         ctx, x, y, width, height, m, cardStyle,
+        this._layout!.display.grayscale_levels ?? 16,
       );
       const cx = x + xOff;
       let cw = width - xOff;
@@ -2843,6 +2857,7 @@ class EinkDashboardCard extends HTMLElement {
       const m = computeMetrics(rowH);
       const xOff = drawCardContainer(
         ctx, x, y, width, height, m, cardStyle,
+        this._layout!.display.grayscale_levels ?? 16,
       );
       const cx = x + xOff;
       let cw = width - xOff;

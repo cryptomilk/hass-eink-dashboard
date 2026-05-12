@@ -105,6 +105,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       w: 400,
       h: 40,
       entities: [],
+      card_style: "none",
     },
   },
   waste_schedule: {
@@ -556,6 +557,14 @@ export const SCHEMAS: Record<
       schema: [
         { type: "grid", name: "", schema: posXYWH(d) },
       ],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette-outline",
+      schema: [cardStyleSelector()],
     },
   ],
 

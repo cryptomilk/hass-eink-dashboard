@@ -1443,7 +1443,8 @@ class TestRenderDeviceBattery:
         assert_all_white(img, 0, 0, 400, 100)
 
     def test_icon_low_battery_forces_black(self) -> None:
-        # Below 20% overrides color to black for emphasis.
+        # Below 20% overrides color to black for emphasis; both colors
+        # produce identical output and the widget actually draws pixels.
         base = {
             "type": "device_battery",
             "x": PADDING,
@@ -1456,12 +1457,16 @@ class TestRenderDeviceBattery:
         black_img = png_to_image(
             render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
         )
-        assert list(gray_img.get_flattened_data()) == list(
-            black_img.get_flattened_data()
+        assert gray_img.tobytes() == black_img.tobytes()
+        # Verify something was actually drawn (guards against both
+        # renders producing blank images, which would also be equal).
+        assert_has_dark_pixels(
+            gray_img, PADDING, 30, PADDING + 35, 44, threshold=200
         )
 
     def test_chip_low_battery_forces_black(self) -> None:
-        # Below 20% chip overrides color to black for emphasis.
+        # Below 20% chip overrides color to black for emphasis; both
+        # colors produce identical output and the widget draws pixels.
         base = {
             "type": "device_battery",
             "x": PADDING,
@@ -1476,8 +1481,10 @@ class TestRenderDeviceBattery:
         black_img = png_to_image(
             render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
         )
-        assert list(gray_img.get_flattened_data()) == list(
-            black_img.get_flattened_data()
+        assert gray_img.tobytes() == black_img.tobytes()
+        # Verify the chip was actually rendered with dark pixels.
+        assert_has_dark_pixels(
+            gray_img, PADDING, 10, PADDING + 80, 50, threshold=200
         )
 
     # -- Chip layout -------------------------------------------------
@@ -1978,6 +1985,118 @@ class TestRenderStatusIcons:
             icon_region=(pad, 0, pad + icon_sz, h),
             text_region=(text_start, 0, 300, h),
         )
+
+    # ── Card container tests ──────────────────────────
+
+    def test_card_border(self) -> None:
+        # Border style draws dark pixels on all four edges
+        # of the chip container.
+        h = 40
+        W = 400
+        m = _compute_metrics(h)
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": W,
+                "h": h,
+                "card_style": "border",
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top edge
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            0,
+            W - m.radius,
+            m.border,
+        )
+        # Bottom edge — +1 margin accommodates PIL stroke
+        # rounding at larger border widths.
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            h - m.border - 1,
+            W - m.radius,
+            h + 1,
+        )
+        # Left edge
+        assert_has_dark_pixels(
+            img,
+            0,
+            m.radius,
+            m.border,
+            h - m.radius,
+        )
+        # Right edge
+        assert_has_dark_pixels(
+            img,
+            W - m.border,
+            m.radius,
+            W,
+            h - m.radius,
+        )
+
+    def test_card_left_bar(self) -> None:
+        # Left_bar style draws gray pixels on the left edge;
+        # the right edge should be white.
+        h = 40
+        m = _compute_metrics(h)
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "card_style": "left_bar",
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # The bar fills the full height; 2px inset avoids
+        # sub-pixel edge effects at the top/bottom.
+        assert_has_gray_pixels(
+            img,
+            0,
+            2,
+            m.left_bar,
+            h - 2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        # Right edge: no decoration
+        assert_all_white(img, 395, 0, 400, 1)
+
+    def test_card_none(self) -> None:
+        # No-decoration style has white corners — only chip
+        # content draws pixels.
+        h = 40
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "card_style": "none",
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top-left corner should be white (no border, no bar)
+        assert_all_white(img, 0, 0, 3, 3)
+        # Far right edge should be white
+        assert_all_white(img, 397, 0, 400, 3)
 
 
 MOCK_WASTE_SCHEDULE_STATES = {
@@ -2678,7 +2797,15 @@ class TestDrawCardContainer:
     def test_border_draws_dark_pixels_on_all_edges(self) -> None:
         img, draw = self._blank()
         m = self._m()
-        _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
+        _draw_card_container(
+            draw,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            card_style="border",
+        )
         assert_has_dark_pixels(
             img,
             self._X + m.radius,
@@ -2727,7 +2854,13 @@ class TestDrawCardContainer:
         _, draw = self._blank()
         m = self._m()
         offset = _draw_card_container(
-            draw, self._X, self._Y, self._W, self._H, m
+            draw,
+            self._X,
+            self._Y,
+            self._W,
+            self._H,
+            m,
+            card_style="border",
         )
         assert offset == m.padding
 
@@ -2856,17 +2989,13 @@ class TestDrawCardContainer:
             self._Y + self._H - 1,
         )
 
-    def test_default_card_style_is_border(self) -> None:
+    def test_default_card_style_is_none(self) -> None:
+        # Omitting card_style should default to "none": no pixels drawn.
         img, draw = self._blank()
         m = self._m()
         _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
-        # Default should behave identically to card_style="border".
-        assert_has_dark_pixels(
-            img,
-            self._X + m.radius,
-            self._Y,
-            self._X + self._W - m.radius,
-            self._Y + m.border,
+        assert_all_white(
+            img, self._X, self._Y, self._X + self._W, self._Y + self._H
         )
 
 
