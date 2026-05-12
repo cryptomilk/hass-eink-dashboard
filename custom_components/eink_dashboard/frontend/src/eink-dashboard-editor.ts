@@ -95,7 +95,7 @@ function posXYW(d: DisplayConfig): HaFormSchema[] {
 
 /** Font size number selector with the given default. */
 const FONT_OPTIONS = [
-  { value: "roboto", label: "Roboto" },
+  { value: "roboto", label: "Roboto (default)" },
   { value: "roboto_medium", label: "Roboto Medium" },
   { value: "ibm_plex_mono", label: "IBM Plex Mono" },
   { value: "noto_sans", label: "Noto Sans" },
