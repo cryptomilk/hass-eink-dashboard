@@ -965,8 +965,9 @@ class TestRenderSensorRows:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Title text should appear near the top of the widget
-        assert_has_dark_pixels(img, 0, 0, 200, 20)
+        # Title is rendered in COLOR_GRAY, so assert gray pixels
+        # (not just any dark pixels) in the title region.
+        assert_has_gray_pixels(img, 0, 0, 200, 20)
 
     def test_sensor_rows_secondary_text(self) -> None:
         # Secondary text (state + unit) is drawn in gray below
@@ -1593,10 +1594,11 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Center of the chip should be white (outlined only)
+        # Check above the text/icon band (y=4) where the chip
+        # background is white for a non-inverted chip.  The
+        # left cap centre (cx=h//2) is always content-free there.
         cx = h // 2
-        cy = h // 2
-        assert pixel(img, cx, cy) >= 200
+        assert pixel(img, cx, 4) >= 200
         # The border itself should have dark pixels
         # (along top edge past the radius)
         radius = h // 2
@@ -1754,12 +1756,11 @@ class TestRenderStatusIcons:
         ]
         cfg = self._config(states=states)
         img = png_to_image(render_dashboard(widgets, cfg))
-        # Interior of the chip (between border and text)
-        # should contain white pixels — a filled black
-        # chip would have none.
-        mid_y = h // 2
+        # Check above the text/icon band (y=4) where the chip
+        # background is white for a non-inverted chip.  A
+        # black-filled (inverted) chip would be dark there too.
         interior_x = pad + 5
-        assert pixel(img, interior_x, mid_y) == 255
+        assert pixel(img, interior_x, 4) == 255
 
     # ── Scaling tests ─────────────────────────────────
 
@@ -1843,17 +1844,14 @@ class TestRenderStatusIcons:
 
 
 MOCK_WASTE_SCHEDULE_STATES = {
-    "sensor.restmull": {
-        "state": "2026-05-03",
-        "attributes": {"friendly_name": "Restmull"},
-    },
-    "sensor.gelbe_tonne": {
-        "state": "2026-05-04",
-        "attributes": {"friendly_name": "Gelbe Tonne"},
-    },
-    "sensor.papier": {
-        "state": "2026-05-05",
-        "attributes": {"friendly_name": "Papier"},
+    "sensor.waste_collection": {
+        "state": "Restmuell in 1 day",
+        "attributes": {
+            "friendly_name": "Waste Collection",
+            "Restmuell": "2026-05-03",
+            "Biotonne": "2026-05-04",
+            "Papier": "2026-05-05",
+        },
     },
 }
 
@@ -1896,8 +1894,18 @@ class TestWasteDateHelpers:
 
 
 class TestRenderWasteSchedule:
+    # Verify rendering of redesigned waste_schedule widgets
+    # using card container + trash-can icon + urgency styling.
+    # Data model: single entity with attribute-based dates.
+
+    _ENTRIES: list[dict[str, str]] = [
+        {"attribute": "Restmuell", "label": "Restmuell"},
+        {"attribute": "Biotonne", "label": "Bio"},
+        {"attribute": "Papier", "label": "Papier"},
+    ]
+
     _DEFAULTS: dict[str, object] = {
-        "width": 500,
+        "width": 400,
         "height": 300,
         "states": MOCK_WASTE_SCHEDULE_STATES,
     }
@@ -1905,224 +1913,492 @@ class TestRenderWasteSchedule:
     def _config(self, **overrides: object) -> dict[str, object]:
         return make_config(self._DEFAULTS, **overrides)
 
-    def test_waste_schedule_draws_entities(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": [
-                    "sensor.restmull",
-                    "sensor.gelbe_tonne",
-                ],
-            }
-        ]
+    def _widget(self, **overrides: object) -> dict[str, object]:
+        """Build a waste_schedule widget config with defaults."""
+        base: dict[str, object] = {
+            "type": "waste_schedule",
+            "entity": "sensor.waste_collection",
+            "entries": list(self._ENTRIES),
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 168,
+        }
+        base.update(overrides)
+        return base
+
+    # ── Structural tests ──────────────────────────────
+
+    def test_card_border(self) -> None:
+        # Border style draws dark pixels on all four edges.
+        row_h = 168 // 3
+        m = _compute_metrics(row_h)
+        w = self._widget(card_style="border")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Top edge
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            0,
+            400 - m.radius,
+            m.border,
+        )
+        # Bottom edge
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            168 - m.border - 1,
+            400 - m.radius,
+            169,
+        )
+        # Left edge
+        assert_has_dark_pixels(
+            img,
+            0,
+            m.radius,
+            m.border,
+            168 - m.radius,
+        )
+        # Right edge
+        assert_has_dark_pixels(
+            img,
+            400 - m.border,
+            m.radius,
+            400,
+            168 - m.radius,
+        )
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
-        assert_has_dark_pixels(img, PADDING, 38, 300, 66, threshold=200)
-
-    def test_waste_schedule_with_title(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "title": "Waste Collection",
-                "entities": ["sensor.restmull"],
-            }
-        ]
+    def test_card_left_bar(self) -> None:
+        # Left_bar style draws gray pixels on the left edge;
+        # right edge should be white.
+        row_h = 168 // 3
+        m = _compute_metrics(row_h)
+        w = self._widget(card_style="left_bar")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
+            img = png_to_image(render_dashboard([w], self._config()))
+        assert_has_gray_pixels(
+            img,
+            0,
+            2,
+            m.left_bar,
+            166,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        # Right edge: no decoration
+        assert_all_white(img, 395, 0, 400, 1)
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 250, 40)
-        assert_has_dark_pixels(img, PADDING, 42, 300, 70, threshold=200)
-
-    def test_waste_schedule_missing_entity_skipped(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": [
-                    "sensor.nonexistent",
-                    "sensor.restmull",
-                ],
-            }
-        ]
+    def test_card_none(self) -> None:
+        # No-decoration style has white corners.
+        w = self._widget(card_style="none")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Top-left corner should be white
+        assert_all_white(img, 0, 0, 3, 3)
+        # Far right edge should be white
+        assert_all_white(img, 397, 0, 400, 3)
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
+    def test_row_divider(self) -> None:
+        # Gray dividers exist at row boundaries between rows.
+        row_h = 168 // 3
+        m = _compute_metrics(row_h)
+        w = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Divider at first row boundary (y = row_h)
+        assert_has_gray_pixels(
+            img,
+            m.padding + 20,
+            row_h - m.divider,
+            380,
+            row_h + m.divider,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
 
-    def test_waste_schedule_empty_entities_is_noop(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": [],
-            }
+    def test_no_divider_single_entry(self) -> None:
+        # Single entry should not produce a divider below.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
         ]
-        result = render_dashboard(widgets, self._config())
+        w = self._widget(entries=entries, h=56)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Area just below the row must be white
+        assert_all_white(img, 0, 57, 400, 60)
 
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 500, 300)
+    # ── Alignment tests ───────────────────────────────
 
-    def test_waste_schedule_today_fills_circle(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
+    def test_icon_centered_with_text(self) -> None:
+        # Icon circle is vertically centered with the text
+        # in a single-entry row.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
         ]
-        # restmull state is 2026-05-03; today = 2026-05-03 → days=0
+        h = 56
+        m = _compute_metrics(h)
+        w = self._widget(
+            entries=entries,
+            h=h,
+            card_style="border",
+        )
+        dummy = _make_dummy_icon()
+        with (
+            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
+            patch(
+                "custom_components.eink_dashboard.render._load_icon",
+                return_value=dummy,
+            ),
+        ):
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        icon_left = m.padding
+        icon_right = icon_left + m.icon_dia
+        text_left = icon_right + m.inner_gap
+        assert_vertically_centered(
+            img,
+            icon_region=(icon_left, 0, icon_right, h),
+            text_region=(text_left, 0, 380, h),
+        )
+
+    # ── Scaling tests ─────────────────────────────────
+
+    def test_scales_with_h(self) -> None:
+        # Doubling h roughly doubles icon area content height.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        m_small = _compute_metrics(56)
+        m_large = _compute_metrics(112)
+        w_small = self._widget(entries=entries, h=56)
+        w_large = self._widget(entries=entries, h=112)
+        dummy = _make_dummy_icon()
+        with (
+            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
+            patch(
+                "custom_components.eink_dashboard.render._load_icon",
+                return_value=dummy,
+            ),
+        ):
+            mock_dt.today.return_value = _TODAY
+            img_s = png_to_image(render_dashboard([w_small], self._config()))
+            img_l = png_to_image(render_dashboard([w_large], self._config()))
+        assert_scales_proportionally(
+            img_s,
+            img_l,
+            region_small=(
+                m_small.padding,
+                0,
+                m_small.padding + m_small.icon_dia,
+                56,
+            ),
+            region_large=(
+                m_large.padding,
+                0,
+                m_large.padding + m_large.icon_dia,
+                112,
+            ),
+            expected_ratio=2.0,
+        )
+
+    # ── Content tests ─────────────────────────────────
+
+    def test_draws_entries(self) -> None:
+        # All 3 entries within range render content in their
+        # respective row regions.
+        row_h = 168 // 3
+        w = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Row 0 (Restmuell, days=1)
+        assert_has_dark_pixels(
+            img,
+            0,
+            0,
+            400,
+            row_h,
+            threshold=200,
+        )
+        # Row 1 (Biotonne, days=2)
+        assert_has_dark_pixels(
+            img,
+            0,
+            row_h,
+            400,
+            2 * row_h,
+            threshold=200,
+        )
+        # Row 2 (Papier, days=3)
+        assert_has_dark_pixels(
+            img,
+            0,
+            2 * row_h,
+            400,
+            3 * row_h,
+            threshold=200,
+        )
+
+    def test_with_title(self) -> None:
+        # Title text is rendered above the card area.
+        h = 100
+        w = self._widget(
+            title="Waste",
+            entries=[
+                {"attribute": "Restmuell", "label": "Restmuell"},
+            ],
+            h=h,
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Title area near the top
+        assert_has_dark_pixels(img, 0, 0, 200, 20)
+
+    def test_missing_attribute_skipped(self) -> None:
+        # An entry whose attribute is absent from the entity
+        # is silently skipped.
+        entries = [
+            {"attribute": "Nonexistent", "label": "Gone"},
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Only one visible entry; content should exist
+        assert_has_dark_pixels(
+            img,
+            0,
+            0,
+            400,
+            56,
+            threshold=200,
+        )
+
+    def test_empty_entries_noop(self) -> None:
+        # Empty entries list produces a white canvas.
+        w = self._widget(entries=[])
+        img = png_to_image(render_dashboard([w], self._config()))
+        assert_all_white(img, 0, 0, 400, 300)
+
+    def test_entity_missing_noop(self) -> None:
+        # Entity not in states produces a white canvas.
+        w = self._widget(entity="sensor.nonexistent")
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        assert_all_white(img, 0, 0, 400, 300)
+
+    def test_urgency_today_black_icon(self) -> None:
+        # days=0: icon circle should be filled black (not gray).
+        # The icon image sits at 60% of icon_dia in the center,
+        # so we check the ring between icon and circle edge.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        h = 80
+        m = _compute_metrics(h)
+        w = self._widget(entries=entries, h=h)
+        # Restmuell = 2026-05-03; today = 2026-05-03 → days=0
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = dt.date(2026, 5, 3)
-            result = render_dashboard(widgets, self._config())
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Check the ring along the horizontal centerline
+        # where we're guaranteed to be inside the circle
+        # but outside the 60%-scaled icon.
+        ring_x = m.padding + 4
+        ring_y = h // 2
+        assert pixel(img, ring_x, ring_y) < 64
 
-        img = png_to_image(result)
+    def test_urgency_tomorrow_black_icon(self) -> None:
+        # days=1: icon circle should be filled black (not gray).
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        h = 80
+        m = _compute_metrics(h)
+        w = self._widget(entries=entries, h=h)
+        # Restmuell = 2026-05-03; today = 2026-05-02 → days=1
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        ring_x = m.padding + 4
+        ring_y = h // 2
+        assert pixel(img, ring_x, ring_y) < 64
+
+    def test_urgency_future_gray_icon(self) -> None:
+        # days=2: icon circle should be gray (not black).
+        entries = [
+            {"attribute": "Biotonne", "label": "Bio"},
+        ]
+        h = 80
+        m = _compute_metrics(h)
+        w = self._widget(entries=entries, h=h)
+        # Biotonne = 2026-05-04; today = 2026-05-02 → days=2
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Check the ring along the horizontal centerline
+        # where we're guaranteed to be inside the circle
+        # but outside the 60%-scaled icon.
+        ring_x = m.padding + 4
+        ring_y = h // 2
+        assert COLOR_GRAY - 20 < pixel(img, ring_x, ring_y) < COLOR_GRAY + 20
+
+    def test_date_right_aligned(self) -> None:
+        # Relative date text appears near the right edge.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Dark pixels near right edge (value text area)
         assert_has_dark_pixels(
-            img, PADDING, 16, PADDING + 11, 27, threshold=64
+            img,
+            300,
+            0,
+            400,
+            56,
+            threshold=200,
         )
 
-    def test_waste_schedule_tomorrow_fills_circle(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
+    def test_past_date_skipped(self) -> None:
+        # Entry with date in the past is not rendered.
+        states = {
+            "sensor.waste_collection": {
+                "state": "past",
+                "attributes": {
+                    "friendly_name": "Waste",
+                    "Restmuell": "2026-05-01",
+                },
+            },
+        }
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
         ]
-        # restmull state is 2026-05-03; today = 2026-05-02 → days=1
+        w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
+            img = png_to_image(
+                render_dashboard([w], self._config(states=states))
+            )
+        assert_all_white(img, 0, 0, 400, 300)
 
-        img = png_to_image(result)
+    def test_beyond_3_days_skipped(self) -> None:
+        # Entry with days > 3 is not rendered.
+        states = {
+            "sensor.waste_collection": {
+                "state": "far",
+                "attributes": {
+                    "friendly_name": "Waste",
+                    "Restmuell": "2026-05-06",
+                },
+            },
+        }
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        # 2026-05-06 is 4 days from 2026-05-02 → filtered
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(
+                render_dashboard([w], self._config(states=states))
+            )
+        assert_all_white(img, 0, 0, 400, 300)
+
+    def test_integer_attribute_value(self) -> None:
+        # Integer strings in attributes parse correctly.
+        states = {
+            "sensor.waste_collection": {
+                "state": "ok",
+                "attributes": {
+                    "friendly_name": "Waste",
+                    "Restmuell": "3",
+                },
+            },
+        }
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(
+                render_dashboard([w], self._config(states=states))
+            )
         assert_has_dark_pixels(
-            img, PADDING, 16, PADDING + 11, 27, threshold=64
+            img,
+            0,
+            0,
+            400,
+            56,
+            threshold=200,
         )
 
-    def test_waste_schedule_future_draws_outline(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.gelbe_tonne"],
-            }
-        ]
-        # gelbe_tonne state is 2026-05-04; today = 2026-05-02 → days=2
+    # ── Layout tests ──────────────────────────────────
+
+    def test_card_layout_shows_most_urgent(self) -> None:
+        # Card layout renders only the most urgent entry
+        # (lowest days) and uses the full height.
+        h = 168
+        w = self._widget(layout="card", h=h)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        # Interior of circle should NOT be solid black
-        interior_black = all(
-            pixel(img, x, y) < 64
-            for x in range(PADDING + 2, PADDING + 9)
-            for y in range(18, 25)
-        )
-        assert not interior_black
-        # But the circle boundary should have some non-white pixels
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Content should exist (most urgent = Restmuell,
+        # days=1)
         assert_has_dark_pixels(
-            img, PADDING, 16, PADDING + 11, 27, threshold=240
+            img,
+            0,
+            0,
+            400,
+            h,
+            threshold=200,
         )
 
-    def test_waste_schedule_date_right_aligned(self) -> None:
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
-        ]
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+    def test_card_layout_uses_full_height(self) -> None:
+        # Card layout uses full h as row height, so the icon
+        # circle is much larger than in list layout with 3
+        # entries.
+        h = 168
+        m_card = _compute_metrics(h)
+        m_list = _compute_metrics(h // 3)
+        # Card mode icon diameter should be larger
+        assert m_card.icon_dia > m_list.icon_dia
+        w = self._widget(layout="card", h=h)
+        dummy = _make_dummy_icon()
+        with (
+            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
+            patch(
+                "custom_components.eink_dashboard.render._load_icon",
+                return_value=dummy,
+            ),
+        ):
             mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, 380, 10, 476, 38, threshold=200)
-
-    def test_waste_schedule_integer_state(self) -> None:
-        states = {
-            "sensor.restmull": {
-                "state": "3",
-                "attributes": {"friendly_name": "Restmull"},
-            }
-        }
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
-        ]
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config(states=states))
-
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 300, 38, threshold=200)
-
-    def test_waste_schedule_past_date_skipped(self) -> None:
-        states = {
-            "sensor.restmull": {
-                "state": "2026-05-01",
-                "attributes": {"friendly_name": "Restmull"},
-            }
-        }
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
-        ]
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config(states=states))
-
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 500, 300)
-
-    def test_waste_schedule_beyond_3_days_skipped(self) -> None:
-        states = {
-            "sensor.restmull": {
-                "state": "2026-05-06",
-                "attributes": {"friendly_name": "Restmull"},
-            }
-        }
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["sensor.restmull"],
-            }
-        ]
-        # 2026-05-06 is 4 days from today (2026-05-02) → filtered out
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            result = render_dashboard(widgets, self._config(states=states))
-
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 500, 300)
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Icon circle area should have content spanning a
+        # large vertical range
+        icon_bb = content_bbox(
+            img,
+            m_card.padding,
+            0,
+            m_card.padding + m_card.icon_dia,
+            h,
+        )
+        assert icon_bb is not None
+        icon_h = icon_bb[3] - icon_bb[1]
+        # Icon should span at least 40% of widget height
+        assert icon_h > h * 0.4
 
 
 class TestFontSizeControls:
@@ -2166,32 +2442,6 @@ class TestFontSizeControls:
         )
         img = png_to_image(result)
         assert_has_dark_pixels(img, PADDING + 32, 10, PADDING + 90, 40)
-
-    def test_waste_schedule_custom_font_size(self) -> None:
-        # font_size=42 → s=42/28=1.5; row_height=round(28*1.5)=42
-        # Row 1 at y=10; row 2 at y=52.
-        widgets = [
-            {
-                "type": "waste_schedule",
-                "x": PADDING,
-                "y": 10,
-                "font_size": 42,
-                "entities": ["sensor.restmull", "sensor.gelbe_tonne"],
-            }
-        ]
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            result = render_dashboard(
-                widgets,
-                {
-                    "width": 400,
-                    "height": 150,
-                    "states": MOCK_WASTE_SCHEDULE_STATES,
-                },
-            )
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 350, 50, threshold=200)
-        assert_has_dark_pixels(img, PADDING, 52, 350, 100, threshold=200)
 
 
 class TestLoadFont:

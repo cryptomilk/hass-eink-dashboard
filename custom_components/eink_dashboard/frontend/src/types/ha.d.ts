@@ -112,10 +112,16 @@ export type CardStyle = "border" | "left_bar" | "none";
 export interface CardRowOpts {
   primary: string;
   secondary?: string;
+  /** Grayscale fill for the secondary text (0–255).
+   *  Defaults to COLOR_GRAY (120). */
+  secondaryFill?: number;
   value?: string;
   /** Grayscale fill for the icon circle (0–255).
    *  Defaults to COLOR_GRAY (120). */
   iconFill?: number;
+  /** Grayscale fill for the right-aligned value text (0–255).
+   *  Defaults to COLOR_GRAY (120). */
+  valueFill?: number;
   /** Loaded icon image to draw inside the icon circle.
    *  When set, the letter fallback is skipped and the
    *  image is drawn at 60% of iconDia, centred. */
@@ -216,10 +222,18 @@ export interface StatusIconsWidget extends WidgetBase {
   entities?: string[];
 }
 
+export interface WasteScheduleEntry {
+  attribute: string;
+  label: string;
+}
+
 export interface WasteScheduleWidget extends WidgetBase {
   type: "waste_schedule";
   title?: string;
-  entities?: string[];
+  entity?: string;
+  entries?: WasteScheduleEntry[];
+  layout?: "list" | "card";
+  card_style?: CardStyle;
 }
 
 export type Widget =

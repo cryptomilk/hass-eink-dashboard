@@ -19,7 +19,6 @@ const EDITOR_TAG = "eink-dashboard-editor";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
-const FONT_SIZE_WASTE_SCHEDULE = 28;
 
 // ── Widget type registry ─────────────────────────────────────────
 
@@ -114,10 +113,14 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
     defaults: {
       type: "waste_schedule",
       title: "",
+      entity: "",
       x: 24,
       y: 0,
-      entities: [],
-      font_size: FONT_SIZE_WASTE_SCHEDULE,
+      w: 400,
+      h: 168,
+      entries: [],
+      layout: "list",
+      card_style: "none",
     },
   },
 };
@@ -565,16 +568,35 @@ export const SCHEMAS: Record<
       icon: "mdi:trash-can",
       schema: [
         { name: "title", selector: { text: {} } },
-        { name: "entities", selector: { entity: { multiple: true } } },
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: { domain: "sensor" } },
+        },
+        {
+          name: "layout",
+          default: "list",
+          selector: {
+            select: {
+              options: [
+                { value: "list", label: "List" },
+                { value: "card", label: "Card" },
+              ],
+              mode: "dropdown",
+            },
+          },
+        },
       ],
     },
     {
-      name: "layout",
+      name: "layout_pos",
       type: "expandable",
       flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+      ],
     },
     {
       name: "appearance",
@@ -582,7 +604,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)],
+      schema: [cardStyleSelector()],
     },
   ],
 };
@@ -598,6 +620,8 @@ export const LABELS: Record<string, string> = {
   color: "Color",
   align: "Align",
   card_style: "Card style",
+  layout: "Layout",
+  entries: "Entries",
   forecast_days: "Forecast days",
 };
 
@@ -636,14 +660,15 @@ export function getSummary(widget: Widget): string {
   if (t === "device_battery") {
     return "Device battery";
   }
-  if (
-    t === "sensor_rows" ||
-    t === "status_icons" ||
-    t === "waste_schedule"
-  ) {
+  if (t === "sensor_rows" || t === "status_icons") {
     const title = widget.title ? `${widget.title} — ` : "";
     const count = (widget.entities || []).length;
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
+  }
+  if (t === "waste_schedule") {
+    const title = widget.title ? `${widget.title} — ` : "";
+    const count = (widget.entries || []).length;
+    return `${title}${count} entr${count === 1 ? "y" : "ies"}`;
   }
   if (t === "separator") {
     const dir = widget.direction === "vertical" ? "v" : "h";
@@ -816,6 +841,78 @@ class EinkDashboardEditor extends HTMLElement {
           font-weight: 500;
         }
         .save-btn:hover { opacity: 0.9; }
+        .entries-section {
+          margin-top: 12px;
+          padding: 8px 0;
+        }
+        .entries-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--primary-text-color, #212121);
+        }
+        .entries-hint {
+          font-size: 12px;
+          color: var(
+            --secondary-text-color, #757575
+          );
+          margin-bottom: 8px;
+        }
+        .entry-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 4px 0;
+        }
+        .entry-row input[type="checkbox"] {
+          margin: 0;
+          flex-shrink: 0;
+        }
+        .entry-attr {
+          font-size: 12px;
+          color: var(
+            --secondary-text-color, #757575
+          );
+          min-width: 120px;
+          max-width: 200px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .entry-label-input {
+          flex: 1;
+          font-size: 13px;
+          padding: 4px 6px;
+          border: 1px solid var(
+            --divider-color, #e0e0e0
+          );
+          border-radius: 4px;
+          background: var(
+            --card-background-color, #fff
+          );
+          color: var(
+            --primary-text-color, #212121
+          );
+          min-width: 0;
+        }
+        .entry-label-input:disabled {
+          opacity: 0.5;
+        }
+        .entry-value {
+          font-size: 11px;
+          color: var(
+            --secondary-text-color, #999
+          );
+          max-width: 80px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
       </style>
       <div class="editor">
         <div class="editor-header">
@@ -976,6 +1073,10 @@ class EinkDashboardEditor extends HTMLElement {
       ((ev: CustomEvent<{ value: Record<string, unknown> }>) => {
         ev.stopPropagation();
         const raw = ev.detail.value;
+        const prevEntity = (
+          this._widgets[index] as unknown as
+            Record<string, unknown>
+        ).entity;
         const data: Record<string, unknown> = {
           type: widget.type,
           ...raw,
@@ -983,13 +1084,241 @@ class EinkDashboardEditor extends HTMLElement {
         if ("color" in data && data.color !== undefined) {
           data.color = parseInt(String(data.color), 10) || 0;
         }
+        // Preserve entries — ha-form doesn't know about
+        // them so they'd be dropped by the spread.
+        if (widget.type === "waste_schedule") {
+          const cur = this._widgets[index] as
+            unknown as Record<string, unknown>;
+          if (!("entries" in data) && cur.entries) {
+            data.entries = cur.entries;
+          }
+        }
         this._widgets[index] = data as unknown as Widget;
         this._fireWidgetChange();
         this._updateSummary(index);
+        // Refresh entries pick-list when entity changes
+        if (
+          widget.type === "waste_schedule"
+          && data.entity !== prevEntity
+        ) {
+          this._refreshEntriesEditor(
+            container, index,
+          );
+        }
       }) as EventListener
     );
     container.appendChild(form);
+
+    if (widget.type === "waste_schedule") {
+      this._buildEntriesEditor(container, index);
+    }
+
     return container;
+  }
+
+  // ── Waste schedule entries pick-list ────────────────────────────
+
+  /** HA-internal attributes to exclude from the pick-list. */
+  private static readonly _HA_INTERNAL_ATTRS = new Set([
+    "friendly_name",
+    "unit_of_measurement",
+    "icon",
+    "device_class",
+    "state_class",
+    "entity_picture",
+    "attribution",
+  ]);
+
+  /**
+   * Remove and re-create the entries pick-list section.
+   *
+   * Called when the entity field changes so the attribute
+   * list reflects the newly selected entity.
+   *
+   * @param container - Parent div holding the ha-form.
+   * @param index     - Widget index in the widget array.
+   */
+  private _refreshEntriesEditor(
+    container: HTMLElement,
+    index: number,
+  ): void {
+    const old = container.querySelector(
+      ".entries-section",
+    );
+    if (old) old.remove();
+    this._buildEntriesEditor(container, index);
+  }
+
+  /**
+   * Build an attribute pick-list for waste_schedule entries.
+   *
+   * Reads the selected entity's attributes from hass.states,
+   * filters out HA internal attrs, and renders a checkbox +
+   * label input for each attribute.  Checked attributes are
+   * included in the widget's entries array.
+   *
+   * @param container - Parent div to append the section to.
+   * @param index     - Widget index in the widget array.
+   */
+  private _buildEntriesEditor(
+    container: HTMLElement,
+    index: number,
+  ): void {
+    const widget = this._widgets[index];
+    const section = document.createElement("div");
+    section.className = "entries-section";
+
+    const entityId = (
+      widget as unknown as Record<string, unknown>
+    ).entity as string | undefined;
+
+    if (!entityId) {
+      const hint = document.createElement("div");
+      hint.className = "entries-hint";
+      hint.textContent =
+        "Select an entity to configure entries.";
+      section.appendChild(hint);
+      container.appendChild(section);
+      return;
+    }
+
+    const stateObj = this._hass?.states[entityId];
+    if (!stateObj) {
+      const hint = document.createElement("div");
+      hint.className = "entries-hint";
+      hint.textContent = "Entity not available.";
+      section.appendChild(hint);
+      container.appendChild(section);
+      return;
+    }
+
+    const attrs = stateObj.attributes as
+      Record<string, unknown>;
+    const attrKeys = Object.keys(attrs).filter(
+      (k) =>
+        !EinkDashboardEditor._HA_INTERNAL_ATTRS.has(k),
+    );
+
+    if (attrKeys.length === 0) {
+      const hint = document.createElement("div");
+      hint.className = "entries-hint";
+      hint.textContent =
+        "No waste type attributes found.";
+      section.appendChild(hint);
+      container.appendChild(section);
+      return;
+    }
+
+    // Header
+    const header = document.createElement("div");
+    header.className = "entries-header";
+    header.textContent = "Entries";
+    section.appendChild(header);
+
+    const hint = document.createElement("div");
+    hint.className = "entries-hint";
+    hint.textContent =
+      "Select which waste types to display and set "
+      + "short labels for each.";
+    section.appendChild(hint);
+
+    // Build a lookup for existing entries
+    const existing = new Map<string, string>();
+    const entries = (
+      (widget as unknown as Record<string, unknown>)
+        .entries as Array<{
+        attribute: string;
+        label: string;
+      }>
+    ) ?? [];
+    for (const e of entries) {
+      existing.set(e.attribute, e.label);
+    }
+
+    /** Collect checked entries and update the widget. */
+    const syncEntries = (): void => {
+      const rows = section.querySelectorAll<
+        HTMLElement
+      >(".entry-row");
+      const newEntries: Array<{
+        attribute: string;
+        label: string;
+      }> = [];
+      rows.forEach((row) => {
+        const cb = row.querySelector<
+          HTMLInputElement
+        >("input[type='checkbox']");
+        const labelInput = row.querySelector<
+          HTMLInputElement
+        >(".entry-label-input");
+        if (cb?.checked && labelInput) {
+          newEntries.push({
+            attribute: row.dataset.attr!,
+            label: labelInput.value,
+          });
+        }
+      });
+      const w = this._widgets[index] as
+        unknown as Record<string, unknown>;
+      w.entries = newEntries;
+      this._fireWidgetChange();
+      this._updateSummary(index);
+    };
+
+    // Rows — one per attribute
+    for (const key of attrKeys) {
+      const row = document.createElement("div");
+      row.className = "entry-row";
+      row.dataset.attr = key;
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = existing.has(key);
+      cb.addEventListener("change", syncEntries);
+      row.appendChild(cb);
+
+      const attrLabel = document.createElement(
+        "span",
+      );
+      attrLabel.className = "entry-attr";
+      attrLabel.textContent = key;
+      attrLabel.title = key;
+      row.appendChild(attrLabel);
+
+      const labelInput = document.createElement(
+        "input",
+      );
+      labelInput.type = "text";
+      labelInput.className = "entry-label-input";
+      labelInput.placeholder = "Label";
+      labelInput.value =
+        existing.get(key) ?? key;
+      labelInput.disabled = !cb.checked;
+      labelInput.addEventListener(
+        "input", syncEntries,
+      );
+      // Enable/disable label input with checkbox
+      cb.addEventListener("change", () => {
+        labelInput.disabled = !cb.checked;
+      });
+      row.appendChild(labelInput);
+
+      // Show current attribute value as hint
+      const val = attrs[key];
+      if (val !== undefined && val !== null) {
+        const valHint = document.createElement(
+          "span",
+        );
+        valHint.className = "entry-value";
+        valHint.textContent = String(val);
+        valHint.title = String(val);
+        row.appendChild(valHint);
+      }
+
+      section.appendChild(row);
+    }
+
+    container.appendChild(section);
   }
 
   // ── Inline summary update (avoids full re-render on edits) ────

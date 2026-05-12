@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
@@ -19,7 +19,6 @@ from .const import (
     COLOR_WHITE,
     FONT_SIZE_DEVICE_BATTERY,
     FONT_SIZE_TEXT,
-    FONT_SIZE_WASTE_SCHEDULE,
     FONT_SIZE_WEATHER,
     PADDING,
     Align,
@@ -376,13 +375,15 @@ def _draw_card_row(
     value: str = "",
     icon: tuple[Image.Image, Image.Image] | None = None,
     icon_fill: int = COLOR_GRAY,
+    value_fill: int = COLOR_GRAY,
+    secondary_fill: int = COLOR_GRAY,
 ) -> None:
     """Draw one row inside a card container.
 
-    Renders a single entity row with a circular icon area on the left,
-    primary and optional secondary text in the center, and an optional
-    right-aligned value string.  Used by SENSOR_ROWS, WASTE_SCHEDULE,
-    PERSON, and ALARM widget renderers.
+    Renders a single entity row with a circular icon area on the
+    left, primary and optional secondary text in the center, and
+    an optional right-aligned value string.  Used by SENSOR_ROWS
+    and WASTE_SCHEDULE widget renderers.
 
     Args:
         draw: PIL ImageDraw context for shapes and text.
@@ -391,13 +392,15 @@ def _draw_card_row(
         y: Top edge of the row area in pixels.
         w: Width of the row area in pixels.
         row_h: Height of the row in pixels.
-        m: Pre-computed layout metrics from ``_compute_metrics()``.
-        primary: Main text label (entity friendly name).  Drawn with
-            Roboto Medium at ``m.font_primary`` size.
-        secondary: Sub-text (state + unit), drawn below primary in gray.
-            When empty, primary text is vertically centered alone.
-        value: Right-aligned text (e.g. relative date).  Drawn in gray
-            at ``m.font_secondary`` size.
+        m: Pre-computed layout metrics from
+            ``_compute_metrics()``.
+        primary: Main text label (entity friendly name).  Drawn
+            with Roboto Medium at ``m.font_primary`` size.
+        secondary: Sub-text (state + unit), drawn below primary.
+            When empty, primary text is vertically centered
+            alone.
+        value: Right-aligned text (e.g. relative date).  Drawn at
+            ``m.font_secondary`` size.
         icon: ``(gray, mask)`` tuple from ``_load_icon()``, or
             ``None`` for letter fallback (first letter of
             ``primary``).  Internally downscaled to
@@ -405,6 +408,8 @@ def _draw_card_row(
             background shows a visible ring; load at
             ``m.icon_dia`` (the function then downscales).
         icon_fill: Fill color for the icon circle background.
+        value_fill: Fill color for the right-aligned value text.
+        secondary_fill: Fill color for the secondary text.
     """
     font_p = _load_font(m.font_primary, medium=True)
     font_s = _load_font(m.font_secondary)
@@ -433,15 +438,17 @@ def _draw_card_row(
     else:
         letter = primary[0].upper() if primary else "?"
         font_letter = _load_font(round(m.icon_dia * 0.5))
-        # Measure at origin so lw/lh are pure glyph dimensions; font
-        # size includes ascender/descender space that would shift the
-        # letter off-center inside the circle.
+        # Measure at origin to get absolute ink bounds.
+        # Subtracting bb[0]/bb[1] converts anchor coordinates (which
+        # PIL places at the left-ascender) to ink-top-left coordinates,
+        # so the glyph is centred on visible pixels rather than on the
+        # font's ascender line.
         letter_bb = draw.textbbox((0, 0), letter, font=font_letter)
         lw, lh = letter_bb[2] - letter_bb[0], letter_bb[3] - letter_bb[1]
         draw.text(
             (
-                icon_x + (m.icon_dia - lw) // 2,
-                circle_y + (m.icon_dia - lh) // 2,
+                icon_x + (m.icon_dia - lw) // 2 - letter_bb[0],
+                circle_y + (m.icon_dia - lh) // 2 - letter_bb[1],
             ),
             letter,
             fill=COLOR_WHITE,
@@ -450,10 +457,11 @@ def _draw_card_row(
     text_x = icon_x + m.icon_dia + m.inner_gap
 
     # Text block (vertically centered in row).
-    # Actual glyph heights from textbbox are used instead of nominal
-    # font sizes so the block is centered on visible ink, not on the
-    # font's ascender/descender envelope.  The spec pseudocode uses
-    # m.font_primary + m.font_secondary as an approximation.
+    # textbbox returns ink bounds in anchor coordinates.  PIL's default
+    # "la" anchor places draw.text() at the ascender line, so bb[1] is
+    # the gap between that line and the actual ink top.  Subtracting
+    # bb[1] from the draw y converts anchor-y to ink-top-y, centering
+    # on visible pixels rather than on the ascender/descender envelope.
     if secondary:
         p_bb = draw.textbbox((0, 0), primary, font=font_p)
         s_bb = draw.textbbox((0, 0), secondary, font=font_s)
@@ -462,18 +470,23 @@ def _draw_card_row(
         line_gap = max(2, round(row_h * 0.04))
         text_block_h = p_h + line_gap + s_h
         text_y = y + (row_h - text_block_h) // 2
-        draw.text((text_x, text_y), primary, fill=COLOR_BLACK, font=font_p)
         draw.text(
-            (text_x, text_y + p_h + line_gap),
+            (text_x, text_y - p_bb[1]),
+            primary,
+            fill=COLOR_BLACK,
+            font=font_p,
+        )
+        draw.text(
+            (text_x, text_y + p_h + line_gap - s_bb[1]),
             secondary,
-            fill=COLOR_GRAY,
+            fill=secondary_fill,
             font=font_s,
         )
     else:
         p_bb = draw.textbbox((0, 0), primary, font=font_p)
         text_h = p_bb[3] - p_bb[1]
         draw.text(
-            (text_x, y + (row_h - text_h) // 2),
+            (text_x, y + (row_h - text_h) // 2 - p_bb[1]),
             primary,
             fill=COLOR_BLACK,
             font=font_p,
@@ -485,9 +498,9 @@ def _draw_card_row(
         vw = v_bb[2] - v_bb[0]
         vh = v_bb[3] - v_bb[1]
         draw.text(
-            (x + w - m.padding - vw, y + (row_h - vh) // 2),
+            (x + w - m.padding - vw, y + (row_h - vh) // 2 - v_bb[1]),
             value,
-            fill=COLOR_GRAY,
+            fill=value_fill,
             font=font_s,
         )
 
@@ -604,13 +617,12 @@ def _draw_chip(
             resized_gray = ImageOps.invert(resized_gray)
         img.paste(resized_gray, (cx, icon_y), resized_mask)
         cx += icon_sz + icon_gap
-    # Vertically center the text glyph within the chip using the
-    # measured bounding box height (not the nominal font size, which
-    # includes ascender/descender space that would shift the glyph
-    # upward).
+    # Vertically center the text glyph within the chip.  Subtracting
+    # bbox[1] converts the "la" anchor y to the actual ink top so the
+    # glyph is centred on visible pixels, not on the ascender line.
     bbox = draw.textbbox((0, 0), text, font=font)
     text_h = bbox[3] - bbox[1]
-    text_y = y + (h - text_h) // 2
+    text_y = y + (h - text_h) // 2 - bbox[1]
     draw.text((cx, text_y), text, fill=fg, font=font)
     return x + chip_w
 
@@ -710,131 +722,6 @@ def _compute_right_edge(x: int, widget: Widget, config_width: int) -> int:
     """
     w = widget.get("w")
     return (x + w) if w is not None else config_width
-
-
-class _MultiEntityParams(NamedTuple):
-    """Common fields shared by multi-entity widget renderers."""
-
-    x: int
-    y: int
-    font_size: int
-    title: str
-    entity_ids: list[str]
-    states: dict[str, Any]
-    right_edge: int
-
-
-def _extract_multi_entity_params(
-    widget: Widget,
-    config: DisplayConfig,
-    default_font_size: int,
-) -> _MultiEntityParams:
-    """Extract common fields shared by multi-entity renderers.
-
-    Args:
-        widget: Widget configuration dict.
-        config: Display configuration dict.
-        default_font_size: Default font size for this widget type.
-
-    Returns:
-        A _MultiEntityParams tuple with the extracted values.
-    """
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    font_size = widget.get("font_size", default_font_size)
-    title = widget.get("title", "")
-    entity_ids: list[str] = widget.get("entities", [])
-    states = config.get("states", {})
-    right_edge = _compute_right_edge(x, widget, config["width"])
-    return _MultiEntityParams(
-        x, y, font_size, title, entity_ids, states, right_edge
-    )
-
-
-def _draw_section_title(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    title: str,
-    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-    advance: float,
-    scale: float,
-) -> int:
-    """Draw an optional section title and return the updated y.
-
-    Args:
-        draw: PIL ImageDraw context.
-        x: Left x-coordinate for the title text.
-        y: Current y-coordinate.
-        title: Title string; when empty, y is returned unchanged.
-        font: Font to render the title with.
-        advance: Base vertical advance after the title (unscaled).
-        scale: Scaling factor applied to the advance.
-
-    Returns:
-        Updated y-coordinate after the title (or unchanged if empty).
-    """
-    if not title:
-        return y
-    draw.text((x, y), title, fill=COLOR_BLACK, font=font)
-    return y + round(advance * scale)
-
-
-class _EntityInfo(NamedTuple):
-    """Resolved entity state, attributes, and display label."""
-
-    state: dict[str, Any]
-    attrs: dict[str, Any]
-    label: str
-
-
-def _resolve_entity(
-    entity_id: str,
-    states: dict[str, Any],
-    renderer_name: str,
-) -> _EntityInfo | None:
-    """Look up an entity and return its info, or None if missing.
-
-    Args:
-        entity_id: Home Assistant entity identifier.
-        states: Mapping of entity IDs to state dicts.
-        renderer_name: Name of the calling renderer (for debug logs).
-
-    Returns:
-        An _EntityInfo tuple, or None when the entity is absent.
-    """
-    state = states.get(entity_id)
-    if state is None:
-        _LOGGER.debug(
-            "%s: entity %r not in states",
-            renderer_name,
-            entity_id,
-        )
-        return None
-    attrs = state.get("attributes", {})
-    label = attrs.get("friendly_name", entity_id)
-    return _EntityInfo(state, attrs, label)
-
-
-def _draw_indicator(
-    draw: ImageDraw.ImageDraw,
-    bbox: list[int | float],
-    filled: bool,
-    shape: str = "rectangle",
-) -> None:
-    """Draw a filled or outlined indicator shape.
-
-    Args:
-        draw: PIL ImageDraw context.
-        bbox: Bounding box ``[x0, y0, x1, y1]`` for the shape.
-        filled: When True, fill with black; otherwise outline in gray.
-        shape: ``"rectangle"`` or ``"ellipse"``.
-    """
-    fn = draw.ellipse if shape == "ellipse" else draw.rectangle
-    if filled:
-        fn(bbox, fill=COLOR_BLACK)
-    else:
-        fn(bbox, outline=COLOR_GRAY)
 
 
 def render_text(
@@ -963,7 +850,7 @@ def _draw_weather_icon(
         tw = bbox[2] - bbox[0]
         th = bbox[3] - bbox[1]
         draw.text(
-            (cx - tw // 2, cy - th // 2),
+            (cx - tw // 2 - bbox[0], cy - th // 2 - bbox[1]),
             "?",
             fill=COLOR_BLACK,
             font=font,
@@ -1538,8 +1425,9 @@ def _render_battery_chip(
             fill=color,
         )
 
-    # Percentage label to the right of the bar
-    text_y = y + (h - text_h) // 2
+    # Percentage label to the right of the bar.  Subtract bbox[1] to
+    # convert anchor y to ink top for accurate vertical centering.
+    text_y = y + (h - text_h) // 2 - bbox[1]
     draw.text(
         (bar_x + bar_w + gap, text_y),
         label,
@@ -1679,11 +1567,6 @@ def render_status_icons(
     _draw_chip_flow(draw, img, x, y, w, h, chips, font, m.border)
 
 
-_WASTE_ROW_HEIGHT = 28
-_WASTE_TITLE_ADVANCE = 32
-_WASTE_ICON_SIZE = 10
-
-
 def _parse_days_until(raw: str, today: date) -> int | None:
     """Parse an ISO date or integer offset into days from today."""
     try:
@@ -1698,7 +1581,7 @@ def _parse_days_until(raw: str, today: date) -> int | None:
 
 
 def _format_relative_date(days: int | None, raw: str) -> str:
-    """Return 'today', 'tomorrow', 'in N days', or the original string."""
+    """Return 'today', 'tomorrow', 'in N days', or the raw string."""
     if days is None or days < 0:
         return raw
     if days == 0:
@@ -1713,57 +1596,172 @@ def render_waste_schedule(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
-    """Draw upcoming waste-collection entries due within the next 3 days."""
-    (x, y, font_size, title, entity_ids, states, right_edge) = (
-        _extract_multi_entity_params(widget, config, FONT_SIZE_WASTE_SCHEDULE)
-    )
+    """Draw waste collection entries as card rows with urgency styling.
 
-    s = font_size / FONT_SIZE_WASTE_SCHEDULE
-    font_md = _load_font(round(22 * s))
-    font_sm = _load_font(font_size)
-    sz = round(_WASTE_ICON_SIZE * s)
-    row_height = round(_WASTE_ROW_HEIGHT * s)
+    Supports two layouts: ``"list"`` (default) shows all entries
+    due within 3 days as rows with dividers, ``"card"`` shows only
+    the most urgent entry using the full widget height.
 
-    y = _draw_section_title(
-        draw, x, y, title, font_md, _WASTE_TITLE_ADVANCE, s
-    )
+    Data comes from a single entity whose attributes contain
+    waste types as keys with ISO date values.  The ``entries``
+    config maps attribute keys to short display labels.
 
-    today = date.today()
-    for entity_id in entity_ids:
-        info = _resolve_entity(entity_id, states, "render_waste_schedule")
-        if info is None:
-            continue
-        label = info.label
-        raw = info.state.get("state", "")
+    Args:
+        draw: PIL ImageDraw context.
+        widget: Widget config with entity, entries, x, y, w, h,
+            layout, card_style, and optional title.
+        config: Display config with states and _image.
+    """
+    img: Image.Image = config["_image"]
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    w = widget.get("w", config["width"] - x)
+    h = widget.get("h", 168)
+    title = widget.get("title", "")
+    entity_id: str = widget.get("entity", "")
+    entries: list[dict[str, str]] = widget.get("entries", [])
+    layout = widget.get("layout", "list")
+    card_style = widget.get("card_style", "none")
+    states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
 
-        days = _parse_days_until(raw, today)
-        if days is not None and (days < 0 or days > 3):
-            continue
-        icon_top = y + round(6 * s)
-        _draw_indicator(
-            draw,
-            [x, icon_top, x + sz, icon_top + sz],
-            days is not None and days <= 1,
-            shape="ellipse",
+    if not entity_id or not entries:
+        return
+
+    state = states.get(entity_id)
+    if state is None:
+        _LOGGER.debug(
+            "render_waste_schedule: entity %r not in states",
+            entity_id,
         )
+        return
+    attrs = state.get("attributes", {})
 
+    # Title above the card (gray, scales with h)
+    if title:
+        title_font_sz = max(10, round(h * 0.14))
+        title_font = _load_font(title_font_sz)
         draw.text(
-            (x + sz + round(8 * s), y),
-            label,
-            fill=COLOR_BLACK,
-            font=font_sm,
-        )
-
-        date_str = _format_relative_date(days, raw)
-        bbox = draw.textbbox((0, 0), date_str, font=font_sm)
-        text_w = bbox[2] - bbox[0]
-        draw.text(
-            (right_edge - PADDING - text_w, y),
-            date_str,
+            (x, y),
+            title,
             fill=COLOR_GRAY,
-            font=font_sm,
+            font=title_font,
         )
-        y += row_height
+        title_advance = round(title_font_sz * 1.4)
+        y += title_advance
+        h -= title_advance
+
+    # Resolve entries: look up each attribute, parse days,
+    # filter to the 0–3 day range.  Entries are appended in
+    # config order, which matters for the stable sort below —
+    # equal-days entries stay in the order the user configured them.
+    today = date.today()
+    visible: list[tuple[str, str, int]] = []
+    for entry in entries:
+        attr_key = entry.get("attribute", "")
+        label = entry.get("label", attr_key)
+        raw = str(attrs.get(attr_key, ""))
+        if not raw:
+            continue
+        days = _parse_days_until(raw, today)
+        if days is None or days < 0 or days > 3:
+            continue
+        visible.append((label, raw, days))
+
+    if not visible:
+        return
+
+    if layout == "card":
+        # Show the most urgent entry (lowest days value).
+        # Stable sort: equal-days entries keep config order.
+        visible.sort(key=lambda e: e[2])
+        label, raw, days = visible[0]
+        row_h = h
+        m = _compute_metrics(row_h)
+        x_off = _draw_card_container(
+            draw,
+            x,
+            y,
+            w,
+            h,
+            m,
+            card_style,
+            grayscale_levels,
+        )
+        cx, cw = x + x_off, w - x_off
+        if card_style == "border":
+            cw -= m.padding
+        # Black icon for today/tomorrow, gray otherwise
+        icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
+        icon = _load_icon("mdi:trash-can", m.icon_dia)
+        date_str = _format_relative_date(days, raw)
+        # Today entries get black date text for urgency
+        sf = COLOR_BLACK if days == 0 else COLOR_GRAY
+        _draw_card_row(
+            draw,
+            img,
+            cx,
+            y,
+            cw,
+            row_h,
+            m,
+            primary=label,
+            secondary=date_str,
+            icon=icon,
+            icon_fill=icon_fill,
+            secondary_fill=sf,
+        )
+    else:
+        # List layout: one row per visible entry
+        n = len(visible)
+        row_h = h // n
+        m = _compute_metrics(row_h)
+        x_off = _draw_card_container(
+            draw,
+            x,
+            y,
+            w,
+            h,
+            m,
+            card_style,
+            grayscale_levels,
+        )
+        cx, cw = x + x_off, w - x_off
+        if card_style == "border":
+            cw -= m.padding
+        icon = _load_icon("mdi:trash-can", m.icon_dia)
+
+        for i, (label, raw, days) in enumerate(visible):
+            row_y = y + i * row_h
+            icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
+            date_str = _format_relative_date(days, raw)
+            # Today entries get black date text for urgency
+            vf = COLOR_BLACK if days == 0 else COLOR_GRAY
+            _draw_card_row(
+                draw,
+                img,
+                cx,
+                row_y,
+                cw,
+                row_h,
+                m,
+                primary=label,
+                value=date_str,
+                icon=icon,
+                icon_fill=icon_fill,
+                value_fill=vf,
+            )
+            # Gray divider between rows (not after last)
+            if i < n - 1:
+                div_y = row_y + row_h
+                draw.line(
+                    [
+                        (cx + m.padding, div_y),
+                        (cx + cw - m.padding, div_y),
+                    ],
+                    fill=COLOR_GRAY,
+                    width=m.divider,
+                )
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {

@@ -12,6 +12,7 @@ import type {
   DeviceBatteryWidget,
   StatusIconsWidget,
   WasteScheduleWidget,
+  WasteScheduleEntry,
   LayoutResponse,
   WidgetBounds,
   WidgetMetrics,
@@ -43,7 +44,6 @@ const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
-const FONT_SIZE_WASTE_SCHEDULE = 28;
 const MIN_RESIZE_FONT_SIZE = 8;
 const MAX_RESIZE_FONT_SIZE = 72;
 
@@ -70,6 +70,7 @@ async function _loadRobotoMedium(): Promise<void> {
 }
 
 const ICON_BASE = "/eink_dashboard/icons";
+const TRASH_ICON_URL = `${ICON_BASE}/svg/mdi/trash-can.svg`;
 
 // Condition string → SVG filename under icons/svg/.
 // Mirrors CONDITION_TO_SVG in scripts/build_icons.py.
@@ -295,10 +296,6 @@ const PROBLEM_DEVICE_CLASSES = new Set([
   "moisture", "smoke", "problem", "safety",
   "tamper", "vibration",
 ]);
-
-const WASTE_ROW_HEIGHT = 28;
-const WASTE_TITLE_ADVANCE = 32;
-const WASTE_ICON_SIZE = 10;
 
 // Proportional sizing constants for pill-shaped chips.
 // All three chip functions must use the same values so
@@ -589,7 +586,9 @@ export function drawCardRow(
     ctx.fillText(primary, textX, textY);
 
     ctx.font = `${m.fontSecondary}px ${FONT_FAMILY}`;
-    ctx.fillStyle = grayColor(COLOR_GRAY);
+    ctx.fillStyle = grayColor(
+      opts.secondaryFill ?? COLOR_GRAY,
+    );
     ctx.fillText(secondary, textX, textY + pH + lineGap);
   } else {
     // Primary only — vertically center it alone.
@@ -610,7 +609,7 @@ export function drawCardRow(
     const vw = vm.width;
     const vh = vm.actualBoundingBoxAscent
       + vm.actualBoundingBoxDescent;
-    ctx.fillStyle = grayColor(COLOR_GRAY);
+    ctx.fillStyle = grayColor(opts.valueFill ?? COLOR_GRAY);
     ctx.fillText(
       value,
       x + w - m.padding - vw,
@@ -1767,6 +1766,10 @@ class EinkDashboardCard extends HTMLElement {
           this._collectMdiIcons(entities, urls);
         }
       }
+      // Waste schedule uses a fixed trash-can icon.
+      if (widget.type === "waste_schedule") {
+        urls.add(TRASH_ICON_URL);
+      }
     }
     if (urls.size > 0) {
       await Promise.all(
@@ -2675,63 +2678,165 @@ class EinkDashboardCard extends HTMLElement {
     };
   }
 
-  // mirrors render.py: render_waste_schedule
-  private _renderWasteSchedule(ctx: CanvasRenderingContext2D, widget: WasteScheduleWidget): WidgetBounds {
-    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_WASTE_SCHEDULE);
-    let y = origY;
-    const sc = fontSize / FONT_SIZE_WASTE_SCHEDULE;
+  /**
+   * Render waste collection entries as card rows with urgency
+   * styling.  Mirrors render_waste_schedule() in render.py.
+   *
+   * Data comes from a single entity whose attributes contain
+   * waste types as keys with ISO date values.  The ``entries``
+   * config maps attribute keys to short display labels.
+   *
+   * @param ctx - Canvas 2D context.
+   * @param widget - Waste schedule widget config.
+   * @returns Bounding box of the rendered widget.
+   */
+  private _renderWasteSchedule(
+    ctx: CanvasRenderingContext2D,
+    widget: WasteScheduleWidget,
+  ): WidgetBounds {
+    const x = widget.x ?? PADDING;
+    let y = widget.y ?? 0;
+    const origY = y;
+    const width = widget.w ?? 400;
+    let height = widget.h ?? 168;
     const title = widget.title ?? "";
-    const entityIds = widget.entities ?? [];
-    const sz = Math.round(WASTE_ICON_SIZE * sc);
-    const rowH = Math.round(WASTE_ROW_HEIGHT * sc);
+    const entityId = widget.entity ?? "";
+    const entries: WasteScheduleEntry[] =
+      widget.entries ?? [];
+    const layout = widget.layout ?? "list";
+    const cardStyle = widget.card_style ?? "none";
+
+    if (!entityId || entries.length === 0) {
+      return { x, y, w: width, h: height };
+    }
+
+    const stateObj = this._getState(entityId);
+    if (!stateObj) {
+      return { x, y, w: width, h: height };
+    }
+    const attrs = stateObj.attributes as Record<
+      string, string | undefined
+    >;
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
+    // Title above the card (gray, proportional to h)
     if (title) {
-      ctx.font = `${Math.round(22 * sc)}px ${FONT_FAMILY}`;
-      ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(title, x, y);
-      y += Math.round(WASTE_TITLE_ADVANCE * sc);
-    }
-
-    for (const entityId of entityIds) {
-      const stateObj = this._getState(entityId);
-      if (!stateObj) continue;
-      const attrs = stateObj.attributes as Record<string, string | null>;
-      const label = String(attrs.friendly_name ?? entityId);
-      const raw = stateObj.state ?? "";
-
-      const days = parseDaysUntil(raw);
-      if (days !== null && (days < 0 || days > 3)) continue;
-
-      const wcx = x + sz / 2;
-      const wcy = y + Math.round(6 * sc) + sz / 2;
-      const r = sz / 2;
-
-      ctx.beginPath();
-      ctx.arc(wcx, wcy, r, 0, 2 * Math.PI);
-      if (days !== null && days <= 1) {
-        ctx.fillStyle = grayColor(COLOR_BLACK);
-        ctx.fill();
-      } else {
-        ctx.strokeStyle = grayColor(COLOR_GRAY);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-      ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + sz + Math.round(8 * sc), y);
-
-      const dateStr = formatRelativeDate(days, raw);
-      const dateW = ctx.measureText(dateStr).width;
+      const titleFontSz = Math.max(
+        10, Math.round(height * 0.14),
+      );
+      ctx.font = `${titleFontSz}px ${FONT_FAMILY}`;
       ctx.fillStyle = grayColor(COLOR_GRAY);
-      ctx.fillText(dateStr, rightEdge - PADDING - dateW, y);
-
-      y += rowH;
+      ctx.fillText(title, x, y);
+      const titleAdv = Math.round(titleFontSz * 1.4);
+      y += titleAdv;
+      height -= titleAdv;
     }
-    return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
+
+    // Resolve entries from entity attributes, filter
+    // to the 0–3 day range.
+    type VisibleEntry = {
+      label: string;
+      raw: string;
+      days: number;
+    };
+    const visible: VisibleEntry[] = [];
+    for (const entry of entries) {
+      const raw = String(attrs[entry.attribute] ?? "");
+      if (!raw) continue;
+      const days = parseDaysUntil(raw);
+      if (days === null || days < 0 || days > 3) {
+        continue;
+      }
+      visible.push({
+        label: entry.label || entry.attribute,
+        raw,
+        days,
+      });
+    }
+
+    if (visible.length === 0) {
+      return { x, y: origY, w: width, h: (y - origY) + height };
+    }
+
+    const trashIcon = getIcon(TRASH_ICON_URL);
+
+    if (layout === "card") {
+      // Most urgent entry (lowest days value).
+      // Stable sort: equal-days entries keep config order.
+      visible.sort(
+        (a, b) => a.days - b.days,
+      );
+      const { label, raw, days } = visible[0];
+      const rowH = height;
+      const m = computeMetrics(rowH);
+      const xOff = drawCardContainer(
+        ctx, x, y, width, height, m, cardStyle,
+      );
+      const cx = x + xOff;
+      let cw = width - xOff;
+      if (cardStyle === "border") cw -= m.padding;
+      const iconFill = (
+        days <= 1 ? COLOR_BLACK : COLOR_GRAY
+      );
+      const dateStr = formatRelativeDate(days, raw);
+      // Today entries get black date text for urgency
+      const sf = days === 0 ? COLOR_BLACK : COLOR_GRAY;
+      drawCardRow(ctx, cx, y, cw, rowH, m, {
+        primary: label,
+        secondary: dateStr,
+        icon: trashIcon ?? undefined,
+        iconFill,
+        secondaryFill: sf,
+      });
+    } else {
+      // List layout: one row per visible entry
+      const n = visible.length;
+      const rowH = Math.floor(height / n);
+      const m = computeMetrics(rowH);
+      const xOff = drawCardContainer(
+        ctx, x, y, width, height, m, cardStyle,
+      );
+      const cx = x + xOff;
+      let cw = width - xOff;
+      if (cardStyle === "border") cw -= m.padding;
+
+      for (let i = 0; i < n; i++) {
+        const { label, raw, days } = visible[i];
+        const rowY = y + i * rowH;
+        const iconFill = (
+          days <= 1 ? COLOR_BLACK : COLOR_GRAY
+        );
+        const dateStr = formatRelativeDate(days, raw);
+        // Today entries get black date text for urgency
+        const vf = days === 0 ? COLOR_BLACK : COLOR_GRAY;
+        drawCardRow(ctx, cx, rowY, cw, rowH, m, {
+          primary: label,
+          value: dateStr,
+          icon: trashIcon ?? undefined,
+          iconFill,
+          valueFill: vf,
+        });
+
+        // Gray divider between rows (not after last)
+        if (i < n - 1) {
+          const divY = rowY + rowH;
+          const divTop = divY - Math.floor(
+            m.divider / 2,
+          );
+          ctx.fillStyle = grayColor(COLOR_GRAY);
+          ctx.fillRect(
+            cx + m.padding, divTop,
+            cw - 2 * m.padding, m.divider,
+          );
+        }
+      }
+    }
+    return {
+      x, y: origY,
+      w: width, h: (y - origY) + height,
+    };
   }
 }
 

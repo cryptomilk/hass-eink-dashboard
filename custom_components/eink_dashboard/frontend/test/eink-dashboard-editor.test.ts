@@ -140,11 +140,14 @@ describe("SCHEMAS", () => {
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
   });
 
-  it("waste_schedule entities field has multiple: true", () => {
-    const entitiesField = findField(
-      SCHEMAS.waste_schedule(DISPLAY), "entities"
+  it("waste_schedule entity field uses domain filter 'sensor'", () => {
+    // Waste schedule uses a single entity selector, not multiple.
+    const entityField = findField(
+      SCHEMAS.waste_schedule(DISPLAY), "entity"
     );
-    expect(entitiesField?.selector?.entity?.multiple).toBe(true);
+    expect(entityField?.selector?.entity).toMatchObject({
+      domain: "sensor",
+    });
   });
 });
 
@@ -382,9 +385,9 @@ describe("SCHEMAS form grouping", () => {
   });
 
   it("widget schemas with entities put them inside content", () => {
-    // Entities are content, not layout or appearance. Verify for the
-    // three widgets that use a multi-entity selector.
-    for (const type of ["sensor_rows", "status_icons", "waste_schedule"]) {
+    // Entities are content, not layout or appearance. Verify for
+    // widgets that use a multi-entity selector.
+    for (const type of ["sensor_rows", "status_icons"]) {
       const schema = SCHEMAS[type](DISPLAY);
       const content = getExpandableSections(schema).find(
         (s) => s.name === "content"
@@ -393,6 +396,18 @@ describe("SCHEMAS form grouping", () => {
       const fields = flattenFields(content.schema!);
       expect(fields).toContain("entities");
     }
+  });
+
+  it("waste_schedule entity field is inside content section", () => {
+    // The single entity selector for waste_schedule belongs in
+    // content so it is visible by default when the form opens.
+    const schema = SCHEMAS.waste_schedule(DISPLAY);
+    const content = getExpandableSections(schema).find(
+      (s) => s.name === "content"
+    )!;
+    expect(content).toBeDefined();
+    const fields = flattenFields(content.schema!);
+    expect(fields).toContain("entity");
   });
 
   it("weather entity field is inside content section", () => {
