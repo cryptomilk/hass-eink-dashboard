@@ -2058,6 +2058,7 @@ class EinkDashboardCard extends HTMLElement {
 
     const y = origY;
     const forecastDays = widget.forecast_days ?? 5;
+    const cardStyle = widget.card_style ?? "none";
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes as Record<string, string | number | null>;
     const temp = attrs.temperature ?? "--";
@@ -2090,12 +2091,56 @@ class EinkDashboardCard extends HTMLElement {
     const iconSize = Math.round(80 * s);
     const pad = Math.round(10 * s);
     const iconRightPad = Math.round(16 * s);
-    // Symmetric content area: pad inset on both sides.
-    const contentLeft = x + pad;
-    const contentW = rightEdge - x - 2 * pad;
 
-    const iconCx = x + pad + iconSize / 2;
-    const iconCy = y + pad + iconSize / 2;
+    // Named layout constants shared between height estimation and drawing.
+    const detailGap = Math.round(8 * s);
+    const detailIconH = Math.round(20 * s);
+    const sepGap = Math.round(8 * s);
+    const sepThickness = Math.max(2, Math.round(3 * s));
+    const forecastZoneH = Math.round(88 * s);
+    const precipTextH = Math.round(16 * s);
+
+    // Compute metrics early so topPad is available for the height
+    // estimation — m.padding differs from pad by 1px at some scales.
+    const cardW = rightEdge - x;
+    const hasForecast = forecast.length > 0 && forecastDays > 0;
+    let m: WidgetMetrics | null = null;
+    let topPad: number;
+    if (cardStyle !== "none") {
+      m = computeMetrics(Math.round(48 * s));
+      topPad = m.padding;
+    } else {
+      topPad = pad;
+    }
+
+    // iconSize dominates tempH in practice, but Math.max() makes the
+    // estimation robust against unusual font metrics or large fontSize.
+    const row1H = topPad + Math.max(iconSize, tempH) + pad;
+    const detailH = detailGap + detailIconH;
+    const forecastSectionH = hasForecast
+      ? (sepGap + sepThickness + sepGap + forecastZoneH + precipTextH)
+      : pad;
+    const totalH = row1H + detailH + forecastSectionH + pad;
+
+    // Card container draws the outer frame and returns the content
+    // x-offset — left bar and border styles shift content rightward.
+    let contentLeft: number;
+    let contentW: number;
+    if (m !== null) {
+      const xOff = drawCardContainer(
+        ctx, x, y, cardW, totalH, m, cardStyle,
+      );
+      contentLeft = x + xOff;
+      contentW = cardW - xOff;
+      if (cardStyle === "border") contentW -= m.padding;
+    } else {
+      contentLeft = x + pad;
+      contentW = rightEdge - x - 2 * pad;
+    }
+    const contentTop = y + topPad;
+
+    const iconCx = contentLeft + iconSize / 2;
+    const iconCy = contentTop + iconSize / 2;
 
     // Condition icon: SVG loaded at preload time, top-left origin.
     const condSvg = CONDITION_SVG_MAP[condition];
@@ -2103,7 +2148,7 @@ class EinkDashboardCard extends HTMLElement {
       ? getIcon(`${ICON_BASE}/svg/${condSvg}.svg`)
       : null;
     if (condImg) {
-      ctx.drawImage(condImg, x + pad, y + pad, iconSize, iconSize);
+      ctx.drawImage(condImg, contentLeft, contentTop, iconSize, iconSize);
     } else {
       ctx.font = `${iconSize}px ${FONT_FAMILY}`;
       ctx.textBaseline = "middle";
@@ -2115,7 +2160,7 @@ class EinkDashboardCard extends HTMLElement {
     // Temperature text vertically centred on the icon.
     // With textBaseline="top", actualBoundingBoxAscent is the
     // offset from draw anchor to visible glyph top.
-    const tempX = x + pad + iconSize + iconRightPad;
+    const tempX = contentLeft + iconSize + iconRightPad;
     const tempY = iconCy
       + tempM.actualBoundingBoxAscent
       - tempH / 2;
@@ -2127,7 +2172,7 @@ class EinkDashboardCard extends HTMLElement {
 
     const visTop = tempY - tempM.actualBoundingBoxAscent;
     const row1Bottom = Math.max(
-      y + pad + iconSize + pad,
+      contentTop + iconSize + pad,
       tempY + tempM.actualBoundingBoxDescent,
     );
 
@@ -2139,7 +2184,7 @@ class EinkDashboardCard extends HTMLElement {
       const hi = today.temperature;
       const lo = today.templow;
       const precip = today.precipitation;
-      const hiloRight = rightEdge - pad;
+      const hiloRight = contentLeft + contentW;
       ctx.textBaseline = "top";
       ctx.textAlign = "right";
       if (hi != null) {
@@ -2171,8 +2216,7 @@ class EinkDashboardCard extends HTMLElement {
     // Text centred on the icon by correcting for canvas ascent offset.
     // Mirrors: text_y = detail_y + icon_h/2 − bbox[1] − text_h/2
     //   where bbox[1] = −actualBoundingBoxAscent (with textBaseline=top).
-    const detailY = row1Bottom + Math.round(8 * s);
-    const iconH = Math.round(20 * s);
+    const detailY = row1Bottom + detailGap;
     const iconGap = Math.round(4 * s);
 
     const detailItems: DetailItem[] = [];
@@ -2214,31 +2258,36 @@ class EinkDashboardCard extends HTMLElement {
       const textW2 = tm.width;
       const textH2 = tm.actualBoundingBoxAscent
         + tm.actualBoundingBoxDescent;
-      const itemW = iconH + iconGap + textW2;
+      const itemW = detailIconH + iconGap + textW2;
       const itemX = colCx - Math.floor(itemW / 2);
       const detailImg = getIcon(`${ICON_BASE}/svg/${svgName}.svg`);
       if (detailImg) {
-        ctx.drawImage(detailImg, itemX, detailY, iconH, iconH);
+        ctx.drawImage(detailImg, itemX, detailY, detailIconH, detailIconH);
       } else {
         // Fallback: gray rectangle when icon not loaded.
         ctx.fillStyle = grayColor(COLOR_LIGHT_GRAY);
-        ctx.fillRect(itemX, detailY, iconH, iconH);
+        ctx.fillRect(itemX, detailY, detailIconH, detailIconH);
       }
       // Glyph centre aligned to icon centre.
-      const textY = detailY + iconH / 2
+      const textY = detailY + detailIconH / 2
         + tm.actualBoundingBoxAscent
         - textH2 / 2;
       ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(text, itemX + iconH + iconGap, textY);
+      ctx.fillText(text, itemX + detailIconH + iconGap, textY);
     }
 
-    const detailBottom = detailY + iconH;
+    const detailBottom = detailY + detailIconH;
 
     // Separator and forecast.
     if (!forecast.length || forecastDays <= 0) {
       return {
-        x, y: origY, w: rightEdge - x,
-        h: detailBottom + Math.round(4 * s) - origY,
+        x, y: origY, w: cardW,
+        // For styled containers, use pre-computed height so the border
+        // frame matches the drawn rectangle exactly. For "none", measure
+        // the actual rendered extent to preserve the old bounding box.
+        h: m !== null
+          ? totalH
+          : detailBottom + Math.round(4 * s) - origY,
       };
     }
 
@@ -2248,15 +2297,15 @@ class EinkDashboardCard extends HTMLElement {
     const colWidth = Math.floor(contentW / nCols);
     const contentWidth = nCols * colWidth;
 
-    const separatorY = detailBottom + Math.round(8 * s);
+    const separatorY = detailBottom + sepGap;
     ctx.beginPath();
     ctx.moveTo(contentLeft, separatorY);
     ctx.lineTo(contentLeft + contentWidth, separatorY);
     ctx.strokeStyle = grayColor(COLOR_GRAY);
-    ctx.lineWidth = Math.max(2, Math.round(3 * s));
+    ctx.lineWidth = sepThickness;
     ctx.stroke();
 
-    const forecastY = separatorY + Math.round(8 * s);
+    const forecastY = separatorY + sepGap;
 
     // Spread entries evenly when fewer than nCols.
     let positions: number[];
@@ -2352,13 +2401,10 @@ class EinkDashboardCard extends HTMLElement {
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    // Precipitation text is the lowest element in the forecast.
-    // 16*s accounts for the 14*s font height plus descent.
-    const forecastBottom = forecastY
-      + Math.round(88 * s) + Math.round(16 * s);
+    const forecastBottom = forecastY + forecastZoneH + precipTextH;
     return {
-      x, y: origY, w: rightEdge - x,
-      h: forecastBottom - origY,
+      x, y: origY, w: cardW,
+      h: m !== null ? totalH : forecastBottom - origY,
     };
   }
 

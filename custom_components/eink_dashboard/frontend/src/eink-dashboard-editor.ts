@@ -60,6 +60,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       y: 0,
       forecast_days: 5,
       font_size: FONT_SIZE_WEATHER,
+      card_style: "none",
     },
   },
   sensor_rows: {
@@ -428,7 +429,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [fontSizeSelector(FONT_SIZE_WEATHER)],
+      schema: [fontSizeSelector(FONT_SIZE_WEATHER), cardStyleSelector()],
     },
   ],
 

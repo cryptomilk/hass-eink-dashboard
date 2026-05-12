@@ -612,6 +612,143 @@ class TestRenderWeather:
         # should be white.
         assert_all_white(img, 400, 140, 600, 155)
 
+    def test_weather_card_border(self) -> None:
+        # Border style wraps the entire weather layout in a
+        # rounded-rectangle outline drawn on all four edges.
+        m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "border",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top edge (inset by m.radius to avoid rounded corners)
+        assert_has_dark_pixels(img, m.radius, 0, 400 - m.radius, m.border)
+        # Left edge
+        assert_has_dark_pixels(img, 0, m.radius, m.border, 100)
+        # Right edge
+        assert_has_dark_pixels(img, 400 - m.border, m.radius, 400, 100)
+        # Bottom edge: total_h mirrors the renderer formula at s=1.0
+        # with forecast (icon_size=80 dominates temp_h in practice).
+        s = 1.0
+        pad = round(10 * s)
+        total_h = (
+            m.padding
+            + round(80 * s)
+            + pad  # row1_h
+            + round(8 * s)
+            + round(20 * s)  # detail_h
+            + round(8 * s)  # sep_gap
+            + max(2, round(3 * s))  # sep_thickness
+            + round(8 * s)  # sep_gap after separator
+            + round(88 * s)  # forecast_zone_h
+            + round(16 * s)  # precip_text_h
+            + pad  # bottom pad
+        )
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            total_h - m.border,
+            400 - m.radius,
+            total_h,
+        )
+        # Temperature text still renders inside the card.
+        assert_has_dark_pixels(img, 106, 10, 300, 70)
+
+    def test_weather_card_left_bar(self) -> None:
+        # Left-bar style draws a gray vertical bar on the left
+        # edge only; the right edge remains undecorated.
+        m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "left_bar",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Gray bar spans the full height; 2px vertical inset
+        # avoids sub-pixel edge effects at widget boundaries.
+        # +1 because PIL rectangle uses inclusive coordinates so the
+        # bar occupies pixels 0..left_bar (left_bar+1 pixels wide).
+        assert_has_gray_pixels(
+            img,
+            0,
+            2,
+            m.left_bar + 1,
+            100,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        # Far right edge is undecorated
+        assert_all_white(img, 395, 0, 400, 5)
+
+    def test_weather_card_none(self) -> None:
+        # Explicit card_style="none" leaves border positions white
+        # and preserves existing content rendering.
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "none",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # No border decoration at corners
+        assert_all_white(img, 0, 0, 3, 3)
+        assert_all_white(img, 397, 0, 400, 3)
+        # Temperature text still renders in the content area
+        assert_has_dark_pixels(img, 106, 5, 300, 70)
+
+    def test_weather_card_border_nonzero_origin(self) -> None:
+        # Border is correctly positioned when widget has non-zero x/y.
+        ox, oy = 50, 30
+        m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": ox,
+                "y": oy,
+                "w": 300,
+                "card_style": "border",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top edge at y=oy
+        assert_has_dark_pixels(
+            img,
+            ox + m.radius,
+            oy,
+            ox + 300 - m.radius,
+            oy + m.border,
+        )
+        # Left edge at x=ox
+        assert_has_dark_pixels(
+            img,
+            ox,
+            oy + m.radius,
+            ox + m.border,
+            oy + 100,
+        )
+        # Area to the left of the widget is undecorated
+        assert_all_white(img, 0, oy, ox - 1, oy + 5)
+        # Temperature text inside the card:
+        # content_left = ox + m.padding, temp_x = content_left + 80 + 16
+        temp_x_min = ox + m.padding + 80 + 16
+        assert_has_dark_pixels(img, temp_x_min, oy + 10, ox + 280, oy + 70)
+
 
 MOCK_SENSOR_STATES = {
     "sensor.living_room_temperature": {

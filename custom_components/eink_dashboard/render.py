@@ -893,6 +893,7 @@ def render_weather(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
+    card_style = widget.get("card_style", "none")
 
     s = font_size / FONT_SIZE_WEATHER
 
@@ -923,24 +924,79 @@ def render_weather(
 
     img: Image.Image = config["_image"]
 
+    # Sizing pass: measure temp text and compute total widget height
+    # so the card container can be drawn before any content is placed.
+    icon_size = round(80 * s)
+    pad = round(10 * s)
+    icon_right_pad = round(16 * s)
+    temp_text = f"{_fmt_temp(temp)}{temp_unit}"
+    temp_bbox = draw.textbbox((0, 0), temp_text, font=font_xl)
+    temp_h = temp_bbox[3] - temp_bbox[1]
+
+    # Named layout constants shared between height estimation and drawing.
+    detail_gap = round(8 * s)
+    detail_icon_h = round(20 * s)
+    sep_gap = round(8 * s)
+    sep_thickness = max(2, round(3 * s))
+    forecast_zone_h = round(88 * s)
+    precip_text_h = round(16 * s)
+
+    # Compute metrics early so top_pad is available for the height
+    # estimation — m.padding differs from pad by 1px at some scales.
+    card_w = right_edge - x
+    m = None
+    if card_style != "none":
+        m = _compute_metrics(round(48 * s))
+        top_pad = m.padding
+    else:
+        top_pad = pad
+
+    # icon_size dominates temp_h in practice, but max() makes the
+    # estimation robust against unusual font metrics or large font_size.
+    row1_h = top_pad + max(icon_size, temp_h) + pad
+    detail_h = detail_gap + detail_icon_h
+    if forecast and forecast_days > 0:
+        forecast_section_h = (
+            sep_gap  # gap between detail bottom and separator
+            + sep_thickness
+            + sep_gap  # gap between separator and forecast rows
+            + forecast_zone_h
+            + precip_text_h
+        )
+    else:
+        forecast_section_h = pad
+    total_h = row1_h + detail_h + forecast_section_h + pad
+
+    # Card container draws the outer frame and returns the content
+    # x-offset — left bar and border styles shift content rightward.
+    if m is not None:
+        grayscale_levels = config.get("grayscale_levels", 16)
+        x_off = _draw_card_container(
+            draw,
+            x,
+            y,
+            card_w,
+            total_h,
+            m,
+            card_style,
+            grayscale_levels,
+        )
+        content_left = x + x_off
+        content_w = card_w - x_off
+        if card_style == "border":
+            content_w -= m.padding
+    else:
+        content_left = x + pad
+        content_w = right_edge - x - 2 * pad
+    content_top = y + top_pad
+
     # Row 1: condition icon + temperature + today hi/lo
     #
     # The icon is the anchor element — sized independently of text
     # metrics, with equal padding on top/left/bottom and slightly
     # more on the right before the temperature text.
-    temp_text = f"{_fmt_temp(temp)}{temp_unit}"
-    temp_bbox = draw.textbbox((0, 0), temp_text, font=font_xl)
-    temp_h = temp_bbox[3] - temp_bbox[1]
-
-    icon_size = round(80 * s)
-    pad = round(10 * s)
-    icon_right_pad = round(16 * s)
-    # Symmetric content area: pad inset on both sides.
-    content_left = x + pad
-    content_w = right_edge - x - 2 * pad
-
-    icon_cx = x + pad + icon_size // 2
-    icon_cy = y + pad + icon_size // 2
+    icon_cx = content_left + icon_size // 2
+    icon_cy = content_top + icon_size // 2
     _draw_weather_icon(
         img,
         draw,
@@ -954,7 +1010,7 @@ def render_weather(
     # temp_bbox[1] is the offset from draw anchor to visible
     # glyph top; subtracting it and half the glyph height
     # centres the visible ink on icon_cy.
-    temp_x = x + pad + icon_size + icon_right_pad
+    temp_x = content_left + icon_size + icon_right_pad
     temp_y = icon_cy - temp_bbox[1] - temp_h // 2
     draw.text(
         (temp_x, temp_y),
@@ -966,7 +1022,7 @@ def render_weather(
     # Today hi/lo/precip right-aligned at the widget's right edge.
     vis_top = temp_y + temp_bbox[1]
     row1_bottom = max(
-        y + pad + icon_size + pad,
+        content_top + icon_size + pad,
         temp_y + temp_bbox[3],
     )
     if forecast:
@@ -975,7 +1031,7 @@ def render_weather(
         lo = today.get("templow")
         precip = today.get("precipitation")
         precip_unit = attrs.get("precipitation_unit", "mm")
-        hilo_right = right_edge - pad
+        hilo_right = content_left + content_w
         if hi is not None:
             hi_text = f"{_fmt_temp(hi)}°"
             hi_bbox = draw.textbbox(
@@ -1027,8 +1083,7 @@ def render_weather(
 
     # Row 2: detail icons + text, evenly distributed across the full width.
     # Text is vertically centred on the icon by correcting for bbox[1].
-    detail_y = row1_bottom + round(8 * s)
-    icon_h = round(20 * s)
+    detail_y = row1_bottom + detail_gap
     icon_gap = round(4 * s)
 
     details: list[tuple[str, str]] = []
@@ -1051,21 +1106,21 @@ def render_weather(
         text_w_i = text_bbox[2] - text_bbox[0]
         text_h_i = text_bbox[3] - text_bbox[1]
 
-        result = _load_icon(icon_name, icon_h)
+        result = _load_icon(icon_name, detail_icon_h)
         has_icon = result is not None
-        item_w = (icon_h + icon_gap if has_icon else 0) + text_w_i
+        item_w = (detail_icon_h + icon_gap if has_icon else 0) + text_w_i
         item_x = col_cx - item_w // 2
 
         if has_icon:
             gray, mask = result
             img.paste(gray, (item_x, detail_y), mask)
-            item_x += icon_h + icon_gap
+            item_x += detail_icon_h + icon_gap
 
         # Align visible glyph centre with icon centre.
-        text_y = detail_y + icon_h // 2 - text_bbox[1] - text_h_i // 2
+        text_y = detail_y + detail_icon_h // 2 - text_bbox[1] - text_h_i // 2
         draw.text((item_x, text_y), text, fill=COLOR_BLACK, font=font_sm)
 
-    detail_bottom = detail_y + icon_h
+    detail_bottom = detail_y + detail_icon_h
 
     # Forecast
     if not forecast or forecast_days <= 0:
@@ -1077,17 +1132,17 @@ def render_weather(
     col_width = content_w // forecast_cols
     content_width = forecast_cols * col_width
 
-    separator_y = detail_bottom + round(8 * s)
+    separator_y = detail_bottom + sep_gap
     draw.line(
         [
             (content_left, separator_y),
             (content_left + content_width, separator_y),
         ],
         fill=COLOR_GRAY,
-        width=max(2, round(3 * s)),
+        width=sep_thickness,
     )
 
-    forecast_y = separator_y + round(8 * s)
+    forecast_y = separator_y + sep_gap
 
     # Spread entries evenly when fewer than forecast_cols.
     if forecast_days >= forecast_cols:

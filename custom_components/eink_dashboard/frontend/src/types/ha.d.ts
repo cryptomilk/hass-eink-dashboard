@@ -201,6 +201,7 @@ export interface WeatherWidget extends WidgetBase {
   type: "weather";
   entity?: string;
   forecast_days?: number;
+  card_style?: CardStyle;
 }
 
 export interface SensorRowsWidget extends WidgetBase {
