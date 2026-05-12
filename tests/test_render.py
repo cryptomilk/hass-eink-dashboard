@@ -1903,11 +1903,12 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Interior center of the chip should be very dark
-        # (black fill from inverted=True).
-        cx = h // 2
-        cy = h // 2
-        assert pixel(img, cx, cy) < 64
+        # Check inside the left semicircle but left of where text
+        # starts (pad_h = round(h * 0.18) = 7).  x=3 is 17 px from
+        # the circle centre (radius 20) and clear of the text column,
+        # so it is reliably black regardless of which font backend
+        # renders the label.
+        assert pixel(img, 3, h // 2) < 64
 
     def test_normal_chip_outline(self) -> None:
         # kitchen_window: state=off → not a problem →
