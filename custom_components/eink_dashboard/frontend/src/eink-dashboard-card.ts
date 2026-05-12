@@ -43,7 +43,6 @@ const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
-const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 const MIN_RESIZE_FONT_SIZE = 8;
 const MAX_RESIZE_FONT_SIZE = 72;
@@ -291,12 +290,9 @@ const BATTERY_BODY_H = 10;
 const BATTERY_NUB_W = 2;
 const BATTERY_NUB_H = 4;
 
-const STATUS_ICON_SIZE = 12;
-const STATUS_ROW_HEIGHT = 26;
-const STATUS_TITLE_ADVANCE = 30;
 const PROBLEM_DEVICE_CLASSES = new Set([
   "door", "window", "garage_door", "opening",
-  "moisture", "smoke", "gas", "problem", "safety",
+  "moisture", "smoke", "problem", "safety",
   "tamper", "vibration",
 ]);
 
@@ -315,6 +311,8 @@ export const CHIP_PAD_RATIO = 0.18;
 export const CHIP_ICON_RATIO = 0.29;
 /** @internal Exported for testing only. */
 export const CHIP_GAP_RATIO = 0.14;
+/** @internal Exported for testing only. */
+export const CHIP_FONT_RATIO = 0.46;
 
 const DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -2467,60 +2465,83 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_status_icons
-  private _renderStatusIcons(ctx: CanvasRenderingContext2D, widget: StatusIconsWidget): WidgetBounds {
-    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_STATUS_ICONS);
-    let y = origY;
-    const sc = fontSize / FONT_SIZE_STATUS_ICONS;
+  private _renderStatusIcons(
+    ctx: CanvasRenderingContext2D,
+    widget: StatusIconsWidget,
+  ): WidgetBounds {
+    const x = widget.x ?? PADDING;
+    let y = widget.y ?? 0;
+    const origY = y;
+    const width = widget.w ?? 400;
+    let height = widget.h ?? 40;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const sz = Math.round(STATUS_ICON_SIZE * sc);
-    const rowH = Math.round(STATUS_ROW_HEIGHT * sc);
+
+    if (entityIds.length === 0) {
+      return { x, y, w: width, h: height };
+    }
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
 
+    // Title above chips (gray, proportional to h)
     if (title) {
-      ctx.font = `${Math.round(22 * sc)}px ${FONT_FAMILY}`;
-      ctx.fillStyle = grayColor(COLOR_BLACK);
+      const titleFontSz = Math.max(
+        10, Math.round(height * 0.14),
+      );
+      ctx.font = `${titleFontSz}px ${FONT_FAMILY}`;
+      ctx.fillStyle = grayColor(COLOR_GRAY);
       ctx.fillText(title, x, y);
-      y += Math.round(STATUS_TITLE_ADVANCE * sc);
+      const titleAdv = Math.round(titleFontSz * 1.4);
+      y += titleAdv;
+      height -= titleAdv;
     }
 
-    let curX = x;
+    const m = computeMetrics(height);
+    const chipFontSz = Math.max(
+      10, Math.round(height * CHIP_FONT_RATIO),
+    );
+
+    // Build chip descriptors
+    const chips: ChipDescriptor[] = [];
     for (const entityId of entityIds) {
       const stateObj = this._getState(entityId);
       if (!stateObj) continue;
-      const attrs = stateObj.attributes as Record<string, string | null>;
-      const label = String(attrs.friendly_name ?? entityId);
+      const attrs = stateObj.attributes as Record<
+        string, string | undefined
+      >;
+      const label = String(
+        attrs.friendly_name ?? entityId,
+      );
       const isOn = stateObj.state === "on";
-      const deviceClass = String(attrs.device_class ?? "");
-      const isProblem = isOn && PROBLEM_DEVICE_CLASSES.has(deviceClass);
+      const dc = String(attrs.device_class ?? "");
+      const isProblem = isOn
+        && PROBLEM_DEVICE_CLASSES.has(dc);
+      const domain = entityId.split(".")[0];
+      const iconName = deviceClassIcon(
+        dc, stateObj.state, domain,
+      );
+      const icon = iconName
+        ? getIcon(
+            `${ICON_BASE}/svg/mdi/${iconName}.svg`,
+          )
+        : null;
 
-      ctx.font = `${fontSize}px ${FONT_FAMILY}`;
-      const textW = ctx.measureText(label).width;
-      const itemW = sz + Math.round(6 * sc) + textW + Math.round(20 * sc);
-
-      if (curX + itemW > rightEdge - PADDING && curX > x) {
-        curX = x;
-        y += rowH;
-      }
-
-      const iconTop = y + Math.round(4 * sc);
-      if (isProblem) {
-        ctx.fillStyle = grayColor(COLOR_BLACK);
-        ctx.fillRect(curX, iconTop, sz, sz);
-      } else {
-        ctx.strokeStyle = grayColor(COLOR_GRAY);
-        ctx.lineWidth = 1;
-        ctx.strokeRect(curX, iconTop, sz, sz);
-      }
-
-      ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, curX + sz + Math.round(6 * sc), y);
-
-      curX += itemW;
+      chips.push({
+        text: label,
+        inverted: isProblem,
+        icon: icon ?? undefined,
+      });
     }
-    return { x, y: origY, w: rightEdge - x, h: y - origY + rowH };
+
+    const endY = drawChipFlow(
+      ctx, x, y, width, height, chips,
+      chipFontSz, m.border,
+    );
+    return {
+      x, y: origY, w: width,
+      h: endY - origY,
+    };
   }
 
   // mirrors render.py: render_waste_schedule

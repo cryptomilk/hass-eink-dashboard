@@ -1265,7 +1265,18 @@ MOCK_STATUS_ICON_STATES = {
 }
 
 
+def _make_dummy_icon(
+    size: int = 64,
+) -> tuple[Image.Image, Image.Image]:
+    """Create a synthetic icon for tests that need _load_icon."""
+    gray = Image.new("L", (size, size), 0)
+    mask = Image.new("L", (size, size), 255)
+    return gray, mask
+
+
 class TestRenderStatusIcons:
+    # Verify rendering of redesigned status_icons widgets
+    # using pill-shaped chips with MDI icons.
     _DEFAULTS: dict[str, object] = {
         "width": 500,
         "height": 200,
@@ -1275,119 +1286,92 @@ class TestRenderStatusIcons:
     def _config(self, **overrides: object) -> dict[str, object]:
         return make_config(self._DEFAULTS, **overrides)
 
-    def test_status_icons_draws_entities(self) -> None:
+    # ── Structural tests ──────────────────────────────
+
+    def test_chip_pill_shape(self) -> None:
+        # Corner pixel is white (clipped by pill radius);
+        # border pixels inward along the top edge are dark.
+        h = 40
         widgets = [
             {
                 "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Extreme top-left corner: outside the pill radius
+        radius = h // 2
+        assert pixel(img, 0, 0) == 255
+        # A few pixels inward from the radius along the
+        # top edge: inside the border stroke
+        assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
+
+    def test_problem_chip_inverted(self) -> None:
+        # front_door: state=on, device_class=door (problem)
+        # → chip interior is filled black.
+        h = 40
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
                 "entities": [
                     "binary_sensor.front_door",
-                    "binary_sensor.kitchen_window",
                 ],
             }
         ]
-        result = render_dashboard(widgets, self._config())
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Interior center of the chip should be very dark
+        # (black fill from inverted=True).
+        cx = h // 2
+        cy = h // 2
+        assert pixel(img, cx, cy) < 64
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 300, 36, threshold=200)
-
-    def test_status_icons_problem_fills_square(self) -> None:
-        # front_door: state=on, device_class=door → problem → filled square
+    def test_normal_chip_outline(self) -> None:
+        # kitchen_window: state=off → not a problem →
+        # outlined chip with white interior.
+        h = 40
         widgets = [
             {
                 "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["binary_sensor.front_door"],
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        assert_has_dark_pixels(
-            img, PADDING, 14, PADDING + 13, 27, threshold=64
-        )
-
-    def test_status_icons_ok_draws_outline(self) -> None:
-        # kitchen_window: state=off → not a problem → outline only
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
-                "entities": ["binary_sensor.kitchen_window"],
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        # Interior of the outline square should NOT be solid black
-        interior_black = all(
-            pixel(img, x, y) < 64
-            for x in range(PADDING + 2, PADDING + 11)
-            for y in range(16, 25)
-        )
-        assert not interior_black
-        # But the outline itself should have some dark pixels
-        assert_has_dark_pixels(
-            img, PADDING, 14, PADDING + 13, 27, threshold=200
-        )
-
-    def test_status_icons_with_title(self) -> None:
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
-                "title": "Doors",
-                "entities": ["binary_sensor.front_door"],
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 200, 40)
-        assert_has_dark_pixels(img, PADDING, 40, 200, 70)
-
-    def test_status_icons_missing_entity_skipped(self) -> None:
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
                 "entities": [
-                    "binary_sensor.nonexistent",
                     "binary_sensor.kitchen_window",
                 ],
             }
         ]
-        result = render_dashboard(widgets, self._config())
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Center of the chip should be white (outlined only)
+        cx = h // 2
+        cy = h // 2
+        assert pixel(img, cx, cy) >= 200
+        # The border itself should have dark pixels
+        # (along top edge past the radius)
+        radius = h // 2
+        assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 10, 300, 36, threshold=200)
-
-    def test_status_icons_empty_entities_is_noop(self) -> None:
+    def test_wrapping(self) -> None:
+        # Narrow w forces chips to wrap to the next row.
+        h = 40
+        gap = round(h * 0.29)
         widgets = [
             {
                 "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
-                "entities": [],
-            }
-        ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 500, 200)
-
-    def test_status_icons_wraps_to_next_row(self) -> None:
-        # Narrow canvas forces wrapping after first entity
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": h,
                 "entities": [
                     "binary_sensor.front_door",
                     "binary_sensor.kitchen_window",
@@ -1396,13 +1380,225 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        result = render_dashboard(
-            widgets,
-            {"width": 200, "height": 200, "states": MOCK_STATUS_ICON_STATES},
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Dark pixels should exist below the first chip row
+        # (second row starts at y = h + gap).
+        second_row_y = h + gap
+        assert_has_dark_pixels(
+            img,
+            0,
+            second_row_y,
+            200,
+            second_row_y + h,
         )
 
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 36, 180, 80, threshold=200)
+    # ── Content tests ─────────────────────────────────
+
+    def test_icon_presence(self) -> None:
+        # Entity with mapped device_class (door) → MDI icon
+        # drawn inside the chip's icon region.  Patches
+        # _load_icon so PNGs need not be built.
+        h = 40
+        pad = round(h * 0.18)
+        icon_sz = round(h * 0.29)
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.front_door",
+                ],
+            }
+        ]
+        dummy = _make_dummy_icon()
+        with patch(
+            "custom_components.eink_dashboard.render._load_icon",
+            return_value=dummy,
+        ):
+            img = png_to_image(render_dashboard(widgets, self._config()))
+        # Icon region inside the chip (after horizontal
+        # padding).  The dummy icon is a solid black square
+        # with full opacity, so non-white pixels confirm
+        # the icon was drawn.
+        assert content_bbox(img, pad, 0, pad + icon_sz, h) is not None
+
+    def test_title(self) -> None:
+        # Title text is rendered above chip area in gray.
+        h = 40
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "title": "Doors",
+                "entities": [
+                    "binary_sensor.front_door",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Title area: top pixels should have content
+        title_font_sz = max(10, round(h * 0.14))
+        title_advance = round(title_font_sz * 1.4)
+        assert_has_dark_pixels(img, 0, 0, 200, title_advance, threshold=200)
+        # Chip content starts below the title
+        assert_has_dark_pixels(img, 0, title_advance, 400, title_advance + h)
+
+    # ── Edge case tests ───────────────────────────────
+
+    def test_empty_entities_noop(self) -> None:
+        # Empty entity list → canvas is entirely white.
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 40,
+                "entities": [],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_all_white(img, 0, 0, 500, 200)
+
+    def test_missing_entity_skipped(self) -> None:
+        # Nonexistent entity is skipped; valid entity
+        # still renders.
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 40,
+                "entities": [
+                    "binary_sensor.nonexistent",
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_has_dark_pixels(img, 0, 0, 400, 40)
+
+    def test_motion_on_is_not_inverted(self) -> None:
+        # Motion sensor with state "on" is informational,
+        # not a problem — chip must NOT be inverted (no
+        # black fill).
+        h = 40
+        pad = round(h * 0.18)
+        states = dict(MOCK_STATUS_ICON_STATES)
+        states["binary_sensor.motion"] = {
+            "state": "on",
+            "attributes": {
+                "friendly_name": "Motion",
+                "device_class": "motion",
+            },
+        }
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.motion",
+                ],
+            }
+        ]
+        cfg = self._config(states=states)
+        img = png_to_image(render_dashboard(widgets, cfg))
+        # Interior of the chip (between border and text)
+        # should contain white pixels — a filled black
+        # chip would have none.
+        mid_y = h // 2
+        interior_x = pad + 5
+        assert pixel(img, interior_x, mid_y) == 255
+
+    # ── Scaling tests ─────────────────────────────────
+
+    def test_scales_with_h(self) -> None:
+        # Doubling h roughly doubles chip content height.
+        h_small = 40
+        h_large = 80
+        entity = ["binary_sensor.kitchen_window"]
+        img_s = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "status_icons",
+                        "x": 0,
+                        "y": 0,
+                        "w": 400,
+                        "h": h_small,
+                        "entities": entity,
+                    }
+                ],
+                self._config(),
+            )
+        )
+        img_l = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "status_icons",
+                        "x": 0,
+                        "y": 0,
+                        "w": 400,
+                        "h": h_large,
+                        "entities": entity,
+                    }
+                ],
+                self._config(),
+            )
+        )
+        assert_scales_proportionally(
+            img_s,
+            img_l,
+            region_small=(0, 0, 400, h_small),
+            region_large=(0, 0, 400, h_large),
+            expected_ratio=2.0,
+        )
+
+    # ── Alignment tests ───────────────────────────────
+
+    def test_icon_vertically_centered(self) -> None:
+        # Icon content and text content share the same
+        # vertical center within the chip.  Patches
+        # _load_icon so PNGs need not be built.
+        h = 40
+        pad = round(h * 0.18)
+        icon_sz = round(h * 0.29)
+        icon_gap = round(h * 0.14)
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        dummy = _make_dummy_icon()
+        with patch(
+            "custom_components.eink_dashboard.render._load_icon",
+            return_value=dummy,
+        ):
+            img = png_to_image(render_dashboard(widgets, self._config()))
+        text_start = pad + icon_sz + icon_gap
+        assert_vertically_centered(
+            img,
+            icon_region=(pad, 0, pad + icon_sz, h),
+            text_region=(text_start, 0, 300, h),
+        )
 
 
 MOCK_WASTE_SCHEDULE_STATES = {
@@ -1723,31 +1919,6 @@ class TestFontSizeControls:
         )
         img = png_to_image(result)
         assert_has_dark_pixels(img, PADDING + 28, 10, PADDING + 90, 40)
-
-    def test_status_icons_custom_font_size(self) -> None:
-        # font_size=14 → s=14/28=0.5; sz=round(12*0.5)=6
-        # icon_top = y + round(4*0.5) = 12; icon fills [24,12]-[30,18]
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": PADDING,
-                "y": 10,
-                "font_size": 14,
-                "entities": list(MOCK_STATUS_ICON_STATES.keys()),
-            }
-        ]
-        result = render_dashboard(
-            widgets,
-            {"width": 500, "height": 100, "states": MOCK_STATUS_ICON_STATES},
-        )
-        img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING, 12, PADDING + 6, 18)
-        # Column just past the icon (x=PADDING+7) in the icon's y-band
-        # must be white — verifies the icon is smaller than default sz=12.
-        icon_not_oversized = all(
-            pixel(img, PADDING + 7, y) == 255 for y in range(12, 18)
-        )
-        assert icon_not_oversized
 
     def test_waste_schedule_custom_font_size(self) -> None:
         # font_size=42 → s=42/28=1.5; row_height=round(28*1.5)=42

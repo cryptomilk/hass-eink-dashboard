@@ -18,7 +18,6 @@ from .const import (
     COLOR_GRAY,
     COLOR_WHITE,
     FONT_SIZE_DEVICE_BATTERY,
-    FONT_SIZE_STATUS_ICONS,
     FONT_SIZE_TEXT,
     FONT_SIZE_WASTE_SCHEDULE,
     FONT_SIZE_WEATHER,
@@ -499,6 +498,7 @@ def _draw_card_row(
 _CHIP_PAD_RATIO: float = 0.18
 _CHIP_ICON_RATIO: float = 0.29
 _CHIP_GAP_RATIO: float = 0.14
+_CHIP_FONT_RATIO: float = 0.46
 
 
 def _chip_width(
@@ -1448,9 +1448,6 @@ def render_device_battery(
     )
 
 
-_STATUS_ICON_SIZE = 12
-_STATUS_ROW_HEIGHT = 26
-_STATUS_TITLE_ADVANCE = 30
 _PROBLEM_DEVICE_CLASSES = {
     "door",
     "window",
@@ -1458,7 +1455,6 @@ _PROBLEM_DEVICE_CLASSES = {
     "opening",
     "moisture",
     "smoke",
-    "gas",
     "problem",
     "safety",
     "tamper",
@@ -1471,51 +1467,81 @@ def render_status_icons(
     widget: Widget,
     config: DisplayConfig,
 ) -> None:
-    """Draw binary-sensor status icons, highlighting problem states."""
-    (x, y, font_size, title, entity_ids, states, right_edge) = (
-        _extract_multi_entity_params(widget, config, FONT_SIZE_STATUS_ICONS)
-    )
+    """Draw binary-sensor states as pill-shaped chips.
 
-    s = font_size / FONT_SIZE_STATUS_ICONS
-    font = _load_font(font_size)
-    font_title = _load_font(round(22 * s))
-    sz = round(_STATUS_ICON_SIZE * s)
-    row_height = round(_STATUS_ROW_HEIGHT * s)
+    Each entity becomes a chip with an MDI icon and label.
+    Normal states use outlined chips; problem states
+    (device_class in ``_PROBLEM_DEVICE_CLASSES`` and
+    state ``"on"``) use inverted chips (black fill, white
+    text and icon).  Layout wraps horizontally via
+    ``_draw_chip_flow()``.
 
-    y = _draw_section_title(
-        draw, x, y, title, font_title, _STATUS_TITLE_ADVANCE, s
-    )
+    Args:
+        draw: PIL ImageDraw context.
+        widget: Widget config with x, y, w, h, entities,
+            and optional title.
+        config: Display config with states and _image.
+    """
+    img: Image.Image = config["_image"]
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    w = widget.get("w", config["width"] - x)
+    h = widget.get("h", 40)
+    title = widget.get("title", "")
+    entity_ids: list[str] = widget.get("entities", [])
+    states = config.get("states", {})
 
-    cur_x = x
+    if not entity_ids:
+        return
+
+    # Title above chips (gray, proportional to h).
+    if title:
+        title_font_sz = max(10, round(h * 0.14))
+        title_font = _load_font(title_font_sz)
+        draw.text((x, y), title, fill=COLOR_GRAY, font=title_font)
+        title_advance = round(title_font_sz * 1.4)
+        y += title_advance
+        h -= title_advance
+
+    m = _compute_metrics(h)
+    chip_font_sz = max(10, round(h * _CHIP_FONT_RATIO))
+    font = _load_font(chip_font_sz)
+
+    chips: list[dict[str, Any]] = []
     for entity_id in entity_ids:
-        info = _resolve_entity(entity_id, states, "render_status_icons")
-        if info is None:
+        state = states.get(entity_id)
+        if state is None:
+            _LOGGER.debug(
+                "render_status_icons: entity %r not in states",
+                entity_id,
+            )
             continue
-        label = info.label
-        is_on = info.state.get("state") == "on"
-        device_class = info.attrs.get("device_class", "")
+        attrs = state.get("attributes", {})
+        label = attrs.get("friendly_name", entity_id)
+        is_on = state.get("state") == "on"
+        device_class = attrs.get("device_class", "")
         is_problem = is_on and device_class in _PROBLEM_DEVICE_CLASSES
 
-        bbox = draw.textbbox((0, 0), label, font=font)
-        text_w = bbox[2] - bbox[0]
-        item_w = sz + round(6 * s) + text_w + round(20 * s)
-
-        if cur_x + item_w > right_edge - PADDING and cur_x > x:
-            cur_x = x
-            y += row_height
-
-        icon_top = y + round(4 * s)
-        _draw_indicator(
-            draw,
-            [cur_x, icon_top, cur_x + sz, icon_top + sz],
-            is_problem,
+        domain = entity_id.split(".")[0]
+        icon_name = _device_class_icon(attrs, state.get("state", ""), domain)
+        icon = (
+            _load_icon(
+                f"mdi:{icon_name}",
+                round(h * _CHIP_ICON_RATIO),
+            )
+            if icon_name
+            else None
         )
 
-        draw.text(
-            (cur_x + sz + round(6 * s), y), label, fill=COLOR_BLACK, font=font
+        chips.append(
+            {
+                "text": label,
+                "icon": icon,
+                "inverted": is_problem,
+            }
         )
 
-        cur_x += item_w
+    _draw_chip_flow(draw, img, x, y, w, h, chips, font, m.border)
 
 
 _WASTE_ROW_HEIGHT = 28

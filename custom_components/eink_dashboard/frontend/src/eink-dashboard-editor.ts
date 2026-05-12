@@ -19,7 +19,6 @@ const EDITOR_TAG = "eink-dashboard-editor";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
-const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
 
 // ── Widget type registry ─────────────────────────────────────────
@@ -100,8 +99,9 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       title: "",
       x: 24,
       y: 0,
+      w: 400,
+      h: 40,
       entities: [],
-      font_size: FONT_SIZE_STATUS_ICONS,
     },
   },
   waste_schedule: {
@@ -523,15 +523,9 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
-    },
-    {
-      name: "appearance",
-      type: "expandable",
-      flatten: true,
-      title: "Appearance",
-      icon: "mdi:palette",
-      schema: [fontSizeSelector(FONT_SIZE_STATUS_ICONS)],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+      ],
     },
   ],
 
