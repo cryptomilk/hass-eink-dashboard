@@ -91,6 +91,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       font_size: FONT_SIZE_DEVICE_BATTERY,
       w: 200,
       h: 40,
+      card_style: "none",
     },
   },
   status_icons: {
@@ -523,6 +524,7 @@ export const SCHEMAS: Record<
             fontSizeSelector(FONT_SIZE_DEVICE_BATTERY),
           ],
         },
+        cardStyleSelector(),
       ],
     },
   ],

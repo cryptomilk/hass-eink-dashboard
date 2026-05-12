@@ -384,6 +384,7 @@ def _draw_card_row(
     value: str = "",
     icon: tuple[Image.Image, Image.Image] | None = None,
     icon_fill: int = COLOR_GRAY,
+    icon_outline: bool = False,
     value_fill: int = COLOR_GRAY,
     secondary_fill: int = COLOR_GRAY,
 ) -> None:
@@ -417,6 +418,11 @@ def _draw_card_row(
             background shows a visible ring; load at
             ``m.icon_dia`` (the function then downscales).
         icon_fill: Fill color for the icon circle background.
+            Ignored when ``icon_outline`` is ``True``.
+        icon_outline: When ``True``, draw the icon circle as a
+            black outline on a white background instead of a
+            solid fill.  Used for waste entries with days >= 2
+            (spec: outline black icon).
         value_fill: Fill color for the right-aligned value text.
         secondary_fill: Fill color for the secondary text.
     """
@@ -427,10 +433,30 @@ def _draw_card_row(
     # Draw icon circle, then place the PNG icon or a letter fallback
     # centered inside it.
     circle_y = y + (row_h - m.icon_dia) // 2
-    draw.ellipse(
-        [icon_x, circle_y, icon_x + m.icon_dia, circle_y + m.icon_dia],
-        fill=icon_fill,
-    )
+    if icon_outline:
+        # Outline circle: white fill with black stroke — used for
+        # waste entries due in 2-3 days (spec: outline black icon).
+        draw.ellipse(
+            [
+                icon_x,
+                circle_y,
+                icon_x + m.icon_dia,
+                circle_y + m.icon_dia,
+            ],
+            fill=COLOR_WHITE,
+            outline=COLOR_BLACK,
+            width=m.border,
+        )
+    else:
+        draw.ellipse(
+            [
+                icon_x,
+                circle_y,
+                icon_x + m.icon_dia,
+                circle_y + m.icon_dia,
+            ],
+            fill=icon_fill,
+        )
     if icon is not None:
         # Shrink to 60 % so the circle background shows
         # a visible ring around the icon.
@@ -460,7 +486,9 @@ def _draw_card_row(
                 circle_y + (m.icon_dia - lh) // 2 - letter_bb[1],
             ),
             letter,
-            fill=COLOR_WHITE,
+            # Outline circles have white background, so letter
+            # must be black to remain legible.
+            fill=COLOR_BLACK if icon_outline else COLOR_WHITE,
             font=font_letter,
         )
     text_x = icon_x + m.icon_dia + m.inner_gap
@@ -1340,6 +1368,7 @@ _BATTERY_NUB_H = 8
 
 def _render_battery_icon(
     draw: ImageDraw.ImageDraw,
+    x: int,
     widget: Widget,
     pct: int,
 ) -> None:
@@ -1352,10 +1381,11 @@ def _render_battery_icon(
 
     Args:
         draw: PIL ImageDraw context.
-        widget: Widget config dict with x, y, font_size, color.
+        x: Left edge for the battery icon (content x after any
+            card container offset).
+        widget: Widget config dict with y, font_size, color.
         pct: Battery percentage clamped to 0–100.
     """
-    x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_DEVICE_BATTERY)
     color = widget.get("color", COLOR_BLACK)
@@ -1416,6 +1446,7 @@ def _render_battery_icon(
 
 def _render_battery_chip(
     draw: ImageDraw.ImageDraw,
+    x: int,
     widget: Widget,
     pct: int,
 ) -> None:
@@ -1428,10 +1459,11 @@ def _render_battery_chip(
 
     Args:
         draw: PIL ImageDraw context.
-        widget: Widget config dict with x, y, h.
+        x: Left edge for the chip (content x after any card
+            container offset).
+        widget: Widget config dict with y, h, color.
         pct: Battery percentage clamped to 0–100.
     """
-    x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     h = widget.get("h", 40)
     color = widget.get("color", COLOR_BLACK)
@@ -1514,6 +1546,12 @@ def render_device_battery(
     - ``"chip"``: pill-shaped chip with proportional fill bar
       and percentage text, sized via ``h``.
 
+    An optional ``card_style`` parameter (``"border"``,
+    ``"left_bar"``, or ``"none"``, default ``"none"``) wraps
+    the content in a card container frame.  When active, the
+    card is drawn at the widget's ``x``, ``y``, ``w``, ``h``
+    and content is offset rightward by the container's inset.
+
     Args:
         draw: PIL ImageDraw context.
         widget: Widget config dict.
@@ -1528,11 +1566,23 @@ def render_device_battery(
 
     pct = max(0, min(100, int(level)))
     layout = widget.get("layout", "icon")
+    card_style = widget.get("card_style", "none")
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    w = widget.get("w", 200)
+    h = widget.get("h", 40)
+
+    grayscale_levels = config.get("grayscale_levels", 16)
+    m = _compute_metrics(h)
+    x_off = _draw_card_container(
+        draw, x, y, w, h, m, card_style, grayscale_levels
+    )
+    cx = x + x_off
 
     if layout == "chip":
-        _render_battery_chip(draw, widget, pct)
+        _render_battery_chip(draw, cx, widget, pct)
     else:
-        _render_battery_icon(draw, widget, pct)
+        _render_battery_icon(draw, cx, widget, pct)
 
 
 _PROBLEM_DEVICE_CLASSES = {
@@ -1643,9 +1693,28 @@ def render_status_icons(
 
 
 def _parse_days_until(raw: str, today: date) -> int | None:
-    """Parse an ISO date or integer offset into days from today."""
+    """Parse a date string into the number of days from *today*.
+
+    Tries two formats in order: first as an ISO date or datetime
+    string (only the first 10 characters — ``YYYY-MM-DD`` — are
+    parsed, so full datetime strings like ``"2026-05-03T10:00:00"``
+    are accepted), then as a plain integer string (e.g. ``"3"``).
+    Returns ``None`` when neither format matches.
+
+    Args:
+        raw: Date string from the entity attribute value.
+        today: Reference date used to compute the day delta.
+
+    Returns:
+        Number of days from *today* to the target date (positive =
+        future, negative = past), or ``None`` if *raw* cannot be
+        parsed as either an ISO date or an integer.
+    """
     try:
-        target = date.fromisoformat(raw)
+        # Slice to 10 chars to handle full ISO datetime strings
+        # like "2026-05-03T10:00:00" — mirrors TypeScript's
+        # raw.slice(0, 10) in parseDaysUntil().
+        target = date.fromisoformat(raw[:10])
         return (target - today).days
     except ValueError:
         pass
@@ -1656,7 +1725,25 @@ def _parse_days_until(raw: str, today: date) -> int | None:
 
 
 def _format_relative_date(days: int | None, raw: str) -> str:
-    """Return 'today', 'tomorrow', 'in N days', or the raw string."""
+    """Format a day offset as a human-readable relative label.
+
+    Converts a numeric day offset into the friendly string shown as
+    the right-aligned date value in waste schedule rows.  When
+    *days* is ``None`` or negative (past dates), *raw* is returned
+    verbatim so the original attribute string is visible rather than
+    silently blank.
+
+    Args:
+        days: Day offset from today (0 = today, 1 = tomorrow,
+            positive = future).  ``None`` or negative values pass
+            through to *raw*.
+        raw: Original attribute value string, returned unchanged
+            when *days* cannot be formatted as a relative label.
+
+    Returns:
+        ``"today"``, ``"tomorrow"``, ``"in N days"`` for non-negative
+        offsets, or *raw* unchanged for ``None`` / negative *days*.
+    """
     if days is None or days < 0:
         return raw
     if days == 0:
@@ -1734,7 +1821,7 @@ def render_waste_schedule(
     visible: list[tuple[str, str, int]] = []
     for entry in entries:
         attr_key = entry.get("attribute", "")
-        label = entry.get("label", attr_key)
+        label = entry.get("label") or attr_key
         raw = str(attrs.get(attr_key, ""))
         if not raw:
             continue
@@ -1766,8 +1853,9 @@ def render_waste_schedule(
         cx, cw = x + x_off, w - x_off
         if card_style == "border":
             cw -= m.padding
-        # Black icon for today/tomorrow, gray otherwise
+        # Black icon for today/tomorrow, outline for days 2-3
         icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
+        use_outline = days >= 2
         icon = _load_icon("mdi:trash-can", m.icon_dia)
         date_str = _format_relative_date(days, raw)
         # Today entries get black date text for urgency
@@ -1784,6 +1872,7 @@ def render_waste_schedule(
             secondary=date_str,
             icon=icon,
             icon_fill=icon_fill,
+            icon_outline=use_outline,
             secondary_fill=sf,
         )
     else:
@@ -1809,6 +1898,7 @@ def render_waste_schedule(
         for i, (label, raw, days) in enumerate(visible):
             row_y = y + i * row_h
             icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
+            use_outline = days >= 2
             date_str = _format_relative_date(days, raw)
             # Today entries get black date text for urgency
             vf = COLOR_BLACK if days == 0 else COLOR_GRAY
@@ -1824,6 +1914,7 @@ def render_waste_schedule(
                 value=date_str,
                 icon=icon,
                 icon_fill=icon_fill,
+                icon_outline=use_outline,
                 value_fill=vf,
             )
             # Gray divider between rows (not after last)

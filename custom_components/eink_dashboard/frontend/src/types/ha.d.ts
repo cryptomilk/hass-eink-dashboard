@@ -117,8 +117,13 @@ export interface CardRowOpts {
   secondaryFill?: number;
   value?: string;
   /** Grayscale fill for the icon circle (0–255).
-   *  Defaults to COLOR_GRAY (120). */
+   *  Defaults to COLOR_GRAY (120).
+   *  Ignored when iconOutline is true. */
   iconFill?: number;
+  /** When true, draw the icon circle as a black outline on a
+   *  white background instead of a solid fill.  Used for waste
+   *  entries with days >= 2 (spec: outline black icon). */
+  iconOutline?: boolean;
   /** Grayscale fill for the right-aligned value text (0–255).
    *  Defaults to COLOR_GRAY (120). */
   valueFill?: number;
@@ -215,6 +220,7 @@ export interface DeviceBatteryWidget extends WidgetBase {
   type: "device_battery";
   layout?: "icon" | "chip";
   h?: number;
+  card_style?: CardStyle;
 }
 
 export interface StatusIconsWidget extends WidgetBase {

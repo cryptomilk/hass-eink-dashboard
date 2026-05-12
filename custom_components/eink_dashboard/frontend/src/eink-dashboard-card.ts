@@ -503,7 +503,8 @@ export function drawCardContainer(
  * @param m - Pre-computed layout metrics.
  * @param opts - Row content: primary label, optional
  *   secondary sub-label, optional right-aligned value,
- *   and optional icon circle fill color (default gray).
+ *   optional icon circle fill color (default gray), and
+ *   optional iconOutline flag for outline-style circles.
  */
 export function drawCardRow(
   ctx: CanvasRenderingContext2D,
@@ -524,8 +525,18 @@ export function drawCardRow(
   const cy = circleY + m.iconDia / 2;
   ctx.beginPath();
   ctx.arc(cx, cy, m.iconDia / 2, 0, 2 * Math.PI);
-  ctx.fillStyle = grayColor(iconFill);
-  ctx.fill();
+  if (opts.iconOutline) {
+    // Outline circle: white fill with black stroke — used for
+    // waste entries due in 2-3 days (spec: outline black icon).
+    ctx.fillStyle = grayColor(COLOR_WHITE);
+    ctx.fill();
+    ctx.strokeStyle = grayColor(COLOR_BLACK);
+    ctx.lineWidth = m.border;
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = grayColor(iconFill);
+    ctx.fill();
+  }
 
   if (opts.icon) {
     // Icon image: 60% of circle diameter, centred — mirrors
@@ -550,7 +561,11 @@ export function drawCardRow(
     const lw = lm.width;
     const lh = lm.actualBoundingBoxAscent
       + lm.actualBoundingBoxDescent;
-    ctx.fillStyle = grayColor(COLOR_WHITE);
+    // Outline circles have white background, so the letter
+    // must be black to remain legible.
+    ctx.fillStyle = grayColor(
+      opts.iconOutline ? COLOR_BLACK : COLOR_WHITE,
+    );
     ctx.fillText(
       letter,
       iconX + Math.floor((m.iconDia - lw) / 2),
@@ -2506,18 +2521,30 @@ class EinkDashboardCard extends HTMLElement {
     widget: DeviceBatteryWidget,
   ): WidgetBounds {
     const layout = widget.layout ?? "icon";
+    const cardStyle = widget.card_style ?? "none";
+    const x = widget.x ?? PADDING;
+    const y = widget.y ?? 0;
+    const w = widget.w ?? 200;
+    const h = widget.h ?? 40;
+
+    const m = computeMetrics(h);
+    const xOff = drawCardContainer(ctx, x, y, w, h, m, cardStyle);
+    const cx = x + xOff;
+
     if (layout === "chip") {
-      return this._renderDeviceBatteryChip(ctx, widget);
+      return this._renderDeviceBatteryChip(ctx, cx, widget);
     }
-    return this._renderDeviceBatteryIcon(ctx, widget);
+    return this._renderDeviceBatteryIcon(ctx, cx, widget);
   }
 
   /** Icon layout: compact battery outline + percentage text. */
   private _renderDeviceBatteryIcon(
     ctx: CanvasRenderingContext2D,
+    cx: number,
     widget: DeviceBatteryWidget,
   ): WidgetBounds {
-    const { x, y, fontSize } = this._getWidgetBase(widget, FONT_SIZE_DEVICE_BATTERY);
+    const { y, fontSize } = this._getWidgetBase(widget, FONT_SIZE_DEVICE_BATTERY);
+    const x = cx;
     let color = widget.color ?? COLOR_BLACK;
 
     const rawLevel = this._layout?.device?.device_battery_level;
@@ -2576,9 +2603,10 @@ class EinkDashboardCard extends HTMLElement {
   /** Chip layout: pill-shaped chip with battery fill bar. */
   private _renderDeviceBatteryChip(
     ctx: CanvasRenderingContext2D,
+    cx: number,
     widget: DeviceBatteryWidget,
   ): WidgetBounds {
-    const x = widget.x ?? PADDING;
+    const x = cx;
     const y = widget.y ?? 0;
     const h = widget.h ?? 40;
     let color = widget.color ?? COLOR_BLACK;
@@ -2840,6 +2868,7 @@ class EinkDashboardCard extends HTMLElement {
       const iconFill = (
         days <= 1 ? COLOR_BLACK : COLOR_GRAY
       );
+      const iconOutline = days >= 2;
       const dateStr = formatRelativeDate(days, raw);
       // Today entries get black date text for urgency
       const sf = days === 0 ? COLOR_BLACK : COLOR_GRAY;
@@ -2848,6 +2877,7 @@ class EinkDashboardCard extends HTMLElement {
         secondary: dateStr,
         icon: trashIcon ?? undefined,
         iconFill,
+        iconOutline,
         secondaryFill: sf,
       });
     } else {
@@ -2869,6 +2899,7 @@ class EinkDashboardCard extends HTMLElement {
         const iconFill = (
           days <= 1 ? COLOR_BLACK : COLOR_GRAY
         );
+        const iconOutline = days >= 2;
         const dateStr = formatRelativeDate(days, raw);
         // Today entries get black date text for urgency
         const vf = days === 0 ? COLOR_BLACK : COLOR_GRAY;
@@ -2877,6 +2908,7 @@ class EinkDashboardCard extends HTMLElement {
           value: dateStr,
           icon: trashIcon ?? undefined,
           iconFill,
+          iconOutline,
           valueFill: vf,
         });
 

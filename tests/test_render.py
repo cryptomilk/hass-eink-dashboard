@@ -1618,6 +1618,169 @@ class TestRenderDeviceBattery:
             tolerance=0.35,
         )
 
+    # -- Card style (shared by both layouts) -------------------------
+
+    def test_card_style_border_icon(self) -> None:
+        # Border style draws a rounded rectangle frame around
+        # the icon layout; content still renders inside.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 56,
+                "card_style": "border",
+                "layout": "icon",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top edge (skip rounded corners at both ends)
+        assert_has_dark_pixels(img, m.radius, 0, 200 - m.radius, m.border)
+        # Bottom edge (+1 margin for PIL stroke rounding)
+        assert_has_dark_pixels(
+            img, m.radius, 56 - m.border - 1, 200 - m.radius, 57
+        )
+        # Left edge
+        assert_has_dark_pixels(img, 0, m.radius, m.border, 56 - m.radius)
+        # Right edge
+        assert_has_dark_pixels(
+            img, 200 - m.border, m.radius, 200, 56 - m.radius
+        )
+        # Content (battery icon) renders inside the card
+        assert_has_dark_pixels(
+            img, m.padding, 5, m.padding + 40, 56, threshold=200
+        )
+
+    def test_card_style_border_chip(self) -> None:
+        # Border style draws a rounded rectangle frame around
+        # the chip layout; content still renders inside.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 56,
+                "card_style": "border",
+                "layout": "chip",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top edge (skip rounded corners at both ends)
+        assert_has_dark_pixels(img, m.radius, 0, 200 - m.radius, m.border)
+        # Bottom edge (+1 margin for PIL stroke rounding)
+        assert_has_dark_pixels(
+            img, m.radius, 56 - m.border - 1, 200 - m.radius, 57
+        )
+        # Left edge
+        assert_has_dark_pixels(img, 0, m.radius, m.border, 56 - m.radius)
+        # Right edge
+        assert_has_dark_pixels(
+            img, 200 - m.border, m.radius, 200, 56 - m.radius
+        )
+        # Content (fill bar) renders inside the card
+        assert_has_dark_pixels(img, m.padding + 5, 15, m.padding + 60, 45)
+
+    def test_card_style_left_bar_icon(self) -> None:
+        # Left_bar style draws a gray vertical bar spanning the
+        # full card height.  Checking below y≈25 avoids the
+        # battery body outline (y≈6–20) which is also gray.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 56,
+                "card_style": "left_bar",
+                "layout": "icon",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # The bar must extend into the lower portion of the card
+        # (below the battery icon at ~y=6–20).
+        assert_has_gray_pixels(
+            img,
+            0,
+            35,
+            m.left_bar,
+            54,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        # Right edge should be white
+        assert_all_white(img, 197, 0, 200, 3)
+
+    def test_card_style_left_bar_chip(self) -> None:
+        # Left_bar style draws a gray vertical bar on the left
+        # edge for the chip layout.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 56,
+                "card_style": "left_bar",
+                "layout": "chip",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_has_gray_pixels(
+            img,
+            0,
+            2,
+            m.left_bar,
+            54,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+        # Right edge should be white
+        assert_all_white(img, 197, 0, 200, 3)
+
+    def test_card_style_none_is_default(self) -> None:
+        # Omitting card_style produces identical output to
+        # explicit card_style="none".
+        base: dict[str, object] = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "w": 200,
+            "h": 56,
+            "layout": "chip",
+        }
+        cfg = self._config()
+        implicit = png_to_image(render_dashboard([base], cfg))
+        explicit = png_to_image(
+            render_dashboard([{**base, "card_style": "none"}], cfg)
+        )
+        assert implicit.tobytes() == explicit.tobytes()
+
+    def test_card_style_none_no_border(self) -> None:
+        # Explicit card_style="none" has no border decoration
+        # on any edge.
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 56,
+                "card_style": "none",
+                "layout": "chip",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Top-left corner: white (no border)
+        assert_all_white(img, 0, 0, 3, 3)
+        # Right edge: white (no border)
+        assert_all_white(img, 197, 0, 200, 3)
+
 
 MOCK_STATUS_ICON_STATES = {
     "binary_sensor.front_door": {
@@ -2127,6 +2290,13 @@ class TestWasteDateHelpers:
         assert _parse_days_until("0", today) == 0
         assert _parse_days_until("3", today) == 3
 
+    def test_parse_iso_datetime(self) -> None:
+        # ISO datetime strings (with time component) should parse
+        # by extracting just the date portion, like TypeScript does.
+        today = dt.date(2026, 5, 2)
+        assert _parse_days_until("2026-05-03T10:00:00", today) == 1
+        assert _parse_days_until("2026-05-02T00:00:00", today) == 0
+
     def test_parse_invalid_returns_none(self) -> None:
         today = dt.date(2026, 5, 2)
         assert _parse_days_until("unavailable", today) is None
@@ -2489,8 +2659,9 @@ class TestRenderWasteSchedule:
         ring_y = h // 2
         assert pixel(img, ring_x, ring_y) < 64
 
-    def test_urgency_future_gray_icon(self) -> None:
-        # days=2: icon circle should be gray (not black).
+    def test_urgency_future_outline_icon(self) -> None:
+        # days=2: icon circle should be drawn as a black outline
+        # on white background, not as a filled gray circle.
         entries = [
             {"attribute": "Biotonne", "label": "Bio"},
         ]
@@ -2501,12 +2672,19 @@ class TestRenderWasteSchedule:
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = png_to_image(render_dashboard([w], self._config()))
-        # Check the ring along the horizontal centerline
-        # where we're guaranteed to be inside the circle
-        # but outside the 60%-scaled icon.
-        ring_x = m.padding + 4
+        # The stroke pixel (2px inside the left circle edge)
+        # should be black (outline stroke).
+        stroke_x = m.padding + 2
         ring_y = h // 2
-        assert COLOR_GRAY - 20 < pixel(img, ring_x, ring_y) < COLOR_GRAY + 20
+        assert pixel(img, stroke_x, ring_y) < 64
+        # The interior pixel (well inside the stroke, before
+        # the icon image begins) should be white (fill).
+        # icon_dia=51, border=3, so white fill starts at ~x=20.
+        # The 60% icon begins at x ~ padding + (icon_dia-icon_sz)/2
+        # = 17 + (51-31)/2 = 17+10 = 27.  Check at x=23 to stay
+        # in the white fill region between stroke and icon.
+        interior_x = m.padding + m.border + 3
+        assert pixel(img, interior_x, ring_y) > 200
 
     def test_date_right_aligned(self) -> None:
         # Relative date text appears near the right edge.
@@ -2526,6 +2704,44 @@ class TestRenderWasteSchedule:
             56,
             threshold=200,
         )
+
+    def test_urgency_today_date_black(self) -> None:
+        # days=0: date text should be rendered in black (high
+        # urgency).  Verify the value region has black pixels
+        # (< 64), not just any dark pixels.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        # Restmuell = 2026-05-03; today = 2026-05-03 → days=0
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = dt.date(2026, 5, 3)
+            img = png_to_image(render_dashboard([w], self._config()))
+        assert any(
+            pixel(img, x, y) < 64
+            for y in range(0, 56)
+            for x in range(300, 400)
+        ), "days=0 date text should be black (< 64)"
+
+    def test_urgency_tomorrow_date_gray(self) -> None:
+        # days=1: date text should be gray, not black.  Verify
+        # the value region has gray pixels but no black pixels.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=56)
+        # Restmuell = 2026-05-03; today = 2026-05-02 → days=1
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = png_to_image(render_dashboard([w], self._config()))
+        # Should have gray pixels (date label "tomorrow")
+        assert_has_gray_pixels(img, 300, 0, 400, 56)
+        # Should NOT have black pixels — date is gray for days=1
+        assert not any(
+            pixel(img, x, y) < 64
+            for y in range(0, 56)
+            for x in range(300, 400)
+        ), "days=1 date text should be gray, not black"
 
     def test_past_date_skipped(self) -> None:
         # Entry with date in the past is not rendered.
