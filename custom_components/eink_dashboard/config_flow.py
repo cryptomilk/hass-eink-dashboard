@@ -51,6 +51,16 @@ def _build_user_schema(
     default_model: str = "kindle_pw",
     default_orientation: str = "landscape",
 ) -> vol.Schema:
+    """Build the voluptuous schema for the initial user setup step.
+
+    Args:
+        default_model: Pre-selected device model value in the form.
+        default_orientation: Pre-selected orientation value in the form.
+
+    Returns:
+        A voluptuous Schema covering name, device_model, orientation,
+        optional area, and update_interval.
+    """
     return vol.Schema(
         {
             vol.Required("name", default="My E-Ink Display"): str,

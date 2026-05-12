@@ -49,7 +49,7 @@
           "label": "Label (optional)"
         },
         "data_description": {
-          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL",
+          "webhook_url": "From trmnl.com: device settings → Private API Plugin → webhook URL",
           "label": "A name for this push target — defaults to the device name if left empty"
         }
       }
@@ -115,7 +115,7 @@
           "label": "Label (optional)"
         },
         "data_description": {
-          "webhook_url": "From usetrmnl.com: device settings → Private API Plugin → webhook URL",
+          "webhook_url": "From trmnl.com: device settings → Private API Plugin → webhook URL",
           "label": "A name for this push target — defaults to the device name if left empty"
         }
       },
