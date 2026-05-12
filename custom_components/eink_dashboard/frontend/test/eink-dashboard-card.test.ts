@@ -245,8 +245,9 @@ describe("drawCardContainer", () => {
     // "border" style content starts at the padding inset.
     const m = computeMetrics(56);
     const ctx = createMockCtx();
-    const offset = drawCardContainer(ctx, 0, 0, 200, 300, m, "border");
-    expect(offset).toBe(m.padding);
+    const [xOff, rInset] = drawCardContainer(ctx, 0, 0, 200, 300, m, "border");
+    expect(xOff).toBe(m.padding);
+    expect(rInset).toBe(m.padding);
   });
 
   it("border: calls roundRect with correct args", () => {
@@ -271,10 +272,11 @@ describe("drawCardContainer", () => {
     // Standard 16-level display uses the normal bar width.
     const m = computeMetrics(56);
     const ctx = createMockCtx();
-    const offset = drawCardContainer(
+    const [xOff, rInset] = drawCardContainer(
       ctx, 0, 0, 200, 300, m, "left_bar",
     );
-    expect(offset).toBe(m.leftBar + m.padding);
+    expect(xOff).toBe(m.leftBar + m.padding);
+    expect(rInset).toBe(0);
   });
 
   it("left_bar: draws gray filled rect for the bar", () => {
@@ -291,10 +293,11 @@ describe("drawCardContainer", () => {
     const m = computeMetrics(56);
     const ctx = createMockCtx();
     const widened = Math.max(10, m.leftBar * 3);
-    const offset = drawCardContainer(
+    const [xOff, rInset] = drawCardContainer(
       ctx, 0, 0, 200, 300, m, "left_bar", 2,
     );
-    expect(offset).toBe(widened + m.padding);
+    expect(xOff).toBe(widened + m.padding);
+    expect(rInset).toBe(0);
     expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, widened, 300);
   });
 
@@ -302,10 +305,11 @@ describe("drawCardContainer", () => {
     // Explicit 16-level: normal bar width, no widening.
     const m = computeMetrics(56);
     const ctx = createMockCtx();
-    const offset = drawCardContainer(
+    const [xOff, rInset] = drawCardContainer(
       ctx, 0, 0, 200, 300, m, "left_bar", 16,
     );
-    expect(offset).toBe(m.leftBar + m.padding);
+    expect(xOff).toBe(m.leftBar + m.padding);
+    expect(rInset).toBe(0);
     expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, m.leftBar, 300);
   });
 
@@ -313,22 +317,23 @@ describe("drawCardContainer", () => {
     // Omitting grayscaleLevels must behave like passing 16.
     const m = computeMetrics(56);
     const ctx = createMockCtx();
-    const offsetDefault = drawCardContainer(
+    const [xOffDefault] = drawCardContainer(
       ctx, 0, 0, 200, 300, m, "left_bar",
     );
     const ctx2 = createMockCtx();
-    const offsetExplicit = drawCardContainer(
+    const [xOffExplicit] = drawCardContainer(
       ctx2, 0, 0, 200, 300, m, "left_bar", 16,
     );
-    expect(offsetDefault).toBe(offsetExplicit);
+    expect(xOffDefault).toBe(xOffExplicit);
   });
 
   it("none: returns 0", () => {
     // No decoration means zero content offset.
     const m = computeMetrics(56);
     const ctx = createMockCtx();
-    const offset = drawCardContainer(ctx, 0, 0, 200, 300, m, "none");
-    expect(offset).toBe(0);
+    const [xOff, rInset] = drawCardContainer(ctx, 0, 0, 200, 300, m, "none");
+    expect(xOff).toBe(0);
+    expect(rInset).toBe(0);
   });
 
   it("none: does not call any drawing method", () => {

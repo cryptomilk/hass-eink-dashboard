@@ -7,6 +7,7 @@ import type {
   HaFormElement,
   EinkWidgetPicker,
   Widget,
+  CardStyle,
   DisplayConfig,
   WidgetTypeMeta,
 } from "./types/ha.js";
@@ -19,6 +20,9 @@ const EDITOR_TAG = "eink-dashboard-editor";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
+
+/** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
+const DEFAULT_CARD_STYLE: CardStyle = "none";
 
 // ── Widget type registry ─────────────────────────────────────────
 
@@ -60,7 +64,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       y: 0,
       forecast_days: 5,
       font_size: FONT_SIZE_WEATHER,
-      card_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
   sensor_rows: {
@@ -75,7 +79,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       w: 400,
       h: 112,
       entities: [],
-      card_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
   device_battery: {
@@ -91,7 +95,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       font_size: FONT_SIZE_DEVICE_BATTERY,
       w: 200,
       h: 40,
-      card_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
   status_icons: {
@@ -106,7 +110,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       w: 400,
       h: 40,
       entities: [],
-      card_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
   waste_schedule: {
@@ -123,7 +127,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       h: 168,
       entries: [],
       layout: "list",
-      card_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
 };
@@ -208,7 +212,7 @@ function posXYWH(d: DisplayConfig): HaFormSchema[] {
 function cardStyleSelector(): HaFormSchema {
   return {
     name: "card_style",
-    default: "none",
+    default: DEFAULT_CARD_STYLE,
     selector: {
       select: {
         options: [

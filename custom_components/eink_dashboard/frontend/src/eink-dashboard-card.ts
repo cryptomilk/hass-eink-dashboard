@@ -44,6 +44,10 @@ const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
+
+/** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
+const DEFAULT_CARD_STYLE: CardStyle = "none";
+
 const MIN_RESIZE_FONT_SIZE = 8;
 const MAX_RESIZE_FONT_SIZE = 72;
 
@@ -456,14 +460,14 @@ export function drawCardContainer(
   m: WidgetMetrics,
   cardStyle: CardStyle,
   grayscaleLevels?: number,
-): number {
+): [number, number] {
   if (cardStyle === "border") {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, m.radius);
     ctx.strokeStyle = grayColor(COLOR_BLACK);
     ctx.lineWidth = m.border;
     ctx.stroke();
-    return m.padding;
+    return [m.padding, m.padding];
   }
   if (cardStyle === "left_bar") {
     let barW = m.leftBar;
@@ -474,16 +478,16 @@ export function drawCardContainer(
     }
     ctx.fillStyle = grayColor(COLOR_GRAY);
     ctx.fillRect(x, y, barW, h);
-    return barW + m.padding;
+    return [barW + m.padding, 0];
   }
   if (cardStyle === "none") {
-    return 0;
+    return [0, 0];
   }
   console.warn(
     `drawCardContainer: unknown cardStyle ${JSON.stringify(cardStyle)},`
     + " treating as 'none'",
   );
-  return 0;
+  return [0, 0];
 }
 
 /**
@@ -2073,7 +2077,7 @@ class EinkDashboardCard extends HTMLElement {
 
     const y = origY;
     const forecastDays = widget.forecast_days ?? 5;
-    const cardStyle = widget.card_style ?? "none";
+    const cardStyle = widget.card_style ?? DEFAULT_CARD_STYLE;
     const condition = stateObj.state ?? "";
     const attrs = stateObj.attributes as Record<string, string | number | null>;
     const temp = attrs.temperature ?? "--";
@@ -2137,18 +2141,16 @@ class EinkDashboardCard extends HTMLElement {
       : pad;
     const totalH = row1H + detailH + forecastSectionH + pad;
 
-    // Card container draws the outer frame and returns the content
-    // x-offset — left bar and border styles shift content rightward.
+    // Card container draws the outer frame and returns content insets.
     let contentLeft: number;
     let contentW: number;
     if (m !== null) {
-      const xOff = drawCardContainer(
+      const [xOff, rInset] = drawCardContainer(
         ctx, x, y, cardW, totalH, m, cardStyle,
         this._layout!.display.grayscale_levels ?? 16,
       );
       contentLeft = x + xOff;
-      contentW = cardW - xOff;
-      if (cardStyle === "border") contentW -= m.padding;
+      contentW = cardW - xOff - rInset;
     } else {
       contentLeft = x + pad;
       contentW = rightEdge - x - 2 * pad;
@@ -2436,7 +2438,7 @@ class EinkDashboardCard extends HTMLElement {
     let height = widget.h ?? 112;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const cardStyle = widget.card_style ?? "none";
+    const cardStyle = widget.card_style ?? DEFAULT_CARD_STYLE;
     const n = entityIds.length;
 
     if (n === 0) return { x, y, w: width, h: height };
@@ -2457,14 +2459,12 @@ class EinkDashboardCard extends HTMLElement {
 
     const rowH = Math.floor(height / n);
     const m = computeMetrics(rowH);
-    const xOff = drawCardContainer(
+    const [xOff, rInset] = drawCardContainer(
       ctx, x, y, width, height, m, cardStyle,
       this._layout!.display.grayscale_levels ?? 16,
     );
     const cx = x + xOff;
-    let cw = width - xOff;
-    // Inset content from right edge for border style
-    if (cardStyle === "border") cw -= m.padding;
+    const cw = width - xOff - rInset;
 
     for (let i = 0; i < n; i++) {
       const entityId = entityIds[i];
@@ -2521,18 +2521,19 @@ class EinkDashboardCard extends HTMLElement {
     widget: DeviceBatteryWidget,
   ): WidgetBounds {
     const layout = widget.layout ?? "icon";
-    const cardStyle = widget.card_style ?? "none";
+    const cardStyle = widget.card_style ?? DEFAULT_CARD_STYLE;
     const x = widget.x ?? PADDING;
     const y = widget.y ?? 0;
     const w = widget.w ?? 200;
     const h = widget.h ?? 40;
 
     const m = computeMetrics(h);
-    const xOff = drawCardContainer(ctx, x, y, w, h, m, cardStyle);
+    const [xOff, rInset] = drawCardContainer(ctx, x, y, w, h, m, cardStyle);
     const cx = x + xOff;
+    const cw = w - xOff - rInset;
 
     if (layout === "chip") {
-      return this._renderDeviceBatteryChip(ctx, cx, widget);
+      return this._renderDeviceBatteryChip(ctx, cx, widget, cw);
     }
     return this._renderDeviceBatteryIcon(ctx, cx, widget);
   }
@@ -2605,6 +2606,7 @@ class EinkDashboardCard extends HTMLElement {
     ctx: CanvasRenderingContext2D,
     cx: number,
     widget: DeviceBatteryWidget,
+    maxW?: number,
   ): WidgetBounds {
     const x = cx;
     const y = widget.y ?? 0;
@@ -2636,7 +2638,8 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     const textW = Math.floor(ctx.measureText(label).width);
-    const chipW = pad + barW + chipGap + textW + pad;
+    let chipW = pad + barW + chipGap + textW + pad;
+    if (maxW != null) chipW = Math.min(chipW, maxW);
 
     // Pill-shaped chip border
     ctx.beginPath();
@@ -2707,17 +2710,14 @@ class EinkDashboardCard extends HTMLElement {
       height -= titleAdv;
     }
 
-    const cardStyle = widget.card_style ?? "none";
+    const cardStyle = widget.card_style ?? DEFAULT_CARD_STYLE;
     const m = computeMetrics(height);
-    const xOff = drawCardContainer(
+    const [xOff, rInset] = drawCardContainer(
       ctx, x, y, width, height, m, cardStyle,
       this._layout!.display.grayscale_levels ?? 16,
     );
     const cx = x + xOff;
-    // Mirror left inset on right so chips stay within the
-    // border stroke.
-    let cw = width - xOff;
-    if (cardStyle === "border") cw -= m.padding;
+    const cw = width - xOff - rInset;
 
     const chipFontSz = Math.max(
       10, Math.round(height * CHIP_FONT_RATIO),
@@ -2791,7 +2791,7 @@ class EinkDashboardCard extends HTMLElement {
     const entries: WasteScheduleEntry[] =
       widget.entries ?? [];
     const layout = widget.layout ?? "list";
-    const cardStyle = widget.card_style ?? "none";
+    const cardStyle = widget.card_style ?? DEFAULT_CARD_STYLE;
 
     if (!entityId || entries.length === 0) {
       return { x, y, w: width, h: height };
@@ -2858,13 +2858,12 @@ class EinkDashboardCard extends HTMLElement {
       const { label, raw, days } = visible[0];
       const rowH = height;
       const m = computeMetrics(rowH);
-      const xOff = drawCardContainer(
+      const [xOff, rInset] = drawCardContainer(
         ctx, x, y, width, height, m, cardStyle,
         this._layout!.display.grayscale_levels ?? 16,
       );
       const cx = x + xOff;
-      let cw = width - xOff;
-      if (cardStyle === "border") cw -= m.padding;
+      const cw = width - xOff - rInset;
       const iconFill = (
         days <= 1 ? COLOR_BLACK : COLOR_GRAY
       );
@@ -2885,13 +2884,12 @@ class EinkDashboardCard extends HTMLElement {
       const n = visible.length;
       const rowH = Math.floor(height / n);
       const m = computeMetrics(rowH);
-      const xOff = drawCardContainer(
+      const [xOff, rInset] = drawCardContainer(
         ctx, x, y, width, height, m, cardStyle,
         this._layout!.display.grayscale_levels ?? 16,
       );
       const cx = x + xOff;
-      let cw = width - xOff;
-      if (cardStyle === "border") cw -= m.padding;
+      const cw = width - xOff - rInset;
 
       for (let i = 0; i < n; i++) {
         const { label, raw, days } = visible[i];

@@ -711,6 +711,16 @@ class TestRenderWeather:
         # Temperature text still renders in the content area
         assert_has_dark_pixels(img, 106, 5, 300, 70)
 
+    def test_weather_card_style_none_is_default(self) -> None:
+        # Omitting card_style must produce byte-identical output to
+        # card_style="none" (no card decoration drawn).
+        base = {"type": "weather", "entity": "weather.home", "x": 0, "y": 0}
+        with_none = render_dashboard(
+            [{**base, "card_style": "none"}], self._config()
+        )
+        without = render_dashboard([base], self._config())
+        assert with_none == without
+
     def test_weather_card_border_nonzero_origin(self) -> None:
         # Border is correctly positioned when widget has non-zero x/y.
         ox, oy = 50, 30
@@ -916,6 +926,23 @@ class TestRenderSensorRows:
         assert_all_white(img, 0, 0, 3, 3)
         # Far right edge should be white
         assert_all_white(img, 397, 0, 400, 3)
+
+    def test_sensor_rows_card_style_none_is_default(self) -> None:
+        # Omitting card_style must produce byte-identical output to
+        # card_style="none" (no card decoration drawn).
+        base = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entities": ["sensor.living_room_temperature"],
+        }
+        with_none = render_dashboard(
+            [{**base, "card_style": "none"}], self._config()
+        )
+        without = render_dashboard([base], self._config())
+        assert with_none == without
 
     def test_sensor_rows_row_divider(self) -> None:
         # A gray divider exists at the boundary between two
@@ -1755,11 +1782,9 @@ class TestRenderDeviceBattery:
             "layout": "chip",
         }
         cfg = self._config()
-        implicit = png_to_image(render_dashboard([base], cfg))
-        explicit = png_to_image(
-            render_dashboard([{**base, "card_style": "none"}], cfg)
-        )
-        assert implicit.tobytes() == explicit.tobytes()
+        with_none = render_dashboard([{**base, "card_style": "none"}], cfg)
+        without = render_dashboard([base], cfg)
+        assert with_none == without
 
     def test_card_style_none_no_border(self) -> None:
         # Explicit card_style="none" has no border decoration
@@ -2261,6 +2286,23 @@ class TestRenderStatusIcons:
         # Far right edge should be white
         assert_all_white(img, 397, 0, 400, 3)
 
+    def test_card_style_none_is_default(self) -> None:
+        # Omitting card_style must produce byte-identical output to
+        # card_style="none" (no card decoration drawn).
+        base = {
+            "type": "status_icons",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 40,
+            "entities": ["binary_sensor.kitchen_window"],
+        }
+        with_none = render_dashboard(
+            [{**base, "card_style": "none"}], self._config()
+        )
+        without = render_dashboard([base], self._config())
+        assert with_none == without
+
 
 MOCK_WASTE_SCHEDULE_STATES = {
     "sensor.waste_collection": {
@@ -2427,6 +2469,17 @@ class TestRenderWasteSchedule:
         assert_all_white(img, 0, 0, 3, 3)
         # Far right edge should be white
         assert_all_white(img, 397, 0, 400, 3)
+
+    def test_card_style_none_is_default(self) -> None:
+        # Omitting card_style must produce byte-identical output to
+        # card_style="none" (no card decoration drawn).
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            with_none = render_dashboard(
+                [self._widget(card_style="none")], self._config()
+            )
+            without = render_dashboard([self._widget()], self._config())
+        assert with_none == without
 
     def test_row_divider(self) -> None:
         # Gray dividers exist at row boundaries between rows.
@@ -3014,13 +3067,7 @@ class TestDrawCardContainer:
         img, draw = self._blank()
         m = self._m()
         _draw_card_container(
-            draw,
-            self._X,
-            self._Y,
-            self._W,
-            self._H,
-            m,
-            card_style="border",
+            draw, self._X, self._Y, self._W, self._H, m, card_style="border"
         )
         assert_has_dark_pixels(
             img,
@@ -3054,7 +3101,9 @@ class TestDrawCardContainer:
     def test_border_interior_is_white(self) -> None:
         img, draw = self._blank()
         m = self._m()
-        _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
+        _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="border"
+        )
         inset = m.border + 1  # +1 for Pillow anti-aliasing at the border edge
         assert_all_white(
             img,
@@ -3069,16 +3118,11 @@ class TestDrawCardContainer:
         # with left_bar semantics (content clears the frame decoration).
         _, draw = self._blank()
         m = self._m()
-        offset = _draw_card_container(
-            draw,
-            self._X,
-            self._Y,
-            self._W,
-            self._H,
-            m,
-            card_style="border",
+        x_off, r_inset = _draw_card_container(
+            draw, self._X, self._Y, self._W, self._H, m, card_style="border"
         )
-        assert offset == m.padding
+        assert x_off == m.padding
+        assert r_inset == m.padding
 
     def test_left_bar_draws_gray_on_left(self) -> None:
         img, draw = self._blank()
@@ -3118,10 +3162,11 @@ class TestDrawCardContainer:
     def test_left_bar_returns_offset(self) -> None:
         _, draw = self._blank()
         m = self._m()
-        offset = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw, self._X, self._Y, self._W, self._H, m, card_style="left_bar"
         )
-        assert offset == m.left_bar + m.padding
+        assert x_off == m.left_bar + m.padding
+        assert r_inset == 0
 
     def test_none_leaves_canvas_white(self) -> None:
         img, draw = self._blank()
@@ -3136,15 +3181,16 @@ class TestDrawCardContainer:
     def test_none_returns_zero_offset(self) -> None:
         _, draw = self._blank()
         m = self._m()
-        offset = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw, self._X, self._Y, self._W, self._H, m, card_style="none"
         )
-        assert offset == 0
+        assert x_off == 0
+        assert r_inset == 0
 
     def test_left_bar_widens_for_2_level_display(self) -> None:
         img, draw = self._blank()
         m = self._m()  # left_bar=4
-        offset = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw,
             self._X,
             self._Y,
@@ -3166,7 +3212,8 @@ class TestDrawCardContainer:
             low=COLOR_GRAY - 20,
             high=COLOR_GRAY + 20,
         )
-        assert offset == widened + m.padding
+        assert x_off == widened + m.padding
+        assert r_inset == 0
 
     def test_left_bar_standard_width_without_2_level(self) -> None:
         img, draw = self._blank()
@@ -3206,12 +3253,17 @@ class TestDrawCardContainer:
         )
 
     def test_default_card_style_is_none(self) -> None:
-        # Omitting card_style should default to "none": no pixels drawn.
+        # Omitting card_style must produce the same result as "none"
+        # (no decoration on the canvas).
         img, draw = self._blank()
         m = self._m()
         _draw_card_container(draw, self._X, self._Y, self._W, self._H, m)
         assert_all_white(
-            img, self._X, self._Y, self._X + self._W, self._Y + self._H
+            img,
+            self._X,
+            self._Y,
+            self._X + self._W,
+            self._Y + self._H,
         )
 
 

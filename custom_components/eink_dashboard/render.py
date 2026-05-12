@@ -17,6 +17,7 @@ from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
     COLOR_WHITE,
+    DEFAULT_CARD_STYLE,
     FONT_SIZE_DEVICE_BATTERY,
     FONT_SIZE_TEXT,
     FONT_SIZE_WEATHER,
@@ -312,14 +313,14 @@ def _draw_card_container(
     w: int,
     h: int,
     m: WidgetMetrics,
-    card_style: str = "none",
+    card_style: str = DEFAULT_CARD_STYLE,
     grayscale_levels: int = 16,
-) -> int:
-    """Draw card container decoration and return the content x-offset.
+) -> tuple[int, int]:
+    """Draw card container decoration and return content insets.
 
     Renders the card's visual frame based on ``card_style``.  Callers use
-    the returned offset to position content so it clears the left bar
-    (``"left_bar"``) or starts at the card edge (``"border"`` / ``"none"``).
+    the returned offsets to position content so it clears the left bar
+    (``"left_bar"``) or stays inside the border stroke (``"border"``).
 
     Args:
         draw: PIL ImageDraw context.
@@ -335,11 +336,16 @@ def _draw_card_container(
             ``config.get("grayscale_levels", 16)`` from the caller.
 
     Returns:
-        Horizontal pixel offset from ``x`` where content should start.
-        Add this to ``x`` to get the absolute content x-coordinate.
-        ``"border"`` returns ``m.padding``; ``"left_bar"`` returns
-        ``bar_w + m.padding``; ``"none"`` returns ``0`` (no padding
-        — callers that need a margin must add it themselves).
+        ``(x_off, right_inset)`` tuple.
+
+        ``x_off``: horizontal pixel offset from ``x`` where content
+        should start.  Add to ``x`` for the absolute content
+        x-coordinate.
+
+        ``right_inset``: pixels to subtract from the right edge so
+        content stays inside the card frame.
+
+        Callers compute content width as ``w - x_off - right_inset``.
     """
     if card_style == "border":
         draw.rounded_rectangle(
@@ -348,7 +354,7 @@ def _draw_card_container(
             outline=COLOR_BLACK,
             width=m.border,
         )
-        return m.padding
+        return (m.padding, m.padding)
     elif card_style == "left_bar":
         bar_w = m.left_bar
         # On 2-level displays (TRMNL), widen the bar so the dithered dot
@@ -359,15 +365,15 @@ def _draw_card_container(
             [x, y, x + bar_w, y + h],
             fill=COLOR_GRAY,
         )
-        return bar_w + m.padding
+        return (bar_w + m.padding, 0)
     elif card_style == "none":
-        return 0
+        return (0, 0)
     else:
         _LOGGER.warning(
             "_draw_card_container: unknown card_style %r, treating as 'none'",
             card_style,
         )
-        return 0
+        return (0, 0)
 
 
 def _draw_card_row(
@@ -923,7 +929,7 @@ def render_weather(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     width = config["width"]
-    card_style = widget.get("card_style", "none")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
 
     s = font_size / FONT_SIZE_WEATHER
 
@@ -997,11 +1003,10 @@ def render_weather(
         forecast_section_h = pad
     total_h = row1_h + detail_h + forecast_section_h + pad
 
-    # Card container draws the outer frame and returns the content
-    # x-offset — left bar and border styles shift content rightward.
+    # Card container draws the outer frame and returns content insets.
     if m is not None:
         grayscale_levels = config.get("grayscale_levels", 16)
-        x_off = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw,
             x,
             y,
@@ -1012,9 +1017,7 @@ def render_weather(
             grayscale_levels,
         )
         content_left = x + x_off
-        content_w = card_w - x_off
-        if card_style == "border":
-            content_w -= m.padding
+        content_w = card_w - x_off - r_inset
     else:
         content_left = x + pad
         content_w = right_edge - x - 2 * pad
@@ -1279,7 +1282,7 @@ def render_sensor_rows(
     h = widget.get("h", 112)
     title = widget.get("title", "")
     entity_ids: list[str] = widget.get("entities", [])
-    card_style = widget.get("card_style", "none")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
 
     n = len(entity_ids)
@@ -1302,15 +1305,10 @@ def render_sensor_rows(
     row_h = h // n
     m = _compute_metrics(row_h)
     grayscale_levels = config.get("grayscale_levels", 16)
-    x_off = _draw_card_container(
+    x_off, r_inset = _draw_card_container(
         draw, x, y, w, h, m, card_style, grayscale_levels
     )
-    cx, cw = x + x_off, w - x_off
-    # _draw_card_container offsets cx by m.padding on the
-    # left; mirror that on the right so text stays inside
-    # the border stroke.
-    if card_style == "border":
-        cw -= m.padding
+    cx, cw = x + x_off, w - x_off - r_inset
 
     for i, entity_id in enumerate(entity_ids):
         state = states.get(entity_id)
@@ -1385,6 +1383,12 @@ def _render_battery_icon(
             card container offset).
         widget: Widget config dict with y, font_size, color.
         pct: Battery percentage clamped to 0–100.
+
+    Note:
+        Unlike ``_render_battery_chip``, this function does not accept
+        a ``max_w`` parameter.  The icon layout is inherently compact
+        (~70 px at default scale, ~140 px at 2×) and fits within the
+        minimum content area any card container leaves available.
     """
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_DEVICE_BATTERY)
@@ -1449,6 +1453,7 @@ def _render_battery_chip(
     x: int,
     widget: Widget,
     pct: int,
+    max_w: int | None = None,
 ) -> None:
     """Draw a pill-shaped chip with battery fill bar and text.
 
@@ -1463,6 +1468,9 @@ def _render_battery_chip(
             container offset).
         widget: Widget config dict with y, h, color.
         pct: Battery percentage clamped to 0–100.
+        max_w: Maximum chip width in pixels.  When set, caps the
+            chip so it stays within the card container's content
+            area.  ``None`` means unconstrained.
     """
     y = widget.get("y", 0)
     h = widget.get("h", 40)
@@ -1488,8 +1496,12 @@ def _render_battery_chip(
     text_w = int(bbox[2] - bbox[0])
     text_h = bbox[3] - bbox[1]
 
-    # Content-based chip width
+    # Content-based chip width; cap to available space when inside a border.
     chip_w = pad + bar_w + gap + text_w + pad
+    if max_w is not None:
+        chip_w = min(chip_w, max_w)
+        # Reflow bar to fit within the capped chip width.
+        bar_w = max(0, chip_w - pad - gap - text_w - pad)
 
     # Pill-shaped chip border
     draw.rounded_rectangle(
@@ -1499,27 +1511,28 @@ def _render_battery_chip(
         width=m.border,
     )
 
-    # Bar outline
+    # Bar outline + fill (skipped when bar is squeezed to zero).
     bar_x = x + pad
-    bar_y = y + (h - bar_h) // 2
-    draw.rectangle(
-        [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
-        outline=color,
-        width=max(1, m.border // 2),
-    )
-
-    # Bar fill proportional to level
-    fill_w = int((bar_w - 2) * pct / 100)
-    if fill_w > 0:
+    if bar_w > 0:
+        bar_y = y + (h - bar_h) // 2
         draw.rectangle(
-            [
-                bar_x + 1,
-                bar_y + 1,
-                bar_x + 1 + fill_w,
-                bar_y + bar_h - 1,
-            ],
-            fill=color,
+            [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
+            outline=color,
+            width=max(1, m.border // 2),
         )
+
+        # Bar fill proportional to level
+        fill_w = int((bar_w - 2) * pct / 100)
+        if fill_w > 0:
+            draw.rectangle(
+                [
+                    bar_x + 1,
+                    bar_y + 1,
+                    bar_x + 1 + fill_w,
+                    bar_y + bar_h - 1,
+                ],
+                fill=color,
+            )
 
     # Percentage label to the right of the bar.  Subtract bbox[1] to
     # convert anchor y to ink top for accurate vertical centering.
@@ -1566,7 +1579,7 @@ def render_device_battery(
 
     pct = max(0, min(100, int(level)))
     layout = widget.get("layout", "icon")
-    card_style = widget.get("card_style", "none")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     w = widget.get("w", 200)
@@ -1574,13 +1587,14 @@ def render_device_battery(
 
     grayscale_levels = config.get("grayscale_levels", 16)
     m = _compute_metrics(h)
-    x_off = _draw_card_container(
+    x_off, r_inset = _draw_card_container(
         draw, x, y, w, h, m, card_style, grayscale_levels
     )
     cx = x + x_off
+    cw = w - x_off - r_inset
 
     if layout == "chip":
-        _render_battery_chip(draw, cx, widget, pct)
+        _render_battery_chip(draw, cx, widget, pct, max_w=cw)
     else:
         _render_battery_icon(draw, cx, widget, pct)
 
@@ -1626,7 +1640,7 @@ def render_status_icons(
     w = widget.get("w", config["width"] - x)
     h = widget.get("h", 40)
     title = widget.get("title", "")
-    card_style = widget.get("card_style", "none")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     entity_ids: list[str] = widget.get("entities", [])
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
@@ -1644,14 +1658,10 @@ def render_status_icons(
         h -= title_advance
 
     m = _compute_metrics(h)
-    x_off = _draw_card_container(
+    x_off, r_inset = _draw_card_container(
         draw, x, y, w, h, m, card_style, grayscale_levels
     )
-    cx, cw = x + x_off, w - x_off
-    # Mirror the left inset on the right so chips stay inside
-    # the border stroke.
-    if card_style == "border":
-        cw -= m.padding
+    cx, cw = x + x_off, w - x_off - r_inset
     chip_font_sz = max(10, round(h * _CHIP_FONT_RATIO))
     font = _load_font(chip_font_sz)
 
@@ -1783,7 +1793,7 @@ def render_waste_schedule(
     entity_id: str = widget.get("entity", "")
     entries: list[dict[str, str]] = widget.get("entries", [])
     layout = widget.get("layout", "list")
-    card_style = widget.get("card_style", "none")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
@@ -1840,7 +1850,7 @@ def render_waste_schedule(
         label, raw, days = visible[0]
         row_h = h
         m = _compute_metrics(row_h)
-        x_off = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw,
             x,
             y,
@@ -1850,9 +1860,7 @@ def render_waste_schedule(
             card_style,
             grayscale_levels,
         )
-        cx, cw = x + x_off, w - x_off
-        if card_style == "border":
-            cw -= m.padding
+        cx, cw = x + x_off, w - x_off - r_inset
         # Black icon for today/tomorrow, outline for days 2-3
         icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
         use_outline = days >= 2
@@ -1880,7 +1888,7 @@ def render_waste_schedule(
         n = len(visible)
         row_h = h // n
         m = _compute_metrics(row_h)
-        x_off = _draw_card_container(
+        x_off, r_inset = _draw_card_container(
             draw,
             x,
             y,
@@ -1890,9 +1898,7 @@ def render_waste_schedule(
             card_style,
             grayscale_levels,
         )
-        cx, cw = x + x_off, w - x_off
-        if card_style == "border":
-            cw -= m.padding
+        cx, cw = x + x_off, w - x_off - r_inset
         icon = _load_icon("mdi:trash-can", m.icon_dia)
 
         for i, (label, raw, days) in enumerate(visible):
