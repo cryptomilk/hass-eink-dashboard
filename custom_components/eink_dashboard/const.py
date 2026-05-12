@@ -142,7 +142,9 @@ def apply_screen_portion(
         return width // 2, height
     if portion == "quarter":
         return width // 2, height // 2
-    return width, height
+    if portion == "full":
+        return width, height
+    raise ValueError(f"Unknown screen portion: {portion!r}")
 
 
 class Align(StrEnum):

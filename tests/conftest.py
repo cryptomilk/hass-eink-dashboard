@@ -112,6 +112,12 @@ class _StubFlowBase:
 
 
 class _StubConfigFlow(_StubFlowBase):
+    # Provide a stub hass so async_step_user can call
+    # self.hass.config_entries.async_entries() without raising AttributeError.
+    hass: object = MagicMock(
+        config_entries=MagicMock(async_entries=MagicMock(return_value=[]))
+    )
+
     def __init_subclass__(
         cls, *, domain: str | None = None, **kw: object
     ) -> None:

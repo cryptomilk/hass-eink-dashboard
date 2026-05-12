@@ -54,8 +54,12 @@ class TestEinkDashboardConfigFlow:
         assert result["data_schema"] is not None
 
     async def test_kindle_creates_entry(self) -> None:
+        # Full happy path: user step → screen_portion step → create_entry.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(_USER_INPUT_KINDLE)
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         assert result["title"] == "Kitchen"
@@ -72,9 +76,13 @@ class TestEinkDashboardConfigFlow:
         assert opts["webhook_urls"] == []
 
     async def test_kindle_landscape_rotation(self) -> None:
+        # Landscape orientation uses rotated dimensions and rotation=90.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(
+        await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "orientation": "landscape"},
+        )
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -84,9 +92,13 @@ class TestEinkDashboardConfigFlow:
         assert opts["rotation"] == 90
 
     async def test_kindle_pw4_dimensions(self) -> None:
+        # Different device preset produces correct canvas size.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(
+        await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "device_model": "kindle_pw4"},
+        )
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -95,30 +107,105 @@ class TestEinkDashboardConfigFlow:
         assert opts["height"] == 1448
 
     async def test_user_with_area(self) -> None:
+        # Area selection is preserved in the created entry options.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(
+        await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "area": "kitchen"},
+        )
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
         assert result["options"]["area_id"] == "kitchen"
 
     async def test_user_without_area(self) -> None:
+        # Omitting area means area_id is absent from the entry options.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(_USER_INPUT_KINDLE)
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert "area_id" not in result["options"]
 
-    async def test_trmnl_advances_to_setup(self) -> None:
+    async def test_screen_portion_shows_form(self) -> None:
+        # After the user step, a screen_portion form is presented.
         flow = EinkDashboardConfigFlow()
-        result = await flow.async_step_user(_USER_INPUT_TRMNL)
+        result = await flow.async_step_user(_USER_INPUT_KINDLE)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "screen_portion"
+
+    async def test_screen_portion_full_creates_entry(self) -> None:
+        # Selecting "full" preserves the preset's native dimensions.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["width"] == 758
+        assert opts["height"] == 1024
+        assert opts["screen_portion"] == "full"
+
+    async def test_screen_portion_half_halves_width(self) -> None:
+        # Selecting "half" halves the width while keeping the full height.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "half"}
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["width"] == 379
+        assert opts["height"] == 1024
+        assert opts["screen_portion"] == "half"
+
+    async def test_screen_portion_quarter_halves_both(self) -> None:
+        # Selecting "quarter" halves both width and height.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "quarter"}
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["width"] == 379
+        assert opts["height"] == 512
+        assert opts["screen_portion"] == "quarter"
+
+    async def test_screen_portion_custom_advances_to_resolution(self) -> None:
+        # Selecting "custom" routes to the custom_resolution step.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_KINDLE)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "custom"}
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
+
+    async def test_trmnl_advances_to_setup(self) -> None:
+        # TRMNL flow goes user → screen_portion → trmnl_setup.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_TRMNL)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "form"
         assert result["step_id"] == "trmnl_setup"
 
     async def test_trmnl_og_dimensions(self) -> None:
+        # TRMNL OG preset produces 800×480 with no rotation.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
 
         assert flow._data["width"] == 800
         assert flow._data["height"] == 480
@@ -126,38 +213,57 @@ class TestEinkDashboardConfigFlow:
         assert flow._data["grayscale_levels"] == 2
 
     async def test_trmnl_portrait_rotation(self) -> None:
+        # TRMNL in portrait orientation swaps dimensions and sets rotation=90.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(
             {**_USER_INPUT_TRMNL, "orientation": "portrait"},
         )
+        await flow.async_step_screen_portion({"screen_portion": "full"})
 
         assert flow._data["width"] == 480
         assert flow._data["height"] == 800
         assert flow._data["rotation"] == 90
 
     async def test_trmnl_setup_shows_form(self) -> None:
+        # async_step_trmnl_setup(None) returns the form without submitting.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
         result = await flow.async_step_trmnl_setup(None)
 
         assert result["type"] == "form"
         assert result["step_id"] == "trmnl_setup"
 
     async def test_trmnl_setup_advances_to_webhook(self) -> None:
+        # Submitting the trmnl_setup step opens the webhook entry form.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
         result = await flow.async_step_trmnl_setup({})
 
         assert result["type"] == "form"
         assert result["step_id"] == "trmnl_webhook"
 
-    async def test_trmnl_webhook_creates_entry(self) -> None:
+    async def test_trmnl_screen_portion_full_advances_to_setup(self) -> None:
+        # Selecting "full" screen portion for a TRMNL device goes to setup.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        result = await flow.async_step_screen_portion(
+            {"screen_portion": "full"}
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "trmnl_setup"
+
+    async def test_trmnl_webhook_creates_entry(self) -> None:
+        # Full TRMNL flow produces a correctly-shaped config entry.
+        flow = EinkDashboardConfigFlow()
+        await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {
-                "webhook_url": "https://usetrmnl.com/api/custom_plugins/abc",
+                "webhook_url": "https://trmnl.com/api/custom_plugins/abc",
                 "label": "Hallway TRMNL",
             }
         )
@@ -172,24 +278,28 @@ class TestEinkDashboardConfigFlow:
         assert opts["webhook_urls"] == [
             {
                 "name": "Hallway TRMNL",
-                "url": "https://usetrmnl.com/api/custom_plugins/abc",
+                "url": "https://trmnl.com/api/custom_plugins/abc",
             }
         ]
 
     async def test_trmnl_webhook_defaults_label_to_device_name(self) -> None:
+        # Omitting the label defaults the webhook name to the device name.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
-            {"webhook_url": "https://usetrmnl.com/api/custom_plugins/abc"}
+            {"webhook_url": "https://trmnl.com/api/custom_plugins/abc"}
         )
 
         assert result["type"] == "create_entry"
         assert result["options"]["webhook_urls"][0]["name"] == "Hallway"
 
     async def test_trmnl_webhook_rejects_invalid_url(self) -> None:
+        # A non-URL value triggers an inline validation error.
         flow = EinkDashboardConfigFlow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
+        await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
         result = await flow.async_step_trmnl_webhook(
             {"webhook_url": "not-a-url"}
@@ -473,6 +583,7 @@ class TestEinkDashboardOptionsFlow:
     async def test_device_settings_preset_recomputes_dimensions(
         self,
     ) -> None:
+        # Changing device model recomputes width, height, and rotation.
         flow = _make_options_flow(
             {
                 "device_model": "kindle_pw",
@@ -483,8 +594,11 @@ class TestEinkDashboardOptionsFlow:
                 "webhook_urls": [],
             }
         )
-        result = await flow.async_step_device_settings(
+        await flow.async_step_device_settings(
             {"device_model": "kindle_pw4", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -499,6 +613,7 @@ class TestEinkDashboardOptionsFlow:
     async def test_device_settings_orientation_change_recomputes(
         self,
     ) -> None:
+        # Changing orientation swaps dimensions and updates rotation.
         flow = _make_options_flow(
             {
                 "device_model": "kindle_pw",
@@ -508,8 +623,11 @@ class TestEinkDashboardOptionsFlow:
                 "rotation": 0,
             }
         )
-        result = await flow.async_step_device_settings(
+        await flow.async_step_device_settings(
             {"device_model": "kindle_pw", "orientation": "landscape"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -519,21 +637,26 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["rotation"] == 90
 
     async def test_device_settings_area_saved(self) -> None:
+        # Area selection from device_settings is preserved in saved options.
         flow = _make_options_flow(
             {"device_model": "kindle_pw", "orientation": "portrait"}
         )
-        result = await flow.async_step_device_settings(
+        await flow.async_step_device_settings(
             {
                 "device_model": "kindle_pw",
                 "orientation": "portrait",
                 "area": "kitchen",
             }
         )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
+        )
 
         assert result["type"] == "create_entry"
         assert result["data"]["area_id"] == "kitchen"
 
     async def test_device_settings_area_removed(self) -> None:
+        # Submitting without area removes a previously-stored area_id.
         flow = _make_options_flow(
             {
                 "device_model": "kindle_pw",
@@ -541,12 +664,98 @@ class TestEinkDashboardOptionsFlow:
                 "area_id": "kitchen",
             }
         )
-        result = await flow.async_step_device_settings(
+        await flow.async_step_device_settings(
             {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
         assert "area_id" not in result["data"]
+
+    async def test_screen_portion_options_shows_form(self) -> None:
+        # After device_settings, a screen_portion_options form is presented.
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "screen_portion_options"
+
+    async def test_screen_portion_options_full_saves(self) -> None:
+        # "full" in options flow saves the preset's native dimensions.
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "screen_portion": "half",
+            }
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["width"] == 758
+        assert result["data"]["height"] == 1024
+        assert result["data"]["screen_portion"] == "full"
+
+    async def test_screen_portion_options_half_halves_width(self) -> None:
+        # Selecting "half" in options flow halves the width.
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "half"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["width"] == 379
+        assert result["data"]["height"] == 1024
+
+    async def test_screen_portion_options_quarter_halves_both(self) -> None:
+        # Selecting "quarter" in options flow halves both dimensions.
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "quarter"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["width"] == 379
+        assert result["data"]["height"] == 512
+
+    async def test_screen_portion_options_custom_routes_to_resolution(
+        self,
+    ) -> None:
+        # Selecting "custom" in options flow routes to custom_resolution.
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "custom"}
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "custom_resolution"
 
     async def test_device_settings_custom_routes_to_resolution(
         self,
@@ -637,6 +846,7 @@ class TestEinkDashboardOptionsFlow:
         assert "area_id" not in result["data"]
 
     async def test_device_settings_custom_to_preset(self) -> None:
+        # Switching from custom to a preset routes via screen_portion_options.
         flow = _make_options_flow(
             {
                 "device_model": "custom",
@@ -646,8 +856,11 @@ class TestEinkDashboardOptionsFlow:
                 "rotation": 0,
             }
         )
-        result = await flow.async_step_device_settings(
+        await flow.async_step_device_settings(
             {"device_model": "kindle_pw4", "orientation": "portrait"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -729,3 +942,30 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] == "menu"
         assert result["step_id"] == "init"
+
+
+class TestApplyScreenPortion:
+    def test_full_returns_original_dimensions(self) -> None:
+        # "full" leaves width and height unchanged.
+        from custom_components.eink_dashboard.const import apply_screen_portion
+
+        assert apply_screen_portion(800, 480, "full") == (800, 480)
+
+    def test_half_halves_width(self) -> None:
+        # "half" halves the width while preserving height.
+        from custom_components.eink_dashboard.const import apply_screen_portion
+
+        assert apply_screen_portion(800, 480, "half") == (400, 480)
+
+    def test_quarter_halves_both_dimensions(self) -> None:
+        # "quarter" halves both width and height.
+        from custom_components.eink_dashboard.const import apply_screen_portion
+
+        assert apply_screen_portion(800, 480, "quarter") == (400, 240)
+
+    def test_unknown_portion_raises(self) -> None:
+        # An unrecognised portion string raises ValueError immediately.
+        from custom_components.eink_dashboard.const import apply_screen_portion
+
+        with pytest.raises(ValueError, match="Unknown screen portion"):
+            apply_screen_portion(800, 480, "third")
