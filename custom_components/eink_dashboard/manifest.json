@@ -6,6 +6,6 @@
   "documentation": "https://github.com/cryptomilk/hass-eink-dashboard",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cryptomilk/hass-eink-dashboard/issues",
-  "requirements": [],
+  "requirements": ["resvg-py>=0.3.1"],
   "version": "0.1.0"
 }
