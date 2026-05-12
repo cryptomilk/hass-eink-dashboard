@@ -3,11 +3,12 @@
 ## Commands
 
 ```bash
-tox -e test          # run all tests
+tox -e test            # run all tests
 tox -e test -- tests/test_render.py::TestRenderWeather::test_weather_draws_temperature  # run a single test
-tox -e lint          # ruff check
-tox -e format        # format check
-tox -e typecheck     # ty type checker
+tox -e lint            # ruff check
+tox -e format          # format check
+tox -e typecheck       # ty type checker
+tox -e docs-coverage   # docstring coverage (interrogate)
 ```
 
 After making changes, ALWAYS run:
@@ -28,6 +29,7 @@ via an HA image entity and a public HTTP endpoint.
 - `config_flow.py` — multi-step config flow: name/dimensions/interval, plus TRMNL webhook management (add/remove named webhook targets)
 - `optimize.py` — `optimize_for_eink(img, config)`: optional post-render pipeline (autocontrast, sharpness, contrast, grayscale level quantization)
 - `push.py` — `async_push_image(session, url, image_bytes)`: HTTP POST of PNG bytes to a webhook URL
+- `sensor.py` — `EinkDashboardSensor`, exposes dashboard state as an HA sensor entity
 - `const.py` — enums, shared constants, and defaults
 
 **Rendering entry point**: `render_dashboard(widget_list, config) -> bytes` in `render.py`
@@ -75,8 +77,12 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 
 **Colors**: Integers 0–255. Constants in `const.py`: `COLOR_BLACK=0`,
 `COLOR_WHITE=255`, `COLOR_GRAY=120`, `COLOR_LIGHT_GRAY=180`, `PADDING=24`.
+`DEFAULT_CARD_STYLE="none"`. Per-widget font sizes: `FONT_SIZE_TEXT=32`,
+`FONT_SIZE_WEATHER=32`, `FONT_SIZE_SENSOR_ROWS=32`,
+`FONT_SIZE_DEVICE_BATTERY=24`, `FONT_SIZE_STATUS_ICONS=28`.
 
-**Fonts**: `_load_font(size)` (LRU-cached) loads `fonts/Roboto-Regular.ttf`,
+**Fonts**: `_load_font(size, medium=False)` (LRU-cached) loads
+`fonts/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when `medium=True`),
 falling back to PIL's built-in default.
 
 **Dual renderers**: Each widget type is rendered in two places that must stay
@@ -86,9 +92,14 @@ Lovelace editor). When changing layout, coordinates, or data fields in one,
 mirror the change in the other.
 
 **Tests** assert visual correctness by scanning pixel regions for dark/gray
-pixels. The helper `_pixel(img, x, y)` reads a grayscale pixel value. Weather
-forecast entries must include a `"datetime"` ISO 8601 field so day labels can
-be derived without timezone assumptions.
+pixels. Helpers in `tests/helpers.py`: `pixel(img, x, y)` reads a grayscale
+pixel value, `content_bbox(img)` finds the tight bounding box of non-white
+pixels, `assert_has_dark_pixels()` / `assert_all_white()` /
+`assert_has_gray_pixels()` check regions, `assert_vertically_centered()`
+and `assert_scales_proportionally()` verify layout geometry,
+`make_config()` builds config dicts, `png_to_image()` converts PNG bytes
+to a PIL Image. Weather forecast entries must include a `"datetime"` ISO
+8601 field so day labels can be derived without timezone assumptions.
 
 **Test infrastructure**: Tests run without a real Home Assistant installation.
 `tests/conftest.py` injects stub modules into `sys.modules` before any import.
@@ -100,11 +111,19 @@ base classes (return plain dicts), `ImageEntity`, `HomeAssistantView`,
 When adding new HA imports to production code, add matching stubs in
 `tests/conftest.py`.
 
-Home Assistant Core Sources: `./.tmp/core`
-Home Assistant Frontend Sources: `./.tmp/frontend`
-Home Assistant Trmnl: `./.tmp/trmnl-home-assistant`
-Home Assistant Lovelace Mushroom: `./.tmp/lovelace-mushroom`
-Home Assistant Lovelace Mini Graph Cards: `./.tmp/mini-graph-card`
-Home Assistant Mushroom Strategy Dashboard: `./.tmp/mushroom-strategy`
-
-Kindle OnlineScreensaver sources: `./.tmp/kndl-online-screensaver`
+**Commit and PR hygiene**:
+- **One concern per PR.** A config-flow UX change and a new widget type
+  are two PRs, not one. If a PR touches unrelated areas it is too big to
+  review.
+- **No fix-then-fix-again chains.** Do not commit code that you then
+  correct or rewrite in a later commit in the same PR. Validate the
+  approach (run tests, check the dependency is right, verify the
+  rendering) *before* committing. If a mistake slips through, amend or
+  squash — the reviewer should never see a commit that only exists to
+  fix a previous commit in the same PR.
+- **Squash iterative polish.** Moving a label, tweaking wording, and
+  adjusting alignment on the same feature are one commit, not three.
+  Interactive-rebase before opening the PR.
+- **Each commit must stand on its own.** Tests pass, lint passes, no
+  half-finished code. A reviewer should be able to check out any single
+  commit and get a working tree.
