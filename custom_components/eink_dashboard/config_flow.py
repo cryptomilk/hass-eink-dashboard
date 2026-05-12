@@ -304,6 +304,9 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="trmnl_setup",
             data_schema=vol.Schema({}),
+            description_placeholders={
+                "trmnl_plugin_url": "https://trmnl.com/plugin_settings?keyname=webhook_image",
+            },
         )
 
     async def async_step_trmnl_webhook(
