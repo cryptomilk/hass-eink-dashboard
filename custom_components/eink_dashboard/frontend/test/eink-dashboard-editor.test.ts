@@ -133,11 +133,25 @@ describe("SCHEMAS", () => {
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
   });
 
+  it("sensor_rows entities field accepts sensor and binary_sensor domains", () => {
+    const entitiesField = findField(SCHEMAS.sensor_rows(DISPLAY), "entities");
+    expect(entitiesField?.selector?.entity).toMatchObject({
+      domain: ["sensor", "binary_sensor"],
+    });
+  });
+
   it("status_icons entities field has multiple: true", () => {
     const entitiesField = findField(
       SCHEMAS.status_icons(DISPLAY), "entities"
     );
     expect(entitiesField?.selector?.entity?.multiple).toBe(true);
+  });
+
+  it("status_icons entities field is restricted to binary_sensor domain", () => {
+    const entitiesField = findField(SCHEMAS.status_icons(DISPLAY), "entities");
+    expect(entitiesField?.selector?.entity).toMatchObject({
+      domain: "binary_sensor",
+    });
   });
 
   it("waste_schedule entity field uses domain filter 'sensor'", () => {
