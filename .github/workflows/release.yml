@@ -11,19 +11,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - tox_env: lint
-          - tox_env: format
-          - tox_env: typecheck
-          - tox_env: test
+          - name: lint
+            cmd: uv run --group lint ruff check .
+          - name: format
+            cmd: uv run --group format ruff format --check .
+          - name: typecheck
+            cmd: uv run --group typecheck ty check
+          - name: test
+            cmd: uv run --group test pytest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: tox.ini
-      - run: pip install tox
-      - run: tox -e ${{ matrix.tox_env }}
+      - uses: astral-sh/setup-uv@v4
+      - run: ${{ matrix.cmd }}
 
   validate-frontend:
     runs-on: ubuntu-latest

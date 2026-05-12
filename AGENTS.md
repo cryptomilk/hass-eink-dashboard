@@ -3,16 +3,16 @@
 ## Commands
 
 ```bash
-tox -e test            # run all tests
-tox -e test -- tests/test_render.py::TestRenderWeather::test_weather_draws_temperature  # run a single test
-tox -e lint            # ruff check
-tox -e format          # format check
-tox -e typecheck       # ty type checker
-tox -e docs-coverage   # docstring coverage (interrogate)
+uv run --group test pytest                    # run all tests
+uv run --group test pytest tests/test_render.py::TestRenderWeather::test_weather_draws_temperature  # run a single test
+uv run --group lint ruff check .              # lint
+uv run --group format ruff format --check .   # format check
+uv run --group typecheck ty check             # typecheck
+uv run --group interrogate interrogate -vv custom_components/eink_dashboard/  # docstring coverage
 ```
 
 After making changes, ALWAYS run:
-- `tox -e format,lint,typecheck,test` for Python changes
+- `uv run --group lint ruff check . && uv run --group format ruff format --check . && uv run --group typecheck ty check && uv run --group test pytest` for Python changes
 - `pnpm --dir custom_components/eink_dashboard/frontend typecheck && pnpm --dir custom_components/eink_dashboard/frontend test` for TypeScript changes
 
 ## Architecture

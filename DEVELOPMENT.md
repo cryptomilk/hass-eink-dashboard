@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Python 3.13+
-- [tox](https://tox.wiki/)
+- [uv](https://docs.astral.sh/uv/)
 - [pnpm](https://pnpm.io/) (for the frontend)
 - `cairosvg` (build-time only, for icon generation)
 
@@ -12,12 +12,12 @@
 ### Python (backend)
 
 ```bash
-tox -e test                    # run all tests
-tox -e test -- tests/test_render.py::TestClass::test_name  # run a single test
-tox -e lint                    # ruff check
-tox -e format                  # ruff format check
-tox -e typecheck               # ty type checker
-tox -e format,lint,typecheck,test  # run everything
+uv run --group test pytest                    # run all tests
+uv run --group test pytest tests/test_render.py::TestClass::test_name  # run a single test
+uv run --group lint ruff check .              # ruff check
+uv run --group format ruff format --check .   # ruff format check
+uv run --group typecheck ty check             # ty type checker
+uv run --group lint ruff check . && uv run --group format ruff format --check . && uv run --group typecheck ty check && uv run --group test pytest  # run everything
 ```
 
 ### TypeScript (frontend)
