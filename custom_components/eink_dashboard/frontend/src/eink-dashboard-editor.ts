@@ -18,7 +18,6 @@ const EDITOR_TAG = "eink-dashboard-editor";
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
-const FONT_SIZE_SENSOR_ROWS = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
@@ -74,8 +73,10 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       title: "",
       x: 24,
       y: 0,
+      w: 400,
+      h: 112,
       entities: [],
-      font_size: FONT_SIZE_SENSOR_ROWS,
+      card_style: "none",
     },
   },
   device_battery: {
@@ -168,6 +169,48 @@ function posXYW(d: DisplayConfig): HaFormSchema[] {
       },
     },
   ];
+}
+
+/**
+ * Position selectors for x, y, width, and height.
+ *
+ * @param d - Display dimensions used as max bounds.
+ * @returns Schema array with x, y, w, and h number fields.
+ */
+function posXYWH(d: DisplayConfig): HaFormSchema[] {
+  return [
+    ...posXYW(d),
+    {
+      name: "h",
+      selector: {
+        number: {
+          min: 20, max: d.height, step: 8, mode: "box",
+        },
+      },
+    },
+  ];
+}
+
+/**
+ * Card style dropdown selector.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function cardStyleSelector(): HaFormSchema {
+  return {
+    name: "card_style",
+    default: "none",
+    selector: {
+      select: {
+        options: [
+          { value: "border", label: "Border" },
+          { value: "left_bar", label: "Left bar" },
+          { value: "none", label: "None" },
+        ],
+        mode: "dropdown",
+      },
+    },
+  };
 }
 
 /**
@@ -410,7 +453,9 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+      ],
     },
     {
       name: "appearance",
@@ -418,7 +463,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [fontSizeSelector(FONT_SIZE_SENSOR_ROWS)],
+      schema: [cardStyleSelector()],
     },
   ],
 
@@ -527,11 +572,12 @@ export const LABELS: Record<string, string> = {
   entity: "Entity",
   entities: "Entities",
   title: "Title",
-  x: "X", y: "Y", w: "Width",
+  x: "X", y: "Y", w: "Width", h: "Height",
   direction: "Direction", style: "Style", length: "Length",
   font_size: "Font size",
   color: "Color",
   align: "Align",
+  card_style: "Card style",
   forecast_days: "Forecast days",
 };
 

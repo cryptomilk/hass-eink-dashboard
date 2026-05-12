@@ -42,7 +42,6 @@ const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
-const FONT_SIZE_SENSOR_ROWS = 32;
 const FONT_SIZE_DEVICE_BATTERY = 24;
 const FONT_SIZE_STATUS_ICONS = 28;
 const FONT_SIZE_WASTE_SCHEDULE = 28;
@@ -287,9 +286,6 @@ export function clearIconCache(): void {
 /** One column in the weather detail row (humidity, wind, etc.). */
 interface DetailItem { text: string; svgName: string; }
 
-const SENSOR_ROW_HEIGHT = 30;
-const SENSOR_TITLE_ADVANCE = 32;
-
 const BATTERY_BODY_W = 22;
 const BATTERY_BODY_H = 10;
 const BATTERY_NUB_W = 2;
@@ -504,9 +500,6 @@ export function drawCardContainer(
  * secondary text (gray) vertically centered in the
  * middle, and an optional right-aligned value string.
  *
- * @todo Icon loading is not yet implemented in the canvas
- *   preview; the circle shows a letter fallback regardless
- *   of opts.icon.
  * @param ctx - Canvas 2D rendering context.
  * @param x - Left edge of the row area in pixels.
  * @param y - Top edge of the row area in pixels.
@@ -841,6 +834,7 @@ interface ResizeStart {
   x2: number;
   y2: number;
   w?: number;
+  h?: number;
   font_size?: number;
   renderedW?: number;
   renderedH?: number;
@@ -1349,6 +1343,7 @@ class EinkDashboardCard extends HTMLElement {
       widget?.type === "device_battery"
       || widget?.type === "weather"
     ) return "nwse-resize";
+    if (widget?.type === "sensor_rows") return "nwse-resize";
     return "ew-resize";
   }
 
@@ -1369,7 +1364,7 @@ class EinkDashboardCard extends HTMLElement {
       const s: ResizeStart = {
         x: w.x ?? 0, y: w.y ?? 0,
         x2: w.x2 ?? 0, y2: w.y2 ?? 0,
-        w: w.w,
+        w: w.w, h: w.h,
         font_size: w.font_size,
         renderedW: wb?.w,
         renderedH: wb?.h,
@@ -1471,6 +1466,39 @@ class EinkDashboardCard extends HTMLElement {
           s.renderedW, s.renderedH,
           MIN_RESIZE_FONT_SIZE, MAX_RESIZE_FONT_SIZE,
         );
+      } else if (w.type === "sensor_rows") {
+        // Corner resize adjusting w and h directly.
+        const startW = s.w ?? 400;
+        const startH = s.h ?? 112;
+        if (handle === "se") {
+          w.w = snap(Math.max(50, startW + dx));
+          w.h = snap(Math.max(28, startH + dy));
+        } else if (handle === "ne") {
+          w.w = snap(Math.max(50, startW + dx));
+          w.h = snap(Math.max(28, startH - dy));
+          w.y = snap(s.y + (startH - (w.h ?? startH)));
+        } else if (handle === "sw") {
+          const startRight = s.x + startW;
+          const newX = Math.max(
+            0, Math.min(startRight - 50, s.x + dx),
+          );
+          w.x = snap(Math.round(newX));
+          w.w = snap(
+            Math.round(startRight - (w.x ?? 0)),
+          );
+          w.h = snap(Math.max(28, startH + dy));
+        } else if (handle === "nw") {
+          const startRight = s.x + startW;
+          const newX = Math.max(
+            0, Math.min(startRight - 50, s.x + dx),
+          );
+          w.x = snap(Math.round(newX));
+          w.w = snap(
+            Math.round(startRight - (w.x ?? 0)),
+          );
+          w.h = snap(Math.max(28, startH - dy));
+          w.y = snap(s.y + (startH - (w.h ?? startH)));
+        }
       } else if (handle === "ne" || handle === "se") {
         const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
         const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
@@ -1554,6 +1582,7 @@ class EinkDashboardCard extends HTMLElement {
       w.x = s.x;
       w.y = s.y;
       w.w = s.w;
+      w.h = s.h;
       w.x2 = s.x2;
       w.y2 = s.y2;
       w.font_size = s.font_size;
@@ -2297,42 +2326,93 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_sensor_rows
-  private _renderSensorRows(ctx: CanvasRenderingContext2D, widget: SensorRowsWidget): WidgetBounds {
-    const { x, y: origY, fontSize, rightEdge } = this._getWidgetBase(widget, FONT_SIZE_SENSOR_ROWS);
-    let y = origY;
-    const sc = fontSize / FONT_SIZE_SENSOR_ROWS;
+  private _renderSensorRows(
+    ctx: CanvasRenderingContext2D,
+    widget: SensorRowsWidget,
+  ): WidgetBounds {
+    const x = widget.x ?? PADDING;
+    let y = widget.y ?? 0;
+    const origY = y;
+    const width = widget.w ?? 400;
+    let height = widget.h ?? 112;
     const title = widget.title ?? "";
     const entityIds = widget.entities ?? [];
-    const rowHeight = Math.round(SENSOR_ROW_HEIGHT * sc);
+    const cardStyle = widget.card_style ?? "none";
+    const n = entityIds.length;
+
+    if (n === 0) return { x, y, w: width, h: height };
 
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
 
+    // Title above the card (gray, proportional to h)
     if (title) {
-      ctx.fillStyle = grayColor(COLOR_BLACK);
+      const titleFontSz = Math.max(10, Math.round(height * 0.14));
+      ctx.font = `${titleFontSz}px ${FONT_FAMILY}`;
+      ctx.fillStyle = grayColor(COLOR_GRAY);
       ctx.fillText(title, x, y);
-      y += Math.round(SENSOR_TITLE_ADVANCE * sc);
+      const titleAdv = Math.round(titleFontSz * 1.4);
+      y += titleAdv;
+      height -= titleAdv;
     }
 
-    for (const entityId of entityIds) {
+    const rowH = Math.floor(height / n);
+    const m = computeMetrics(rowH);
+    const xOff = drawCardContainer(
+      ctx, x, y, width, height, m, cardStyle,
+    );
+    const cx = x + xOff;
+    let cw = width - xOff;
+    // Inset content from right edge for border style
+    if (cardStyle === "border") cw -= m.padding;
+
+    for (let i = 0; i < n; i++) {
+      const entityId = entityIds[i];
       const stateObj = this._getState(entityId);
       if (!stateObj) continue;
-      const attrs = stateObj.attributes as Record<string, string | null>;
-      const label = String(attrs.friendly_name ?? entityId);
-      const value = stateObj.state ?? "";
+      const rowY = y + i * rowH;
+      const attrs = stateObj.attributes as Record<
+        string, string | undefined
+      >;
+      const domain = entityId.split(".")[0];
+      const dc = String(attrs.device_class ?? "");
+      const iconName = deviceClassIcon(
+        dc, stateObj.state, domain,
+      );
+      // SVG icon for canvas (Python uses PNG via icons/png/).
+      const icon = iconName
+        ? getIcon(
+            `${ICON_BASE}/svg/mdi/${iconName}.svg`,
+          )
+        : null;
+
       const unit = String(attrs.unit_of_measurement ?? "");
-      const displayVal = unit ? `${value}${unit}` : value;
+      const stateVal = stateObj.state ?? "";
+      const secondary = unit
+        ? `${stateVal}${unit}`
+        : stateVal;
 
-      ctx.fillStyle = grayColor(COLOR_BLACK);
-      ctx.fillText(label, x + Math.round(16 * sc), y);
+      drawCardRow(ctx, cx, rowY, cw, rowH, m, {
+        primary: String(attrs.friendly_name ?? entityId),
+        secondary,
+        icon: icon ?? undefined,
+      });
 
-      const valW = ctx.measureText(displayVal).width;
-      ctx.fillText(displayVal, rightEdge - PADDING - valW, y);
-
-      y += rowHeight;
+      // Gray divider between rows (not after last)
+      if (i < n - 1) {
+        const divY = rowY + rowH;
+        // Center divider on the row boundary to match
+        // PIL's draw.line() which centers stroke on the
+        // coordinate.
+        const divTop = divY - Math.floor(m.divider / 2);
+        ctx.fillStyle = grayColor(COLOR_GRAY);
+        ctx.fillRect(
+          cx + m.padding, divTop,
+          cw - 2 * m.padding, m.divider,
+        );
+      }
     }
-    return { x, y: origY, w: rightEdge - x, h: Math.max(y - origY, 20) };
+    return { x, y: origY, w: width, h: (y - origY) + height };
   }
 
   // mirrors render.py: render_device_battery

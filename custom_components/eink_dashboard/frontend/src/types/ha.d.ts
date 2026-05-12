@@ -173,6 +173,7 @@ interface WidgetBase {
   x?: number;
   y?: number;
   w?: number;
+  h?: number;
   font_size?: number;
   color?: number;
 }
@@ -200,6 +201,7 @@ export interface SensorRowsWidget extends WidgetBase {
   type: "sensor_rows";
   title?: string;
   entities?: string[];
+  card_style?: CardStyle;
 }
 
 export interface DeviceBatteryWidget extends WidgetBase {
