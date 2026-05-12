@@ -285,10 +285,10 @@ export function clearIconCache(): void {
 /** One column in the weather detail row (humidity, wind, etc.). */
 interface DetailItem { text: string; svgName: string; }
 
-const BATTERY_BODY_W = 22;
-const BATTERY_BODY_H = 10;
-const BATTERY_NUB_W = 2;
-const BATTERY_NUB_H = 4;
+const BATTERY_BODY_W = 30;
+const BATTERY_BODY_H = 14;
+const BATTERY_NUB_W = 3;
+const BATTERY_NUB_H = 8;
 
 const PROBLEM_DEVICE_CLASSES = new Set([
   "door", "window", "garage_door", "opening",
@@ -1304,6 +1304,15 @@ class EinkDashboardCard extends HTMLElement {
       ];
     }
     if (widget.type === "device_battery") {
+      const bw = widget as DeviceBatteryWidget;
+      if (bw.layout === "chip") {
+        return [
+          { id: "nw", cx: bounds.x, cy: bounds.y },
+          { id: "ne", cx: bounds.x + bounds.w, cy: bounds.y },
+          { id: "sw", cx: bounds.x, cy: bounds.y + bounds.h },
+          { id: "se", cx: bounds.x + bounds.w, cy: bounds.y + bounds.h },
+        ];
+      }
       return [
         { id: "se", cx: bounds.x + bounds.w, cy: bounds.y + bounds.h },
       ];
@@ -1441,6 +1450,33 @@ class EinkDashboardCard extends HTMLElement {
           // Move end only: adjust length along the primary axis.
           const delta = dir === "vertical" ? dy : dx;
           sw.length = snap(Math.max(20, sLen + delta));
+        }
+      } else if (
+        w.type === "device_battery"
+        && (w as DeviceBatteryWidget).layout === "chip"
+      ) {
+        const startW = s.w ?? 200;
+        const startH = s.h ?? 40;
+        if (handle === "se") {
+          w.w = snap(Math.max(50, startW + dx));
+          w.h = snap(Math.max(28, startH + dy));
+        } else if (handle === "ne") {
+          w.w = snap(Math.max(50, startW + dx));
+          const newY = snap(Math.max(0, (s.y ?? 0) + dy));
+          w.y = newY;
+          w.h = snap(Math.max(28, startH + ((s.y ?? 0) - newY)));
+        } else if (handle === "sw") {
+          const newX = snap(Math.max(0, (s.x ?? 0) + dx));
+          w.x = newX;
+          w.w = snap(Math.max(50, startW + ((s.x ?? 0) - newX)));
+          w.h = snap(Math.max(28, startH + dy));
+        } else if (handle === "nw") {
+          const newX = snap(Math.max(0, (s.x ?? 0) + dx));
+          const newY = snap(Math.max(0, (s.y ?? 0) + dy));
+          w.x = newX;
+          w.y = newY;
+          w.w = snap(Math.max(50, startW + ((s.x ?? 0) - newX)));
+          w.h = snap(Math.max(28, startH + ((s.y ?? 0) - newY)));
         }
       } else if (
         w.type === "device_battery"
@@ -2414,12 +2450,31 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // mirrors render.py: render_device_battery
-  private _renderDeviceBattery(ctx: CanvasRenderingContext2D, widget: DeviceBatteryWidget): WidgetBounds {
+  private _renderDeviceBattery(
+    ctx: CanvasRenderingContext2D,
+    widget: DeviceBatteryWidget,
+  ): WidgetBounds {
+    const layout = widget.layout ?? "icon";
+    if (layout === "chip") {
+      return this._renderDeviceBatteryChip(ctx, widget);
+    }
+    return this._renderDeviceBatteryIcon(ctx, widget);
+  }
+
+  /** Icon layout: compact battery outline + percentage text. */
+  private _renderDeviceBatteryIcon(
+    ctx: CanvasRenderingContext2D,
+    widget: DeviceBatteryWidget,
+  ): WidgetBounds {
     const { x, y, fontSize } = this._getWidgetBase(widget, FONT_SIZE_DEVICE_BATTERY);
-    const color = widget.color ?? COLOR_BLACK;
+    let color = widget.color ?? COLOR_BLACK;
 
     const rawLevel = this._layout?.device?.device_battery_level;
     const pct = rawLevel != null ? Math.max(0, Math.min(100, Math.floor(rawLevel))) : null;
+    // Below 20%: force black for visual emphasis
+    if (pct != null && pct < 20) {
+      color = COLOR_BLACK;
+    }
     const label = pct != null ? `${pct}%` : "---%";
 
     const s = fontSize / FONT_SIZE_DEVICE_BATTERY;
@@ -2436,7 +2491,10 @@ class EinkDashboardCard extends HTMLElement {
     ctx.textAlign = "left";
     const metrics = ctx.measureText(label);
     const textH = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
-    const iconY = y + Math.floor((textH - bh) / 2);
+    // Centre icon on the text glyph — mirrors Python's
+    // icon_y = y + bbox[1] + (text_h - bh) // 2
+    const inkTop = metrics.actualBoundingBoxAscent;
+    const iconY = y + inkTop + Math.floor((textH - bh) / 2);
 
     // Outline
     ctx.strokeStyle = grayColor(COLOR_GRAY);
@@ -2462,6 +2520,79 @@ class EinkDashboardCard extends HTMLElement {
     ctx.fillStyle = grayColor(color);
     ctx.fillText(label, x + bw + nubGap + nubW + gap, y);
     return { x, y, w: bw + nubGap + nubW + gap + labelW, h: textH };
+  }
+
+  /** Chip layout: pill-shaped chip with battery fill bar. */
+  private _renderDeviceBatteryChip(
+    ctx: CanvasRenderingContext2D,
+    widget: DeviceBatteryWidget,
+  ): WidgetBounds {
+    const x = widget.x ?? PADDING;
+    const y = widget.y ?? 0;
+    const h = widget.h ?? 40;
+    let color = widget.color ?? COLOR_BLACK;
+
+    const rawLevel = this._layout?.device?.device_battery_level;
+    const pct = rawLevel != null
+      ? Math.max(0, Math.min(100, Math.floor(rawLevel)))
+      : null;
+    // Below 20%: force black for visual emphasis
+    if (pct != null && pct < 20) {
+      color = COLOR_BLACK;
+    }
+    const label = pct != null ? `${pct}%` : "---%";
+
+    const m = computeMetrics(h);
+    const radius = Math.floor(h / 2);
+    const pad = Math.round(h * CHIP_PAD_RATIO);
+
+    // Battery bar proportional to chip height
+    const barW = Math.round(h * 1.2);
+    const barH = Math.round(h * 0.36);
+
+    // Measure label to compute content-based chip width
+    const chipGap = Math.round(h * CHIP_GAP_RATIO);
+    const fontSize = Math.max(10, Math.round(h * CHIP_FONT_RATIO));
+    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    const textW = Math.floor(ctx.measureText(label).width);
+    const chipW = pad + barW + chipGap + textW + pad;
+
+    // Pill-shaped chip border
+    ctx.beginPath();
+    ctx.roundRect(x, y, chipW, h, radius);
+    ctx.strokeStyle = grayColor(COLOR_BLACK);
+    ctx.lineWidth = m.border;
+    ctx.stroke();
+
+    const barX = x + pad;
+    const barY = y + Math.floor((h - barH) / 2);
+
+    // Bar outline
+    const barBorder = Math.max(1, Math.floor(m.border / 2));
+    ctx.strokeStyle = grayColor(color);
+    ctx.lineWidth = barBorder;
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    // Bar fill proportional to level
+    if (pct != null) {
+      const fillW = Math.floor((barW - 2) * pct / 100);
+      if (fillW > 0) {
+        ctx.fillStyle = grayColor(color);
+        ctx.fillRect(barX + 1, barY + 1, fillW, barH - 2);
+      }
+    }
+
+    // Percentage label to the right of the bar
+    const textMetrics = ctx.measureText(label);
+    const textH = textMetrics.actualBoundingBoxAscent
+      + textMetrics.actualBoundingBoxDescent;
+    const textY = y + Math.floor((h - textH) / 2);
+    ctx.fillStyle = grayColor(color);
+    ctx.fillText(label, barX + barW + chipGap, textY);
+
+    return { x, y, w: chipW, h };
   }
 
   // mirrors render.py: render_status_icons

@@ -1381,31 +1381,36 @@ def render_sensor_rows(
             )
 
 
-_BATTERY_BODY_W = 22
-_BATTERY_BODY_H = 10
-_BATTERY_NUB_W = 2
-_BATTERY_NUB_H = 4
+_BATTERY_BODY_W = 30
+_BATTERY_BODY_H = 14
+_BATTERY_NUB_W = 3
+_BATTERY_NUB_H = 8
 
 
-def render_device_battery(
+def _render_battery_icon(
     draw: ImageDraw.ImageDraw,
     widget: Widget,
-    config: DisplayConfig,
+    pct: int,
 ) -> None:
-    """Draw battery icon and percentage for the device's own battery."""
-    level = config.get("device_battery_level")
-    if level is None:
-        _LOGGER.debug(
-            "render_device_battery: no battery level in config, skipping"
-        )
-        return
+    """Draw compact battery icon with percentage text.
 
-    pct = max(0, min(100, int(level)))
+    The icon layout renders a battery outline with proportional
+    fill bar and a nub terminal, followed by a percentage label.
+    All dimensions scale from ``font_size`` via the ratio
+    ``s = font_size / FONT_SIZE_DEVICE_BATTERY``.
 
+    Args:
+        draw: PIL ImageDraw context.
+        widget: Widget config dict with x, y, font_size, color.
+        pct: Battery percentage clamped to 0–100.
+    """
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     font_size = widget.get("font_size", FONT_SIZE_DEVICE_BATTERY)
     color = widget.get("color", COLOR_BLACK)
+    # Below 20%: force black for visual emphasis
+    if pct < 20:
+        color = COLOR_BLACK
 
     s = font_size / FONT_SIZE_DEVICE_BATTERY
     bw = round(_BATTERY_BODY_W * s)
@@ -1419,20 +1424,29 @@ def render_device_battery(
     label = f"{pct}%"
     bbox = draw.textbbox((0, 0), label, font=font)
     text_h = bbox[3] - bbox[1]
+    # Centre the icon vertically on the text glyph
     icon_y = y + bbox[1] + (text_h - bh) // 2
 
+    # Battery body outline
     draw.rectangle(
         [x, icon_y, x + bw, icon_y + bh],
         outline=COLOR_GRAY,
         width=1,
     )
 
+    # Nub (positive terminal)
     nub_y = icon_y + (bh - nub_h) // 2
     draw.rectangle(
-        [x + bw + nub_gap, nub_y, x + bw + nub_gap + nub_w - 1, nub_y + nub_h],
+        [
+            x + bw + nub_gap,
+            nub_y,
+            x + bw + nub_gap + nub_w - 1,
+            nub_y + nub_h,
+        ],
         fill=COLOR_GRAY,
     )
 
+    # Fill bar proportional to level
     fill_w = int((bw - 2) * pct / 100)
     if fill_w > 0:
         draw.rectangle(
@@ -1440,12 +1454,133 @@ def render_device_battery(
             fill=color,
         )
 
+    # Percentage label
     draw.text(
         (x + bw + nub_gap + nub_w + gap, y),
         label,
         fill=color,
         font=font,
     )
+
+
+def _render_battery_chip(
+    draw: ImageDraw.ImageDraw,
+    widget: Widget,
+    pct: int,
+) -> None:
+    """Draw a pill-shaped chip with battery fill bar and text.
+
+    The chip width is computed from its content (battery bar +
+    gap + percentage label + padding) so it wraps tightly around
+    the content, matching the Mushroom chip sizing approach.
+    All internal dimensions derive from the chip height ``h``.
+
+    Args:
+        draw: PIL ImageDraw context.
+        widget: Widget config dict with x, y, h.
+        pct: Battery percentage clamped to 0–100.
+    """
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    h = widget.get("h", 40)
+    color = widget.get("color", COLOR_BLACK)
+    # Below 20%: force black for visual emphasis
+    if pct < 20:
+        color = COLOR_BLACK
+
+    m = _compute_metrics(h)
+    radius = h // 2
+    pad = round(h * _CHIP_PAD_RATIO)
+
+    # Battery bar proportional to chip height
+    bar_w = round(h * 1.2)
+    bar_h = round(h * 0.36)
+
+    # Percentage label
+    gap = round(h * _CHIP_GAP_RATIO)
+    font_sz = max(10, round(h * _CHIP_FONT_RATIO))
+    font = _load_font(font_sz)
+    label = f"{pct}%"
+    bbox = draw.textbbox((0, 0), label, font=font)
+    text_w = int(bbox[2] - bbox[0])
+    text_h = bbox[3] - bbox[1]
+
+    # Content-based chip width
+    chip_w = pad + bar_w + gap + text_w + pad
+
+    # Pill-shaped chip border
+    draw.rounded_rectangle(
+        [x, y, x + chip_w, y + h],
+        radius=radius,
+        outline=COLOR_BLACK,
+        width=m.border,
+    )
+
+    # Bar outline
+    bar_x = x + pad
+    bar_y = y + (h - bar_h) // 2
+    draw.rectangle(
+        [bar_x, bar_y, bar_x + bar_w, bar_y + bar_h],
+        outline=color,
+        width=max(1, m.border // 2),
+    )
+
+    # Bar fill proportional to level
+    fill_w = int((bar_w - 2) * pct / 100)
+    if fill_w > 0:
+        draw.rectangle(
+            [
+                bar_x + 1,
+                bar_y + 1,
+                bar_x + 1 + fill_w,
+                bar_y + bar_h - 1,
+            ],
+            fill=color,
+        )
+
+    # Percentage label to the right of the bar
+    text_y = y + (h - text_h) // 2
+    draw.text(
+        (bar_x + bar_w + gap, text_y),
+        label,
+        fill=color,
+        font=font,
+    )
+
+
+def render_device_battery(
+    draw: ImageDraw.ImageDraw,
+    widget: Widget,
+    config: DisplayConfig,
+) -> None:
+    """Draw battery level indicator in icon or chip layout.
+
+    Supports two layouts via the ``layout`` parameter:
+
+    - ``"icon"`` (default): compact inline battery icon with
+      percentage text, sized via ``font_size``.
+    - ``"chip"``: pill-shaped chip with proportional fill bar
+      and percentage text, sized via ``h``.
+
+    Args:
+        draw: PIL ImageDraw context.
+        widget: Widget config dict.
+        config: Display config with ``device_battery_level``.
+    """
+    level = config.get("device_battery_level")
+    if level is None:
+        _LOGGER.debug(
+            "render_device_battery: no battery level in config, skipping"
+        )
+        return
+
+    pct = max(0, min(100, int(level)))
+    layout = widget.get("layout", "icon")
+
+    if layout == "chip":
+        _render_battery_chip(draw, widget, pct)
+    else:
+        _render_battery_icon(draw, widget, pct)
 
 
 _PROBLEM_DEVICE_CLASSES = {

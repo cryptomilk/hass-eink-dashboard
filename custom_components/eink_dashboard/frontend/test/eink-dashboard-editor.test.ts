@@ -360,14 +360,15 @@ describe("SCHEMAS form grouping", () => {
     expect(fields).toContain("color");
   });
 
-  it("device_battery has no content section", () => {
-    // device_battery has no entity or text fields, so no content
-    // group is needed.
+  it("device_battery content section contains layout selector", () => {
+    // device_battery has a layout selector (icon/chip) in content.
     const schema = SCHEMAS.device_battery(DISPLAY);
     const content = getExpandableSections(schema).find(
       (s) => s.name === "content"
     );
-    expect(content).toBeUndefined();
+    expect(content).toBeDefined();
+    const fields = flattenFields(content!.schema);
+    expect(fields).toContain("layout");
   });
 
   it("separator has no appearance section", () => {

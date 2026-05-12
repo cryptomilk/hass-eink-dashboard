@@ -87,7 +87,10 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       x: 24,
       y: 0,
       color: 0,
+      layout: "icon",
       font_size: FONT_SIZE_DEVICE_BATTERY,
+      w: 200,
+      h: 40,
     },
   },
   status_icons: {
@@ -236,7 +239,7 @@ function fontSizeSelector(defaultSize: number): HaFormSchema {
 function colorSelector(defaultColor: number = 0): HaFormSchema {
   return {
     name: "color",
-    default: defaultColor,
+    default: String(defaultColor),
     selector: {
       select: {
         options: COLOR_OPTIONS,
@@ -469,13 +472,36 @@ export const SCHEMAS: Record<
 
   device_battery: (d) => [
     {
-      name: "layout",
+      name: "content",
       type: "expandable",
       flatten: true,
       expanded: true,
+      title: "Content",
+      icon: "mdi:battery",
+      schema: [
+        {
+          name: "layout",
+          required: false,
+          selector: {
+            select: {
+              options: [
+                { value: "icon", label: "Icon" },
+                { value: "chip", label: "Chip" },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      name: "layout_pos",
+      type: "expandable",
+      flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXY(d) }],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+      ],
     },
     {
       name: "appearance",

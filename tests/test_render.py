@@ -1138,6 +1138,10 @@ class TestRenderSensorRows:
 
 
 class TestRenderDeviceBattery:
+    # Verify rendering of device battery widgets in both icon and chip
+    # layouts.  Icon layout uses font_size-based sizing with a 30x14
+    # battery body.  Chip layout uses w/h-based sizing with a pill
+    # shape containing a fill bar.
     _DEFAULTS: dict[str, object] = {
         "width": 400,
         "height": 100,
@@ -1147,60 +1151,98 @@ class TestRenderDeviceBattery:
     def _config(self, **overrides: object) -> dict[str, object]:
         return make_config(self._DEFAULTS, **overrides)
 
-    def test_device_battery_draws_fill(self) -> None:
+    # -- Icon layout (default): bigger battery icon (30x14) ----------
+
+    def test_icon_draws_fill(self) -> None:
+        # Verify the fill bar renders inside the battery body.
+        # At 75%: fill_w = int((30-2)*75/100) = 21 px.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 1, 33, PADDING + 16, 42)
+        # Fill region: (PADDING+1, icon_y+1) to (PADDING+22, icon_y+bh-1)
+        # icon_y=30, bh=14 → fill at (25, 31) to (46, 43)
+        assert_has_dark_pixels(img, PADDING + 1, 31, PADDING + 22, 43)
 
-    def test_device_battery_none_is_noop(self) -> None:
-        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=None)
-        )
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 400, 100)
-
-    def test_device_battery_missing_key_is_noop(self) -> None:
-        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, {"width": 400, "height": 100})
-        img = png_to_image(result)
-        assert_all_white(img, 0, 0, 400, 100)
-
-    def test_device_battery_draws_percentage_text(self) -> None:
+    def test_icon_draws_percentage_text(self) -> None:
+        # Verify percentage label appears to the right of the icon.
+        # Text starts at x + 30 + 1 + 3 + 4 = x + 38
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 28, 29, PADDING + 70, 47)
+        assert_has_dark_pixels(img, PADDING + 38, 29, PADDING + 80, 47)
 
-    def test_device_battery_draws_nub(self) -> None:
+    def test_icon_draws_nub(self) -> None:
+        # Verify the nub (battery terminal) renders in gray.
+        # Nub at (PADDING+31, nub_y) to (PADDING+33, nub_y+8)
+        # nub_y = icon_y + (14-8)//2 = 30 + 3 = 33
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(widgets, self._config())
         img = png_to_image(result)
         assert_has_dark_pixels(
-            img, PADDING + 23, 35, PADDING + 25, 40, threshold=200
+            img,
+            PADDING + 31,
+            33,
+            PADDING + 34,
+            41,
+            threshold=200,
         )
 
-    def test_device_battery_zero_percent(self) -> None:
+    def test_icon_draws_outline(self) -> None:
+        # Verify the battery body outline (gray rectangle).
+        # Body from (PADDING, 30) to (PADDING+30, 44)
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Top edge of body
+        assert_has_dark_pixels(
+            img, PADDING, 30, PADDING + 30, 31, threshold=200
+        )
+        # Left edge of body
+        assert_has_dark_pixels(
+            img, PADDING, 30, PADDING + 1, 44, threshold=200
+        )
+
+    def test_icon_vertically_centers_with_text(self) -> None:
+        # Verify the battery icon is vertically centred against
+        # the text label.
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Icon region: battery body area
+        # Text region: right of nub+gap
+        assert_vertically_centered(
+            img,
+            icon_region=(PADDING, 28, PADDING + 34, 46),
+            text_region=(PADDING + 38, 20, PADDING + 90, 50),
+            tolerance=3.0,
+        )
+
+    def test_icon_zero_percent(self) -> None:
+        # Verify 0% shows outline only, no fill.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(
             widgets, self._config(device_battery_level=0)
         )
         img = png_to_image(result)
+        # Outline is present (gray, threshold=200)
         assert_has_dark_pixels(
-            img, PADDING, 32, PADDING + 25, 43, threshold=200
+            img, PADDING, 30, PADDING + 34, 44, threshold=200
         )
+        # Interior should be white (no fill bar)
+        assert_all_white(img, PADDING + 2, 32, PADDING + 28, 42)
 
-    def test_device_battery_100_percent(self) -> None:
+    def test_icon_100_percent(self) -> None:
+        # Verify 100% fills the entire battery body interior.
+        # fill_w = int((30-2)*100/100) = 28
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         result = render_dashboard(
             widgets, self._config(device_battery_level=100)
         )
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 1, 33, PADDING + 21, 42)
+        assert_has_dark_pixels(img, PADDING + 1, 31, PADDING + 29, 43)
 
-    def test_device_battery_icon_scales_with_font_size(self) -> None:
-        # font_size=48 → s=2 → icon is 44×20 instead of default 22×10
+    def test_icon_scales_with_font_size(self) -> None:
+        # font_size=48 → s=2 → body is 60×28 instead of 30×14
         widgets = [
             {
                 "type": "device_battery",
@@ -1213,14 +1255,15 @@ class TestRenderDeviceBattery:
             widgets, self._config(device_battery_level=75)
         )
         img = png_to_image(result)
-        # Scaled icon body: PADDING to PADDING+44, icon_y=64 to 84
+        # Scaled icon body occupies a region the default size
+        # cannot reach (PADDING to PADDING+60).
         assert_has_dark_pixels(
-            img, PADDING, 64, PADDING + 44, 85, threshold=200
+            img, PADDING, 57, PADDING + 60, 88, threshold=200
         )
 
-        # At default font_size, the gap between nub-end (PADDING+24) and
-        # label-start (PADDING+30) is clear — proving the scaled icon actually
-        # extends its body into a region the default size never reaches.
+        # At default font_size the region below the icon (y=67+)
+        # is clear — the scaled icon fills this area, proving the
+        # icon body actually grew.
         result_default = render_dashboard(
             [{"type": "device_battery", "x": PADDING, "y": 40}],
             self._config(device_battery_level=75),
@@ -1228,8 +1271,206 @@ class TestRenderDeviceBattery:
         img_default = png_to_image(result_default)
         assert all(
             pixel(img_default, x, y) >= 200
-            for x in range(PADDING + 25, PADDING + 30)
-            for y in range(40, 50)
+            for x in range(PADDING + 35, PADDING + 50)
+            for y in range(67, 75)
+        )
+
+    def test_icon_default_layout(self) -> None:
+        # Verify that omitting layout defaults to "icon" and renders
+        # the battery body (not a chip).
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Battery body outline at (PADDING, 30)
+        assert_has_dark_pixels(
+            img, PADDING, 30, PADDING + 30, 44, threshold=200
+        )
+
+    # -- Data edge cases (shared by both layouts) --------------------
+
+    def test_none_level_is_noop(self) -> None:
+        # Verify null battery level produces a blank canvas.
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=None)
+        )
+        img = png_to_image(result)
+        assert_all_white(img, 0, 0, 400, 100)
+
+    def test_missing_key_is_noop(self) -> None:
+        # Verify absent device_battery_level key produces blank canvas.
+        widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
+        result = render_dashboard(widgets, {"width": 400, "height": 100})
+        img = png_to_image(result)
+        assert_all_white(img, 0, 0, 400, 100)
+
+    def test_icon_low_battery_forces_black(self) -> None:
+        # Below 20% overrides color to black for emphasis.
+        base = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 20,
+        }
+        cfg = self._config(device_battery_level=15)
+        gray_img = png_to_image(
+            render_dashboard([{**base, "color": COLOR_GRAY}], cfg)
+        )
+        black_img = png_to_image(
+            render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
+        )
+        assert list(gray_img.get_flattened_data()) == list(
+            black_img.get_flattened_data()
+        )
+
+    def test_chip_low_battery_forces_black(self) -> None:
+        # Below 20% chip overrides color to black for emphasis.
+        base = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "h": 40,
+            "layout": "chip",
+        }
+        cfg = self._config(device_battery_level=10)
+        gray_img = png_to_image(
+            render_dashboard([{**base, "color": COLOR_GRAY}], cfg)
+        )
+        black_img = png_to_image(
+            render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
+        )
+        assert list(gray_img.get_flattened_data()) == list(
+            black_img.get_flattened_data()
+        )
+
+    # -- Chip layout -------------------------------------------------
+
+    def test_chip_draws_pill_shape(self) -> None:
+        # Verify the chip has a pill-shaped border (rounded corners).
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 10,
+                "w": 200,
+                "h": 40,
+                "layout": "chip",
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Extreme corner should be white (outside pill radius)
+        assert pixel(img, PADDING, 10) == 255
+        # A few pixels inward along the top edge should have border
+        assert_has_dark_pixels(img, PADDING + 10, 10, PADDING + 30, 12)
+
+    def test_chip_draws_fill_bar(self) -> None:
+        # Verify the fill bar appears inside the chip at 75%.
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 10,
+                "w": 200,
+                "h": 40,
+                "layout": "chip",
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Fill bar should exist in the left portion of the bar
+        assert_has_dark_pixels(img, PADDING + 8, 18, PADDING + 42, 36)
+        # Right 25% of bar interior should be unfilled
+        assert_all_white(img, PADDING + 43, 24, PADDING + 54, 36)
+
+    def test_chip_draws_percentage_text(self) -> None:
+        # Verify percentage label appears inside the chip.
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 10,
+                "w": 200,
+                "h": 40,
+                "layout": "chip",
+            }
+        ]
+        result = render_dashboard(widgets, self._config())
+        img = png_to_image(result)
+        # Text should appear in the right portion of the chip
+        assert_has_dark_pixels(img, PADDING + 60, 14, PADDING + 150, 46)
+
+    def test_chip_zero_percent_shows_outline_only(self) -> None:
+        # Verify 0% chip has the bar outline but no fill inside.
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 10,
+                "w": 200,
+                "h": 40,
+                "layout": "chip",
+            }
+        ]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=0)
+        )
+        img = png_to_image(result)
+        # The chip outline should still be present
+        assert_has_dark_pixels(img, PADDING + 10, 10, PADDING + 150, 50)
+        # Interior of the bar should be white (no fill)
+        assert_all_white(img, PADDING + 8, 24, PADDING + 54, 36)
+
+    def test_chip_100_percent_fills_bar(self) -> None:
+        # Verify 100% chip fills the entire bar interior.
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 10,
+                "w": 200,
+                "h": 40,
+                "layout": "chip",
+            }
+        ]
+        result = render_dashboard(
+            widgets, self._config(device_battery_level=100)
+        )
+        img = png_to_image(result)
+        # Right portion that is white at 75% should be filled
+        assert_has_dark_pixels(img, PADDING + 43, 24, PADDING + 54, 36)
+
+    def test_chip_scales_with_h(self) -> None:
+        # Verify doubling h roughly doubles the chip content height.
+        small_widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 30,
+                "layout": "chip",
+            }
+        ]
+        large_widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 300,
+                "h": 60,
+                "layout": "chip",
+            }
+        ]
+        cfg = self._config()
+        img_small = png_to_image(render_dashboard(small_widgets, cfg))
+        img_large = png_to_image(render_dashboard(large_widgets, cfg))
+        assert_scales_proportionally(
+            img_small,
+            img_large,
+            region_small=(0, 0, 200, 30),
+            region_large=(0, 0, 300, 60),
+            expected_ratio=2.0,
+            tolerance=0.35,
         )
 
 
@@ -1909,16 +2150,22 @@ class TestFontSizeControls:
         assert_has_dark_pixels(img, PADDING, 35, PADDING + 200, 46)
 
     def test_device_battery_custom_font_size(self) -> None:
-        # font_size=20 — larger percentage label
+        # font_size=20 → s=20/24≈0.83; body 25×12
+        # Text starts further right than at default font_size.
         widgets = [
-            {"type": "device_battery", "x": PADDING, "y": 20, "font_size": 20}
+            {
+                "type": "device_battery",
+                "x": PADDING,
+                "y": 20,
+                "font_size": 20,
+            }
         ]
         result = render_dashboard(
             widgets,
             {"width": 400, "height": 100, "device_battery_level": 75},
         )
         img = png_to_image(result)
-        assert_has_dark_pixels(img, PADDING + 28, 10, PADDING + 90, 40)
+        assert_has_dark_pixels(img, PADDING + 32, 10, PADDING + 90, 40)
 
     def test_waste_schedule_custom_font_size(self) -> None:
         # font_size=42 → s=42/28=1.5; row_height=round(28*1.5)=42

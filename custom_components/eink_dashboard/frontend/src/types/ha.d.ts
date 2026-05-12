@@ -206,6 +206,8 @@ export interface SensorRowsWidget extends WidgetBase {
 
 export interface DeviceBatteryWidget extends WidgetBase {
   type: "device_battery";
+  layout?: "icon" | "chip";
+  h?: number;
 }
 
 export interface StatusIconsWidget extends WidgetBase {
