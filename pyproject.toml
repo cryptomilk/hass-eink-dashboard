@@ -5,6 +5,7 @@ description = "Home Assistant custom component that renders e-ink dashboard imag
 requires-python = ">=3.13"
 license = "Apache-2.0"
 dependencies = [
+    "defusedxml>=0.7.1",
     "Pillow>=12.2",
     "resvg-py>=0.3.1",
 ]
@@ -12,8 +13,9 @@ dependencies = [
 [dependency-groups]
 lint = ["ruff>=0.11"]
 format = ["ruff>=0.11"]
-typecheck = ["Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty"]
+typecheck = ["defusedxml>=0.7", "Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty"]
 test = [
+    "defusedxml>=0.7.1",
     "Pillow>=12.2.0",
     "aiohttp>=3.0",
     "Jinja2>=3.1",
