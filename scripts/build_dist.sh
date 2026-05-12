@@ -38,7 +38,7 @@ ARCHIVE="${DIST_DIR}/eink_dashboard-${VERSION}.tar.gz"
 FRONTEND_DIR="${COMPONENT_DIR}/frontend"
 ROBOTO_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
 ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Medium.ttf"
-IBM_PLEX_MONO_URL="https://github.com/IBM/plex/raw/master/packages/ibm-plex-mono/fonts/complete/ttf/IBMPlexMono-Regular.ttf"
+IBM_PLEX_MONO_URL="https://github.com/IBM/plex/raw/master/packages/plex-mono/fonts/complete/ttf/IBMPlexMono-Regular.ttf"
 NOTO_SANS_URL="https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf"
 
 cleanup() {
