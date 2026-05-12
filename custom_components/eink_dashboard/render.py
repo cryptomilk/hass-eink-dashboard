@@ -61,36 +61,36 @@ _KNOWN_CONDITIONS: frozenset[str] = frozenset(
 )
 
 
+_FONT_FILES: dict[str, str] = {
+    "roboto": "Roboto-Regular.ttf",
+    "roboto_medium": "Roboto-Medium.ttf",
+    "ibm_plex_mono": "IBMPlexMono-Regular.ttf",
+    "noto_sans": "NotoSans-Regular.ttf",
+}
+
+
 def _load_font(
-    size: int, medium: bool = False
+    size: int, medium: bool = False, font: str = "roboto"
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load Roboto at the given pixel size, falling back to PIL default.
-
-    Args:
-        size: Font size in pixels (clamped to a minimum of 1).
-        medium: When True, load Roboto Medium (weight 500) instead of
-            Roboto Regular (weight 400).
-
-    Returns:
-        A FreeTypeFont loaded from the TTF file, or the PIL built-in
-        default font if the TTF is not found.
-    """
-    return _load_font_cached(max(1, size), medium)
+    """Load a font at the given pixel size, falling back to PIL default."""
+    if medium and font == "roboto":
+        font = "roboto_medium"
+    return _load_font_cached(max(1, size), font)
 
 
 @functools.cache
 def _load_font_cached(
-    size: int, medium: bool
+    size: int, font: str
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load a font at the given size (unclamped, cached).
-
-    Separated from _load_font so that size=0 and size=1 produce distinct
-    cache entries instead of colliding after the clamp.
-    """
-    filename = "Roboto-Medium.ttf" if medium else "Roboto-Regular.ttf"
+    """Load a font at the given size (unclamped, cached)."""
+    filename = _FONT_FILES.get(font, _FONT_FILES["roboto"])
     ttf_path = _FONTS_DIR / filename
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
+    # fall back to roboto if requested font not found
+    fallback = _FONTS_DIR / _FONT_FILES["roboto"]
+    if fallback.exists():
+        return ImageFont.truetype(str(fallback), size)
     return ImageFont.load_default(size)
 
 
@@ -674,7 +674,7 @@ def render_text(
     color = widget.get("color", COLOR_BLACK)
     align = widget.get("align", Align.LEFT)
 
-    font = _load_font(font_size)
+    font = _load_font(font_size, font=widget.get("font", "roboto"))
     right_edge = _compute_right_edge(x, widget, config["width"])
 
     if align in (Align.RIGHT, Align.CENTER):
@@ -703,7 +703,7 @@ def render_text_multiline(
     max_width = right_edge - x
     line_height = int(widget.get("line_height", font_size + 6))
 
-    font = _load_font(font_size)
+    font = _load_font(font_size, font=widget.get("font", "roboto"))
 
     words = text.split()
     lines: list[str] = []
@@ -1090,7 +1090,7 @@ def render_device_battery(
     nub_gap = max(1, round(s))
     gap = round(4 * s)
 
-    font = _load_font(font_size)
+    font = _load_font(font_size, font=widget.get("font", "roboto"))
     label = f"{pct}%"
     bbox = draw.textbbox((0, 0), label, font=font)
     text_h = bbox[3] - bbox[1]
@@ -1152,8 +1152,9 @@ def render_status_icons(
     )
 
     s = font_size / FONT_SIZE_STATUS_ICONS
-    font = _load_font(font_size)
-    font_title = _load_font(round(22 * s))
+    _font_name = widget.get("font", "roboto")
+    font = _load_font(font_size, font=_font_name)
+    font_title = _load_font(round(22 * s), font=_font_name)
     sz = round(_STATUS_ICON_SIZE * s)
     row_height = round(_STATUS_ROW_HEIGHT * s)
 

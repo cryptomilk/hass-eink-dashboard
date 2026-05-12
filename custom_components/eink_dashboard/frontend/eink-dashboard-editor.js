@@ -73,8 +73,22 @@ function posXYW(d) {
     ];
 }
 /** Font size number selector with the given default. */
+const FONT_OPTIONS = [
+    { value: "roboto", label: "Roboto" },
+    { value: "roboto_medium", label: "Roboto Medium" },
+    { value: "ibm_plex_mono", label: "IBM Plex Mono" },
+    { value: "noto_sans", label: "Noto Sans" },
+];
 function fontSizeSelector(defaultSize) {
     return { name: "font_size", default: defaultSize, selector: { number: { min: 8, max: 72, mode: "box" } } };
+}
+function fontRow(defaultSize) {
+    return {
+        type: "grid", name: "", schema: [
+            { name: "font", default: "roboto", selector: { select: { options: FONT_OPTIONS, mode: "dropdown" } } },
+            fontSizeSelector(defaultSize),
+        ],
+    };
 }
 /** Color dropdown selector with the given default (0=black). */
 function colorSelector(defaultColor = 0) {
@@ -86,9 +100,9 @@ export const SCHEMAS = {
     text: (d) => [
         { type: "grid", name: "", schema: posXYW(d) },
         { name: "text", required: true, selector: { text: {} } },
+        fontRow(FONT_SIZE_TEXT),
         {
             type: "grid", name: "", schema: [
-                fontSizeSelector(FONT_SIZE_TEXT),
                 colorSelector(),
                 { name: "align", default: "left", selector: { select: {
                             options: [
@@ -103,9 +117,9 @@ export const SCHEMAS = {
     text_multiline: (d) => [
         { type: "grid", name: "", schema: posXYW(d) },
         { name: "text", required: true, selector: { text: { multiline: true } } },
+        fontRow(FONT_SIZE_TEXT),
         {
             type: "grid", name: "", schema: [
-                fontSizeSelector(FONT_SIZE_TEXT),
                 colorSelector(),
                 { name: "line_height", selector: { number: { min: 8, max: 120, mode: "box" } } },
             ],
@@ -141,27 +155,31 @@ export const SCHEMAS = {
         { name: "entity", required: true, selector: { entity: { domain: "weather" } } },
         {
             type: "grid", name: "", schema: [
+                fontRow(FONT_SIZE_WEATHER),
                 { name: "forecast_days", default: 5, selector: { number: { min: 0, max: 14, mode: "box" } } },
-                fontSizeSelector(FONT_SIZE_WEATHER),
             ],
         },
     ],
     sensor_rows: (d) => [
-        { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_SENSOR_ROWS)] },
+        { type: "grid", name: "", schema: posXYW(d) },
+        fontRow(FONT_SIZE_SENSOR_ROWS),
         { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     device_battery: (d) => [
         { type: "grid", name: "", schema: posXY(d) },
-        { type: "grid", name: "", schema: [colorSelector(), fontSizeSelector(FONT_SIZE_DEVICE_BATTERY)] },
+        fontRow(FONT_SIZE_DEVICE_BATTERY),
+        colorSelector(),
     ],
     status_icons: (d) => [
-        { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_STATUS_ICONS)] },
+        { type: "grid", name: "", schema: posXYW(d) },
+        fontRow(FONT_SIZE_STATUS_ICONS),
         { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
     waste_schedule: (d) => [
-        { type: "grid", name: "", schema: [...posXYW(d), fontSizeSelector(FONT_SIZE_WASTE_SCHEDULE)] },
+        { type: "grid", name: "", schema: posXYW(d) },
+        fontRow(FONT_SIZE_WASTE_SCHEDULE),
         { name: "title", selector: { text: {} } },
         { name: "entities", selector: { entity: { multiple: true } } },
     ],
@@ -200,7 +218,8 @@ export const LABELS = {
     title: "Title",
     x: "X", y: "Y", w: "Width",
     x2: "X2", y2: "Y2",
-    font_size: "Font size",
+    font: "Font",
+    font_size: "Size",
     color: "Color",
     align: "Align",
     width: "Line width",

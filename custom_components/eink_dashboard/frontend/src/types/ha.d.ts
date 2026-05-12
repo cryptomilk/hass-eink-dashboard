@@ -117,6 +117,7 @@ interface WidgetBase {
   x?: number;
   y?: number;
   w?: number;
+  font?: string;
   font_size?: number;
   color?: number;
 }

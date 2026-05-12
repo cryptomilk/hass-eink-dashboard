@@ -38,6 +38,8 @@ ARCHIVE="${DIST_DIR}/eink_dashboard-${VERSION}.tar.gz"
 FRONTEND_DIR="${COMPONENT_DIR}/frontend"
 ROBOTO_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
 ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Medium.ttf"
+IBM_PLEX_MONO_URL="https://github.com/IBM/plex/raw/master/packages/ibm-plex-mono/fonts/complete/ttf/IBMPlexMono-Regular.ttf"
+NOTO_SANS_URL="https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf"
 
 cleanup() {
     echo "Cleaning up generated assets..."
@@ -66,6 +68,20 @@ if [ -f "${FONTS_DIR}/Roboto-Medium.ttf" ]; then
 else
     echo "==> Downloading Roboto-Medium.ttf (Apache 2.0)..."
     curl -fsSL "${ROBOTO_MEDIUM_URL}" -o "${FONTS_DIR}/Roboto-Medium.ttf"
+fi
+
+if [ -f "${FONTS_DIR}/IBMPlexMono-Regular.ttf" ]; then
+    echo "==> IBMPlexMono-Regular.ttf already exists, skipping download"
+else
+    echo "==> Downloading IBMPlexMono-Regular.ttf (SIL Open Font License)..."
+    curl -fsSL "${IBM_PLEX_MONO_URL}" -o "${FONTS_DIR}/IBMPlexMono-Regular.ttf"
+fi
+
+if [ -f "${FONTS_DIR}/NotoSans-Regular.ttf" ]; then
+    echo "==> NotoSans-Regular.ttf already exists, skipping download"
+else
+    echo "==> Downloading NotoSans-Regular.ttf (SIL Open Font License)..."
+    curl -fsSL "${NOTO_SANS_URL}" -o "${FONTS_DIR}/NotoSans-Regular.ttf"
 fi
 
 mkdir -p "${DIST_DIR}"

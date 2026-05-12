@@ -36,6 +36,39 @@ const COLOR_GRAY = 120;
 const COLOR_LIGHT_GRAY = 180;
 const FONT_FAMILY = "Roboto, sans-serif";
 const ROBOTO_URL = "/eink_dashboard/fonts/Roboto-Regular.ttf";
+
+const _FONT_CSS: Record<string, { family: string; url: string; descriptors?: FontFaceDescriptors }> = {
+  roboto: { family: "Roboto", url: "/eink_dashboard/fonts/Roboto-Regular.ttf" },
+  roboto_medium: { family: "Roboto", url: "/eink_dashboard/fonts/Roboto-Medium.ttf", descriptors: { weight: "500" } },
+  ibm_plex_mono: { family: "IBM Plex Mono", url: "/eink_dashboard/fonts/IBMPlexMono-Regular.ttf" },
+  noto_sans: { family: "Noto Sans", url: "/eink_dashboard/fonts/NotoSans-Regular.ttf" },
+};
+
+const _fontLoaded: Record<string, boolean> = {};
+
+async function _ensureFont(font: string): Promise<void> {
+  if (_fontLoaded[font]) return;
+  const def = _FONT_CSS[font];
+  if (!def) return;
+  try {
+    const face = new FontFace(def.family, `url(${def.url})`, def.descriptors ?? {});
+    await face.load();
+    document.fonts.add(face);
+    _fontLoaded[font] = true;
+  } catch (_) { /* fall back to sans-serif */ }
+}
+
+function _cssFontFamily(font?: string): string {
+  if (!font || font === "roboto") return "Roboto, sans-serif";
+  if (font === "roboto_medium") return "Roboto, sans-serif";
+  if (font === "ibm_plex_mono") return "\"IBM Plex Mono\", monospace";
+  if (font === "noto_sans") return "\"Noto Sans\", sans-serif";
+  return "Roboto, sans-serif";
+}
+
+function _cssFontWeight(font?: string): string {
+  return font === "roboto_medium" ? "500" : "normal";
+}
 const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
 
 const FONT_SIZE_TEXT = 32;
@@ -494,6 +527,15 @@ class EinkDashboardCard extends HTMLElement {
 
   // ── Layout fetch ──────────────────────────────────────────────────────────
 
+  private _preloadFonts(): void {
+    if (!this._layout) return;
+    const needed = new Set<string>(["roboto"]);
+    for (const w of this._layout.widgets) {
+      if (w.font) needed.add(w.font);
+    }
+    for (const font of needed) _ensureFont(font).then(() => this._scheduleRender()).catch(() => {});
+  }
+
   private _applyResolvedTemplates(widget: Widget, index: number): Widget {
     const resolved = this._resolvedTemplates;
     const entries = Object.entries(widget).filter(
@@ -563,6 +605,7 @@ class EinkDashboardCard extends HTMLElement {
       }
       this._fetchForecasts();
       this._resolveTemplates();
+      this._preloadFonts();
       this._scheduleRender();
     } catch (err) {
       if (gen !== this._fetchGeneration) return;
@@ -1168,8 +1211,10 @@ class EinkDashboardCard extends HTMLElement {
     const text = String(widget.text ?? "");
     const color = widget.color ?? COLOR_BLACK;
     const align = widget.align ?? "left";
+    const fontWeight = _cssFontWeight(widget.font);
+    const fontFamily = _cssFontFamily(widget.font);
 
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.font = `${fontWeight !== "normal" ? fontWeight + " " : ""}${fontSize}px ${fontFamily}`;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
@@ -1195,8 +1240,10 @@ class EinkDashboardCard extends HTMLElement {
     const color = widget.color ?? COLOR_BLACK;
     const lineHeight = widget.line_height ?? (fontSize + 6);
     const maxWidth = rightEdge - x;
+    const fontWeight = _cssFontWeight(widget.font);
+    const fontFamily = _cssFontFamily(widget.font);
 
-    ctx.font = `${fontSize}px ${FONT_FAMILY}`;
+    ctx.font = `${fontWeight !== "normal" ? fontWeight + " " : ""}${fontSize}px ${fontFamily}`;
     ctx.fillStyle = grayColor(color);
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
