@@ -93,7 +93,7 @@
         }
       },
       "screen_portion_options": {
-        "title": "Screen portion",
+        "title": "Screen portion — {orientation_info}",
         "data": {
           "screen_portion": "Screen portion"
         },

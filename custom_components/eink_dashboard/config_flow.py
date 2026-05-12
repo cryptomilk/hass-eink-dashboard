@@ -544,6 +544,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         )
         opts = self.config_entry.options
 
+        orientation_indicator = (
+            "▭  Landscape" if width > height else "▮  Portrait"
+        )
+
         options = [
             {"value": "full", "label": f"Full screen ({width}x{height})"},
             {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
@@ -594,6 +598,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="screen_portion_options",
             data_schema=schema,
+            description_placeholders={
+                "orientation_info": orientation_indicator
+            },
         )
 
     async def async_step_custom_resolution(
