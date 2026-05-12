@@ -90,8 +90,15 @@ def _load_font_cached(
 
 
 def _fmt_temp(value: str | float | int) -> str:
-    """Format a temperature value, omitting the decimal when it is zero."""
-    n = float(value)
+    """Format a temperature value, omitting the decimal when it is zero.
+
+    Returns '--' for non-numeric values such as the HA unavailable
+    sentinel '--'.
+    """
+    try:
+        n = float(value)
+    except (ValueError, TypeError):
+        return "--"
     return str(int(n)) if n == int(n) else str(n)
 
 
