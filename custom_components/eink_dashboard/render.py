@@ -734,107 +734,6 @@ def _draw_chip_flow(
 _DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
-def render_sensor_rows(
-    draw: ImageDraw.ImageDraw,
-    widget: Widget,
-    config: DisplayConfig,
-) -> None:
-    """Draw entity states as card rows with icons.
-
-    Each entity is rendered as a Mushroom-style row: gray icon
-    circle on the left (MDI icon from device_class, or letter
-    fallback), primary text (friendly name) above secondary
-    text (state + unit), inside a card container.
-
-    Args:
-        draw: PIL ImageDraw context.
-        widget: Widget config with x, y, w, h, entities,
-            optional title and card_style.
-        config: Display config with states and _image.
-    """
-    img: Image.Image = config["_image"]
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    w = widget.get("w", config["width"] - x)
-    h = widget.get("h", 112)
-    title = widget.get("title", "")
-    entity_ids: list[str] = widget.get("entities", [])
-    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    states = config.get("states", {})
-
-    n = len(entity_ids)
-    if n == 0:
-        return
-
-    # Title above the card (not inside); font size and
-    # advance derive from h so the title scales with the
-    # widget.
-    if title:
-        title_font_sz = max(10, round(h * 0.14))
-        title_font = _load_font(title_font_sz)
-        # Gray distinguishes the section title from primary
-        # text inside the card.
-        draw.text((x, y), title, fill=COLOR_GRAY, font=title_font)
-        title_advance = round(title_font_sz * 1.4)
-        y += title_advance
-        h -= title_advance
-
-    row_h = h // n
-    m = _compute_metrics(row_h)
-    grayscale_levels = config.get("grayscale_levels", 16)
-    x_off, r_inset = _draw_card_container(
-        draw, x, y, w, h, m, card_style, grayscale_levels
-    )
-    cx, cw = x + x_off, w - x_off - r_inset
-
-    for i, entity_id in enumerate(entity_ids):
-        state = states.get(entity_id)
-        if state is None:
-            _LOGGER.debug(
-                "render_sensor_rows: entity %r not in states",
-                entity_id,
-            )
-            continue
-
-        row_y = y + i * row_h
-        attrs = state.get("attributes", {})
-        domain = entity_id.split(".")[0]
-        icon_name = _device_class_icon(attrs, state.get("state", ""), domain)
-        # PNG icon for PIL (TS uses SVG via /icons/svg/).
-        icon = (
-            _load_icon(f"mdi:{icon_name}", m.icon_dia) if icon_name else None
-        )
-
-        unit = attrs.get("unit_of_measurement", "")
-        state_val = state.get("state", "")
-        secondary = f"{state_val}{unit}" if unit else state_val
-
-        _draw_card_row(
-            draw,
-            img,
-            cx,
-            row_y,
-            cw,
-            row_h,
-            m,
-            primary=attrs.get("friendly_name", entity_id),
-            secondary=secondary,
-            icon=icon,
-        )
-
-        # Gray divider between rows (not after last)
-        if i < n - 1:
-            div_y = row_y + row_h
-            draw.line(
-                [
-                    (cx + m.padding, div_y),
-                    (cx + cw - m.padding, div_y),
-                ],
-                fill=COLOR_GRAY,
-                width=m.divider,
-            )
-
-
 _BATTERY_BODY_W = 30
 _BATTERY_BODY_H = 14
 _BATTERY_NUB_W = 3
@@ -1414,7 +1313,6 @@ def render_waste_schedule(
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
-    WidgetType.SENSOR_ROWS: render_sensor_rows,
     WidgetType.DEVICE_BATTERY: render_device_battery,
     WidgetType.STATUS_ICONS: render_status_icons,
     WidgetType.WASTE_SCHEDULE: render_waste_schedule,

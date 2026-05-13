@@ -12,6 +12,7 @@ Icon SVG files are inlined as ``<path>`` elements via Jinja2 filters
 occurs only once per icon per process lifetime.
 """
 
+import contextlib
 import functools
 from collections.abc import Callable
 from datetime import datetime
@@ -734,6 +735,130 @@ def _build_weather_context(
     }
 
 
+def _build_sensor_rows_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the sensor_rows widget.
+
+    Pre-computes every position and icon SVG string so the Jinja2
+    template contains no layout logic.  Mirrors the coordinate math
+    from ``render_sensor_rows()`` in ``render.py``.
+
+    Args:
+        widget: Widget config dict.  Recognised keys:
+            ``x`` (default ``PADDING``), ``y`` (default 0),
+            ``w`` (default remaining canvas width),
+            ``h`` (default remaining canvas height),
+            ``entities`` (list of entity IDs),
+            ``title`` (optional section label drawn above
+            the card), ``card_style``.
+        config: Display config with ``width``, ``height``,
+            ``states``, and ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by
+        ``sensor_rows.svg.j2``.  Returns
+        ``{"w": …, "h": …, "has_entities": False}`` when
+        the entities list is empty.
+    """
+    from .render import (  # noqa: PLC0415
+        _compute_metrics,
+        _device_class_icon,
+    )
+
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    svg_w = max(1, widget.get("w", config["width"] - x))
+    svg_h = max(1, widget.get("h", config["height"] - y))
+
+    entity_ids: list[str] = widget.get("entities", [])
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    title = widget.get("title", "")
+    states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    n = len(entity_ids)
+    if n == 0:
+        return {"w": svg_w, "h": svg_h, "has_entities": False}
+
+    # Title above the card consumes vertical space before the
+    # card area; font size and advance derive from svg_h so the
+    # title scales with the widget.
+    content_y = 0
+    content_h = svg_h
+    title_font_sz = 0
+    if title:
+        title_font_sz = max(10, round(svg_h * 0.14))
+        title_advance = round(title_font_sz * 1.4)
+        content_y = title_advance
+        content_h = svg_h - title_advance
+
+    row_h = content_h // n
+    m = _compute_metrics(row_h)
+
+    rows: list[dict[str, object]] = []
+    for i, entity_id in enumerate(entity_ids):
+        state = states.get(entity_id)
+        if state is None:
+            continue
+
+        attrs = state.get("attributes", {})
+        domain = entity_id.split(".")[0]
+        state_val = state.get("state", "")
+        icon_name = _device_class_icon(attrs, state_val, domain)
+
+        # Icon SVG sized to 60 % of icon_dia — the card_row
+        # macro positions it centered in the circle at that
+        # size, matching PIL's 60 % shrink before paste.
+        icon_svg: markupsafe.Markup | str = ""
+        if icon_name:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(icon_name, m.icon_dia * 6 // 10)
+
+        # Letter fallback when no MDI icon is available.
+        letter = ""
+        if not icon_svg:
+            friendly = attrs.get("friendly_name", entity_id)
+            letter = friendly[:1].upper() if friendly else ""
+
+        unit = attrs.get("unit_of_measurement", "")
+        secondary = f"{state_val}{unit}" if unit else state_val
+
+        rows.append(
+            {
+                "y": content_y + i * row_h,
+                "primary": attrs.get("friendly_name", entity_id),
+                "secondary": secondary,
+                "icon_svg": icon_svg,
+                "letter": letter,
+            }
+        )
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "has_entities": True,
+        "title": title,
+        "title_font_sz": title_font_sz,
+        "content_y": content_y,
+        "content_h": content_h,
+        "card_style": card_style,
+        "grayscale_levels": grayscale_levels,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+        "m_icon_dia": m.icon_dia,
+        "m_inner_gap": m.inner_gap,
+        "m_font_primary": m.font_primary,
+        "m_font_secondary": m.font_secondary,
+        "m_divider": m.divider,
+        "row_h": row_h,
+        "rows": rows,
+    }
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -765,6 +890,7 @@ def render_widget_svg(
 
 
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
+    WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
     WidgetType.SEPARATOR: _build_separator_context,
     WidgetType.TEXT: _build_text_context,
     WidgetType.WEATHER: _build_weather_context,
