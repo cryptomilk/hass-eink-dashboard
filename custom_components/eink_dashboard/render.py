@@ -752,83 +752,6 @@ def _draw_chip_flow(
     return cur_y + h
 
 
-def render_separator(
-    draw: ImageDraw.ImageDraw,
-    widget: Widget,
-    config: DisplayConfig,
-) -> None:
-    """Draw a horizontal or vertical separator line or bar.
-
-    Supports two directions and two visual styles. Color and thickness
-    are determined entirely by ``style`` — the ``color`` parameter is
-    ignored so that all separators stay visually consistent.
-
-    The ``"bar"`` style widens to ~10 px on 2-level displays
-    (``grayscale_levels <= 2``) so the dithered dot pattern remains
-    clearly visible as a separator.
-
-    Args:
-        draw: PIL ImageDraw context.
-        widget: Widget config dict. Recognised keys:
-            ``direction`` (``"horizontal"`` | ``"vertical"``,
-            default ``"horizontal"``),
-            ``style`` (``"line"`` | ``"bar"``, default ``"line"``),
-            ``length`` (explicit pixel length; omit for full span),
-            ``x`` (default ``PADDING``), ``y`` (default 0).
-        config: Display config with ``width``, ``height``, and
-            optional ``grayscale_levels`` (default 16).
-    """
-    direction = widget.get("direction", "horizontal")
-    style = widget.get("style", "line")
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    grayscale_levels = config.get("grayscale_levels", 16)
-
-    # Style determines color and base thickness.
-    if style == "bar":
-        color: int = COLOR_GRAY
-        # Widen bar on 2-level displays so the dithered dot
-        # pattern reads clearly as a separator.
-        thickness = 10 if grayscale_levels <= 2 else 6
-    else:  # "line"
-        color = COLOR_BLACK
-        thickness = 2
-
-    # Default span: from position to the opposing padding edge.
-    explicit_length: int | None = widget.get("length")
-    if explicit_length is not None:
-        length = explicit_length
-    elif direction == "vertical":
-        length = config["height"] - PADDING - y
-    else:
-        length = config["width"] - PADDING - x
-
-    if direction == "vertical":
-        if style == "bar":
-            draw.rectangle(
-                [x, y, x + thickness, y + length],
-                fill=color,
-            )
-        else:
-            draw.line(
-                [(x, y), (x, y + length)],
-                fill=color,
-                width=thickness,
-            )
-    else:
-        if style == "bar":
-            draw.rectangle(
-                [x, y, x + length, y + thickness],
-                fill=color,
-            )
-        else:
-            draw.line(
-                [(x, y), (x + length, y)],
-                fill=color,
-                width=thickness,
-            )
-
-
 _DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 
@@ -1895,7 +1818,6 @@ def render_waste_schedule(
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
-    WidgetType.SEPARATOR: render_separator,
     WidgetType.WEATHER: render_weather,
     WidgetType.SENSOR_ROWS: render_sensor_rows,
     WidgetType.DEVICE_BATTERY: render_device_battery,
