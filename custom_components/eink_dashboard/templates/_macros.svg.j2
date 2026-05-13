@@ -1,0 +1,259 @@
+{#
+  Shared SVG macros for e-ink dashboard widget templates.
+
+  Widget templates import these macros and compose them to build their
+  layout.  The Python context builder pre-computes all positions and
+  sizes; macros receive final coordinates and emit SVG elements only --
+  no layout math happens inside a macro.
+
+  Usage:
+    {%- from "_macros.svg.j2" import card_container, card_row, chip -%}
+#}
+
+{#
+  card_container -- draw card decoration and wrap inner content.
+
+  Use with Jinja2 {% call %} so the macro body wraps the widget's
+  inner content.  The macro passes back (x_off, right_inset) so the
+  caller can compute the content area: content_x = x + x_off and
+  content_w = w - x_off - right_inset.
+
+    {% call(x_off, r_inset) card_container(
+        x=0, y=0, w=400, h=200,
+        card_style="border",
+        radius=m.radius, border=m.border,
+        padding=m.padding, left_bar=m.left_bar) %}
+      ... widget content at x_off / r_inset offsets ...
+    {% endcall %}
+
+  Parameters:
+    x, y      -- top-left of the card area
+    w, h      -- card dimensions
+    card_style -- "border", "left_bar", or "none"; unrecognised
+                 values are treated as "none" (no decoration)
+    radius    -- corner radius for "border" style
+    border    -- stroke width for "border" style
+    padding   -- inner padding returned to caller as x_off / r_inset
+    left_bar  -- bar width for "left_bar" style (before 2-level
+                 widening)
+    grayscale_levels -- display depth; bar widens when <= 2
+#}
+{%- macro card_container(
+    x, y, w, h,
+    card_style="none",
+    radius=0, border=2, padding=0,
+    left_bar=0, grayscale_levels=16
+) -%}
+{%- if card_style == "border" -%}
+{# SVG strokes are centred on the path (half inside, half outside).
+   Inset the rect by border//2 so the stroke grows fully inward,
+   matching PIL's rounded_rectangle which strokes entirely inside
+   the declared bounding box. #}
+<rect
+  x="{{ x + border // 2 }}" y="{{ y + border // 2 }}"
+  width="{{ w - border }}" height="{{ h - border }}"
+  rx="{{ radius }}" ry="{{ radius }}"
+  fill="none"
+  stroke="#000000"
+  stroke-width="{{ border }}"/>
+{{ caller(padding, padding) }}
+{%- elif card_style == "left_bar" -%}
+{%- if grayscale_levels <= 2 -%}
+{%- set bar_w = [10, left_bar * 3]|max -%}
+{%- else -%}
+{%- set bar_w = left_bar -%}
+{%- endif -%}
+<rect
+  x="{{ x }}" y="{{ y }}"
+  width="{{ bar_w }}" height="{{ h }}"
+  fill="#787878"/>
+{{ caller(bar_w + padding, 0) }}
+{%- else -%}
+{{ caller(0, 0) }}
+{%- endif -%}
+{%- endmacro -%}
+
+
+{#
+  card_row -- draw one entity row with icon circle, text, and value.
+
+  Lays out a single row: a circular icon area on the left, a primary
+  label with an optional secondary line in the centre, and an optional
+  right-aligned value string.  Dimensions come from the WidgetMetrics
+  computed by the Python context builder (padding, icon_dia, etc.).
+
+  Icon content priority: icon_svg > letter > empty circle.
+  icon_svg is a string produced by the mdi_svg or weather_svg filter;
+  it is rendered at 60 % of icon_dia so the circle shows a visible ring.
+  When icon_svg is empty and letter is set, the letter is drawn centred
+  in the circle instead.
+
+  Parameters:
+    x, y      -- top-left of the row content area (after container
+                 x_off has been applied)
+    w, row_h  -- row dimensions
+    padding   -- horizontal inset applied to icon position and value
+    icon_dia  -- circle diameter
+    inner_gap -- gap between circle right edge and text
+    border    -- stroke width for outlined icon circle
+    font_primary   -- Roboto Medium font size for the main label
+    font_secondary -- font size for secondary text and value
+    primary   -- main label text
+    secondary -- sub-label text (empty = single-line row)
+    value     -- right-aligned value string (empty = omitted)
+    icon_svg  -- pre-built icon SVG string (empty = letter fallback)
+    icon_fill -- hex fill color for solid icon circle
+    icon_outline -- when true, circle is white with black stroke
+    letter    -- fallback letter drawn in circle when icon_svg is empty
+    primary_fill   -- hex color for primary text
+    secondary_fill -- hex color for secondary text
+    value_fill     -- hex color for value text
+#}
+{%- macro card_row(
+    x, y, w, row_h,
+    padding, icon_dia, inner_gap, border,
+    font_primary, font_secondary,
+    primary="", secondary="", value="",
+    icon_svg="", icon_fill="#787878",
+    icon_outline=false,
+    letter="",
+    primary_fill="#000000",
+    secondary_fill="#787878",
+    value_fill="#787878"
+) -%}
+{%- set icon_cx = x + padding + icon_dia // 2 -%}
+{%- set icon_cy = y + row_h // 2 -%}
+{%- set icon_r = icon_dia // 2 -%}
+{# Icon circle -- outline or solid fill #}
+{%- if icon_outline -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="#ffffff"
+  stroke="#000000"
+  stroke-width="{{ border }}"/>
+{%- else -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="{{ icon_fill }}"/>
+{%- endif -%}
+{# Icon content: inlined SVG or letter fallback #}
+{%- if icon_svg -%}
+{%- set icon_sz = icon_dia * 6 // 10 -%}
+{%- set ix = icon_cx - icon_sz // 2 -%}
+{%- set iy = icon_cy - icon_sz // 2 -%}
+{# Outlined circles are white so the icon must be black to stay
+   legible; solid-fill circles are dark so the icon is white. #}
+{%- set ic = "#000000" if icon_outline else "#ffffff" -%}
+<g transform="translate({{ ix }}, {{ iy }})"
+  style="color: {{ ic }}">{{ icon_svg }}</g>
+{%- elif letter -%}
+{%- set lc = "#000000" if icon_outline else "#ffffff" -%}
+<text
+  x="{{ icon_cx }}" y="{{ icon_cy }}"
+  font-family="Roboto"
+  font-size="{{ icon_dia * 5 // 10 }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ lc }}">{{ letter }}</text>
+{%- endif -%}
+{%- set tx = x + padding + icon_dia + inner_gap -%}
+{# Text block -- vertically center primary + optional secondary #}
+{%- if secondary -%}
+{# (row_h * 4 + 50) // 100 is integer rounding of row_h * 0.04,
+   matching PIL's round(row_h * 0.04). #}
+{%- set lg = [2, (row_h * 4 + 50) // 100]|max -%}
+{%- set bh = font_primary + lg + font_secondary -%}
+{%- set bt = y + (row_h - bh) // 2 -%}
+{%- set py = bt + font_primary // 2 -%}
+{%- set sy = bt + font_primary + lg + font_secondary // 2 -%}
+<text
+  x="{{ tx }}" y="{{ py }}"
+  font-family="Roboto" font-weight="500"
+  font-size="{{ font_primary }}"
+  dominant-baseline="central"
+  fill="{{ primary_fill }}">{{ primary }}</text>
+<text
+  x="{{ tx }}" y="{{ sy }}"
+  font-family="Roboto"
+  font-size="{{ font_secondary }}"
+  dominant-baseline="central"
+  fill="{{ secondary_fill }}">{{ secondary }}</text>
+{%- else -%}
+{# dominant-baseline="central" centres on the em-square midpoint.
+   PIL centres on visible ink height by subtracting the ascender gap
+   (bb[1]).  The difference is a few pixels and acceptable for e-ink. #}
+<text
+  x="{{ tx }}" y="{{ y + row_h // 2 }}"
+  font-family="Roboto" font-weight="500"
+  font-size="{{ font_primary }}"
+  dominant-baseline="central"
+  fill="{{ primary_fill }}">{{ primary }}</text>
+{%- endif -%}
+{# Right-aligned value text #}
+{%- if value -%}
+<text
+  x="{{ x + w - padding }}" y="{{ y + row_h // 2 }}"
+  font-family="Roboto"
+  font-size="{{ font_secondary }}"
+  text-anchor="end"
+  dominant-baseline="central"
+  fill="{{ value_fill }}">{{ value }}</text>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{#
+  chip -- draw a pill-shaped chip with optional icon and text label.
+
+  The pill end-caps are perfect semicircles (rx = ry = h // 2).
+  All internal proportional sizing is driven by h:
+    pad  = h * 0.18  (horizontal padding inside pill)
+    icon = h * 0.29  (icon size)
+    gap  = h * 0.14  (icon-to-text gap)
+    font = h * 0.46  (font size)
+
+  w must be pre-computed by the Python context builder because it
+  depends on the rendered text width (which requires font metrics
+  unavailable in Jinja2).
+
+  Parameters:
+    x, y   -- top-left of the chip
+    w      -- pre-computed chip width
+    h      -- chip height (controls all internal sizing)
+    text   -- label text
+    border -- stroke width for pill outline
+    icon_svg -- pre-built icon SVG string (empty = text-only chip)
+    inverted -- when true, fill black and draw text/icon in white
+#}
+{%- macro chip(
+    x, y, w, h, text, border,
+    icon_svg="", inverted=false
+) -%}
+{%- set radius = h // 2 -%}
+{%- set bg = "#000000" if inverted else "#ffffff" -%}
+{%- set fg = "#ffffff" if inverted else "#000000" -%}
+{%- set pad = h * 18 // 100 -%}
+{%- set icon_sz = h * 29 // 100 -%}
+{%- set icon_gap = h * 14 // 100 -%}
+{%- set font_sz = [10, h * 46 // 100]|max -%}
+<rect
+  x="{{ x }}" y="{{ y }}"
+  width="{{ w }}" height="{{ h }}"
+  rx="{{ radius }}" ry="{{ radius }}"
+  fill="{{ bg }}"
+  stroke="#000000"
+  stroke-width="{{ border }}"/>
+{%- if icon_svg -%}
+{%- set ix = x + pad -%}
+{%- set iy = y + (h - icon_sz) // 2 -%}
+<g transform="translate({{ ix }}, {{ iy }})"
+  style="color: {{ fg }}">{{ icon_svg }}</g>
+{%- endif -%}
+{%- set tx = x + pad + (icon_sz + icon_gap if icon_svg else 0) -%}
+<text
+  x="{{ tx }}" y="{{ y + h // 2 }}"
+  font-family="Roboto"
+  font-size="{{ font_sz }}"
+  dominant-baseline="central"
+  fill="{{ fg }}">{{ text }}</text>
+{%- endmacro -%}
