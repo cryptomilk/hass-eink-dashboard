@@ -266,6 +266,8 @@ export const LABELS: Record<string, string> = {
   legend: "Legend",
   title_font_size: "Title font size",
   label_font_size: "Axis label font size",
+  y_min: "Y-axis min",
+  y_max: "Y-axis max",
 };
 
 // ── HA component loader ──────────────────────────────────────────────────────
