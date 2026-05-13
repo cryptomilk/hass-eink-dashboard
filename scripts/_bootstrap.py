@@ -10,11 +10,22 @@ import importlib
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 
 ROOT = Path(__file__).parent.parent
 PKG = "custom_components.eink_dashboard"
 
 sys.path.insert(0, str(ROOT))
+
+# Register dummy packages so relative imports between submodules
+# (e.g. ``from .svg_render import ...`` in render.py) resolve
+# against already-bootstrapped siblings instead of triggering
+# __init__.py (which requires Home Assistant).
+for _pkg in ("custom_components", PKG):
+    if _pkg not in sys.modules:
+        _m = ModuleType(_pkg)
+        _m.__path__ = []  # type: ignore[attr-defined]
+        sys.modules[_pkg] = _m
 
 
 def import_module(name: str) -> object:

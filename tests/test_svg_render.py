@@ -10,6 +10,7 @@ from PIL import Image
 from custom_components.eink_dashboard.svg_render import (
     _TEMPLATE_DIR,
     _jinja_env,
+    _make_jinja_env,
     _mdi_svg_filter,
     _svg_to_png,
     _weather_svg_filter,
@@ -150,17 +151,14 @@ def render_macro(tmp_path):
         **ctx: object,
     ) -> Image.Image:
         (tmp_path / "_test.svg.j2").write_text(source)
-        env = jinja2.Environment(
-            loader=jinja2.ChoiceLoader(
+        env = _make_jinja_env(
+            jinja2.ChoiceLoader(
                 [
                     jinja2.FileSystemLoader(str(tmp_path)),
                     jinja2.FileSystemLoader(str(_TEMPLATE_DIR)),
                 ]
             ),
-            autoescape=True,
         )
-        env.filters["mdi_svg"] = _mdi_svg_filter
-        env.filters["weather_svg"] = _weather_svg_filter
         svg = env.get_template("_test.svg.j2").render(**ctx)
         png = _svg_to_png(svg, width, height)
         return Image.open(io.BytesIO(png)).convert("L")

@@ -119,8 +119,17 @@ class TestRenderDashboard:
 
 
 class TestRenderText:
+    # Verify rendering of the text widget (SVG pipeline).
+    _DEFAULTS: dict[str, object] = {
+        "width": 200,
+        "height": 100,
+    }
+
+    def _config(self, **overrides: object) -> dict[str, object]:
+        return make_config(self._DEFAULTS, **overrides)
+
     def test_text_draws_pixels(self) -> None:
-        config = {"width": 200, "height": 100}
+        # Left-aligned text renders dark pixels in the expected region.
         widgets = [
             {
                 "type": "text",
@@ -130,13 +139,12 @@ class TestRenderText:
                 "font_size": 20,
             }
         ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # x=10 start; right bound 100 = left half of 200px canvas
         assert_has_dark_pixels(img, 10, 10, 100, 40)
 
     def test_text_right_align(self) -> None:
-        config = {"width": 200, "height": 100}
+        # Right-aligned text appears near the right edge of the canvas.
         widgets = [
             {
                 "type": "text",
@@ -147,13 +155,30 @@ class TestRenderText:
                 "align": "right",
             }
         ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Right 60px of 200px canvas — where short right-aligned text
+        # lands when anchored to the right edge.
         assert_has_dark_pixels(img, 140, 10, 200, 40)
 
+    def test_text_right_align_left_is_white(self) -> None:
+        # Right-aligned text leaves the far-left region blank.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 10,
+                "text": "Hi",
+                "font_size": 20,
+                "align": "right",
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Left 40% of 200px canvas — comfortably clear of
+        # right-aligned "Hi" which lands near the right edge.
+        assert_all_white(img, 0, 10, 80, 40)
+
     def test_text_center_align(self) -> None:
-        config = {"width": 200, "height": 100}
+        # Center-aligned text appears in the middle of the available width.
         widgets = [
             {
                 "type": "text",
@@ -164,13 +189,13 @@ class TestRenderText:
                 "align": "center",
             }
         ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Middle 40px band (80–120) of 200px canvas — centered
+        # "Hi" at font_size 20 should fall in this range.
         assert_has_dark_pixels(img, 80, 10, 120, 40)
 
     def test_text_custom_color(self) -> None:
-        config = {"width": 200, "height": 100}
+        # A non-black color value renders as gray rather than black.
         widgets = [
             {
                 "type": "text",
@@ -181,10 +206,75 @@ class TestRenderText:
                 "color": 160,
             }
         ]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = png_to_image(render_dashboard(widgets, self._config()))
         assert_has_gray_pixels(img, 10, 10, 80, 40, low=100, high=200)
+
+    def test_text_empty_string_is_white(self) -> None:
+        # An empty text string produces no visible content.
+        widgets = [{"type": "text", "x": 0, "y": 0, "text": ""}]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_all_white(img, 0, 0, 200, 100)
+
+    def test_text_explicit_w_constrains_right_align(self) -> None:
+        # With explicit w, right-aligned text stays within the widget
+        # boundary, not spread across the full canvas width.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "text": "Hi",
+                "font_size": 20,
+                "align": "right",
+                "w": 100,
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Right half of w=100 — right-aligned "Hi" anchors to x=100.
+        assert_has_dark_pixels(img, 50, 0, 100, 30)
+        # Left 40px of w=100 — clear of right-aligned "Hi".
+        assert_all_white(img, 0, 0, 40, 30)
+
+    def test_text_scales_with_font_size(self) -> None:
+        # Doubling font_size approximately doubles rendered glyph height.
+        config = self._config(width=400, height=200)
+        small = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "text",
+                        "x": 0,
+                        "y": 0,
+                        "text": "X",
+                        "font_size": 20,
+                    }
+                ],
+                config,
+            )
+        )
+        large = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "text",
+                        "x": 0,
+                        "y": 0,
+                        "text": "X",
+                        "font_size": 40,
+                    }
+                ],
+                config,
+            )
+        )
+        assert_scales_proportionally(
+            small,
+            large,
+            # 40×35 covers a 20px glyph; 70×60 covers a 40px glyph.
+            region_small=(0, 0, 40, 35),
+            region_large=(0, 0, 70, 60),
+            expected_ratio=2.0,
+            tolerance=0.35,
+        )
 
 
 class TestRenderSeparator:

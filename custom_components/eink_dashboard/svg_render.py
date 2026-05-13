@@ -13,13 +13,23 @@ occurs only once per icon per process lifetime.
 """
 
 import functools
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import quoteattr
 
 import defusedxml.ElementTree as ET
 import jinja2
 import markupsafe
 import resvg_py
+
+from .const import (
+    COLOR_BLACK,
+    FONT_SIZE_TEXT,
+    PADDING,
+    Align,
+    WidgetType,
+)
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -48,11 +58,6 @@ _CONDITION_TO_SVG: dict[str, str] = {
     "windy-variant": "wi-cloudy-windy",
     "exceptional": "wi-na",
 }
-
-_jinja_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(str(_TEMPLATE_DIR)),
-    autoescape=True,
-)
 
 
 def _svg_to_png(svg: str, width: int, height: int) -> bytes:
@@ -85,8 +90,9 @@ def _svg_to_png(svg: str, width: int, height: int) -> bytes:
 def _load_svg_paths(path: Path) -> tuple[str, ...]:
     """Parse an SVG file and return all ``<path d="...">`` values.
 
-    Result is cached so file I/O occurs only once per icon per process
-    lifetime.  At render time only string interpolation occurs.
+    Cached (unbounded ``@functools.cache``) so file I/O occurs only
+    once per icon per process lifetime.  At render time only string
+    interpolation occurs.
 
     Args:
         path: Absolute path to the SVG file.
@@ -184,5 +190,145 @@ def _weather_svg_filter(condition: str, size: int) -> str:
     return markupsafe.Markup(_build_inline_svg(paths, size, "0 0 30 30"))
 
 
-_jinja_env.filters["mdi_svg"] = _mdi_svg_filter
-_jinja_env.filters["weather_svg"] = _weather_svg_filter
+# The spec (SVG_EVERYTHING.md) says autoescape=False, but we keep
+# autoescape=True: user-controlled text (HA entity states) may
+# contain < or & which would produce invalid SVG/XML and crash
+# resvg.  Icon filters return markupsafe.Markup so they bypass
+# escaping correctly.
+
+
+def _make_jinja_env(
+    loader: jinja2.BaseLoader,
+) -> jinja2.Environment:
+    """Create a Jinja2 env configured for SVG template rendering.
+
+    Sets ``autoescape=True`` and registers the ``mdi_svg`` and
+    ``weather_svg`` icon-inlining filters.
+
+    Args:
+        loader: Jinja2 template loader to use.
+
+    Returns:
+        Configured ``jinja2.Environment`` with icon filters
+        registered.
+    """
+    env = jinja2.Environment(loader=loader, autoescape=True)
+    env.filters["mdi_svg"] = _mdi_svg_filter
+    env.filters["weather_svg"] = _weather_svg_filter
+    return env
+
+
+_jinja_env = _make_jinja_env(
+    jinja2.FileSystemLoader(str(_TEMPLATE_DIR)),
+)
+
+type Widget = dict[str, Any]
+type DisplayConfig = dict[str, Any]
+type SvgContextFn = Callable[[Widget, DisplayConfig], dict[str, object]]
+
+
+def _build_text_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the text widget.
+
+    Computes the SVG viewport dimensions, text anchor position,
+    alignment attributes, and fill color.  All layout math
+    happens here; the template receives final values only.
+
+    The text widget has no mandatory ``w``/``h`` fields.  The
+    SVG viewport defaults to the remaining canvas area so the
+    widget can be pasted at its ``(x, y)`` position without
+    clipping content below or to the right.
+
+    Args:
+        widget: Widget config dict.  Recognised keys: ``x``,
+            ``y``, ``text``, ``font_size``, ``color``,
+            ``align``, ``w``, ``h``.
+        config: Display config with ``width`` and ``height``.
+
+    Returns:
+        Dict consumed by ``text.svg.j2``: ``w``, ``h``,
+        ``text``, ``font_size``, ``fill``, ``text_x``,
+        ``text_anchor``.
+    """
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    text = widget.get("text", "")
+    font_size = widget.get("font_size", FONT_SIZE_TEXT)
+    color = widget.get("color", COLOR_BLACK)
+    align = widget.get("align", Align.LEFT)
+
+    # Default viewport to remaining canvas when not specified.
+    # Clamp to >= 1: a widget at the canvas edge could produce a
+    # zero or negative dimension, which would crash resvg.
+    w_explicit = widget.get("w")
+    raw_w = w_explicit if w_explicit is not None else config["width"] - x
+    svg_w = max(1, raw_w)
+    svg_h = max(1, widget.get("h", config["height"] - y))
+
+    # Convert grayscale integer (0–255) to an SVG fill color.
+    fill = f"rgb({color},{color},{color})"
+
+    # Map alignment to SVG text-anchor + anchor x-position.
+    # Coordinate algebra ensures these produce the same absolute
+    # pixel positions as the PIL renderer when pasted at (x, y).
+    if align == Align.RIGHT:
+        # text-anchor="end" at (svg_w - PADDING) → text ends
+        # at right_edge - PADDING, matching PIL's computation.
+        text_anchor = "end"
+        text_x = svg_w - PADDING
+    elif align == Align.CENTER:
+        # text-anchor="middle" at svg_w//2 → text centred in
+        # the available width, matching PIL's centre formula.
+        text_anchor = "middle"
+        text_x = svg_w // 2
+    else:
+        text_anchor = "start"
+        text_x = 0
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "text": text,
+        "font_size": font_size,
+        "fill": fill,
+        "text_x": text_x,
+        "text_anchor": text_anchor,
+    }
+
+
+def render_widget_svg(
+    widget: Widget,
+    config: DisplayConfig,
+) -> str:
+    """Render a widget to an SVG string.
+
+    Looks up the registered context builder for the widget type,
+    calls it to build the template context, then renders the
+    corresponding Jinja2 template.
+
+    Args:
+        widget: Widget configuration dict.  Must contain a
+            ``"type"`` key with a matching entry in
+            ``_SVG_RENDERERS``.
+        config: Display config with ``width``, ``height``, and
+            entity ``states``.
+
+    Returns:
+        SVG document string ready to pass to ``_svg_to_png()``.
+
+    Raises:
+        KeyError: If the widget type has no registered SVG
+            renderer.
+    """
+    wtype = widget["type"]
+    ctx = _SVG_RENDERERS[wtype](widget, config)
+    tmpl = _jinja_env.get_template(f"{wtype}.svg.j2")
+    return tmpl.render(**ctx)
+
+
+_SVG_RENDERERS: dict[str, SvgContextFn] = {
+    WidgetType.TEXT: _build_text_context,
+}

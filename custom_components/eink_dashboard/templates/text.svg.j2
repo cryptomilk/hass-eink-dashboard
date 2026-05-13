@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+{# dominant-baseline="hanging" aligns the glyph top with y=0,
+   matching PIL's (x, y) coordinate for text draw position. #}
+<text x="{{ text_x }}" y="0"
+  font-family="Roboto"
+  font-size="{{ font_size }}"
+  text-anchor="{{ text_anchor }}"
+  dominant-baseline="hanging"
+  fill="{{ fill }}">{{ text }}</text>
+</svg>

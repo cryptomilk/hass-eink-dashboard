@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Benchmark the e-ink dashboard PIL rendering pipeline.
 
 Measures per-stage timings for the existing PIL pipeline so each
@@ -48,6 +49,7 @@ from PIL import Image, ImageDraw
 # ---------------------------------------------------------------------------
 import_module(f"{PKG}.const")
 import_module(f"{PKG}.optimize")
+import_module(f"{PKG}.svg_render")
 _render_mod = import_module(f"{PKG}.render")
 
 from custom_components.eink_dashboard.const import (  # noqa: E402

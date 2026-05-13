@@ -19,13 +19,16 @@ from .const import (
     COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     FONT_SIZE_DEVICE_BATTERY,
-    FONT_SIZE_TEXT,
     FONT_SIZE_WEATHER,
     PADDING,
-    Align,
     WidgetType,
 )
 from .optimize import optimize_for_eink
+from .svg_render import (
+    _SVG_RENDERERS,
+    _svg_to_png,
+    render_widget_svg,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -747,51 +750,6 @@ def _draw_chip_flow(
             inverted=chip.get("inverted", False),
         )
     return cur_y + h
-
-
-def _compute_right_edge(x: int, widget: Widget, config_width: int) -> int:
-    """Return the right boundary for content layout.
-
-    Uses the widget's explicit width override if set, otherwise
-    falls back to the full display width.
-
-    Args:
-        x: Left x-coordinate of the widget.
-        widget: Widget configuration dict.
-        config_width: Display width from the config.
-
-    Returns:
-        Right-edge x-coordinate.
-    """
-    w = widget.get("w")
-    return (x + w) if w is not None else config_width
-
-
-def render_text(
-    draw: ImageDraw.ImageDraw,
-    widget: Widget,
-    config: DisplayConfig,
-) -> None:
-    """Draw a text widget with optional alignment and custom font size."""
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    text = widget.get("text", "")
-    font_size = widget.get("font_size", FONT_SIZE_TEXT)
-    color = widget.get("color", COLOR_BLACK)
-    align = widget.get("align", Align.LEFT)
-
-    font = _load_font(font_size)
-    right_edge = _compute_right_edge(x, widget, config["width"])
-
-    if align in (Align.RIGHT, Align.CENTER):
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        if align == Align.RIGHT:
-            x = right_edge - PADDING - text_w
-        else:
-            x = x + (right_edge - x - text_w) // 2
-
-    draw.text((x, y), text, fill=color, font=font)
 
 
 def render_separator(
@@ -1937,7 +1895,6 @@ def render_waste_schedule(
 
 
 _RENDERERS: dict[WidgetType, RendererFn] = {
-    WidgetType.TEXT: render_text,
     WidgetType.SEPARATOR: render_separator,
     WidgetType.WEATHER: render_weather,
     WidgetType.SENSOR_ROWS: render_sensor_rows,
@@ -1962,8 +1919,33 @@ def render_dashboard(
     for widget in widget_list:
         widget_type = widget.get("type")
         if widget_type is None:
-            _LOGGER.warning("render_dashboard: widget has no type: %r", widget)
+            _LOGGER.warning(
+                "render_dashboard: widget has no type: %r",
+                widget,
+            )
             continue
+
+        # SVG-first dispatch: render to PNG and paste onto the
+        # canvas.  Fall back to the PIL renderer otherwise.
+        if widget_type in _SVG_RENDERERS:
+            wx = widget.get("x", PADDING)
+            wy = widget.get("y", 0)
+            sw = widget.get("w", w - wx)
+            sh = widget.get("h", h - wy)
+            _LOGGER.debug(
+                "render_dashboard: SVG rendering type=%s at (%d,%d) %dx%d",
+                widget_type,
+                wx,
+                wy,
+                sw,
+                sh,
+            )
+            svg = render_widget_svg(widget, config)
+            png = _svg_to_png(svg, sw, sh)
+            widget_img = Image.open(io.BytesIO(png)).convert("L")
+            img.paste(widget_img, (wx, wy))
+            continue
+
         renderer = _RENDERERS.get(widget_type)
         if renderer is None:
             _LOGGER.warning(
