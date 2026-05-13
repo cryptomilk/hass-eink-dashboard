@@ -724,14 +724,14 @@ class TestRenderWeather:
         # Right edge
         assert_has_dark_pixels(img, 400 - m.border, m.radius, 400, 100)
         # Bottom edge: total_h mirrors the renderer formula at s=1.0
-        # with forecast (icon_size=80 dominates temp_h in practice).
+        # with forecast.  icon_size=80 dominates temp_h (~44px for
+        # Roboto at 64px) at s=1.0, so max(icon_size, temp_h)=80.
         s = 1.0
         pad = round(10 * s)
         total_h = (
             m.padding
-            + round(80 * s)
-            + pad  # row1_h
-            + round(8 * s)
+            + round(80 * s)  # row1_h
+            + round(2 * s)
             + round(20 * s)  # detail_h
             + round(8 * s)  # sep_gap
             + max(2, round(3 * s))  # sep_thickness

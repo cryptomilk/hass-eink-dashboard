@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Render example widget images without a Home Assistant installation.
 
 Imports render.py and const.py directly, bypassing the HA-dependent
@@ -22,6 +23,7 @@ from _bootstrap import PKG, import_module  # noqa: E402
 # against already-loaded siblings rather than falling back to __init__.py.
 import_module(f"{PKG}.const")
 import_module(f"{PKG}.optimize")
+import_module(f"{PKG}.svg_render")
 render_mod = import_module(f"{PKG}.render")
 render_dashboard = render_mod.render_dashboard  # type: ignore[attr-defined]
 

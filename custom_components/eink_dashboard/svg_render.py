@@ -14,6 +14,7 @@ occurs only once per icon per process lifetime.
 
 import functools
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import quoteattr
@@ -26,7 +27,9 @@ import resvg_py
 from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    DEFAULT_CARD_STYLE,
     FONT_SIZE_TEXT,
+    FONT_SIZE_WEATHER,
     PADDING,
     Align,
     WidgetType,
@@ -379,6 +382,358 @@ def _build_separator_context(
     }
 
 
+_DETAIL_ICON_MAP: dict[str, str] = {
+    "humidity": "wi-humidity",
+    "barometer": "wi-barometer",
+    "wind": "wi-strong-wind",
+    "cloud": "wi-cloud",
+}
+
+
+def _build_weather_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the weather widget.
+
+    Replicates the coordinate math from ``render_weather()``,
+    pre-computing every position and icon SVG string so the
+    Jinja2 template contains no layout logic.
+
+    Args:
+        widget: Widget config dict.  Recognised keys:
+            ``entity``, ``x``, ``y``, ``w``, ``font_size``,
+            ``forecast_days``, ``card_style``.
+        config: Display config with ``width``, ``height``,
+            ``states``, ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by ``weather.svg.j2``.
+        Returns ``{"w": …, "h": …, "has_state": False}`` when
+        the entity is absent from ``states``.
+    """
+    # Lazy imports avoid circular dependency: render.py imports
+    # svg_render.py at module level; if svg_render.py imported
+    # render.py at module level the initialisation would fail.
+    from .render import (  # noqa: PLC0415
+        _DAY_ABBREV,
+        _compute_metrics,
+        _fmt_temp,
+        _load_font,
+    )
+
+    entity_id = widget.get("entity", "")
+    state = config.get("states", {}).get(entity_id)
+    wx = widget.get("x", PADDING)
+    svg_w = max(1, widget.get("w", config["width"] - wx))
+    svg_h = max(1, widget.get("h", config["height"] - widget.get("y", 0)))
+
+    if state is None:
+        return {"w": svg_w, "h": svg_h, "has_state": False}
+
+    font_size = widget.get("font_size", FONT_SIZE_WEATHER)
+    forecast_days = widget.get("forecast_days", 5)
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    s = font_size / FONT_SIZE_WEATHER
+
+    # Card width: use explicit w or natural width capped to canvas.
+    w_override = widget.get("w")
+    if w_override is not None:
+        card_w = w_override
+    else:
+        card_w = min(round(380 * s), svg_w)
+
+    # PIL fonts for text measurement only — never used for drawing.
+    font_xl = _load_font(round(64 * s))
+    font_sm = _load_font(round(16 * s))
+
+    # Entity attributes.
+    condition = state.get("state", "")
+    attrs = state.get("attributes", {})
+    temp = attrs.get("temperature", "--")
+    temp_unit = attrs.get("temperature_unit", "°C")
+    humidity = attrs.get("humidity")
+    wind = attrs.get("wind_speed")
+    wind_unit = attrs.get("wind_speed_unit", "km/h")
+    pressure = attrs.get("pressure")
+    pressure_unit = attrs.get("pressure_unit", "hPa")
+    cloud_coverage = attrs.get("cloud_coverage")
+    forecast = attrs.get("forecast", [])
+
+    # Sizing constants, all proportional to s.
+    icon_size = round(80 * s)
+    pad = round(10 * s)
+    icon_right_pad = round(16 * s)
+    detail_gap = round(2 * s)
+    detail_icon_h = round(20 * s)
+    icon_gap = round(4 * s)
+    sep_gap = round(8 * s)
+    sep_thickness = max(2, round(3 * s))
+    forecast_zone_h = round(88 * s)
+    precip_text_h = round(16 * s)
+
+    # Measure temperature text height (PIL) for height estimation.
+    temp_text = f"{_fmt_temp(temp)}{temp_unit}"
+    temp_bbox = font_xl.getbbox(temp_text)
+    temp_h = temp_bbox[3] - temp_bbox[1]
+
+    # Card metrics — always compute so they can be passed to the
+    # card_container macro even when card_style is "none".
+    m = _compute_metrics(round(48 * s))
+    top_pad = m.padding if card_style != "none" else pad
+
+    # Total card height, matching PIL's formula exactly.
+    row1_h = top_pad + max(icon_size, temp_h)
+    detail_h = detail_gap + detail_icon_h
+    has_forecast = bool(forecast) and forecast_days > 0
+    if has_forecast:
+        forecast_section_h = (
+            sep_gap + sep_thickness + sep_gap + forecast_zone_h + precip_text_h
+        )
+    else:
+        forecast_section_h = pad
+    total_h = row1_h + detail_h + forecast_section_h + pad
+
+    # Content insets — mirror the card_container macro in
+    # templates/_macros.svg.j2 (macro card_container, lines 41-74).
+    # The macro's caller(xo, ri) values are intentionally unused in
+    # the template; all positions are pre-computed here so they stay
+    # in Python, not Jinja2.
+    if card_style == "none":
+        content_left = pad
+        content_w = card_w - 2 * pad
+    elif card_style == "border":
+        content_left = m.padding
+        content_w = card_w - 2 * m.padding
+    elif card_style == "left_bar":
+        bar_w = (
+            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
+        )
+        content_left = bar_w + m.padding
+        content_w = card_w - content_left
+    else:
+        content_left = 0
+        content_w = card_w
+
+    content_top = top_pad
+
+    # Row 1: condition icon + temperature + today hi/lo/precip.
+    icon_cy = content_top + icon_size // 2
+    icon_x = content_left
+    icon_y = content_top
+    temp_x = content_left + icon_size + icon_right_pad
+    # dominant-baseline="central" in template — centres em-square
+    # on icon_cy, matching PIL's visible-ink centering within a
+    # few pixels.
+    temp_y = icon_cy
+
+    # vis_top: top of the visible temperature glyph, used as
+    # anchor for the stacked hi/lo/precip text block.
+    vis_top = icon_cy - temp_h // 2
+    hilo_right = content_left + content_w - pad
+
+    today_hi = ""
+    today_lo = ""
+    today_precip = ""
+    lo_y = vis_top + round(temp_h * 0.4)
+    precip_y_val = vis_top + round(temp_h * 0.72)
+    precip_unit_fc = attrs.get("precipitation_unit", "mm")
+    if forecast:
+        today = forecast[0]
+        hi_val = today.get("temperature")
+        lo_val = today.get("templow")
+        p_val = today.get("precipitation")
+        if hi_val is not None:
+            today_hi = f"{_fmt_temp(hi_val)}°"
+        if lo_val is not None:
+            today_lo = f"{_fmt_temp(lo_val)}°"
+        if p_val is not None:
+            today_precip = f"{p_val}{precip_unit_fc}"
+
+    # row1_bottom mirrors PIL's max() between icon bottom and
+    # the bottom of the temperature glyph.
+    temp_y_pil = icon_cy - temp_bbox[1] - temp_h // 2
+    row1_bottom = max(
+        content_top + icon_size,
+        temp_y_pil + temp_bbox[3],
+    )
+
+    # Condition icon SVG.
+    try:
+        cond_icon_svg: markupsafe.Markup | str = _weather_svg_filter(
+            condition, icon_size
+        )
+    except (KeyError, FileNotFoundError):
+        cond_icon_svg = ""
+
+    # Detail row: icon + text pairs for weather attributes.
+    detail_y = row1_bottom + detail_gap
+    raw_details: list[tuple[str, str]] = []
+    if humidity is not None:
+        raw_details.append(("humidity", f"{humidity}%"))
+    if pressure is not None:
+        raw_details.append(("barometer", f"{round(pressure)}{pressure_unit}"))
+    if wind is not None:
+        raw_details.append(("wind", f"{round(wind)}{wind_unit}"))
+    if cloud_coverage is not None:
+        raw_details.append(("cloud", f"{cloud_coverage}%"))
+
+    detail_cols = max(len(raw_details), 1)
+    col_w_detail = content_w // detail_cols
+    detail_items: list[dict[str, object]] = []
+
+    for i, (icon_name, text) in enumerate(raw_details):
+        col_cx = content_left + col_w_detail * i + col_w_detail // 2
+        text_w_i = round(font_sm.getlength(text))
+        svg_filename = _DETAIL_ICON_MAP.get(icon_name, "")
+        # Wrap in Markup so Jinja2 emits the SVG verbatim.  All
+        # icon strings added to the context must be Markup instances.
+        d_icon_svg: markupsafe.Markup | str = ""
+        if svg_filename:
+            d_path = (_ICONS_DIR / f"{svg_filename}.svg").resolve()
+            try:
+                d_paths = _load_svg_paths(d_path)
+                d_icon_svg = markupsafe.Markup(
+                    _build_inline_svg(d_paths, detail_icon_h, "0 0 30 30")
+                )
+            except FileNotFoundError:
+                pass
+        has_d_icon = bool(d_icon_svg)
+        item_w = (detail_icon_h + icon_gap if has_d_icon else 0) + text_w_i
+        item_x = col_cx - item_w // 2
+        detail_items.append(
+            {
+                "icon_svg": d_icon_svg,
+                "icon_x": item_x,
+                "icon_y": detail_y,
+                "text_x": (
+                    item_x + detail_icon_h + icon_gap if has_d_icon else item_x
+                ),
+                "text_y": detail_y + detail_icon_h // 2,
+                "text": text,
+            }
+        )
+
+    detail_bottom = detail_y + detail_icon_h
+
+    # Forecast grid.
+    forecast_entries: list[dict[str, object]] = []
+    sep_x1 = 0
+    sep_x2 = 0
+    sep_y = 0
+
+    if has_forecast:
+        forecast_cols = max(forecast_days, 5)
+        col_width = content_w // forecast_cols
+        content_width = forecast_cols * col_width
+        separator_y = detail_bottom + sep_gap
+        sep_x1 = content_left
+        sep_x2 = content_left + content_width
+        sep_y = separator_y
+        # sep_thickness accounts for the separator line height so
+        # forecast content starts below the stroke bottom, matching
+        # the sep_thickness term in forecast_section_h.
+        forecast_y = separator_y + sep_thickness + sep_gap
+        fc_icon_size = round(32 * s)
+
+        if forecast_days >= forecast_cols:
+            positions = list(range(forecast_days))
+        elif forecast_days <= 1:
+            positions = [forecast_cols // 2]
+        else:
+            positions = [
+                round(i * (forecast_cols - 1) / (forecast_days - 1))
+                for i in range(forecast_days)
+            ]
+
+        for idx, day in enumerate(forecast[:forecast_days]):
+            col_i = positions[idx]
+            cx = content_left + col_width * col_i + col_width // 2
+            dt_str = day.get("datetime")
+            if dt_str:
+                day_label = _DAY_ABBREV[
+                    datetime.fromisoformat(dt_str).weekday()
+                ]
+            else:
+                day_label = ""
+
+            day_condition = day.get("condition", "")
+            try:
+                fc_icon_svg: markupsafe.Markup | str = _weather_svg_filter(
+                    day_condition, fc_icon_size
+                )
+            except (KeyError, FileNotFoundError):
+                fc_icon_svg = ""
+
+            hi_val_fc = day.get("temperature", "")
+            lo_val_fc = day.get("templow", "")
+            fc_hi = f"{_fmt_temp(hi_val_fc)}°" if hi_val_fc != "" else ""
+            fc_lo = f"{_fmt_temp(lo_val_fc)}°" if lo_val_fc != "" else ""
+            fc_p = day.get("precipitation")
+            fc_precip = (
+                f"{fc_p}{precip_unit_fc}"
+                if fc_p is not None and fc_p > 0
+                else ""
+            )
+            icon_cy_fc = forecast_y + round(34 * s)
+            forecast_entries.append(
+                {
+                    "cx": cx,
+                    "label": day_label,
+                    "label_y": forecast_y,
+                    "icon_svg": fc_icon_svg,
+                    "icon_x": cx - fc_icon_size // 2,
+                    "icon_y": icon_cy_fc - fc_icon_size // 2,
+                    "hi": fc_hi,
+                    "hi_y": forecast_y + round(52 * s),
+                    "lo": fc_lo,
+                    "lo_y": forecast_y + round(70 * s),
+                    "precip": fc_precip,
+                    "precip_y": forecast_y + round(88 * s),
+                }
+            )
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "has_state": True,
+        "card_w": card_w,
+        "total_h": total_h,
+        "card_style": card_style,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+        "grayscale_levels": grayscale_levels,
+        "icon_svg": cond_icon_svg,
+        "icon_x": icon_x,
+        "icon_y": icon_y,
+        "icon_size": icon_size,
+        "temp_text": temp_text,
+        "temp_x": temp_x,
+        "temp_y": temp_y,
+        "font_xl": round(64 * s),
+        "font_sm": round(16 * s),
+        "font_xs": round(14 * s),  # template-only; no PIL measurement needed
+        "hilo_right": hilo_right,
+        "hi_text": today_hi,
+        "hi_y": vis_top,
+        "lo_text": today_lo,
+        "lo_y": lo_y,
+        "precip_text": today_precip,
+        "precip_y": precip_y_val,
+        "detail_items": detail_items,
+        "has_forecast": has_forecast,
+        "sep_x1": sep_x1,
+        "sep_x2": sep_x2,
+        "sep_y": sep_y,
+        "sep_thickness": sep_thickness,
+        "forecast_entries": forecast_entries,
+    }
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -412,4 +767,5 @@ def render_widget_svg(
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
     WidgetType.SEPARATOR: _build_separator_context,
     WidgetType.TEXT: _build_text_context,
+    WidgetType.WEATHER: _build_weather_context,
 }
