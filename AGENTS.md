@@ -47,11 +47,13 @@ via an HA image entity and a public HTTP endpoint.
 5. Add a `_renderFoo()` method in `frontend/src/eink-dashboard-card.ts` and wire it into `_render()`
 6. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
 
-**Redesigning a widget type**:
+**Converting or redesigning a widget type** (PIL→SVG migration or new
+widget):
 Do not write code directly. Invoke the three skills in order using the
 `Skill` tool — each one must complete before the next is called:
 1. `/implement-widget-tests` — write failing tests (TDD red phase)
-2. `/implement-widget-python` — implement the PIL renderer (green phase)
+2. `/implement-widget-python` — implement the SVG template and Python
+   context builder (green phase)
 3. `/implement-widget-frontend` — canvas preview, TS types, editor schema
 
 **Line length**: 79 characters. Long comments must be wrapped across multiple

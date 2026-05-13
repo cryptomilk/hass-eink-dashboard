@@ -1,28 +1,31 @@
 ---
 name: implement-widget-tests
 description: "Write TDD tests for a widget type: structural tests (borders, dividers), alignment tests (icon centering), and scaling tests (proportional sizing). Uses test helpers from tests/helpers.py."
-when_to_use: "When writing tests for a new or redesigned widget. Run BEFORE implementing the renderer (TDD red phase)."
+when_to_use: "When writing tests for a new widget or converting an existing widget from PIL to SVG (any step 1.x of the SVG migration). Always run BEFORE implementing the renderer (TDD red phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
-allowed-tools: Bash(tox *)
+allowed-tools: Bash(uv *)
 ---
 
 # Write Widget Tests: $widget-type
 
-Write comprehensive tests for the **$widget-type** widget following the
-TDD cycle from `REDESIGN_WIDGETS.md`.
+Write comprehensive tests for the **$widget-type** widget. This is the
+TDD red phase — tests must FAIL until the SVG renderer is implemented.
 
 ## Before you start
 
-1. Read the **$widget-type** section in `REDESIGN_WIDGETS.md` to understand
-   the widget's design, layout, config parameters, and visual structure.
+1. Read the existing PIL renderer in `custom_components/eink_dashboard/render.py`
+   (if converting an existing widget) to understand the visual elements,
+   config parameters, and state handling the new SVG renderer must match.
+   For a new widget, read the task description / spec doc provided.
 2. Read `tests/helpers.py` for available test helpers.
 3. Read existing test classes in `tests/test_render.py` for patterns.
-   The redesigned SEPARATOR tests (`TestRenderSeparator`) are the
-   reference for structural/pixel assertions. The weather tests
-   (`TestRenderWeather`) show the `_DEFAULTS` + `_config()` pattern.
-4. Read the current renderer in `custom_components/eink_dashboard/render.py`
-   (if it exists) to understand current behavior that will be replaced.
+   The SEPARATOR tests (`TestRenderSeparator`) are the reference for
+   structural/pixel assertions. The weather tests (`TestRenderWeather`)
+   show the `_DEFAULTS` + `_config()` pattern.
+4. Read `custom_components/eink_dashboard/templates/_macros.svg.j2` for
+   macro signatures (`card_container`, `card_row`, `chip`) so you know
+   the card container insets to use in pixel region calculations.
 5. Read `const.py` for `COLOR_BLACK=0`, `COLOR_WHITE=255`,
    `COLOR_GRAY=120`, `PADDING=24`.
 
@@ -54,13 +57,17 @@ from the same ratios the renderer uses — no hardcoded magic numbers.
 
 !`grep -n "def _compute_metrics" -A 12 custom_components/eink_dashboard/render.py`
 
-## Current chip sizing constants
+## SVG macro signatures (from _macros.svg.j2)
 
-!`grep -n "^_CHIP_" custom_components/eink_dashboard/render.py`
+!`grep -n "macro card_container\|macro card_row\|macro chip" custom_components/eink_dashboard/templates/_macros.svg.j2`
 
-## Card container return values and device_class resolver
+## Icon resolver (in render.py)
 
-!`grep -n "def _draw_card_container\|def _device_class_icon" -A 5 custom_components/eink_dashboard/render.py`
+!`grep -n "def _device_class_icon" -A 5 custom_components/eink_dashboard/render.py`
+
+## SVG renderer registry
+
+!`grep -n "_SVG_RENDERERS" -A 12 custom_components/eink_dashboard/svg_render.py`
 
 ## Imports
 
@@ -69,12 +76,12 @@ from custom_components.eink_dashboard.const import (
     COLOR_BLACK, COLOR_GRAY, PADDING, DEFAULT_CARD_STYLE,
 )
 from custom_components.eink_dashboard.render import (
-    WidgetMetrics, _compute_metrics, _draw_card_container,
-    _draw_card_row, _draw_chip, _draw_chip_flow, _load_font,
-    render_dashboard,
+    WidgetMetrics, _compute_metrics,
+    _device_class_icon, render_dashboard,
 )
 from tests.helpers import (
-    assert_all_white, assert_has_dark_pixels, assert_has_gray_pixels,
+    assert_all_white, assert_has_dark_pixels,
+    assert_has_gray_pixels,
     assert_scales_proportionally, assert_vertically_centered,
     content_bbox, make_config, pixel, png_to_image,
 )
@@ -220,6 +227,16 @@ class TestRender{WidgetName}:
         img = png_to_image(render_dashboard(widgets, self._config()))
         assert_has_dark_pixels(img, PADDING, 0, 350, 56)
 
+    def test_{widget}_empty_entities_white(self) -> None:
+        # Empty entity list produces blank output.
+        widgets = [{
+            "type": "$widget-type",
+            "x": PADDING, "y": 0, "w": 350, "h": 56,
+            "entities": [],
+        }]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_all_white(img, PADDING, 0, 350, 56)
+
     def test_{widget}_icon_centered_with_text(self) -> None:
         # Verify icon circle is vertically centered with text block.
         m = _compute_metrics(56)
@@ -246,19 +263,19 @@ with the renderer's own layout:
 ```python
 m = _compute_metrics(56)  # row_h = widget h / number of rows
 # Card border:
-#   x ∈ [0, m.border] and [w - m.border, w]
+#   x in [0, m.border] and [w - m.border, w]
 # Icon circle:
-#   x ∈ [x_off + m.padding, x_off + m.padding + m.icon_dia]
+#   x in [x_off + m.padding, x_off + m.padding + m.icon_dia]
 # Text start:
 #   x = x_off + m.padding + m.icon_dia + m.inner_gap
 # Row divider:
 #   y = row_y + row_h  (height = m.divider)
-# _draw_card_container returns x_off:
-#   "border"   → m.padding  (content also ends m.padding from right)
-#   "left_bar" → bar_w + m.padding  (bar_w = m.left_bar)
-#   "none"     → 0  (no inset on either side)
+# card_container macro passes (x_off, right_inset) to caller:
+#   "border"   -> (m.padding, m.padding)
+#   "left_bar" -> (bar_w + m.padding, 0)
+#   "none"     -> (0, 0)
 # Content width (cw):
-#   cw = w - x_off  (then - m.padding if card_style == "border")
+#   cw = w - x_off - right_inset
 ```
 
 ## Lessons from completed TDD cycles
@@ -292,12 +309,37 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 7. **Each test needs a comment**: Every test function must start with
    a short comment explaining what it verifies.
 
+8. **Engine-agnostic tests only**: Tests call `render_dashboard()` and
+   inspect PNG output. Do NOT import or call PIL drawing helpers
+   (`_draw_card_container`, `_draw_card_row`, `_draw_chip`, etc.) from
+   tests. Those helpers are deleted when the PIL pipeline is removed.
+   The entry point (`render_dashboard`) dispatches transparently to the
+   SVG pipeline.
+
+## Font metric tolerance
+
+The SVG pipeline uses resvg for text rendering, which may produce
+slightly different glyph metrics than PIL. Keep the following in mind:
+
+- Use region-based assertions (`assert_has_dark_pixels`,
+  `assert_has_gray_pixels`) rather than exact pixel checks for text
+  content. Text position may shift by 1-3 pixels between engines.
+- Use `tolerance=3.0` (instead of 2.0) for
+  `assert_vertically_centered` when testing icon-text alignment.
+  resvg's `dominant-baseline="central"` differs slightly from PIL's
+  ascender-based centering.
+- `assert_scales_proportionally` tolerance of 0.25 remains sufficient
+  — proportional scaling is engine-agnostic.
+- Exact `pixel()` checks are fine for geometry (borders, dividers,
+  chip corners) — these are SVG shapes, not text.
+
 ## Verification
 
 Run tests — they should FAIL at this point (TDD red phase):
 
 ```bash
-tox -e test -- tests/test_render.py::TestRender{WidgetName} -v
+uv run --group test pytest \
+    tests/test_render.py::TestRender{WidgetName} -v
 ```
 
 The tests define the expected behavior. The renderer implementation
@@ -305,11 +347,13 @@ The tests define the expected behavior. The renderer implementation
 
 ## Key references
 
-- Design spec: `REDESIGN_WIDGETS.md` — section for $widget-type
+- Widget behavior source: existing PIL renderer in `render.py` (for
+  conversions), or task description (for new widgets)
 - Test helpers: `tests/helpers.py`
 - Reference structural tests: `TestRenderSeparator` in
   `tests/test_render.py`
 - Reference `_DEFAULTS` + `_config()` pattern: `TestRenderWeather`
 - Sizing ratios: `_compute_metrics()` in `render.py`
+- SVG macros: `templates/_macros.svg.j2`
 - Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120` in
   `const.py`

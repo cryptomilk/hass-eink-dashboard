@@ -1,186 +1,355 @@
 ---
 name: implement-widget-python
-description: "Implement a widget renderer in render.py using shared helpers (WidgetMetrics, _draw_card_container, _draw_card_row, _draw_chip). Follows TDD green phase — makes existing tests pass."
-when_to_use: "When implementing or redesigning a widget renderer in the Python PIL backend. Run AFTER tests are written (TDD green phase)."
+description: "Implement a widget's SVG template and Python context builder. Creates templates/{type}.svg.j2 and _build_{type}_context() in svg_render.py. Follows TDD green phase — makes existing tests pass."
+when_to_use: "When implementing the SVG template and context builder for a widget — whether new or being converted from PIL (any step 1.x of the SVG migration). Always run AFTER tests are written (TDD green phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
-allowed-tools: Bash(tox *)
+allowed-tools: Bash(uv *)
 ---
 
 # Implement Widget Renderer: $widget-type
 
-Implement the Python PIL renderer for **$widget-type** in `render.py`.
+Implement the SVG template and Python context builder for **$widget-type**.
+The output of this work is two artifacts:
+
+1. `custom_components/eink_dashboard/templates/$widget-type.svg.j2`
+2. `_build_$widget-type_context()` in `svg_render.py`
 
 ## Before you start
 
-1. Read the **$widget-type** section in `REDESIGN_WIDGETS.md` for the
-   complete design spec (layout, sizing, icon mapping, state handling).
-2. Read the existing tests for this widget (class
-   `TestRender{WidgetName}`) — these define the expected behavior.
+1. Read the existing PIL renderer for this widget in `render.py` (the
+   function named `render_$widget-type`) — it defines the visual elements,
+   layout logic, and state handling the SVG renderer must replicate.
+2. Read the existing tests (`TestRender{WidgetName}` in
+   `tests/test_render.py`) — these define the expected behavior.
 3. Read `const.py` for `WidgetType`, `COLOR_*` constants, `PADDING`,
    `DEFAULT_CARD_STYLE`.
-4. Read the shared helpers in `render.py`: `_compute_metrics`,
-   `_draw_card_container`, `_draw_card_row`, `_draw_chip`,
-   `_draw_chip_flow`, `_chip_width`.
+4. Read `svg_render.py` for the Jinja2 environment, `_svg_to_png()`,
+   icon filter functions (`_mdi_svg_filter`, `_weather_svg_filter`),
+   and any existing `_build_*_context()` functions.
+5. Read `templates/_macros.svg.j2` for the three shared macros:
+   `card_container`, `card_row`, `chip`.
 
-## Current shared helpers in render.py
+## Current SVG infrastructure
 
-!`grep -n "^def _\|^class Widget\|^_CHIP\|^type " custom_components/eink_dashboard/render.py`
+!`grep -n "^def \|^_SVG_RENDERERS\|^_jinja_env\|^_TEMPLATE_DIR\|^_FONTS_DIR\|^_mdi\|^_weather" custom_components/eink_dashboard/svg_render.py`
 
-## Current renderer registry
+## SVG macro signatures
 
-!`grep -n "_RENDERERS" -A 12 custom_components/eink_dashboard/render.py`
+!`grep -n "{%- macro\|{%  macro" custom_components/eink_dashboard/templates/_macros.svg.j2`
 
-## Key helper signatures (injected from source)
-
-!`grep -n "^def _compute_metrics\|^def _draw_card_\|^def _draw_chip\|^def _chip_width\|^def _device_class_icon\|^def _load_icon\|^def _load_font" -A 6 custom_components/eink_dashboard/render.py`
+## WidgetMetrics and _compute_metrics (in render.py)
 
 !`grep -n "^class WidgetMetrics" -A 10 custom_components/eink_dashboard/render.py`
 
-### Usage notes (not derivable from signatures)
+!`grep -n "^def _compute_metrics" -A 12 custom_components/eink_dashboard/render.py`
 
-- `_draw_card_container` returns content x-offset: `"border"` →
-  `m.padding`, `"left_bar"` → `bar_w + m.padding`, `"none"` → `0`.
-  Always pass `grayscale_levels=config.get("grayscale_levels", 16)`.
-- `_draw_card_row`: `primary` is required (keyword-only, no default).
-  `icon` is `(gray, mask)` tuple from `_load_icon()`. Icons are
-  resized internally to 60% of `m.icon_dia`; load at `m.icon_dia`.
-  Line gap between primary/secondary: `max(2, round(row_h * 0.04))`.
-- `_draw_chip` returns `x + chip_w`. `icon` and `inverted` are
-  keyword-only.
-- `_draw_chip_flow` returns `last_row_y + h`. `chips` is
-  `list[dict]` with keys: `text` (required), `icon` (optional
-  `(gray, mask)` tuple), `inverted` (optional bool).
-- `_device_class_icon` returns MDI name without `"mdi:"` prefix, or
-  `None`. Pass `domain="binary_sensor"` for state-dependent icons.
-  Extract domain: `entity_id.split(".")[0]`.
-- `_load_icon("mdi:thermometer", size)` → `(gray, mask)` or `None`.
-- `_load_font(size, medium=True)` loads Roboto Medium (weight 500).
+## Icon name resolver (in render.py)
 
-## Redesigning an existing widget
+!`grep -n "^def _device_class_icon" -A 6 custom_components/eink_dashboard/render.py`
 
-When replacing an existing renderer (SENSOR_ROWS, STATUS_ICONS,
-WASTE_SCHEDULE, DEVICE_BATTERY), the old renderer uses legacy helpers
-that the redesigned version must **stop using**:
+## Current SVG renderer registry
 
-**Old helpers (do NOT use in redesigned renderers):**
-- `_extract_multi_entity_params()` — extracted x, y, font_size,
-  title, entities, states, right_edge. Redesigned widgets read `w`
-  and `h` directly and don't use `font_size`.
-- `_resolve_entity()` — returned `_EntityInfo` namedtuple. Redesigned
-  widgets look up state from `config["states"]` directly.
-- `_draw_section_title()` — drew a title with font_size-based advance.
-  Redesigned widgets draw titles above the card container using
-  `_load_font(m.font_primary, medium=True)`.
-- `_draw_indicator()` — drew filled/outline squares/ellipses.
-  Redesigned widgets use `_draw_card_row()` with icon circles or
-  `_draw_chip()` with inverted mode instead.
+If this grep returns empty, you are implementing the **first**
+SVG widget. Follow steps 4, 5, and 6 to create
+`_SVG_RENDERERS`, wire SVG dispatch in `render_dashboard()`,
+and add `render_widget_svg()`.
 
-**Replace the old renderer function in-place.** Keep the same function
-name and `_RENDERERS` registration.
+!`grep -n "_SVG_RENDERERS" -A 12 custom_components/eink_dashboard/svg_render.py`
 
-**Preserve `_PROBLEM_DEVICE_CLASSES`** for STATUS_ICONS: the set
-determines which device classes show as "problem" state (inverted
-chip). The redesigned chip-style renderer should use it for the
-`inverted` flag.
+## Current PIL renderer registry (to be pruned)
+
+!`grep -n "_RENDERERS\b" -A 12 custom_components/eink_dashboard/render.py`
+
+## Imports
+
+Context builders need these imports from sibling modules.
+`_compute_metrics` and `_device_class_icon` live in `render.py`
+because they are shared between PIL and SVG pipelines.
+`_load_font` is PIL-only but used for text width measurement in
+chip layouts.
+
+```python
+from custom_components.eink_dashboard.const import (
+    DEFAULT_CARD_STYLE,
+)
+from custom_components.eink_dashboard.render import (
+    _compute_metrics,
+    _device_class_icon,
+    _load_font,        # chip width measurement only
+)
+```
+
+`_mdi_svg_filter` and `_weather_svg_filter` are already in
+`svg_render.py` — call them directly, no import needed.
+
+## Macro usage notes
+
+- **`card_container`** uses Jinja2 `{% call %}` syntax. The macro
+  passes `(x_off, right_inset)` back to the caller body:
+  `"border"` → `(m.padding, m.padding)`;
+  `"left_bar"` → `(bar_w + m.padding, 0)`;
+  `"none"` → `(0, 0)`.
+  Content starts at `x_off`; content width = `w - x_off - right_inset`.
+  Always pass `grayscale_levels` from config.
+- **`card_row`** expects all sizes from `WidgetMetrics` fields plus
+  `icon_svg` (pre-built SVG string, empty string for letter fallback)
+  and `letter` (single uppercase char, empty string when icon_svg is
+  set). `primary` is the entity label; `secondary` is the state + unit.
+- **`chip`** requires pre-computed `w` because text width depends on
+  font metrics unavailable in Jinja2. The context builder must compute
+  chip widths using `_load_font(size).getlength(text)` from PIL — the
+  font object is used only for measurement, not for drawing.
+- **Icon filters** generate the SVG string in Python. Call
+  `_mdi_svg_filter(name, size)` in the context builder and pass the
+  result as the `icon_svg` string to the template. Do NOT call filters
+  from inside templates — pass the pre-built string via context.
+- **`_device_class_icon(attrs, state_val, domain)`** returns an MDI
+  icon name without the `"mdi:"` prefix, or `None`. Extract domain:
+  `entity_id.split(".")[0]`.
+
+## Converting an existing widget
+
+When replacing an existing PIL renderer:
+
+1. Create the SVG template and context builder (steps 2 and 3).
+2. Add an entry to `_SVG_RENDERERS` in `svg_render.py` (step 4).
+3. If this is the **first** widget being converted, wire SVG dispatch
+   in `render_dashboard()` (step 5) and add `render_widget_svg()`
+   to `svg_render.py` (step 6).
+4. Delete the old PIL `render_$widget-type()` function from `render.py`
+   and remove its `_RENDERERS` entry (step 7).
+5. Remove any constants that only that renderer used (e.g.
+   `_SENSOR_ROW_HEIGHT`, `FONT_SIZE_SENSOR_ROWS`). Only remove
+   constants your changes made unused.
+
+**Old PIL helpers — do NOT carry over to the SVG renderer:**
+- `_draw_card_container()`, `_draw_card_row()`, `_draw_chip()`,
+  `_draw_chip_flow()` — replaced by Jinja2 macros in `_macros.svg.j2`
+- `_load_icon()` — replaced by `_mdi_svg_filter()` / `_weather_svg_filter()`
+- `config["_image"]` — SVG renderers do not touch the PIL canvas
+- `_extract_multi_entity_params()`, `_resolve_entity()`,
+  `_draw_section_title()`, `_draw_indicator()` — legacy helpers
+
+**Keep using from `render.py`:**
+- `_compute_metrics(row_h)` — computes `WidgetMetrics` layout ratios
+- `_device_class_icon(attrs, state_val, domain)` — MDI name resolver
+- `_load_font(size)` — PIL font object, used ONLY for text width
+  measurement in chip layout (not for drawing)
+
+**Keep `_PROBLEM_DEVICE_CLASSES`** if it exists — the set of device
+classes that show as "problem" state (inverted chip) is shared logic.
 
 ## Implementation steps
 
 ### 1. Add to WidgetType enum (if new widget)
 
-In `custom_components/eink_dashboard/const.py`, add to `WidgetType`.
-Keep alphabetical order.
+In `const.py`, add the new value to `WidgetType`. Keep alphabetical
+order.
 
-### 2. Write the renderer function
+### 2. Create the SVG template
 
-Renderer signature is always 3-arg `(draw, widget, config) -> None`.
-Get `img` from `config["_image"]` at the top.
+Create `custom_components/eink_dashboard/templates/$widget-type.svg.j2`.
 
-**Card-style renderer pattern** (sensor_rows, waste_schedule, person,
-alarm):
+The template receives a pre-computed context dict from the Python
+context builder. All layout math (positions, sizes, icon SVG strings,
+chip widths) is computed in Python. Templates only emit SVG markup.
+
+Every template must begin with a white background rect so the widget
+is opaque when composited onto the dashboard canvas:
+
+```xml
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+```
+
+**Card-style template pattern** (sensor_rows, waste_schedule):
+
+```jinja
+{%- from "_macros.svg.j2" import card_container, card_row -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+{%- call(x_off, r_inset) card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m.radius, border=m.border,
+    padding=m.padding, left_bar=m.left_bar,
+    grayscale_levels=grayscale_levels) -%}
+{%- for row in rows -%}
+{{ card_row(
+    x=x_off, y=row.y,
+    w=w - x_off - r_inset, row_h=row_h,
+    padding=m.padding, icon_dia=m.icon_dia,
+    inner_gap=m.inner_gap, border=m.border,
+    font_primary=m.font_primary,
+    font_secondary=m.font_secondary,
+    primary=row.primary,
+    secondary=row.secondary,
+    value=row.value,
+    icon_svg=row.icon_svg,
+    letter=row.letter) }}
+{%- if not loop.last -%}
+<line
+  x1="{{ x_off + m.padding }}"
+  y1="{{ row.y + row_h }}"
+  x2="{{ w - r_inset - m.padding }}"
+  y2="{{ row.y + row_h }}"
+  stroke="#787878" stroke-width="{{ m.divider }}"/>
+{%- endif -%}
+{%- endfor -%}
+{%- endcall -%}
+</svg>
+```
+
+**Chip-style template pattern** (status_icons):
+
+```jinja
+{%- from "_macros.svg.j2" import chip -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+{%- for c in chips -%}
+{{ chip(
+    x=c.x, y=c.y, w=c.w, h=chip_h,
+    text=c.text, border=m.border,
+    icon_svg=c.icon_svg,
+    inverted=c.inverted) }}
+{%- endfor -%}
+</svg>
+```
+
+**Simple template pattern** (text, separator):
+
+```jinja
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+<!-- widget-specific SVG elements here -->
+</svg>
+```
+
+Template coordinates are relative to origin (0, 0) — the outer
+composition handles absolute `x`/`y` placement on the dashboard.
+
+### 3. Write the context builder
+
+Add `_build_$widget-type_context(widget, config) -> dict` to
+`svg_render.py`. The context builder:
+
+- Extracts widget dimensions and config from `widget` and `config`
+- Calls `_compute_metrics(row_h)` to get `WidgetMetrics`
+- Calls `_device_class_icon()` to resolve icon names
+- Calls `_mdi_svg_filter(name, size)` to build icon SVG strings
+- Computes all positions, sizes, and data — returns a plain dict
+
+The template receives only this dict; no layout math happens in Jinja2.
+
+**Card-style context builder pattern:**
 
 ```python
-def render_{widget_type}(
-    draw: ImageDraw.ImageDraw,
+def _build_{widget_type}_context(
     widget: Widget,
     config: DisplayConfig,
-) -> None:
-    """..."""
-    img = config["_image"]
-    grayscale_levels = config.get("grayscale_levels", 16)
-    x, y = widget.get("x", PADDING), widget.get("y", 0)
-    w, h = widget["w"], widget["h"]
-    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+) -> dict[str, object]:
+    """Build template context for $widget-type widget.
+
+    Args:
+        widget: Widget config dict with x, y, w, h, entities,
+            card_style.
+        config: DisplayConfig with states and grayscale_levels.
+
+    Returns:
+        Template context dict.
+    """
+    w = widget["w"]
+    h = widget["h"]
+    card_style = widget.get(
+        "card_style", DEFAULT_CARD_STYLE
+    )
     entities = widget.get("entities", [])
     states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
 
     n = len(entities)
     if n == 0:
-        return
+        return {"w": w, "h": h, "rows": [], "m": None}
     row_h = h // n
     m = _compute_metrics(row_h)
-    x_off = _draw_card_container(
-        draw, x, y, w, h, m, card_style, grayscale_levels
-    )
-    cx, cw = x + x_off, w - x_off
-    # Subtract right-side padding for border so content stays
-    # inside the border stroke.
-    if card_style == "border":
-        cw -= m.padding
 
+    rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entities):
         state = states.get(entity_id)
         if state is None:
             continue
-        row_y = y + i * row_h
         attrs = state.get("attributes", {})
         domain = entity_id.split(".")[0]
         icon_name = _device_class_icon(
             attrs, state["state"], domain
         )
-        icon = (
-            _load_icon(f"mdi:{icon_name}", m.icon_dia)
-            if icon_name else None
+        # Call filter in Python; pass result as icon_svg string.
+        icon_svg = (
+            _mdi_svg_filter(icon_name, m.icon_dia * 6 // 10)
+            if icon_name
+            else ""
         )
-        _draw_card_row(
-            draw, img, cx, row_y, cw, row_h, m,
-            primary=attrs.get("friendly_name", entity_id),
-            secondary=(
-                f"{state['state']}"
-                f"{attrs.get('unit_of_measurement', '')}"
+        letter = (
+            ""
+            if icon_name
+            else attrs.get(
+                "friendly_name", entity_id
+            )[:1].upper()
+        )
+        unit = attrs.get("unit_of_measurement", "")
+        rows.append({
+            "y": i * row_h,
+            "primary": attrs.get(
+                "friendly_name", entity_id
             ),
-            icon=icon,
-        )
-        # Row divider between entries (not after last)
-        if i < n - 1:
-            div_y = row_y + row_h
-            draw.line(
-                [
-                    (cx + m.padding, div_y),
-                    (cx + cw - m.padding, div_y),
-                ],
-                fill=COLOR_GRAY,
-                width=m.divider,
-            )
+            "secondary": f"{state['state']}{unit}",
+            "value": "",
+            "icon_svg": icon_svg,
+            "letter": letter,
+        })
+    return {
+        "w": w,
+        "h": h,
+        "m": m,
+        "card_style": card_style,
+        "grayscale_levels": grayscale_levels,
+        "rows": rows,
+        "row_h": row_h,
+    }
 ```
 
-**Chip-style renderer pattern** (status_icons, lock):
+**Chip-style context builder — chip width computation:**
+
+Chips require pre-computed widths because Jinja2 cannot measure text.
+Use a PIL font object (Roboto at `round(h * 0.46)`) only for
+measurement — `_load_font` is LRU-cached, so this is cheap:
 
 ```python
-def render_{widget_type}(
-    draw: ImageDraw.ImageDraw,
+def _build_{widget_type}_context(
     widget: Widget,
     config: DisplayConfig,
-) -> None:
-    """..."""
-    img = config["_image"]
-    x, y = widget.get("x", PADDING), widget.get("y", 0)
-    w, h = widget["w"], widget["h"]
+) -> dict[str, object]:
+    """Build template context for $widget-type widget."""
+    w = widget["w"]
+    h = widget["h"]
     entities = widget.get("entities", [])
     states = config.get("states", {})
-
     m = _compute_metrics(h)
-    font = _load_font(round(h * 0.46))
+
+    # Chip sizing ratios — these MUST match the ratios in the
+    # chip macro in _macros.svg.j2.  If the macro changes,
+    # update these values to match.  Verify before using.
+    pad = round(h * 0.18)
+    icon_sz = round(h * 0.29)
+    icon_gap = round(h * 0.14)
+    font_size = max(10, round(h * 0.46))
+    font = _load_font(font_size)  # PIL, for width measurement only.
+
+    chip_gap = m.border + 4
+
     chips: list[dict[str, object]] = []
     for entity_id in entities:
         state = states.get(entity_id)
@@ -191,44 +360,149 @@ def render_{widget_type}(
         icon_name = _device_class_icon(
             attrs, state["state"], domain
         )
-        icon = (
-            _load_icon(
-                f"mdi:{icon_name}",
-                round(h * _CHIP_ICON_RATIO),
-            )
-            if icon_name else None
+        icon_svg = (
+            _mdi_svg_filter(icon_name, icon_sz)
+            if icon_name
+            else ""
+        )
+        label = attrs.get("friendly_name", entity_id)
+        text_w = round(font.getlength(label))
+        chip_w = (
+            pad
+            + (icon_sz + icon_gap if icon_svg else 0)
+            + text_w
+            + pad
         )
         chips.append({
-            "text": attrs.get("friendly_name", entity_id),
-            "icon": icon,
+            "text": label,
+            "icon_svg": icon_svg,
             "inverted": state["state"] == "on",
+            "w": chip_w,
         })
-    _draw_chip_flow(
-        draw, img, x, y, w, h, chips, font, m.border
-    )
+
+    # Flow layout: pack chips left-to-right with wrapping.
+    cx, cy = 0, 0
+    for c in chips:
+        if cx > 0 and cx + c["w"] > w:
+            cx, cy = 0, cy + h + chip_gap
+        c["x"] = cx
+        c["y"] = cy
+        cx += c["w"] + chip_gap
+
+    return {
+        "w": w,
+        "h": h,
+        "m": m,
+        "chip_h": h,
+        "chips": chips,
+    }
 ```
 
-### 3. Register in _RENDERERS dict
+### 4. Register in _SVG_RENDERERS
+
+In `svg_render.py`, add to the `_SVG_RENDERERS` dict:
 
 ```python
-_RENDERERS: dict[WidgetType, RendererFn] = {
+_SVG_RENDERERS: dict[str, ContextBuilderFn] = {
     ...
-    WidgetType.{WIDGET_TYPE}: render_{widget_type},
+    WidgetType.{WIDGET_TYPE}: _build_{widget_type}_context,
 }
 ```
 
-### 4. Clean up old code
+If `_SVG_RENDERERS` does not exist yet, create it alongside
+`render_widget_svg()` (step 6).
 
-When redesigning, remove old constants that are no longer used
-(e.g. `_SENSOR_ROW_HEIGHT`, `FONT_SIZE_SENSOR_ROWS`,
-`_STATUS_ICON_SIZE`, `_STATUS_ROW_HEIGHT`, etc.). Only remove
-constants that **your changes** made unused — don't remove unrelated
-dead code.
+### 5. Wire SVG dispatch in render_dashboard() (first widget only)
 
-### 5. Run tests
+Add this ONLY for the first widget conversion. Subsequent conversions
+just add entries to `_SVG_RENDERERS` — the dispatch is already wired.
+
+At the top of `render.py`, import from `svg_render`:
+
+```python
+from custom_components.eink_dashboard.svg_render import (
+    _SVG_RENDERERS,
+    _svg_to_png,
+    render_widget_svg,
+)
+```
+
+In `render_dashboard()`, before the PIL dispatch loop, handle SVG
+widgets:
+
+```python
+for widget in widget_list:
+    widget_type = widget.get("type")
+    if widget_type in _SVG_RENDERERS:
+        svg_str = render_widget_svg(widget, config)
+        widget_w = widget["w"]
+        widget_h = widget["h"]
+        widget_png = _svg_to_png(svg_str, widget_w, widget_h)
+        widget_img = Image.open(
+            io.BytesIO(widget_png)
+        ).convert("L")
+        img.paste(
+            widget_img,
+            (widget.get("x", PADDING), widget.get("y", 0)),
+        )
+        continue
+    # Existing PIL dispatch:
+    renderer = _RENDERERS.get(widget_type)
+    if renderer is not None:
+        renderer(draw, widget, config)
+```
+
+### 6. Add render_widget_svg() (if not yet present)
+
+If `render_widget_svg()` does not exist in `svg_render.py`, add it:
+
+```python
+def render_widget_svg(
+    widget: Widget,
+    config: DisplayConfig,
+) -> str:
+    """Render a widget to an SVG string.
+
+    Args:
+        widget: Widget config dict. Must have a ``"type"`` key
+            with a corresponding entry in ``_SVG_RENDERERS``.
+        config: DisplayConfig dict with ``states`` and display
+            dimensions.
+
+    Returns:
+        SVG markup string, ready to pass to ``_svg_to_png()``.
+    """
+    widget_type = widget.get("type")
+    builder = _SVG_RENDERERS[widget_type]
+    ctx = builder(widget, config)
+    tmpl = _jinja_env.get_template(
+        f"{widget_type}.svg.j2"
+    )
+    return tmpl.render(**ctx)
+```
+
+Also define the `ContextBuilderFn` type alias at module level if
+needed:
+
+```python
+type ContextBuilderFn = Callable[
+    [Widget, DisplayConfig], dict[str, object]
+]
+```
+
+### 7. Delete the PIL renderer
+
+- Remove `render_$widget-type()` from `render.py`.
+- Remove its entry from `_RENDERERS`.
+- Remove any constants that only that function used.
+
+### 8. Run tests
 
 ```bash
-tox -e format,lint,typecheck,test
+uv run --group lint ruff check . && \
+uv run --group format ruff format --check . && \
+uv run --group typecheck ty check && \
+uv run --group test pytest
 ```
 
 All tests must pass. Fix any failures — the tests define correct
@@ -238,19 +512,36 @@ behavior.
 
 - **No `font_size` parameter.** All sizes derive from `w` and `h`
   via `_compute_metrics()`. TEXT widget is the only exception.
-- **Use shared helpers.** Don't duplicate card/chip/row drawing logic.
-- **`img` from config.** Get the PIL Image via `config["_image"]`.
-- **Missing state = skip.** Log with `_LOGGER.debug()`, don't crash.
-- **Icon resizing.** `_draw_card_row` resizes icons to 60% of
-  `m.icon_dia` internally. Load at `m.icon_dia` to avoid upscaling.
-- **`primary` is required.** It has no default in `_draw_card_row`.
-- **Line length: 79 chars.** Wrap long lines at word boundaries.
+- **Use shared macros.** Do not duplicate card/chip/row SVG markup.
+  Use `card_container`, `card_row`, `chip` from `_macros.svg.j2`.
+- **All layout math in Python.** Templates receive final coordinates
+  and data. No arithmetic or conditionals in Jinja2 beyond what the
+  macros already compute internally.
+- **White background rect.** Every template starts with
+  `<rect width="{{ w }}" height="{{ h }}" fill="white"/>`.
+- **Missing state = skip.** If `states.get(entity_id)` returns
+  `None`, skip the entity and continue. Do not crash.
+- **Icon inlining via filter functions.** Call `_mdi_svg_filter(name,
+  size)` or `_weather_svg_filter(condition, size)` in the context
+  builder and pass the returned string as `icon_svg`. Do NOT use
+  `_load_icon()` (PIL-only, deleted with the PIL renderer).
+- **Font references in SVG.** Use `font-family="Roboto"` and
+  `font-weight="500"` for Roboto Medium. No `_load_font()` calls in
+  templates.
+- **Template coordinates are relative.** Compute row `y` positions
+  relative to 0, not to the widget's absolute position on the
+  dashboard. Outer composition handles `x`/`y` placement.
+- **Line length: 79 chars.** Applies to Python, Jinja2 templates,
+  and docstrings.
 
 ## Key references
 
-- Design spec: `REDESIGN_WIDGETS.md`
-- Shared helpers: `_compute_metrics`, `_draw_card_container`,
-  `_draw_card_row`, `_draw_chip`, `_draw_chip_flow` in `render.py`
-- Icon resolution: `_device_class_icon(attrs, state, domain)`,
-  `_load_icon()` in `render.py`
-- Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120`
+- Widget behavior to replicate: existing PIL renderer in `render.py`
+- SVG macros: `card_container`, `card_row`, `chip` in
+  `templates/_macros.svg.j2`
+- SVG pipeline: `_jinja_env`, `_svg_to_png()`, `_mdi_svg_filter()`,
+  `_weather_svg_filter()` in `svg_render.py`
+- Layout metrics: `_compute_metrics()`, `WidgetMetrics` in `render.py`
+- Icon name resolution: `_device_class_icon()` in `render.py`
+- Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120`,
+  `COLOR_LIGHT_GRAY=180` in `const.py`
