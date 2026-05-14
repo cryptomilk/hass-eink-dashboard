@@ -17,7 +17,13 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .const import DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVICE_PRESETS, DOMAIN
+from .const import (
+    DEFAULT_GRAYSCALE_LEVELS,
+    DEFAULT_HEIGHT,
+    DEFAULT_WIDTH,
+    DEVICE_PRESETS,
+    DOMAIN,
+)
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 from .svg_render import render_widget_svg
@@ -75,32 +81,41 @@ def _build_display_config(
         entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
 
     Returns:
-        Dict with ``width``, ``height``, ``grayscale_levels``, and
-        ``states`` keys suitable for ``render_widget_svg()``.
+        Dict with ``width``, ``height``, ``grayscale_levels``,
+        ``states``, and (when a battery sensor is registered)
+        ``device_battery_level`` and ``device_battery_charging``
+        keys suitable for ``render_widget_svg()``.
     """
     entry_data = hass.data[DOMAIN][entry_id]
     entry = entry_data["entry"]
-    device_model = entry.options.get("device_model", "custom")
-    preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
     states: dict[str, Any] = {}
     for state in hass.states.async_all():
         states[state.entity_id] = {
             "state": state.state,
             "attributes": dict(state.attributes),
         }
-    return {
+    config: dict[str, Any] = {
         "width": entry.options.get("width", DEFAULT_WIDTH),
         "height": entry.options.get("height", DEFAULT_HEIGHT),
-        "grayscale_levels": preset.grayscale_levels,
+        "grayscale_levels": entry.options.get(
+            "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+        ),
         "states": states,
     }
+    battery_sensor = entry_data.get("battery_sensor")
+    if battery_sensor is not None:
+        config["device_battery_level"] = battery_sensor.native_value
+        config["device_battery_charging"] = (
+            battery_sensor.extra_state_attributes.get("is_charging", False)
+        )
+    return config
 
 
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "eink_dashboard/render_widget",
         vol.Required("entry_id"): str,
-        vol.Required("widget_index"): int,
+        vol.Required("widget_index"): vol.All(int, vol.Range(min=0)),
     }
 )
 @websocket_api.async_response
@@ -127,7 +142,7 @@ async def ws_render_widget(
         )
         return
 
-    widgets = entry_data["widgets"]
+    widgets = list(entry_data["widgets"])
     idx = msg["widget_index"]
     if idx < 0 or idx >= len(widgets):
         connection.send_error(
@@ -143,6 +158,13 @@ async def ws_render_widget(
         svg = await hass.async_add_executor_job(
             render_widget_svg, widget, config
         )
+    except KeyError as exc:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_NOT_FOUND,
+            f"Unknown widget type: {exc}",
+        )
+        return
     except Exception as exc:  # noqa: BLE001
         connection.send_error(
             msg["id"],
@@ -151,6 +173,70 @@ async def ws_render_widget(
         )
         return
     connection.send_result(msg["id"], {"svg": svg})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "eink_dashboard/render_widgets",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_render_widgets(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return SVG strings for all widgets in one call.
+
+    Renders every widget for the given config entry and returns
+    their SVG strings as a list in widget-list order.  Use this
+    command on initial load or full refresh to avoid N sequential
+    round-trips.
+
+    Args:
+        hass: Home Assistant instance.
+        connection: Active WebSocket connection.
+        msg: Validated message dict containing ``entry_id`` (str).
+    """
+    entry_id = msg["entry_id"]
+    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if entry_data is None:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_NOT_FOUND,
+            f"Config entry not found: {entry_id}",
+        )
+        return
+
+    widgets = list(entry_data["widgets"])
+    config = _build_display_config(hass, entry_id)
+
+    # Render all widgets in a single executor job: render_widget_svg
+    # is CPU-bound (Jinja2 + resvg), and one thread per widget would
+    # add overhead without parallelism gains under the GIL.  If any
+    # widget fails the entire batch errors out -- partial results are
+    # not returned.
+    def _render_all() -> list[str]:
+        return [render_widget_svg(w, config) for w in widgets]
+
+    try:
+        svgs = await hass.async_add_executor_job(_render_all)
+    except KeyError as exc:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_NOT_FOUND,
+            f"Unknown widget type: {exc}",
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_UNKNOWN_ERROR,
+            str(exc),
+        )
+        return
+    connection.send_result(msg["id"], {"svgs": svgs})
 
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -193,6 +279,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         f"/eink_dashboard/frontend/eink-dashboard-card.js?v={_VERSION}",
     )
     websocket_api.async_register_command(hass, ws_render_widget)
+    websocket_api.async_register_command(hass, ws_render_widgets)
     _LOGGER.debug("async_setup: complete")
     return True
 
