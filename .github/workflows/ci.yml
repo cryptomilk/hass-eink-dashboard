@@ -29,10 +29,17 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv run --group test pytest
+      - uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: test-results.xml
 
   frontend-typecheck:
     runs-on: ubuntu-latest
@@ -55,6 +62,9 @@ jobs:
 
   frontend-test:
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
     defaults:
       run:
         working-directory: custom_components/eink_dashboard/frontend
@@ -71,6 +81,10 @@ jobs:
           cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: custom_components/eink_dashboard/frontend/test-results.xml
 
   hacs-validate:
     runs-on: ubuntu-latest

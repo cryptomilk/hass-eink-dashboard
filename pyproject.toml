@@ -44,6 +44,7 @@ max-complexity = 25
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--junit-xml=test-results.xml"
 
 [tool.interrogate]
 fail-under = 80
