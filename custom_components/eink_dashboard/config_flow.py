@@ -158,7 +158,24 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             if device_model == "custom":
                 return await self.async_step_custom_resolution()
 
-            return await self.async_step_screen_portion()
+            width, height, rotation, preset = resolve_display(
+                device_model,
+                orientation,
+            )
+
+            if device_model.startswith("trmnl_"):
+                return await self.async_step_screen_portion()
+
+            self._data.update(
+                {
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation,
+                    "optimize": preset.optimize,
+                    "grayscale_levels": preset.grayscale_levels,
+                }
+            )
+            return self._create_pull_entry()
 
         return self.async_show_form(
             step_id="user",
@@ -526,7 +543,26 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     return self.async_create_entry(data=new_opts)
                 return await self.async_step_custom_resolution()
 
-            return await self.async_step_screen_portion_options()
+            if device_model.startswith("trmnl_"):
+                return await self.async_step_screen_portion_options()
+
+            width, height, rotation, preset = resolve_display(
+                device_model, orientation
+            )
+            new_opts = deepcopy(dict(opts))
+            new_opts.update(
+                {
+                    **self._data,
+                    "width": width,
+                    "height": height,
+                    "rotation": rotation,
+                    "optimize": preset.optimize,
+                    "grayscale_levels": preset.grayscale_levels,
+                }
+            )
+            if "area_id" not in self._data:
+                new_opts.pop("area_id", None)
+            return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
             step_id="device_settings",
