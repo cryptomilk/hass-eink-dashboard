@@ -244,6 +244,33 @@ type DisplayConfig = dict[str, Any]
 type SvgContextFn = Callable[[Widget, DisplayConfig], dict[str, object]]
 
 
+def _title_layout(
+    title: str,
+    svg_h: int,
+) -> tuple[int, int, int]:
+    """Return (title_font_sz, content_y, content_h) for a titled widget.
+
+    When ``title`` is non-empty, reserves vertical space above the
+    card content area for the label.  Font size and advance are
+    proportional to ``svg_h`` so the title scales with the widget.
+
+    Args:
+        title: Widget title string.  Empty string means no title.
+        svg_h: Total widget height in pixels.
+
+    Returns:
+        ``(title_font_sz, content_y, content_h)`` where
+        ``title_font_sz`` is 0 when ``title`` is empty,
+        ``content_y`` is the top of the card area (below the
+        title), and ``content_h`` is the remaining height.
+    """
+    if not title:
+        return 0, 0, svg_h
+    font_sz = max(10, round(svg_h * 0.14))
+    advance = round(font_sz * 1.4)
+    return font_sz, advance, svg_h - advance
+
+
 def _card_insets(
     m: Any,
     card_style: str,
@@ -337,17 +364,7 @@ def _build_text_context(
     svg_w = max(1, raw_w)
     svg_h = max(1, widget.get("h", config["height"] - y))
 
-    # Title above the card consumes vertical space; font size and
-    # advance derive from svg_h so the title scales with the widget.
-    content_y = 0
-    content_h = svg_h
-    title_font_sz = 0
-    if title:
-        title_font_sz = max(10, round(svg_h * 0.14))
-        title_advance = round(title_font_sz * 1.4)
-        content_y = title_advance
-        content_h = svg_h - title_advance
-
+    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     m = _compute_metrics(content_h)
 
     # Compute card container insets — mirrors the card_container
@@ -891,18 +908,7 @@ def _build_sensor_rows_context(
     if not entity_ids:
         return {"w": svg_w, "h": svg_h, "has_entities": False}
 
-    # Title above the card consumes vertical space before the
-    # card area; font size and advance derive from svg_h so the
-    # title scales with the widget.
-    content_y = 0
-    content_h = svg_h
-    title_font_sz = 0
-    if title:
-        title_font_sz = max(10, round(svg_h * 0.14))
-        title_advance = round(title_font_sz * 1.4)
-        content_y = title_advance
-        content_h = svg_h - title_advance
-
+    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     row_h = content_h // len(entity_ids)
     m = _compute_metrics(row_h)
 
@@ -1194,12 +1200,10 @@ def _build_status_icons_context(
             "title": title,
         }
 
-    # Title above the chip area: font size and vertical advance.
-    title_font_sz = max(10, round(svg_h * 0.14)) if title else 0
-    title_advance = round(title_font_sz * 1.4) if title else 0
+    title_font_sz, title_advance, content_h = _title_layout(title, svg_h)
 
     # chip_h is the single-row chip height after the title.
-    chip_h = max(1, svg_h - title_advance)
+    chip_h = max(1, content_h)
     m = _compute_metrics(chip_h)
 
     x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
@@ -1381,17 +1385,7 @@ def _build_waste_schedule_context(
         return empty_ctx
 
     attrs = entity_state.get("attributes", {})
-
-    # Title above the card consumes vertical space; derives
-    # from svg_h so it scales with the widget height.
-    content_y = 0
-    content_h = svg_h
-    title_font_sz = 0
-    if title:
-        title_font_sz = max(10, round(svg_h * 0.14))
-        title_advance = round(title_font_sz * 1.4)
-        content_y = title_advance
-        content_h = svg_h - title_advance
+    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
 
     # Resolve visible entries: parse dates, filter to 0–3 days.
     # Config order is preserved — equal-day entries keep the
