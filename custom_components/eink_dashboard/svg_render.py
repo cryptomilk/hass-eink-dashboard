@@ -513,8 +513,8 @@ def _build_weather_context(
 
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
-    wx = widget.get("x", PADDING)
-    svg_w = max(1, widget.get("w", config["width"] - wx))
+    x = widget.get("x", PADDING)
+    svg_w = max(1, widget.get("w", config["width"] - x))
     svg_h = max(1, widget.get("h", config["height"] - widget.get("y", 0)))
 
     if state is None:
@@ -525,18 +525,18 @@ def _build_weather_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     grayscale_levels = config.get("grayscale_levels", 16)
 
-    s = font_size / FONT_SIZE_WEATHER
+    scale = font_size / FONT_SIZE_WEATHER
 
     # Card width: use explicit w or natural width capped to canvas.
     w_override = widget.get("w")
     if w_override is not None:
         card_w = w_override
     else:
-        card_w = min(round(380 * s), svg_w)
+        card_w = min(round(380 * scale), svg_w)
 
     # PIL fonts for text measurement only — never used for drawing.
-    font_xl = _load_font(round(64 * s))
-    font_sm = _load_font(round(16 * s))
+    font_xl = _load_font(round(64 * scale))
+    font_sm = _load_font(round(16 * scale))
 
     # Entity attributes.
     condition = state.get("state", "")
@@ -551,17 +551,17 @@ def _build_weather_context(
     cloud_coverage = attrs.get("cloud_coverage")
     forecast = attrs.get("forecast", [])
 
-    # Sizing constants, all proportional to s.
-    icon_size = round(80 * s)
-    pad = round(10 * s)
-    icon_right_pad = round(16 * s)
-    detail_gap = round(2 * s)
-    detail_icon_h = round(20 * s)
-    icon_gap = round(4 * s)
-    sep_gap = round(8 * s)
-    sep_thickness = max(2, round(3 * s))
-    forecast_zone_h = round(88 * s)
-    precip_text_h = round(16 * s)
+    # Sizing constants, all proportional to scale.
+    icon_size = round(80 * scale)
+    pad = round(10 * scale)
+    icon_right_pad = round(16 * scale)
+    detail_gap = round(2 * scale)
+    detail_icon_h = round(20 * scale)
+    icon_gap = round(4 * scale)
+    sep_gap = round(8 * scale)
+    sep_thickness = max(2, round(3 * scale))
+    forecast_zone_h = round(88 * scale)
+    precip_text_h = round(16 * scale)
 
     # Measure temperature text height (PIL) for height estimation.
     temp_text = f"{_fmt_temp(temp)}{temp_unit}"
@@ -570,7 +570,7 @@ def _build_weather_context(
 
     # Card metrics — always compute so they can be passed to the
     # card_container macro even when card_style is "none".
-    m = _compute_metrics(round(48 * s))
+    m = _compute_metrics(round(48 * scale))
     top_pad = m.padding if card_style != "none" else pad
 
     # Total card height, matching PIL's formula exactly.
@@ -624,7 +624,7 @@ def _build_weather_context(
     today_lo = ""
     today_precip = ""
     lo_y = vis_top + round(temp_h * 0.4)
-    precip_y_val = vis_top + round(temp_h * 0.72)
+    precip_y = vis_top + round(temp_h * 0.72)
     precip_unit_fc = attrs.get("precipitation_unit", "mm")
     if forecast:
         today = forecast[0]
@@ -676,26 +676,29 @@ def _build_weather_context(
         svg_filename = _DETAIL_ICON_MAP.get(icon_name, "")
         # Wrap in Markup so Jinja2 emits the SVG verbatim.  All
         # icon strings added to the context must be Markup instances.
-        d_icon_svg: markupsafe.Markup | str = ""
+        detail_icon_svg: markupsafe.Markup | str = ""
         if svg_filename:
-            d_path = (_ICONS_DIR / f"{svg_filename}.svg").resolve()
+            detail_path = (_ICONS_DIR / f"{svg_filename}.svg").resolve()
             try:
-                d_paths = _load_svg_paths(d_path)
-                d_icon_svg = markupsafe.Markup(
-                    _build_inline_svg(d_paths, detail_icon_h, "0 0 30 30")
+                detail_paths = _load_svg_paths(detail_path)
+                detail_icon_svg = markupsafe.Markup(
+                    _build_inline_svg(detail_paths, detail_icon_h, "0 0 30 30")
                 )
             except FileNotFoundError:
                 pass
-        has_d_icon = bool(d_icon_svg)
-        item_w = (detail_icon_h + icon_gap if has_d_icon else 0) + text_w_i
+        has_detail_icon = bool(detail_icon_svg)
+        icon_w = detail_icon_h + icon_gap if has_detail_icon else 0
+        item_w = icon_w + text_w_i
         item_x = col_cx - item_w // 2
         detail_items.append(
             {
-                "icon_svg": d_icon_svg,
+                "icon_svg": detail_icon_svg,
                 "icon_x": item_x,
                 "icon_y": detail_y,
                 "text_x": (
-                    item_x + detail_icon_h + icon_gap if has_d_icon else item_x
+                    item_x + detail_icon_h + icon_gap
+                    if has_detail_icon
+                    else item_x
                 ),
                 "text_y": detail_y + detail_icon_h // 2,
                 "text": text,
@@ -722,7 +725,7 @@ def _build_weather_context(
         # forecast content starts below the stroke bottom, matching
         # the sep_thickness term in forecast_section_h.
         forecast_y = separator_y + sep_thickness + sep_gap
-        fc_icon_size = round(32 * s)
+        fc_icon_size = round(32 * scale)
 
         if forecast_days >= forecast_cols:
             positions = list(range(forecast_days))
@@ -753,17 +756,17 @@ def _build_weather_context(
             except (KeyError, FileNotFoundError):
                 fc_icon_svg = ""
 
-            hi_val_fc = day.get("temperature", "")
-            lo_val_fc = day.get("templow", "")
-            fc_hi = f"{_fmt_temp(hi_val_fc)}°" if hi_val_fc != "" else ""
-            fc_lo = f"{_fmt_temp(lo_val_fc)}°" if lo_val_fc != "" else ""
+            fc_hi_val = day.get("temperature", "")
+            fc_lo_val = day.get("templow", "")
+            fc_hi = f"{_fmt_temp(fc_hi_val)}°" if fc_hi_val != "" else ""
+            fc_lo = f"{_fmt_temp(fc_lo_val)}°" if fc_lo_val != "" else ""
             fc_p = day.get("precipitation")
             fc_precip = (
                 f"{fc_p}{precip_unit_fc}"
                 if fc_p is not None and fc_p > 0
                 else ""
             )
-            icon_cy_fc = forecast_y + round(34 * s)
+            icon_cy_fc = forecast_y + round(34 * scale)
             forecast_entries.append(
                 {
                     "cx": cx,
@@ -773,11 +776,11 @@ def _build_weather_context(
                     "icon_x": cx - fc_icon_size // 2,
                     "icon_y": icon_cy_fc - fc_icon_size // 2,
                     "hi": fc_hi,
-                    "hi_y": forecast_y + round(52 * s),
+                    "hi_y": forecast_y + round(52 * scale),
                     "lo": fc_lo,
-                    "lo_y": forecast_y + round(70 * s),
+                    "lo_y": forecast_y + round(70 * scale),
                     "precip": fc_precip,
-                    "precip_y": forecast_y + round(88 * s),
+                    "precip_y": forecast_y + round(88 * scale),
                 }
             )
 
@@ -800,16 +803,17 @@ def _build_weather_context(
         "temp_text": temp_text,
         "temp_x": temp_x,
         "temp_y": temp_y,
-        "font_xl": round(64 * s),
-        "font_sm": round(16 * s),
-        "font_xs": round(14 * s),  # template-only; no PIL measurement needed
+        "font_xl": round(64 * scale),
+        "font_sm": round(16 * scale),
+        # font_xs is template-only; no PIL measurement needed.
+        "font_xs": round(14 * scale),
         "hilo_right": hilo_right,
         "hi_text": today_hi,
         "hi_y": vis_top,
         "lo_text": today_lo,
         "lo_y": lo_y,
         "precip_text": today_precip,
-        "precip_y": precip_y_val,
+        "precip_y": precip_y,
         "detail_items": detail_items,
         "has_forecast": has_forecast,
         "sep_x1": sep_x1,
