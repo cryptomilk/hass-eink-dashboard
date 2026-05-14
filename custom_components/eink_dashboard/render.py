@@ -287,6 +287,25 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
     )
 
 
+def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
+    """Return the rendered width of a left_bar card decoration.
+
+    On 2-level displays (TRMNL) the bar is tripled so the
+    dithered dot pattern reads clearly as a solid stripe.
+
+    Args:
+        m: Proportional metrics from ``_compute_metrics``.
+        grayscale_levels: Quantisation level count from the
+            display config.
+
+    Returns:
+        Bar width in pixels.
+    """
+    if grayscale_levels <= 2:
+        return max(10, m.left_bar * 3)
+    return m.left_bar
+
+
 def _draw_card_container(
     draw: ImageDraw.ImageDraw,
     x: int,
@@ -337,11 +356,7 @@ def _draw_card_container(
         )
         return (m.padding, m.padding)
     elif card_style == "left_bar":
-        bar_w = m.left_bar
-        # On 2-level displays (TRMNL), widen the bar so the dithered dot
-        # pattern forms a clearly visible stripe.
-        if grayscale_levels <= 2:
-            bar_w = max(10, m.left_bar * 3)
+        bar_w = _left_bar_width(m, grayscale_levels)
         draw.rectangle(
             [x, y, x + bar_w, y + h],
             fill=COLOR_GRAY,

@@ -276,6 +276,218 @@ class TestRenderText:
             tolerance=0.35,
         )
 
+    def test_text_card_border(self) -> None:
+        # card_style="border" draws dark pixels along all four edges.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 60,
+                "text": "Hello",
+                "font_size": 20,
+                "card_style": "border",
+            }
+        ]
+        img = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=60))
+        )
+        m = _compute_metrics(60)
+        # Top edge
+        assert_has_dark_pixels(img, m.radius, 0, 400 - m.radius, m.border)
+        # Bottom edge
+        assert_has_dark_pixels(
+            img, m.radius, 60 - m.border, 400 - m.radius, 60
+        )
+        # Left edge
+        assert_has_dark_pixels(img, 0, m.radius, m.border, 60 - m.radius)
+        # Right edge
+        assert_has_dark_pixels(
+            img, 400 - m.border, m.radius, 400, 60 - m.radius
+        )
+
+    def test_text_card_left_bar(self) -> None:
+        # card_style="left_bar" draws a solid gray bar on the left
+        # edge; the center of that bar must be exactly COLOR_GRAY.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 60,
+                "text": "Hello",
+                "font_size": 20,
+                "card_style": "left_bar",
+            }
+        ]
+        img = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=60))
+        )
+        m = _compute_metrics(60)
+        # The midpoint of the bar must be solid gray (not text
+        # anti-aliasing): the bar fill color is #787878 = 120.
+        bar_mid_x = m.left_bar // 2
+        assert pixel(img, bar_mid_x, 30) == COLOR_GRAY
+        # Right edge — white (no right-side decoration)
+        assert_all_white(img, 395, 0, 400, 60)
+
+    def test_text_card_none_explicit(self) -> None:
+        # Explicit card_style="none" renders no card decoration
+        # but the text content is still visible.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 60,
+                "text": "Hello",
+                "font_size": 20,
+                "card_style": "none",
+            }
+        ]
+        img = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=60))
+        )
+        # No border — corners must be white
+        assert pixel(img, 0, 0) == 255
+        assert pixel(img, 399, 0) == 255
+        assert pixel(img, 0, 59) == 255
+        assert pixel(img, 399, 59) == 255
+        # Text is still visible somewhere in the widget area
+        assert_has_dark_pixels(img, 0, 0, 400, 60)
+
+    def test_text_card_style_none_is_default(self) -> None:
+        # Omitting card_style must produce byte-identical output to
+        # card_style="none".
+        config = self._config(width=400, height=60)
+        base = {
+            "type": "text",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 60,
+            "text": "Hello",
+            "font_size": 20,
+        }
+        with_none = render_dashboard([{**base, "card_style": "none"}], config)
+        without = render_dashboard([base], config)
+        assert with_none == without
+
+    def test_text_card_border_text_offset(self) -> None:
+        # With card_style="border" the text is inset by the card padding
+        # and must not appear between the border and the padding gap.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 60,
+                "text": "Hello",
+                "font_size": 20,
+                "card_style": "border",
+            }
+        ]
+        img = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=60))
+        )
+        m = _compute_metrics(60)
+        # Gap between border and content padding — should be white
+        # in the straight section of the border (past the corner radius).
+        if m.padding > m.border + 1 and m.radius < 30:
+            assert_all_white(
+                img,
+                m.border + 1,
+                m.radius + 1,
+                m.padding,
+                60 - m.radius - 1,
+            )
+        # Text content exists to the right of the padding inset
+        assert_has_dark_pixels(img, m.padding, 0, 400 - m.padding, 60)
+
+    def test_text_with_title(self) -> None:
+        # An optional title renders as gray text above the card area;
+        # the main text must be pushed below the title band, so the
+        # area immediately below the title band must be white when no
+        # card_style decoration fills it.
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 80,
+                "text": "Hello",
+                "font_size": 20,
+                "title": "Section",
+            }
+        ]
+        img_with = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=80))
+        )
+        # Without a title the canvas top should be darker (main text).
+        img_without = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "text",
+                        "x": 0,
+                        "y": 0,
+                        "w": 400,
+                        "h": 80,
+                        "text": "Hello",
+                        "font_size": 20,
+                    }
+                ],
+                self._config(width=400, height=80),
+            )
+        )
+        # The two renders must differ (title moves the main text down)
+        assert img_with.tobytes() != img_without.tobytes()
+        # Title band must contain gray pixels (title text color).
+        title_font_sz = max(10, round(80 * 0.14))
+        title_advance = round(title_font_sz * 1.4)
+        assert_has_gray_pixels(
+            img_with, 0, 0, 400, title_advance, low=100, high=200
+        )
+
+    def test_text_card_border_vertically_centered(self) -> None:
+        # With card_style="border" the text is vertically centered
+        # inside the card, not pinned to the top.
+        h = 80
+        widgets = [
+            {
+                "type": "text",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "text": "Hello",
+                "font_size": 20,
+                "card_style": "border",
+            }
+        ]
+        img = png_to_image(
+            render_dashboard(widgets, self._config(width=400, height=h))
+        )
+        m = _compute_metrics(h)
+        # Text must appear in the middle vertical band — at least some
+        # dark pixels between 25 % and 75 % of the card height.
+        quarter = h // 4
+        assert_has_dark_pixels(
+            img, m.padding, quarter, 400 - m.padding, h - quarter
+        )
+        # The top strip (just inside the border, before centre band)
+        # must be white — text should not be pinned to the top.
+        top_strip_end = h // 4 - 2
+        if top_strip_end > m.border + 2:
+            assert_all_white(
+                img, m.padding + 2, m.border + 2, 300, top_strip_end
+            )
+
 
 class TestRenderSeparator:
     _CONFIG = {"width": 300, "height": 200}

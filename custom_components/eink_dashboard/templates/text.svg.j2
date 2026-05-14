@@ -1,12 +1,26 @@
+{%- from "_macros.svg.j2" import card_container -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
-{# dominant-baseline="hanging" aligns the glyph top with y=0,
-   matching PIL's (x, y) coordinate for text draw position. #}
-<text x="{{ text_x }}" y="0"
+{%- if title -%}
+<text
+  x="{{ title_x }}" y="0"
+  font-family="Roboto"
+  font-size="{{ title_font_sz }}"
+  dominant-baseline="hanging"
+  fill="#787878">{{ title }}</text>
+{%- endif -%}
+{%- call(x_off, r_inset) card_container(
+    x=0, y=content_y, w=w, h=content_h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    padding=m_padding, left_bar=m_left_bar,
+    grayscale_levels=grayscale_levels) -%}
+<text x="{{ text_x }}" y="{{ text_y }}"
   font-family="Roboto"
   font-size="{{ font_size }}"
   text-anchor="{{ text_anchor }}"
-  dominant-baseline="hanging"
+  dominant-baseline="{{ baseline }}"
   fill="{{ fill }}">{{ text }}</text>
+{%- endcall -%}
 </svg>

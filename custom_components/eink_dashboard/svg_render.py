@@ -259,23 +259,46 @@ def _build_text_context(
     widget can be pasted at its ``(x, y)`` position without
     clipping content below or to the right.
 
+    When ``card_style`` is ``"border"`` or ``"left_bar"``, the
+    text is inset by the card padding and vertically centred
+    within the content area.  When ``card_style`` is ``"none"``
+    (the default), behaviour is identical to the original: text
+    is top-aligned at y=0 with ``dominant-baseline="hanging"``.
+
     Args:
         widget: Widget config dict.  Recognised keys: ``x``,
             ``y``, ``text``, ``font_size``, ``color``,
-            ``align``, ``w``, ``h``.
-        config: Display config with ``width`` and ``height``.
+            ``align``, ``w``, ``h``, ``card_style``, ``title``.
+        config: Display config with ``width``, ``height``,
+            and ``grayscale_levels``.
 
     Returns:
-        Dict consumed by ``text.svg.j2``: ``w``, ``h``,
-        ``text``, ``font_size``, ``fill``, ``text_x``,
-        ``text_anchor``.
+        Dict with viewport size (``w``, ``h``); text rendering
+        attributes (``text``, ``font_size``, ``fill``,
+        ``text_x``, ``text_y``, ``text_anchor``, ``baseline``);
+        optional title attributes (``title``, ``title_font_sz``,
+        ``title_x``); card container inputs (``card_style``,
+        ``content_y``, ``content_h``, ``grayscale_levels``,
+        ``m_border``, ``m_padding``, ``m_radius``,
+        ``m_left_bar``).
     """
+    # Lazy import avoids circular dependency: render.py imports
+    # svg_render.py at module level; importing render.py at
+    # module level here would prevent initialisation.
+    from .render import (  # noqa: PLC0415
+        _compute_metrics,
+        _left_bar_width,
+    )
+
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     text = widget.get("text", "")
     font_size = widget.get("font_size", FONT_SIZE_TEXT)
     color = widget.get("color", COLOR_BLACK)
     align = widget.get("align", Align.LEFT)
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    title = widget.get("title", "")
+    grayscale_levels = config.get("grayscale_levels", 16)
 
     # Default viewport to remaining canvas when not specified.
     # Clamp to >= 1: a widget at the canvas edge could produce a
@@ -285,25 +308,64 @@ def _build_text_context(
     svg_w = max(1, raw_w)
     svg_h = max(1, widget.get("h", config["height"] - y))
 
+    # Title above the card consumes vertical space; font size and
+    # advance derive from svg_h so the title scales with the widget.
+    content_y = 0
+    content_h = svg_h
+    title_font_sz = 0
+    if title:
+        title_font_sz = max(10, round(svg_h * 0.14))
+        title_advance = round(title_font_sz * 1.4)
+        content_y = title_advance
+        content_h = svg_h - title_advance
+
+    m = _compute_metrics(content_h)
+
+    # Compute card container insets — mirrors the card_container
+    # macro's own logic so text_x can be pre-calculated in Python.
+    if card_style == "border":
+        x_off = m.padding
+        r_inset = m.padding
+    elif card_style == "left_bar":
+        x_off = _left_bar_width(m, grayscale_levels) + m.padding
+        r_inset = 0
+    else:
+        x_off = 0
+        r_inset = 0
+
+    content_w = svg_w - x_off - r_inset
+
     # Convert grayscale integer (0–255) to an SVG fill color.
     fill = f"rgb({color},{color},{color})"
 
     # Map alignment to SVG text-anchor + anchor x-position.
-    # Coordinate algebra ensures these produce the same absolute
-    # pixel positions as the PIL renderer when pasted at (x, y).
+    # When a card container is active, text is positioned within
+    # [x_off, svg_w - r_inset].  When no card is used (both
+    # offsets are zero), the formulas reduce to the original
+    # positions, preserving backward compatibility.
     if align == Align.RIGHT:
-        # text-anchor="end" at (svg_w - PADDING) → text ends
-        # at right_edge - PADDING, matching PIL's computation.
         text_anchor = "end"
-        text_x = svg_w - PADDING
+        if x_off > 0 or r_inset > 0:
+            # Card provides its own padding; anchor at content end.
+            text_x = x_off + content_w
+        else:
+            # Original: PADDING inset from the right canvas edge.
+            text_x = svg_w - PADDING
     elif align == Align.CENTER:
-        # text-anchor="middle" at svg_w//2 → text centred in
-        # the available width, matching PIL's centre formula.
         text_anchor = "middle"
-        text_x = svg_w // 2
+        text_x = x_off + content_w // 2
     else:
         text_anchor = "start"
-        text_x = 0
+        text_x = x_off
+
+    # Vertical anchor: centre within the content area when a card
+    # container is active; hang from y=0 otherwise (original).
+    if card_style in ("border", "left_bar"):
+        text_y = content_y + content_h // 2
+        baseline = "central"
+    else:
+        text_y = 0
+        baseline = "hanging"
 
     return {
         "w": svg_w,
@@ -312,7 +374,20 @@ def _build_text_context(
         "font_size": font_size,
         "fill": fill,
         "text_x": text_x,
+        "text_y": text_y,
         "text_anchor": text_anchor,
+        "baseline": baseline,
+        "title": title,
+        "title_font_sz": title_font_sz,
+        "title_x": x_off,
+        "content_y": content_y,
+        "content_h": content_h,
+        "card_style": card_style,
+        "grayscale_levels": grayscale_levels,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
     }
 
 
@@ -432,6 +507,7 @@ def _build_weather_context(
         _DAY_ABBREV,
         _compute_metrics,
         _fmt_temp,
+        _left_bar_width,
         _load_font,
     )
 
@@ -521,10 +597,7 @@ def _build_weather_context(
         content_left = m.padding
         content_w = card_w - 2 * m.padding
     elif card_style == "left_bar":
-        bar_w = (
-            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
-        )
-        content_left = bar_w + m.padding
+        content_left = _left_bar_width(m, grayscale_levels) + m.padding
         content_w = card_w - content_left
     else:
         content_left = 0
@@ -903,7 +976,11 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from .render import _compute_metrics, _load_font  # noqa: PLC0415
+    from .render import (  # noqa: PLC0415
+        _compute_metrics,
+        _left_bar_width,
+        _load_font,
+    )
 
     x = widget.get("x", PADDING)
     svg_w = max(1, widget.get("w", config["width"] - x))
@@ -934,10 +1011,7 @@ def _build_device_battery_context(
         x_off = m.padding
         r_inset = m.padding
     elif card_style == "left_bar":
-        bar_w_lbar = (
-            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
-        )
-        x_off = bar_w_lbar + m.padding
+        x_off = _left_bar_width(m, grayscale_levels) + m.padding
         r_inset = 0
     else:
         x_off = 0
@@ -1090,6 +1164,7 @@ def _build_status_icons_context(
         _PROBLEM_DEVICE_CLASSES,
         _compute_metrics,
         _device_class_icon,
+        _left_bar_width,
         _load_font,
     )
 
@@ -1125,10 +1200,7 @@ def _build_status_icons_context(
         x_off = m.padding
         r_inset = m.padding
     elif card_style == "left_bar":
-        bar_w = (
-            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
-        )
-        x_off = bar_w + m.padding
+        x_off = _left_bar_width(m, grayscale_levels) + m.padding
         r_inset = 0
     else:
         x_off = 0
