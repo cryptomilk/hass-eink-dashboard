@@ -867,8 +867,7 @@ def _build_sensor_rows_context(
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
-    n = len(entity_ids)
-    if n == 0:
+    if not entity_ids:
         return {"w": svg_w, "h": svg_h, "has_entities": False}
 
     # Title above the card consumes vertical space before the
@@ -883,7 +882,7 @@ def _build_sensor_rows_context(
         content_y = title_advance
         content_h = svg_h - title_advance
 
-    row_h = content_h // n
+    row_h = content_h // len(entity_ids)
     m = _compute_metrics(row_h)
 
     rows: list[dict[str, object]] = []
@@ -1022,7 +1021,7 @@ def _build_device_battery_context(
         r_inset = 0
 
     if layout == "chip":
-        cw = svg_w - x_off - r_inset
+        content_w = svg_w - x_off - r_inset
         # Sizing ratios mirror _CHIP_PAD_RATIO/_CHIP_GAP_RATIO/
         # _CHIP_FONT_RATIO in render.py and the chip macro
         # parameters in _macros.svg.j2.
@@ -1035,7 +1034,7 @@ def _build_device_battery_context(
         font = _load_font(font_sz)
         text_w = round(font.getlength(label))
 
-        chip_w = min(pad + bar_w_nat + gap + text_w + pad, cw)
+        chip_w = min(pad + bar_w_nat + gap + text_w + pad, content_w)
         # Reflow bar to fit within a capped chip.
         bar_w = max(0, chip_w - pad - gap - text_w - pad)
 
@@ -1076,9 +1075,9 @@ def _build_device_battery_context(
 
     # Icon layout: compact battery outline with proportional fill bar.
     # Ratios chosen so that h=40 produces the standard geometry
-    # (bw=30, bh=14, nub_w=3, nub_h=8).
-    bw = round(h * 0.75)
-    bh = round(h * 0.35)
+    # (body_w=30, body_h=14, nub_w=3, nub_h=8).
+    body_w = round(h * 0.75)
+    body_h = round(h * 0.35)
     nub_w = round(h * 0.075)
     nub_h = round(h * 0.20)
     nub_gap = max(1, round(h * 0.025))
@@ -1092,9 +1091,9 @@ def _build_device_battery_context(
     # above the SVG canvas.
     bbox = font.getbbox(label)
     text_h = bbox[3] - bbox[1]
-    icon_y = max(0, bbox[1] + (text_h - bh) // 2)
-    nub_y = icon_y + (bh - nub_h) // 2
-    fill_w = int((bw - 2) * pct / 100)
+    icon_y = max(0, bbox[1] + (text_h - body_h) // 2)
+    nub_y = icon_y + (body_h - nub_h) // 2
+    fill_w = int((body_w - 2) * pct / 100)
 
     return {
         "w": svg_w,
@@ -1113,18 +1112,18 @@ def _build_device_battery_context(
         "font_sz": font_sz,
         "body_x": x_off,
         "icon_y": icon_y,
-        "bw": bw,
-        "bh": bh,
-        "nub_abs_x": x_off + bw + nub_gap,
+        "body_w": body_w,
+        "body_h": body_h,
+        "nub_abs_x": x_off + body_w + nub_gap,
         "nub_y": nub_y,
         "nub_w": nub_w,
         "nub_h": nub_h,
         "fill_abs_x": x_off + 1,
         "icon_fill_y": icon_y + 1,
         "fill_w": fill_w,
-        "icon_fill_h": max(0, bh - 2),
-        "text_abs_x": x_off + bw + nub_gap + nub_w + gap,
-        "text_svg_y": icon_y + bh // 2,
+        "icon_fill_h": max(0, body_h - 2),
+        "text_abs_x": x_off + body_w + nub_gap + nub_w + gap,
+        "text_svg_y": icon_y + body_h // 2,
     }
 
 
@@ -1247,8 +1246,8 @@ def _build_status_icons_context(
         has_icon = bool(icon_svg)
         icon_w = (icon_sz + icon_gap) if has_icon else 0
         # Ink bounding box matches _chip_width() in render.py.
-        lbbox = font.getbbox(label)
-        text_w = int(lbbox[2] - lbbox[0])
+        label_bbox = font.getbbox(label)
+        text_w = int(label_bbox[2] - label_bbox[0])
         chip_w = pad * 2 + icon_w + text_w
 
         chips.append(
@@ -1277,16 +1276,16 @@ def _build_status_icons_context(
     # placed below the title.
     cur_x = x_off
     cur_y = title_advance
-    for c in chips:
+    for chip in chips:
         if cur_x > x_off:
-            if cur_x + inter_gap + c["w"] > x_off + content_w:
+            if cur_x + inter_gap + chip["w"] > x_off + content_w:
                 cur_x = x_off
                 cur_y += chip_h + inter_gap
             else:
                 cur_x += inter_gap
-        c["x"] = cur_x
-        c["y"] = cur_y
-        cur_x += c["w"]
+        chip["x"] = cur_x
+        chip["y"] = cur_y
+        cur_x += chip["w"]
 
     # SVG height covers title + all chip rows (may exceed svg_h
     # when chips wrap to more than one row).
@@ -1375,17 +1374,17 @@ def _build_waste_schedule_context(
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
-    _empty: dict[str, object] = {
+    empty_ctx: dict[str, object] = {
         "w": svg_w,
         "h": svg_h,
         "has_rows": False,
     }
     if not entity_id or not entries:
-        return _empty
+        return empty_ctx
 
     entity_state = states.get(entity_id)
     if entity_state is None:
-        return _empty
+        return empty_ctx
 
     attrs = entity_state.get("attributes", {})
 
@@ -1420,7 +1419,7 @@ def _build_waste_schedule_context(
         visible.append((label, raw, days))
 
     if not visible:
-        return _empty
+        return empty_ctx
 
     if layout == "card":
         # Most urgent entry only (stable sort: equal days keep
