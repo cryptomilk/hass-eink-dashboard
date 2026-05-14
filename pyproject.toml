@@ -29,7 +29,6 @@ dev = [
     {include-group = "typecheck"},
     {include-group = "test"},
     {include-group = "interrogate"},
-    "cairosvg>=2.7",
 ]
 
 [tool.ruff]

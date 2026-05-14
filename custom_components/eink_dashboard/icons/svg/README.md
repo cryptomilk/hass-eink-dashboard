@@ -6,5 +6,6 @@ These SVG files are from the [Weather Icons](https://erikflowers.github.io/weath
 - **License:** SIL Open Font License 1.1 (see [LICENSE](LICENSE))
 
 The 15 SVGs in this directory correspond to the Home Assistant weather condition strings.
-They are converted to 64×64 RGBA PNGs by `scripts/build_icons.py` (requires `cairosvg`),
-and the generated PNGs are committed to `custom_components/eink_dashboard/icons/`.
+At render time, `svg_render.py` inlines the icon path data directly into
+the SVG output via Jinja2 filters (`weather_svg`, `mdi_svg`).  No PNG
+conversion step is needed.

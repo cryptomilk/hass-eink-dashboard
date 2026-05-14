@@ -7,7 +7,6 @@ dist/
 .tox/
 .tmp/
 /EINK_DASHBOARD.md
-custom_components/eink_dashboard/icons/png/
 custom_components/eink_dashboard/fonts/
 node_modules/
 custom_components/eink_dashboard/frontend/eink-dashboard-card.js

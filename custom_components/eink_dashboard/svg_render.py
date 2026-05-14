@@ -46,7 +46,7 @@ _MDI_DIR_RESOLVED = (_ICONS_DIR / "mdi").resolve()
 _SVG_NS = "http://www.w3.org/2000/svg"
 
 # Maps HA weather condition strings to wi-*.svg filenames (without
-# extension).  Sourced from scripts/build_icons.py CONDITION_TO_SVG.
+# extension).
 _CONDITION_TO_SVG: dict[str, str] = {
     "sunny": "wi-day-sunny",
     "clear-night": "wi-night-clear",

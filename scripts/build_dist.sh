@@ -2,14 +2,12 @@
 # Build a distributable tar.gz of the eink_dashboard custom component.
 #
 # What this script does:
-#   1. Generate weather icon PNGs from SVG sources (requires cairosvg)
-#   2. Download Roboto-Regular.ttf (Apache 2.0) into the component's fonts/ dir
-#   3. Package custom_components/eink_dashboard/ into dist/eink_dashboard-<version>.tar.gz
-#   4. Optionally produce dist/eink_dashboard.zip for HACS zip_release
-#   5. Clean up generated icons and font from the working tree
+#   1. Download Roboto-Regular.ttf (Apache 2.0) into the component's fonts/ dir
+#   2. Package custom_components/eink_dashboard/ into dist/eink_dashboard-<version>.tar.gz
+#   3. Optionally produce dist/eink_dashboard.zip for HACS zip_release
+#   4. Clean up downloaded fonts from the working tree
 #
 # Usage:
-#   pip install cairosvg
 #   bash scripts/build_dist.sh            # build both tar.gz and zip (default)
 #   bash scripts/build_dist.sh --zip      # zip only
 #   bash scripts/build_dist.sh --tarball  # tar.gz only
@@ -28,7 +26,6 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${0}")/.." && pwd)"
 COMPONENT_DIR="${REPO_ROOT}/custom_components/eink_dashboard"
-ICONS_DIR="${COMPONENT_DIR}/icons"
 FONTS_DIR="${COMPONENT_DIR}/fonts"
 DIST_DIR="${REPO_ROOT}/dist"
 
@@ -41,8 +38,6 @@ ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Rob
 
 cleanup() {
     echo "Cleaning up generated assets..."
-    # Remove only generated icon directories, not the committed SVG sources.
-    rm -rf "${ICONS_DIR}/png" "${ICONS_DIR}/mdi"
     rm -f "${FRONTEND_DIR}/eink-dashboard-card.js" "${FRONTEND_DIR}/eink-dashboard-card.js.map"
     rm -f "${FRONTEND_DIR}/eink-dashboard-editor.js" "${FRONTEND_DIR}/eink-dashboard-editor.js.map"
 }
@@ -50,9 +45,6 @@ trap cleanup EXIT
 
 echo "==> Building frontend TypeScript..."
 (cd "${FRONTEND_DIR}" && pnpm install --frozen-lockfile && pnpm build)
-
-echo "==> Building icons..."
-python3 "${REPO_ROOT}/scripts/build_icons.py"
 
 mkdir -p "${FONTS_DIR}"
 if [ -f "${FONTS_DIR}/Roboto-Regular.ttf" ]; then

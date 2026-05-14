@@ -65,7 +65,6 @@ jobs:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
-      - run: pip install cairosvg
       - name: Stamp version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
