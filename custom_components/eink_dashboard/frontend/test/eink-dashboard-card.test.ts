@@ -3,6 +3,7 @@ import {
   snap,
   buildHeaderText,
   shouldShowCopyUrl,
+  diagScaleFontSize,
 } from "../src/eink-dashboard-card.js";
 
 describe("snap", () => {
@@ -25,6 +26,48 @@ describe("buildHeaderText", () => {
   it("falls back to default when name is empty", () => {
     // An empty name produces the "E-Ink Dashboard" fallback.
     expect(buildHeaderText({ name: "" })).toBe("E-Ink Dashboard");
+  });
+});
+
+describe("diagScaleFontSize", () => {
+  it("SE drag right+down increases font_size", () => {
+    // Dragging SE corner outward (positive dx, dy) makes the widget
+    // larger so the font_size should increase.
+    const result = diagScaleFontSize("se", 10, 10, 32, 100, 100, 8, 72);
+    expect(result).toBeGreaterThan(32);
+  });
+
+  it("NW drag right+down decreases font_size", () => {
+    // Dragging NW corner toward the centre (positive dx, dy)
+    // shrinks the widget so the font_size should decrease.
+    const result = diagScaleFontSize("nw", 10, 10, 32, 100, 100, 8, 72);
+    expect(result).toBeLessThan(32);
+  });
+
+  it("zero delta returns original font_size", () => {
+    // No movement should produce no change.
+    const result = diagScaleFontSize("se", 0, 0, 32, 100, 100, 8, 72);
+    expect(result).toBe(32);
+  });
+
+  it("clamps result to maxFs on large outward drag", () => {
+    // Very large positive SE drag expands the widget far beyond maxFs.
+    const big = diagScaleFontSize("se", 9999, 9999, 32, 100, 100, 8, 72);
+    expect(big).toBe(72);
+  });
+
+  it("clamps result to minFs when drag shrinks widget near zero", () => {
+    // dx/dy ≈ -90 on a 100×100 widget makes the new diagonal ≈14px
+    // vs the start diagonal ≈141px, giving a ratio of ~0.1 which
+    // rounds to 3 for startFs=32 — well below minFs=8.
+    const small = diagScaleFontSize("se", -90, -90, 32, 100, 100, 8, 72);
+    expect(small).toBe(8);
+  });
+
+  it("zero-size widget returns original font_size without crash", () => {
+    // Guard against division by zero when the widget has zero dimensions.
+    const result = diagScaleFontSize("se", 10, 10, 32, 0, 0, 8, 72);
+    expect(result).toBe(32);
   });
 });
 

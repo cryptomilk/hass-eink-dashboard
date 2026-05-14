@@ -137,3 +137,6 @@ When adding new HA imports to production code, add matching stubs in
 - **Each commit must stand on its own.** Tests pass, lint passes, no
   half-finished code. A reviewer should be able to check out any single
   commit and get a working tree.
+
+Home Assistant Core Sources: `./.tmp/core`
+Home Assistant Frontend Sources: `./.tmp/frontend`

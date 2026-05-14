@@ -93,6 +93,10 @@ def _build_display_config(
     for state in hass.states.async_all():
         states[state.entity_id] = {
             "state": state.state,
+            # Shallow copy: _fetch_forecasts adds a "forecast"
+            # key to this dict.  A shallow copy is sufficient
+            # because it only assigns new keys, never mutates
+            # existing nested values.
             "attributes": dict(state.attributes),
         }
     config: dict[str, Any] = {
