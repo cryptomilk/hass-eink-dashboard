@@ -92,65 +92,17 @@ export interface IndexedBounds extends WidgetBounds {
   index: number;
 }
 
-/** Proportional layout dimensions derived from a widget's row height. */
-export interface WidgetMetrics {
-  border: number;
-  padding: number;
-  radius: number;
-  iconDia: number;
-  fontPrimary: number;
-  fontSecondary: number;
-  divider: number;
-  innerGap: number;
-  leftBar: number;
-}
-
 /** Card decoration style for card-style widgets. */
 export type CardStyle = "border" | "left_bar" | "none";
 
-/** Options for drawCardRow(). */
-export interface CardRowOpts {
-  primary: string;
-  secondary?: string;
-  /** Grayscale fill for the secondary text (0–255).
-   *  Defaults to COLOR_GRAY (120). */
-  secondaryFill?: number;
-  value?: string;
-  /** Grayscale fill for the icon circle (0–255).
-   *  Defaults to COLOR_GRAY (120).
-   *  Ignored when iconOutline is true. */
-  iconFill?: number;
-  /** When true, draw the icon circle as a black outline on a
-   *  white background instead of a solid fill.  Used for waste
-   *  entries with days >= 2 (spec: outline black icon). */
-  iconOutline?: boolean;
-  /** Grayscale fill for the right-aligned value text (0–255).
-   *  Defaults to COLOR_GRAY (120). */
-  valueFill?: number;
-  /** Loaded icon image to draw inside the icon circle.
-   *  When set, the letter fallback is skipped and the
-   *  image is drawn at 60% of iconDia, centred. */
-  icon?: HTMLImageElement;
+/** Response from the eink_dashboard/render_widgets WebSocket command. */
+export interface RenderWidgetsResponse {
+  svgs: string[];
 }
 
-/** Options for drawChip(). */
-export interface ChipOpts {
-  /** When true, fill chip black and draw text white
-   *  (used for problem / urgent states). */
-  inverted?: boolean;
-  /** Loaded icon image to draw inside the chip.
-   *  Sized to CHIP_ICON_RATIO * h, vertically centred.
-   *  For inverted chips the image is drawn with
-   *  ctx.filter = "invert(1)" to produce a white icon. */
-  icon?: HTMLImageElement;
-}
-
-/** Descriptor for a single chip in drawChipFlow(). */
-export interface ChipDescriptor {
-  text: string;
-  inverted?: boolean;
-  /** Loaded icon image. See ChipOpts.icon. */
-  icon?: HTMLImageElement;
+/** Response from the eink_dashboard/render_widget WebSocket command. */
+export interface RenderWidgetResponse {
+  svg: string;
 }
 
 export interface Handle {
@@ -159,22 +111,10 @@ export interface Handle {
   cy: number;
 }
 
-export interface ForecastDay {
-  datetime?: string;
-  condition?: string;
-  temperature?: number;
-  templow?: number;
-  precipitation?: number;
-}
-
 export interface LayoutResponse {
   display: DisplayConfig;
   widgets: Widget[];
   device: DeviceInfo;
-}
-
-export interface ForecastServiceResult {
-  response?: Record<string, { forecast?: ForecastDay[] }>;
 }
 
 // ── Widget types ──────────────────────────────────────────────────────────────

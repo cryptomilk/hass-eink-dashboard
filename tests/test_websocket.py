@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+import voluptuous as vol
 from homeassistant.components import websocket_api
 
 from custom_components.eink_dashboard import (
@@ -284,6 +286,55 @@ class TestWsRenderWidget:
         assert args[1] == websocket_api.ERR_UNKNOWN_ERROR
         conn.send_result.assert_not_called()
 
+    async def test_widget_override_used_instead_of_stored(
+        self,
+    ) -> None:
+        # When msg["widget"] is provided the renderer receives it
+        # instead of the stored widget at widget_index.
+        stored = {"type": "separator"}
+        override = {"type": "text", "text": "override"}
+        hass = _make_hass(widgets=[stored])
+        conn = _make_connection()
+        msg = {
+            "id": 13,
+            "entry_id": "entry1",
+            "widget_index": 0,
+            "widget": override,
+        }
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ) as mock_render:
+            await ws_render_widget(hass, conn, msg)
+
+        widget_arg, _ = mock_render.call_args.args
+        assert widget_arg == override
+
+    async def test_widget_override_skips_index_bounds_check(
+        self,
+    ) -> None:
+        # A provided widget override does not require a valid
+        # widget_index because the stored list is never consulted.
+        hass = _make_hass(widgets=[])
+        conn = _make_connection()
+        override = {"type": "text", "text": "hi"}
+        msg = {
+            "id": 14,
+            "entry_id": "entry1",
+            "widget_index": 99,
+            "widget": override,
+        }
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ):
+            await ws_render_widget(hass, conn, msg)
+
+        conn.send_result.assert_called_once_with(14, {"svg": "<svg/>"})
+        conn.send_error.assert_not_called()
+
 
 class TestCommandRegistration:
     async def test_command_registered_on_setup(self) -> None:
@@ -410,3 +461,91 @@ class TestWsRenderWidgets:
         assert args[0] == 6
         assert args[1] == websocket_api.ERR_UNKNOWN_ERROR
         conn.send_result.assert_not_called()
+
+    async def test_widgets_override_used_instead_of_stored(
+        self,
+    ) -> None:
+        # When msg["widgets"] is provided the renderer uses those
+        # widgets instead of the stored list.
+        stored = [{"type": "separator"}]
+        override = [
+            {"type": "text", "text": "a"},
+            {"type": "text", "text": "b"},
+        ]
+        hass = _make_hass(widgets=stored)
+        conn = _make_connection()
+        msg = {"id": 7, "entry_id": "entry1", "widgets": override}
+
+        rendered_widgets: list = []
+
+        def _capture(w, _cfg):
+            rendered_widgets.append(w)
+            return "<svg/>"
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            side_effect=_capture,
+        ):
+            await ws_render_widgets(hass, conn, msg)
+
+        assert rendered_widgets == override
+        conn.send_result.assert_called_once_with(
+            7, {"svgs": ["<svg/>", "<svg/>"]}
+        )
+        conn.send_error.assert_not_called()
+
+
+class TestWidgetsOverrideSchema:
+    """Verify the voluptuous [dict] schema rejects non-dict elements."""
+
+    _SCHEMA = vol.Schema(
+        {
+            vol.Required("type"): str,
+            vol.Required("entry_id"): str,
+            vol.Optional("widgets"): [dict],
+        }
+    )
+
+    def test_rejects_string_element(self) -> None:
+        # Schema must reject a list containing a plain string.
+        with pytest.raises(vol.Invalid):
+            self._SCHEMA(
+                {
+                    "type": "eink_dashboard/render_widgets",
+                    "entry_id": "entry1",
+                    "widgets": ["not-a-dict"],
+                }
+            )
+
+    def test_rejects_none_element(self) -> None:
+        # Schema must reject a list containing None.
+        with pytest.raises(vol.Invalid):
+            self._SCHEMA(
+                {
+                    "type": "eink_dashboard/render_widgets",
+                    "entry_id": "entry1",
+                    "widgets": [None],
+                }
+            )
+
+    def test_accepts_dict_elements(self) -> None:
+        # Schema must accept a list of dicts.
+        result = self._SCHEMA(
+            {
+                "type": "eink_dashboard/render_widgets",
+                "entry_id": "entry1",
+                "widgets": [{"type": "separator"}],
+            }
+        )
+        assert result["widgets"] == [{"type": "separator"}]
+
+    def test_accepts_empty_list(self) -> None:
+        # Schema must accept an empty widget list.
+        result = self._SCHEMA(
+            {
+                "type": "eink_dashboard/render_widgets",
+                "entry_id": "entry1",
+                "widgets": [],
+            }
+        )
+        assert result["widgets"] == []

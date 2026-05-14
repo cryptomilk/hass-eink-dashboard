@@ -52,10 +52,7 @@ image entity and a public HTTP endpoint.
 3. Write `_build_foo_context(widget, config) -> dict` in `svg_render.py`
 4. Register it in `_SVG_RENDERERS` in `svg_render.py`
 5. Add the widget type to `frontend/src/types/ha.d.ts`
-6. Add a `_renderFoo()` method in `frontend/src/eink-dashboard-card.ts`
-   and wire it into `_render()` (until Phase 4 replaces this with
-   inline SVG)
-7. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
+6. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
 
 **Converting or redesigning a widget type** (PIL→SVG migration or new
 widget):
@@ -64,7 +61,7 @@ Do not write code directly. Invoke the three skills in order using the
 1. `/implement-widget-tests` — write failing tests (TDD red phase)
 2. `/implement-widget` — implement the SVG template and Python
    context builder (green phase)
-3. `/implement-widget-frontend` — canvas preview, TS types, editor schema
+3. `/implement-widget-frontend` — TS types and editor schema
 
 **Line length**: 79 characters. Long comments must be wrapped across multiple
 lines — never shortened to fit. Split at word boundaries so each line stays
@@ -98,13 +95,11 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 `medium=True`),
 falling back to PIL's built-in default.
 
-**Dual renderers**: Each widget type is rendered in two places that must stay
-in sync: `svg_render.py` (SVG template + context builder, produces the actual
-PNG via `resvg_py`) and `eink-dashboard-card.ts` (`_render*()` methods,
-Canvas 2D preview in the Lovelace editor, Phase 4 of the SVG migration will
-replace these with inline SVG). When changing layout, data fields, or
-coordinates, mirror the change in both renderers (until Phase 4
-replaces the Canvas 2D preview with inline SVG).
+**Rendering**: Widget SVGs are rendered server-side by `svg_render.py`
+and fetched by the Lovelace card via the `eink_dashboard/render_widgets`
+WebSocket command. There is no client-side canvas renderer. When
+changing layout, data fields, or coordinates, only `svg_render.py` and
+the Jinja2 templates need updating.
 
 **Tests** assert visual correctness by scanning pixel regions for dark/gray
 pixels. Helpers in `tests/helpers.py`: `pixel(img, x, y)` reads a grayscale

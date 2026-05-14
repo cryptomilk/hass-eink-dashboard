@@ -116,6 +116,7 @@ def _build_display_config(
         vol.Required("type"): "eink_dashboard/render_widget",
         vol.Required("entry_id"): str,
         vol.Required("widget_index"): vol.All(int, vol.Range(min=0)),
+        vol.Optional("widget"): dict,
     }
 )
 @websocket_api.async_response
@@ -126,11 +127,16 @@ async def ws_render_widget(
 ) -> None:
     """Return the SVG string for a single widget.
 
+    When ``widget`` is provided it is used as-is instead of the
+    stored widget at ``widget_index``.  This allows the frontend
+    editor to preview unsaved local changes.
+
     Args:
         hass: Home Assistant instance.
         connection: Active WebSocket connection.
-        msg: Validated message dict containing ``entry_id``
-            (str) and ``widget_index`` (int).
+        msg: Validated message dict containing ``entry_id`` (str),
+            ``widget_index`` (int), and an optional ``widget``
+            (dict) override.
     """
     entry_id = msg["entry_id"]
     entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
@@ -142,17 +148,18 @@ async def ws_render_widget(
         )
         return
 
-    widgets = list(entry_data["widgets"])
-    idx = msg["widget_index"]
-    if idx < 0 or idx >= len(widgets):
-        connection.send_error(
-            msg["id"],
-            websocket_api.ERR_NOT_FOUND,
-            f"Widget index out of range: {idx}",
-        )
-        return
-
-    widget = widgets[idx]
+    widget = msg.get("widget")
+    if widget is None:
+        widgets = list(entry_data["widgets"])
+        idx = msg["widget_index"]
+        if idx < 0 or idx >= len(widgets):
+            connection.send_error(
+                msg["id"],
+                websocket_api.ERR_NOT_FOUND,
+                f"Widget index out of range: {idx}",
+            )
+            return
+        widget = widgets[idx]
     config = _build_display_config(hass, entry_id)
     try:
         svg = await hass.async_add_executor_job(
@@ -179,6 +186,7 @@ async def ws_render_widget(
     {
         vol.Required("type"): "eink_dashboard/render_widgets",
         vol.Required("entry_id"): str,
+        vol.Optional("widgets"): [dict],
     }
 )
 @websocket_api.async_response
@@ -194,10 +202,15 @@ async def ws_render_widgets(
     command on initial load or full refresh to avoid N sequential
     round-trips.
 
+    When ``widgets`` is provided it overrides the stored widget
+    list.  This allows the frontend editor to preview unsaved
+    local changes without saving first.
+
     Args:
         hass: Home Assistant instance.
         connection: Active WebSocket connection.
-        msg: Validated message dict containing ``entry_id`` (str).
+        msg: Validated message dict containing ``entry_id`` (str)
+            and an optional ``widgets`` (list) override.
     """
     entry_id = msg["entry_id"]
     entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
@@ -209,7 +222,7 @@ async def ws_render_widgets(
         )
         return
 
-    widgets = list(entry_data["widgets"])
+    widgets = msg.get("widgets") or list(entry_data["widgets"])
     config = _build_display_config(hass, entry_id)
 
     # Render all widgets in a single executor job: render_widget_svg
