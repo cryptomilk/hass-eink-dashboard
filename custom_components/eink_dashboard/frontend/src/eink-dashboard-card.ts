@@ -38,8 +38,8 @@ const COLOR_WHITE = 255;
 const COLOR_GRAY = 120;
 const COLOR_LIGHT_GRAY = 180;
 const FONT_FAMILY = "Roboto, sans-serif";
-const ROBOTO_URL = "/eink_dashboard/fonts/Roboto-Regular.ttf";
-const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto-Medium.ttf";
+const ROBOTO_URL = "/eink_dashboard/fonts/Roboto/Roboto-Regular.ttf";
+const ROBOTO_MEDIUM_URL = "/eink_dashboard/fonts/Roboto/Roboto-Medium.ttf";
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;

@@ -34,7 +34,7 @@ _LOGGER = logging.getLogger(__name__)
 type Widget = dict[str, Any]
 type DisplayConfig = dict[str, Any]
 
-_FONTS_DIR = Path(__file__).parent / "fonts"
+_FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 
 
 def _load_font(

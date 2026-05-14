@@ -36,7 +36,7 @@ from .const import (
     WidgetType,
 )
 
-_FONTS_DIR = Path(__file__).parent / "fonts"
+_FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _ICONS_DIR = Path(__file__).parent / "icons" / "svg"
 _ICONS_DIR_RESOLVED = _ICONS_DIR.resolve()

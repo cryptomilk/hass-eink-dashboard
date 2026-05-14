@@ -94,7 +94,8 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 `FONT_SIZE_STATUS_ICONS=28`.
 
 **Fonts**: `_load_font(size, medium=False)` (LRU-cached) loads
-`fonts/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when `medium=True`),
+`fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
+`medium=True`),
 falling back to PIL's built-in default.
 
 **Dual renderers**: Each widget type is rendered in two places that must stay

@@ -2,10 +2,10 @@
 # Build a distributable tar.gz of the eink_dashboard custom component.
 #
 # What this script does:
-#   1. Download Roboto-Regular.ttf (Apache 2.0) into the component's fonts/ dir
+#   1. Build the frontend TypeScript bundle
 #   2. Package custom_components/eink_dashboard/ into dist/eink_dashboard-<version>.tar.gz
 #   3. Optionally produce dist/eink_dashboard.zip for HACS zip_release
-#   4. Clean up downloaded fonts from the working tree
+#   4. Clean up the generated frontend JS bundle
 #
 # Usage:
 #   bash scripts/build_dist.sh            # build both tar.gz and zip (default)
@@ -26,15 +26,12 @@ done
 
 REPO_ROOT="$(cd "$(dirname "${0}")/.." && pwd)"
 COMPONENT_DIR="${REPO_ROOT}/custom_components/eink_dashboard"
-FONTS_DIR="${COMPONENT_DIR}/fonts"
 DIST_DIR="${REPO_ROOT}/dist"
 
 VERSION=$(python3 -c "import json; print(json.load(open('${COMPONENT_DIR}/manifest.json'))['version'])")
 ARCHIVE="${DIST_DIR}/eink_dashboard-${VERSION}.tar.gz"
 
 FRONTEND_DIR="${COMPONENT_DIR}/frontend"
-ROBOTO_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
-ROBOTO_MEDIUM_URL="https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Medium.ttf"
 
 cleanup() {
     echo "Cleaning up generated assets..."
@@ -45,21 +42,6 @@ trap cleanup EXIT
 
 echo "==> Building frontend TypeScript..."
 (cd "${FRONTEND_DIR}" && pnpm install --frozen-lockfile && pnpm build)
-
-mkdir -p "${FONTS_DIR}"
-if [ -f "${FONTS_DIR}/Roboto-Regular.ttf" ]; then
-    echo "==> Roboto-Regular.ttf already exists, skipping download"
-else
-    echo "==> Downloading Roboto-Regular.ttf (Apache 2.0)..."
-    curl -fsSL "${ROBOTO_URL}" -o "${FONTS_DIR}/Roboto-Regular.ttf"
-fi
-
-if [ -f "${FONTS_DIR}/Roboto-Medium.ttf" ]; then
-    echo "==> Roboto-Medium.ttf already exists, skipping download"
-else
-    echo "==> Downloading Roboto-Medium.ttf (Apache 2.0)..."
-    curl -fsSL "${ROBOTO_MEDIUM_URL}" -o "${FONTS_DIR}/Roboto-Medium.ttf"
-fi
 
 mkdir -p "${DIST_DIR}"
 
