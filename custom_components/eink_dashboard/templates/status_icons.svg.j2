@@ -1,0 +1,33 @@
+{%- from "_macros.svg.j2" import card_container, chip -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ total_h }}">
+<rect width="{{ w }}" height="{{ total_h }}" fill="white"/>
+{%- if has_entities -%}
+{%- if title -%}
+<text
+  x="0" y="0"
+  font-family="Roboto"
+  font-size="{{ title_font_sz }}"
+  dominant-baseline="hanging"
+  fill="#787878">{{ title }}</text>
+{%- endif -%}
+{# xo and ri unused — chip positions are pre-computed by the
+   context builder with card container insets already applied.
+   h=total_h-title_advance so the decoration covers all chip
+   rows when wrapping occurs. #}
+{%- call(xo, ri) card_container(
+    x=0, y=title_advance, w=w, h=total_h - title_advance,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    padding=m_padding, left_bar=m_left_bar,
+    grayscale_levels=grayscale_levels) -%}
+{%- for c in chips -%}
+{{ chip(
+    x=c.x, y=c.y, w=c.w, h=chip_h,
+    text=c.text, border=m_border,
+    icon_svg=c.icon_svg,
+    inverted=c.inverted) }}
+{%- endfor -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

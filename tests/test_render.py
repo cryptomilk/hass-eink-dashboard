@@ -1943,18 +1943,10 @@ MOCK_STATUS_ICON_STATES = {
 }
 
 
-def _make_dummy_icon(
-    size: int = 64,
-) -> tuple[Image.Image, Image.Image]:
-    """Create a synthetic icon for tests that need _load_icon."""
-    gray = Image.new("L", (size, size), 0)
-    mask = Image.new("L", (size, size), 255)
-    return gray, mask
-
-
 class TestRenderStatusIcons:
-    # Verify rendering of redesigned status_icons widgets
-    # using pill-shaped chips with MDI icons.
+    # Verify rendering of status_icons widgets as pill-shaped chips
+    # with MDI icons, inverted problem-state chips, and card
+    # containers.
     _DEFAULTS: dict[str, object] = {
         "width": 500,
         "height": 200,
@@ -1983,11 +1975,11 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Extreme top-left corner: outside the pill radius
+        # Extreme top-left corner: outside the pill radius.
         radius = h // 2
         assert pixel(img, 0, 0) == 255
-        # A few pixels inward from the radius along the
-        # top edge: inside the border stroke
+        # A few pixels inward from the radius along the top
+        # edge: inside the border stroke.
         assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
 
     def test_problem_chip_inverted(self) -> None:
@@ -2007,11 +1999,9 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Check inside the left semicircle but left of where text
-        # starts (pad_h = round(h * 0.18) = 7).  x=3 is 17 px from
-        # the circle centre (radius 20) and clear of the text column,
-        # so it is reliably black regardless of which font backend
-        # renders the label.
+        # Check inside the left semicircle at the vertical
+        # midpoint: x=3 is 17 px from the cap centre (radius 20)
+        # and clear of the text column, so reliably black.
         assert pixel(img, 3, h // 2) < 64
 
     def test_normal_chip_outline(self) -> None:
@@ -2031,13 +2021,13 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Check above the text/icon band (y=4) where the chip
-        # background is white for a non-inverted chip.  The
-        # left cap centre (cx=h//2) is always content-free there.
+        # Interior near the top of the left cap is white for
+        # a non-inverted chip.  At y=4 the cap centre (cx=20)
+        # is always content-free (no icon or text there).
         cx = h // 2
         assert pixel(img, cx, 4) >= 200
-        # The border itself should have dark pixels
-        # (along top edge past the radius)
+        # The border itself has dark pixels along the top
+        # edge past the radius.
         radius = h // 2
         assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
 
@@ -2061,7 +2051,7 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Dark pixels should exist below the first chip row
+        # Dark pixels must exist below the first chip row
         # (second row starts at y = h + gap).
         second_row_y = h + gap
         assert_has_dark_pixels(
@@ -2075,12 +2065,17 @@ class TestRenderStatusIcons:
     # ── Content tests ─────────────────────────────────
 
     def test_icon_presence(self) -> None:
-        # Entity with mapped device_class (door) → MDI icon
-        # drawn inside the chip's icon region.  Patches
-        # _load_icon so PNGs need not be built.
+        # Entity with a mapped device_class (window →
+        # window-closed-variant) renders an MDI icon in the
+        # chip's icon band.  The chip is not inverted so the
+        # background is white and dark icon pixels are
+        # distinguishable from the background.
         h = 40
         pad = round(h * 0.18)
         icon_sz = round(h * 0.29)
+        # Vertical span of the icon within the chip.
+        icon_y0 = (h - icon_sz) // 2
+        icon_y1 = icon_y0 + icon_sz
         widgets = [
             {
                 "type": "status_icons",
@@ -2089,24 +2084,18 @@ class TestRenderStatusIcons:
                 "w": 400,
                 "h": h,
                 "entities": [
-                    "binary_sensor.front_door",
+                    "binary_sensor.kitchen_window",
                 ],
             }
         ]
-        dummy = _make_dummy_icon()
-        with patch(
-            "custom_components.eink_dashboard.render._load_icon",
-            return_value=dummy,
-        ):
-            img = png_to_image(render_dashboard(widgets, self._config()))
-        # Icon region inside the chip (after horizontal
-        # padding).  The dummy icon is a solid black square
-        # with full opacity, so non-white pixels confirm
-        # the icon was drawn.
-        assert content_bbox(img, pad, 0, pad + icon_sz, h) is not None
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        # Dark pixels in the icon-only band (text starts at
+        # pad + icon_sz + gap, well outside this region) confirm
+        # the icon was rendered.
+        assert_has_dark_pixels(img, pad, icon_y0, pad + icon_sz, icon_y1)
 
     def test_title(self) -> None:
-        # Title text is rendered above chip area in gray.
+        # Title text is rendered above the chip area in gray.
         h = 40
         widgets = [
             {
@@ -2122,11 +2111,11 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Title area: top pixels should have content
         title_font_sz = max(10, round(h * 0.14))
         title_advance = round(title_font_sz * 1.4)
+        # Title area has content (threshold=200 catches gray text).
         assert_has_dark_pixels(img, 0, 0, 200, title_advance, threshold=200)
-        # Chip content starts below the title
+        # Chip content starts below the title.
         assert_has_dark_pixels(img, 0, title_advance, 400, title_advance + h)
 
     # ── Edge case tests ───────────────────────────────
@@ -2146,9 +2135,28 @@ class TestRenderStatusIcons:
         img = png_to_image(render_dashboard(widgets, self._config()))
         assert_all_white(img, 0, 0, 500, 200)
 
+    def test_all_entities_missing_noop(self) -> None:
+        # All listed entities absent from states → canvas is
+        # entirely white (same outcome as empty entity list).
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 40,
+                "entities": [
+                    "binary_sensor.nonexistent_a",
+                    "binary_sensor.nonexistent_b",
+                ],
+            }
+        ]
+        img = png_to_image(render_dashboard(widgets, self._config()))
+        assert_all_white(img, 0, 0, 500, 200)
+
     def test_missing_entity_skipped(self) -> None:
-        # Nonexistent entity is skipped; valid entity
-        # still renders.
+        # Nonexistent entity is silently skipped; the valid
+        # entity still renders.
         widgets = [
             {
                 "type": "status_icons",
@@ -2167,8 +2175,8 @@ class TestRenderStatusIcons:
 
     def test_motion_on_is_not_inverted(self) -> None:
         # Motion sensor with state "on" is informational,
-        # not a problem — chip must NOT be inverted (no
-        # black fill).
+        # not a problem — chip must NOT be inverted (no black
+        # fill).
         h = 40
         pad = round(h * 0.18)
         states = dict(MOCK_STATUS_ICON_STATES)
@@ -2193,9 +2201,8 @@ class TestRenderStatusIcons:
         ]
         cfg = self._config(states=states)
         img = png_to_image(render_dashboard(widgets, cfg))
-        # Check above the text/icon band (y=4) where the chip
-        # background is white for a non-inverted chip.  A
-        # black-filled (inverted) chip would be dark there too.
+        # Interior near the top of the chip is white for a
+        # non-inverted chip (black-filled chip would be dark).
         interior_x = pad + 5
         assert pixel(img, interior_x, 4) == 255
 
@@ -2247,9 +2254,10 @@ class TestRenderStatusIcons:
     # ── Alignment tests ───────────────────────────────
 
     def test_icon_vertically_centered(self) -> None:
-        # Icon content and text content share the same
-        # vertical center within the chip.  Patches
-        # _load_icon so PNGs need not be built.
+        # Icon and text share the same vertical centre within
+        # the chip.  kitchen_window (state=off, not inverted)
+        # has a white background so both regions are
+        # measurable via content_bbox.
         h = 40
         pad = round(h * 0.18)
         icon_sz = round(h * 0.29)
@@ -2266,17 +2274,15 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        dummy = _make_dummy_icon()
-        with patch(
-            "custom_components.eink_dashboard.render._load_icon",
-            return_value=dummy,
-        ):
-            img = png_to_image(render_dashboard(widgets, self._config()))
+        img = png_to_image(render_dashboard(widgets, self._config()))
         text_start = pad + icon_sz + icon_gap
+        # tolerance=3.0: resvg dominant-baseline="central"
+        # differs slightly from PIL's ascender-based centering.
         assert_vertically_centered(
             img,
             icon_region=(pad, 0, pad + icon_sz, h),
             text_region=(text_start, 0, 300, h),
+            tolerance=3.0,
         )
 
     # ── Card container tests ──────────────────────────
@@ -2309,8 +2315,7 @@ class TestRenderStatusIcons:
             W - m.radius,
             m.border,
         )
-        # Bottom edge — +1 margin accommodates PIL stroke
-        # rounding at larger border widths.
+        # Bottom edge — +1 accommodates stroke rounding.
         assert_has_dark_pixels(
             img,
             m.radius,
@@ -2337,7 +2342,7 @@ class TestRenderStatusIcons:
 
     def test_card_left_bar(self) -> None:
         # Left_bar style draws gray pixels on the left edge;
-        # the right edge should be white.
+        # the right edge is white.
         h = 40
         m = _compute_metrics(h)
         widgets = [
@@ -2355,7 +2360,7 @@ class TestRenderStatusIcons:
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
         # The bar fills the full height; 2px inset avoids
-        # sub-pixel edge effects at the top/bottom.
+        # sub-pixel edge effects at top/bottom.
         assert_has_gray_pixels(
             img,
             0,
@@ -2365,7 +2370,7 @@ class TestRenderStatusIcons:
             low=COLOR_GRAY - 20,
             high=COLOR_GRAY + 20,
         )
-        # Right edge: no decoration
+        # Right edge: no decoration.
         assert_all_white(img, 395, 0, 400, 1)
 
     def test_card_none(self) -> None:
@@ -2386,14 +2391,14 @@ class TestRenderStatusIcons:
             }
         ]
         img = png_to_image(render_dashboard(widgets, self._config()))
-        # Top-left corner should be white (no border, no bar)
+        # Top-left corner: no border, no bar.
         assert_all_white(img, 0, 0, 3, 3)
-        # Far right edge should be white
+        # Far right edge: no decoration.
         assert_all_white(img, 397, 0, 400, 3)
 
     def test_card_style_none_is_default(self) -> None:
-        # Omitting card_style must produce byte-identical output to
-        # card_style="none" (no card decoration drawn).
+        # Omitting card_style must produce byte-identical output
+        # to card_style="none" (no card decoration drawn).
         base = {
             "type": "status_icons",
             "x": 0,
@@ -2423,6 +2428,13 @@ MOCK_WASTE_SCHEDULE_STATES = {
 
 _TODAY = dt.date(2026, 5, 2)
 _PATCH_NOW = "custom_components.eink_dashboard.render.date"
+
+
+def _make_dummy_icon() -> tuple[Image.Image, Image.Image]:
+    """Return a (gray, mask) icon pair filled with black pixels."""
+    gray = Image.new("L", (32, 32), COLOR_BLACK)
+    mask = Image.new("L", (32, 32), 255)
+    return (gray, mask)
 
 
 class TestWasteDateHelpers:

@@ -65,17 +65,29 @@ _CONDITION_TO_SVG: dict[str, str] = {
 }
 
 
-def _svg_to_png(svg: str, width: int, height: int) -> bytes:
+def _svg_to_png(
+    svg: str,
+    width: int,
+    height: int | None = None,
+) -> bytes:
     """Rasterise an SVG string to PNG bytes via resvg.
 
     Uses ``skip_system_fonts=True`` so rendering is identical across
     HA OS, Docker, and dev machines.  Only fonts shipped in the
     ``fonts/`` directory are available to the renderer.
 
+    When ``height`` is ``None``, resvg uses the SVG document's
+    intrinsic height.  Widgets whose content can exceed their
+    declared ``h`` (e.g. ``status_icons`` with wrapping chips)
+    set the SVG height to the full content height and omit the
+    explicit override so the rasterised PNG is tall enough to hold
+    all rows.
+
     Args:
         svg: SVG document as a string.
         width: Output width in pixels.
-        height: Output height in pixels.
+        height: Output height in pixels, or ``None`` to use the
+            SVG's intrinsic height.
 
     Returns:
         PNG image as raw bytes.
@@ -1038,6 +1050,191 @@ def _build_device_battery_context(
     }
 
 
+def _build_status_icons_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the status_icons widget.
+
+    Renders binary sensor entities as pill-shaped chips.  Problem
+    entities (state ``"on"`` and device_class in
+    ``_PROBLEM_DEVICE_CLASSES``) use inverted chips (black fill,
+    white text/icon).  Chips flow left-to-right with row wrapping.
+    An optional title is drawn in gray above the chip area.
+
+    The SVG ``height`` is set to the full content height, which
+    may exceed the declared widget ``h`` when chips wrap to
+    multiple rows.  ``render_dashboard()`` calls ``_svg_to_png()``
+    without an explicit height override so the rasterised PNG is
+    tall enough to hold all rows.
+
+    Args:
+        widget: Widget config dict.  Recognised keys: ``x``,
+            ``y``, ``w``, ``h`` (default 40), ``title``,
+            ``card_style``, ``entities``.
+        config: Display config with ``states`` and
+            ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by
+        ``status_icons.svg.j2``.  Returns
+        ``{"w": …, "h": …, "total_h": …, "has_entities": False}``
+        when the entity list is empty or all listed entities are
+        absent from ``states``.
+    """
+    from .render import (  # noqa: PLC0415
+        _CHIP_FONT_RATIO,
+        _CHIP_GAP_RATIO,
+        _CHIP_ICON_RATIO,
+        _CHIP_PAD_RATIO,
+        _PROBLEM_DEVICE_CLASSES,
+        _compute_metrics,
+        _device_class_icon,
+        _load_font,
+    )
+
+    x = widget.get("x", PADDING)
+    svg_w = max(1, widget.get("w", config["width"] - x))
+    svg_h = max(1, widget.get("h", 40))
+    title: str = widget.get("title", "")
+    card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
+    entity_ids: list[str] = widget.get("entities", [])
+    states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    if not entity_ids:
+        return {
+            "w": svg_w,
+            "h": svg_h,
+            "total_h": svg_h,
+            "has_entities": False,
+            "title": title,
+        }
+
+    # Title above the chip area: font size and vertical advance.
+    title_font_sz = max(10, round(svg_h * 0.14)) if title else 0
+    title_advance = round(title_font_sz * 1.4) if title else 0
+
+    # chip_h is the single-row chip height after the title.
+    chip_h = max(1, svg_h - title_advance)
+    m = _compute_metrics(chip_h)
+
+    # Pre-compute card container insets, mirroring the
+    # card_container macro in _macros.svg.j2.
+    if card_style == "border":
+        x_off = m.padding
+        r_inset = m.padding
+    elif card_style == "left_bar":
+        bar_w = (
+            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
+        )
+        x_off = bar_w + m.padding
+        r_inset = 0
+    else:
+        x_off = 0
+        r_inset = 0
+
+    content_w = svg_w - x_off - r_inset
+
+    # Chip sizing ratios — must match the chip macro in
+    # _macros.svg.j2.
+    pad = round(chip_h * _CHIP_PAD_RATIO)
+    icon_sz = round(chip_h * _CHIP_ICON_RATIO)
+    icon_gap = round(chip_h * _CHIP_GAP_RATIO)
+    font_sz = max(10, round(chip_h * _CHIP_FONT_RATIO))
+    font = _load_font(font_sz)
+    # Inter-chip gap equals icon size by design (same as PIL).
+    inter_gap = round(chip_h * _CHIP_ICON_RATIO)
+
+    # Build chip descriptors with pre-computed widths.
+    chips: list[dict[str, Any]] = []
+    for entity_id in entity_ids:
+        state = states.get(entity_id)
+        if state is None:
+            continue
+        attrs = state.get("attributes", {})
+        label: str = attrs.get("friendly_name", entity_id)
+        state_val: str = state.get("state", "")
+        device_class: str = attrs.get("device_class", "")
+        domain = entity_id.split(".")[0]
+
+        is_problem = (
+            state_val == "on" and device_class in _PROBLEM_DEVICE_CLASSES
+        )
+
+        icon_name = _device_class_icon(attrs, state_val, domain)
+        icon_svg: markupsafe.Markup | str = ""
+        if icon_name:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(icon_name, icon_sz)
+
+        has_icon = bool(icon_svg)
+        icon_w = (icon_sz + icon_gap) if has_icon else 0
+        # Ink bounding box matches _chip_width() in render.py.
+        lbbox = font.getbbox(label)
+        text_w = int(lbbox[2] - lbbox[0])
+        chip_w = pad * 2 + icon_w + text_w
+
+        chips.append(
+            {
+                "text": label,
+                "icon_svg": icon_svg,
+                "inverted": is_problem,
+                "w": chip_w,
+                "x": 0,
+                "y": 0,
+            }
+        )
+
+    if not chips:
+        return {
+            "w": svg_w,
+            "h": svg_h,
+            "total_h": svg_h,
+            "has_entities": False,
+            "title": title,
+        }
+
+    # Horizontal flow layout with row wrapping.
+    # Positions are absolute within the SVG viewport:
+    # cur_y starts at title_advance so chip rows are
+    # placed below the title.
+    cur_x = x_off
+    cur_y = title_advance
+    for c in chips:
+        if cur_x > x_off:
+            if cur_x + inter_gap + c["w"] > x_off + content_w:
+                cur_x = x_off
+                cur_y += chip_h + inter_gap
+            else:
+                cur_x += inter_gap
+        c["x"] = cur_x
+        c["y"] = cur_y
+        cur_x += c["w"]
+
+    # SVG height covers title + all chip rows (may exceed svg_h
+    # when chips wrap to more than one row).
+    total_h = chips[-1]["y"] + chip_h
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "total_h": total_h,
+        "has_entities": True,
+        "title": title,
+        "title_font_sz": title_font_sz,
+        "title_advance": title_advance,
+        "chip_h": chip_h,
+        "card_style": card_style,
+        "grayscale_levels": grayscale_levels,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+        "chips": chips,
+    }
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -1072,6 +1269,7 @@ _SVG_RENDERERS: dict[str, SvgContextFn] = {
     WidgetType.DEVICE_BATTERY: _build_device_battery_context,
     WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
     WidgetType.SEPARATOR: _build_separator_context,
+    WidgetType.STATUS_ICONS: _build_status_icons_context,
     WidgetType.TEXT: _build_text_context,
     WidgetType.WEATHER: _build_weather_context,
 }
