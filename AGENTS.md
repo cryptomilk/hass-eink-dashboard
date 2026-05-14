@@ -81,7 +81,7 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 `COLOR_WHITE=255`, `COLOR_GRAY=120`, `COLOR_LIGHT_GRAY=180`, `PADDING=24`.
 `DEFAULT_CARD_STYLE="none"`. Per-widget font sizes: `FONT_SIZE_TEXT=32`,
 `FONT_SIZE_WEATHER=32`, `FONT_SIZE_SENSOR_ROWS=32`,
-`FONT_SIZE_DEVICE_BATTERY=24`, `FONT_SIZE_STATUS_ICONS=28`.
+`FONT_SIZE_STATUS_ICONS=28`.
 
 **Fonts**: `_load_font(size, medium=False)` (LRU-cached) loads
 `fonts/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when `medium=True`),

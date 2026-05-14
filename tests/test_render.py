@@ -1394,9 +1394,9 @@ class TestRenderSensorRows:
 
 class TestRenderDeviceBattery:
     # Verify rendering of device battery widgets in both icon and chip
-    # layouts.  Icon layout uses font_size-based sizing with a 30x14
-    # battery body.  Chip layout uses w/h-based sizing with a pill
-    # shape containing a fill bar.
+    # layouts.  Icon layout renders a compact battery outline with fill
+    # bar sized proportionally from h (default h=40 → 30×14 body).
+    # Chip layout uses w/h-based sizing with a pill-shaped container.
     _DEFAULTS: dict[str, object] = {
         "width": 400,
         "height": 100,
@@ -1496,38 +1496,52 @@ class TestRenderDeviceBattery:
         img = png_to_image(result)
         assert_has_dark_pixels(img, PADDING + 1, 31, PADDING + 29, 43)
 
-    def test_icon_scales_with_font_size(self) -> None:
-        # font_size=48 → s=2 → body is 60×28 instead of 30×14
-        widgets = [
+    def test_icon_scales_with_h(self) -> None:
+        # Doubling h doubles the battery icon body dimensions.
+        # At h=40: body is 30×14. At h=80: body is ~60×28.
+        cfg_small = make_config(
+            {"width": 400, "height": 60, "device_battery_level": 75}
+        )
+        cfg_large = make_config(
             {
-                "type": "device_battery",
-                "x": PADDING,
-                "y": 40,
-                "font_size": 48,
+                "width": 400,
+                "height": 100,
+                "device_battery_level": 75,
             }
-        ]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=75)
         )
-        img = png_to_image(result)
-        # Scaled icon body occupies a region the default size
-        # cannot reach (PADDING to PADDING+60).
-        assert_has_dark_pixels(
-            img, PADDING, 57, PADDING + 60, 88, threshold=200
+        img_small = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "device_battery",
+                        "x": 0,
+                        "y": 0,
+                        "h": 40,
+                    }
+                ],
+                cfg_small,
+            )
         )
-
-        # At default font_size the region below the icon (y=67+)
-        # is clear — the scaled icon fills this area, proving the
-        # icon body actually grew.
-        result_default = render_dashboard(
-            [{"type": "device_battery", "x": PADDING, "y": 40}],
-            self._config(device_battery_level=75),
+        img_large = png_to_image(
+            render_dashboard(
+                [
+                    {
+                        "type": "device_battery",
+                        "x": 0,
+                        "y": 0,
+                        "h": 80,
+                    }
+                ],
+                cfg_large,
+            )
         )
-        img_default = png_to_image(result_default)
-        assert all(
-            pixel(img_default, x, y) >= 200
-            for x in range(PADDING + 35, PADDING + 50)
-            for y in range(67, 75)
+        assert_scales_proportionally(
+            img_small,
+            img_large,
+            region_small=(0, 0, 400, 60),
+            region_large=(0, 0, 400, 100),
+            expected_ratio=2.0,
+            tolerance=0.35,
         )
 
     def test_icon_default_layout(self) -> None:

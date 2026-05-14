@@ -1,0 +1,44 @@
+{%- from "_macros.svg.j2" import card_container -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+{%- if has_level -%}
+{# xo and ri are unused — absolute positions are pre-computed by the context builder #}
+{%- call(xo, ri) card_container(
+    x=0, y=0, w=w, h=card_h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    padding=m_padding, left_bar=m_left_bar,
+    grayscale_levels=grayscale_levels) -%}
+{%- if layout == "chip" -%}
+<rect x="{{ chip_x }}" y="0" width="{{ chip_w }}" height="{{ card_h }}"
+  rx="{{ chip_radius }}" ry="{{ chip_radius }}" fill="#ffffff"
+  stroke="#000000" stroke-width="{{ m_border }}"/>
+{%- if bar_w > 0 -%}
+<rect x="{{ bar_abs_x }}" y="{{ bar_y }}" width="{{ bar_w }}"
+  height="{{ bar_h }}" fill="none" stroke="{{ color_hex }}"
+  stroke-width="{{ bar_border }}"/>
+{%- if fill_w > 0 -%}
+<rect x="{{ fill_abs_x }}" y="{{ fill_y }}" width="{{ fill_w }}"
+  height="{{ fill_h }}" fill="{{ color_hex }}"/>
+{%- endif -%}
+{%- endif -%}
+<text x="{{ text_abs_x }}" y="{{ text_y }}" font-family="Roboto"
+  font-size="{{ font_sz }}" dominant-baseline="central"
+  fill="{{ color_hex }}">{{ label }}</text>
+{%- else -%}
+<rect x="{{ body_x }}" y="{{ icon_y }}" width="{{ bw }}" height="{{ bh }}"
+  fill="none" stroke="#787878" stroke-width="1"/>
+<rect x="{{ nub_abs_x }}" y="{{ nub_y }}" width="{{ nub_w }}"
+  height="{{ nub_h }}" fill="#787878"/>
+{%- if fill_w > 0 -%}
+<rect x="{{ fill_abs_x }}" y="{{ icon_fill_y }}" width="{{ fill_w }}"
+  height="{{ icon_fill_h }}" fill="{{ color_hex }}"/>
+{%- endif -%}
+<text x="{{ text_abs_x }}" y="{{ text_svg_y }}" font-family="Roboto"
+  font-size="{{ font_sz }}" dominant-baseline="central"
+  fill="{{ color_hex }}">{{ label }}</text>
+{%- endif -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

@@ -859,6 +859,185 @@ def _build_sensor_rows_context(
     }
 
 
+def _build_device_battery_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the device_battery widget.
+
+    Supports two layouts via the ``layout`` parameter:
+
+    - ``"icon"`` (default): compact battery outline with percentage
+      label, sized via h-based proportional ratios.  At ``h=40``
+      the standard geometry applies (bw=30, bh=14, nub_w=3,
+      nub_h=8).
+    - ``"chip"``: pill-shaped chip with a proportional fill bar
+      and percentage label, sized via ``h``.
+
+    An optional ``card_style`` parameter wraps the content in a
+    card frame.  Content insets are pre-computed from the card
+    style so the template receives final absolute positions.
+
+    Args:
+        widget: Widget config dict.  Recognised keys: ``x``,
+            ``y``, ``w``, ``h`` (default 40), ``layout``,
+            ``card_style``, ``color``.
+        config: Display config with ``device_battery_level``
+            (int 0–100) and ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by
+        ``device_battery.svg.j2``.  Returns
+        ``{"w": …, "h": …, "has_level": False}`` when
+        ``device_battery_level`` is absent from config.
+    """
+    from .render import _compute_metrics, _load_font  # noqa: PLC0415
+
+    x = widget.get("x", PADDING)
+    svg_w = max(1, widget.get("w", config["width"] - x))
+    h: int = widget.get("h", 40)
+    svg_h = max(1, h)
+
+    level = config.get("device_battery_level")
+    if level is None:
+        return {"w": svg_w, "h": svg_h, "has_level": False}
+
+    pct = max(0, min(100, int(level)))
+    layout = widget.get("layout", "icon")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    grayscale_levels = config.get("grayscale_levels", 16)
+    color: int = widget.get("color", COLOR_BLACK)
+    # Force black below 20% for visual emphasis.
+    if pct < 20:
+        color = COLOR_BLACK
+    color_hex = f"#{color:02x}{color:02x}{color:02x}"
+
+    label = f"{pct}%"
+    m = _compute_metrics(h)
+
+    # Pre-compute card container insets, mirroring the card_container
+    # macro in _macros.svg.j2 so chip/icon widths can be capped to
+    # the available content area before the template renders.
+    if card_style == "border":
+        x_off = m.padding
+        r_inset = m.padding
+    elif card_style == "left_bar":
+        bar_w_lbar = (
+            max(10, m.left_bar * 3) if grayscale_levels <= 2 else m.left_bar
+        )
+        x_off = bar_w_lbar + m.padding
+        r_inset = 0
+    else:
+        x_off = 0
+        r_inset = 0
+
+    if layout == "chip":
+        cw = svg_w - x_off - r_inset
+        # Sizing ratios mirror _CHIP_PAD_RATIO/_CHIP_GAP_RATIO/
+        # _CHIP_FONT_RATIO in render.py and the chip macro
+        # parameters in _macros.svg.j2.
+        pad = round(h * 0.18)
+        gap = round(h * 0.14)
+        bar_w_nat = round(h * 1.2)
+        bar_h = round(h * 0.36)
+        bar_border = max(1, m.border // 2)
+        font_sz = max(10, round(h * 0.46))
+        font = _load_font(font_sz)
+        text_w = round(font.getlength(label))
+
+        chip_w = min(pad + bar_w_nat + gap + text_w + pad, cw)
+        # Reflow bar to fit within a capped chip.
+        bar_w = max(0, chip_w - pad - gap - text_w - pad)
+
+        chip_radius = h // 2
+        bar_y = (h - bar_h) // 2
+        fill_w = int((bar_w - 2) * pct / 100) if bar_w > 2 else 0
+
+        return {
+            "w": svg_w,
+            "h": svg_h,
+            "has_level": True,
+            "layout": "chip",
+            "card_h": h,
+            "card_style": card_style,
+            "m_border": m.border,
+            "m_padding": m.padding,
+            "m_radius": m.radius,
+            "m_left_bar": m.left_bar,
+            "grayscale_levels": grayscale_levels,
+            "color_hex": color_hex,
+            "label": label,
+            "font_sz": font_sz,
+            "chip_x": x_off,
+            "chip_w": chip_w,
+            "chip_radius": chip_radius,
+            "bar_abs_x": x_off + pad,
+            "bar_y": bar_y,
+            "bar_w": bar_w,
+            "bar_h": bar_h,
+            "bar_border": bar_border,
+            "fill_abs_x": x_off + pad + 1,
+            "fill_y": bar_y + 1,
+            "fill_w": fill_w,
+            "fill_h": max(0, bar_h - 2),
+            "text_abs_x": x_off + pad + bar_w + gap,
+            "text_y": h // 2,
+        }
+
+    # Icon layout: compact battery outline with proportional fill bar.
+    # Ratios chosen so that h=40 produces the standard geometry
+    # (bw=30, bh=14, nub_w=3, nub_h=8).
+    bw = round(h * 0.75)
+    bh = round(h * 0.35)
+    nub_w = round(h * 0.075)
+    nub_h = round(h * 0.20)
+    nub_gap = max(1, round(h * 0.025))
+    gap = round(h * 0.10)
+    font_sz = max(10, round(h * 0.60))
+    font = _load_font(font_sz)
+    # 'la' (left-ascender) is the default anchor for
+    # FreeTypeFont.getbbox(), centring the battery body on the
+    # visible text glyph ink rather than the full EM square.
+    # Clamp to 0 so negative ascender values never push the rect
+    # above the SVG canvas.
+    bbox = font.getbbox(label)
+    text_h = bbox[3] - bbox[1]
+    icon_y = max(0, bbox[1] + (text_h - bh) // 2)
+    nub_y = icon_y + (bh - nub_h) // 2
+    fill_w = int((bw - 2) * pct / 100)
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "has_level": True,
+        "layout": "icon",
+        "card_h": h,
+        "card_style": card_style,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+        "grayscale_levels": grayscale_levels,
+        "color_hex": color_hex,
+        "label": label,
+        "font_sz": font_sz,
+        "body_x": x_off,
+        "icon_y": icon_y,
+        "bw": bw,
+        "bh": bh,
+        "nub_abs_x": x_off + bw + nub_gap,
+        "nub_y": nub_y,
+        "nub_w": nub_w,
+        "nub_h": nub_h,
+        "fill_abs_x": x_off + 1,
+        "icon_fill_y": icon_y + 1,
+        "fill_w": fill_w,
+        "icon_fill_h": max(0, bh - 2),
+        "text_abs_x": x_off + bw + nub_gap + nub_w + gap,
+        "text_svg_y": icon_y + bh // 2,
+    }
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -890,6 +1069,7 @@ def render_widget_svg(
 
 
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
+    WidgetType.DEVICE_BATTERY: _build_device_battery_context,
     WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
     WidgetType.SEPARATOR: _build_separator_context,
     WidgetType.TEXT: _build_text_context,
