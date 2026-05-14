@@ -29,6 +29,7 @@ dev = [
     {include-group = "typecheck"},
     {include-group = "test"},
     {include-group = "interrogate"},
+    "watchdog>=6.0",
 ]
 
 [tool.ruff]

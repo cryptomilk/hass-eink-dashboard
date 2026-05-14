@@ -1,0 +1,1015 @@
+#!/usr/bin/env python3
+"""Design tool: live-preview e-ink widget templates in a browser.
+
+Renders a single widget type and serves a three-panel preview page
+showing the raw SVG, resvg-rasterized PNG, and e-ink-optimized PNG.
+Watches template and data files for changes and pushes reload events
+via Server-Sent Events.
+
+Runs without a Home Assistant installation.
+
+Usage:
+    python3 scripts/design_tool.py
+    python3 scripts/design_tool.py --widget weather --device trmnl_og
+    python3 scripts/design_tool.py --widget sensor_rows --port 9000
+    python3 scripts/design_tool.py --widget text --data my_data.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import io
+import json
+import logging
+import sys
+import threading
+import time
+import traceback
+from http import HTTPStatus
+from http.server import (
+    BaseHTTPRequestHandler,
+    ThreadingHTTPServer,
+)
+from pathlib import Path
+
+from _bootstrap import PKG, import_module
+from PIL import Image
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+# -------------------------------------------------------------------
+# Bootstrap: import eink_dashboard modules without Home Assistant
+# -------------------------------------------------------------------
+import_module(f"{PKG}.const")
+import_module(f"{PKG}.optimize")
+import_module(f"{PKG}.svg_render")
+import_module(f"{PKG}.render")
+
+from bench_render import (  # noqa: E402
+    _MOCK_DATA,
+    _build_config,
+)
+
+from custom_components.eink_dashboard.const import (  # noqa: E402
+    DEVICE_PRESETS,
+    DevicePreset,
+    WidgetType,
+)
+from custom_components.eink_dashboard.optimize import (  # noqa: E402
+    optimize_for_eink,
+)
+from custom_components.eink_dashboard.svg_render import (  # noqa: E402
+    _compose_svg,
+    _svg_to_png,
+    render_widget_svg,
+)
+
+# -------------------------------------------------------------------
+# Constants and logger
+# -------------------------------------------------------------------
+
+_TEMPLATE_DIR = (
+    Path(__file__).parent.parent
+    / "custom_components"
+    / "eink_dashboard"
+    / "templates"
+)
+
+_logger = logging.getLogger("design_tool")
+
+# -------------------------------------------------------------------
+# Rendering helpers
+# -------------------------------------------------------------------
+
+
+def _render_svg(widget: dict, config: dict) -> str:
+    """Render a widget inside a dashboard-sized SVG canvas.
+
+    Produces a full SVG document with a white background and
+    the widget positioned at its configured (x, y).
+
+    Args:
+        widget: Widget configuration dict.
+        config: Display config with width, height, and states.
+
+    Returns:
+        SVG document string.
+    """
+    svg_part = render_widget_svg(widget, config)
+    x = widget.get("x", 24)
+    y = widget.get("y", 0)
+    return _compose_svg(
+        [svg_part],
+        [(x, y)],
+        config["width"],
+        config["height"],
+    )
+
+
+def _render_png(svg: str, config: dict) -> bytes:
+    """Rasterize an SVG document to PNG bytes via resvg.
+
+    Args:
+        svg: SVG document string.
+        config: Display config with width and height.
+
+    Returns:
+        PNG image bytes.
+    """
+    return _svg_to_png(svg, config["width"], config["height"])
+
+
+def _render_optimized(png_bytes: bytes, config: dict) -> bytes:
+    """Apply e-ink optimization to raw PNG bytes.
+
+    Forces ``optimize=True`` so the third panel always shows
+    the post-processed output regardless of device preset.
+
+    Args:
+        png_bytes: Raw PNG bytes from ``_render_png``.
+        config: Display config with grayscale and enhancement
+            parameters.
+
+    Returns:
+        Optimized PNG image bytes.
+    """
+    img = Image.open(io.BytesIO(png_bytes)).convert("L")
+    opt_config = {**config, "optimize": True}
+    img = optimize_for_eink(img, opt_config)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+# -------------------------------------------------------------------
+# HTML template
+# -------------------------------------------------------------------
+
+_HTML_TEMPLATE = """\
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>E-Ink Dashboard Design Tool</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{
+    font-family: system-ui, sans-serif;
+    background: #2d2d2d;
+    color: #e0e0e0;
+    padding: 16px;
+  }}
+  h1 {{ font-size: 18px; margin-bottom: 12px; color: #ccc; }}
+  .info {{
+    font-size: 13px; color: #999; margin-bottom: 16px;
+  }}
+  .panels {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }}
+  .panel {{
+    background: #3a3a3a;
+    border-radius: 8px;
+    padding: 12px;
+  }}
+  .panel h2 {{
+    font-size: 14px; color: #aaa; margin-bottom: 8px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }}
+  .panel .canvas {{
+    background:
+      repeating-conic-gradient(
+        #555 0% 25%, #444 0% 50%
+      ) 50% / 20px 20px;
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+    border-radius: 4px;
+    min-height: 200px;
+  }}
+  .panel img, .panel object {{
+    max-width: 100%; height: auto;
+  }}
+  #error {{
+    display: none;
+    background: #8b0000; color: #fff;
+    padding: 12px; border-radius: 6px;
+    margin-bottom: 12px;
+    font-family: monospace; font-size: 13px;
+    white-space: pre-wrap;
+  }}
+  .data-editor {{
+    margin-top: 16px;
+    background: #3a3a3a;
+    border-radius: 8px;
+  }}
+  .data-editor summary {{
+    cursor: pointer;
+    padding: 12px;
+    font-size: 14px; color: #aaa;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }}
+  .data-editor .editor-body {{
+    padding: 0 12px 12px;
+  }}
+  .data-editor textarea {{
+    width: 100%;
+    min-height: 300px;
+    background: #2d2d2d;
+    color: #e0e0e0;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: monospace;
+    font-size: 13px;
+    resize: vertical;
+    tab-size: 2;
+  }}
+  .data-editor .buttons {{
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+  }}
+  .data-editor button {{
+    padding: 6px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }}
+  .data-editor .btn-apply {{
+    background: #2e7d32; color: #fff;
+  }}
+  .data-editor .btn-apply:hover {{ background: #388e3c; }}
+  .data-editor .btn-download {{
+    background: #555; color: #e0e0e0;
+  }}
+  .data-editor .btn-download:hover {{ background: #666; }}
+  .data-editor .editor-status {{
+    font-size: 12px; color: #999;
+    margin-left: 8px;
+    align-self: center;
+  }}
+  .status {{
+    position: fixed; bottom: 12px; right: 12px;
+    padding: 4px 10px; border-radius: 4px;
+    font-size: 12px; background: #444;
+  }}
+  .status.connected {{ background: #2e7d32; }}
+  .status.disconnected {{ background: #8b0000; }}
+</style>
+</head>
+<body>
+<h1>E-Ink Dashboard Design Tool</h1>
+<div class="info">
+  Widget: <b>{widget_type}</b> |
+  Device: <b>{device_name}</b>
+  ({width}&times;{height}, {grayscale_levels}-level) |
+  Port: {port}
+</div>
+<div id="error"></div>
+<div class="panels">
+  <div class="panel">
+    <h2>Raw SVG</h2>
+    <div class="canvas">
+      <object id="svg-view" data="/svg"
+              type="image/svg+xml"
+              width="{width}" height="{height}">
+      </object>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Rendered PNG</h2>
+    <div class="canvas">
+      <img id="png-view" src="/png" alt="Rendered PNG">
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Optimized PNG (e-ink)</h2>
+    <div class="canvas">
+      <img id="opt-view" src="/optimized.png"
+           alt="Optimized PNG">
+    </div>
+  </div>
+</div>
+<details class="data-editor">
+  <summary>Data Editor</summary>
+  <div class="editor-body">
+    <textarea id="data-editor">{initial_data}</textarea>
+    <div class="buttons">
+      <button class="btn-apply" onclick="applyData()">
+        Apply
+      </button>
+      <button class="btn-download" onclick="downloadData()">
+        Download
+      </button>
+      <span id="editor-status" class="editor-status"></span>
+    </div>
+  </div>
+</details>
+<div id="status" class="status disconnected">
+  disconnected
+</div>
+<script>
+(function() {{
+  var es = new EventSource("/events");
+  var status = document.getElementById("status");
+  var errDiv = document.getElementById("error");
+  es.onopen = function() {{
+    status.textContent = "watching";
+    status.className = "status connected";
+  }};
+  es.onerror = function() {{
+    status.textContent = "disconnected";
+    status.className = "status disconnected";
+  }};
+  es.onmessage = function(e) {{
+    var ts = Date.now();
+    if (e.data === "reload") {{
+      errDiv.style.display = "none";
+      document.getElementById("svg-view").data =
+        "/svg?t=" + ts;
+      document.getElementById("png-view").src =
+        "/png?t=" + ts;
+      document.getElementById("opt-view").src =
+        "/optimized.png?t=" + ts;
+    }} else if (e.data.startsWith("error:")) {{
+      errDiv.textContent = e.data.substring(6);
+      errDiv.style.display = "block";
+    }}
+  }};
+}})();
+
+function applyData() {{
+  var ta = document.getElementById("data-editor");
+  var es = document.getElementById("editor-status");
+  try {{
+    JSON.parse(ta.value);
+  }} catch (e) {{
+    es.textContent = "Invalid JSON: " + e.message;
+    es.style.color = "#ff6b6b";
+    return;
+  }}
+  es.textContent = "Applying…";
+  es.style.color = "#999";
+  fetch("/data", {{
+    method: "POST",
+    headers: {{"Content-Type": "application/json"}},
+    body: ta.value,
+  }}).then(function(r) {{
+    if (r.ok) {{
+      es.textContent = "Applied";
+      es.style.color = "#81c784";
+      setTimeout(function() {{ es.textContent = ""; }}, 2000);
+    }} else {{
+      return r.text().then(function(t) {{
+        es.textContent = "Error: " + t;
+        es.style.color = "#ff6b6b";
+      }});
+    }}
+  }}).catch(function(e) {{
+    es.textContent = "Request failed: " + e.message;
+    es.style.color = "#ff6b6b";
+  }});
+}}
+
+function downloadData() {{
+  var ta = document.getElementById("data-editor");
+  var wtype = "widget";
+  try {{
+    var d = JSON.parse(ta.value);
+    if (d.widget && d.widget.type) wtype = d.widget.type;
+  }} catch (e) {{ /* use default filename */ }}
+  var blob = new Blob([ta.value], {{type: "application/json"}});
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = wtype + "_data.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}}
+</script>
+</body>
+</html>
+"""
+
+
+# -------------------------------------------------------------------
+# Shared state
+# -------------------------------------------------------------------
+
+
+class _DesignState:
+    """Shared mutable state for the design tool server.
+
+    Holds the current widget config, display config, device
+    preset, and the threading event used to signal file changes
+    to SSE clients.
+
+    Attributes:
+        widget_type: Current widget type string.
+        widget: Widget configuration dict.
+        states: Entity state dict (separate from config so the
+            data editor can reconstruct the JSON).
+        config: Display configuration dict.
+        preset: Device preset for display info.
+        port: Server port number.
+        data_path: Path to the custom data file, or None.
+        change_event: Threading event set by the file watcher.
+        _lock: Protects widget, states, widget_type, and config
+            against concurrent reads and writes.
+    """
+
+    def __init__(
+        self,
+        widget_type: str,
+        widget: dict,
+        states: dict,
+        config: dict,
+        preset: DevicePreset,
+        port: int,
+        data_path: Path | None = None,
+    ) -> None:
+        """Initialize the design state."""
+        self.widget_type = widget_type
+        self.widget = widget
+        self.states = states
+        self.config = config
+        self.preset = preset
+        self.port = port
+        self.data_path = data_path
+        self.change_event = threading.Event()
+        self._lock = threading.Lock()
+
+    def apply_data(self, widget: dict, states: dict) -> None:
+        """Replace the current widget and states from the editor.
+
+        Rebuilds the display config from the device preset and
+        the new states so the next render uses the updated data.
+
+        Args:
+            widget: New widget configuration dict.
+            states: New entity state dict.
+        """
+        extra: dict = {}
+        wtype = widget.get("type", "")
+        if wtype == WidgetType.DEVICE_BATTERY:
+            extra["device_battery_level"] = 72
+        config = _build_config(self.preset, states, **extra)
+        with self._lock:
+            self.widget = widget
+            self.states = states
+            self.widget_type = wtype
+            self.config = config
+
+    def reload_data(self) -> None:
+        """Re-read the data file and update widget/config.
+
+        Called by the file watcher when the ``--data`` file
+        changes.  Errors are logged but do not crash the
+        server.
+        """
+        if self.data_path is None:
+            return
+        try:
+            widget, states = _load_data_file(self.data_path)
+            self.apply_data(widget, states)
+            _logger.info("Data file reloaded: %s", self.data_path)
+        except Exception:
+            _logger.exception("Failed to reload data file")
+
+    def snapshot(self) -> tuple[dict, dict]:
+        """Return a consistent (widget, config) pair.
+
+        Returns:
+            Tuple of widget dict and config dict, captured
+            under the internal lock.
+        """
+        with self._lock:
+            return self.widget, self.config
+
+    def data_json(self) -> str:
+        """Serialize the current widget and states as JSON.
+
+        Returns:
+            Pretty-printed JSON string with ``widget`` and
+            ``states`` keys.
+        """
+        with self._lock:
+            return json.dumps(
+                {"widget": self.widget, "states": self.states},
+                indent=2,
+            )
+
+
+# -------------------------------------------------------------------
+# Data file loading
+# -------------------------------------------------------------------
+
+
+def _load_data_file(path: Path) -> tuple[dict, dict]:
+    """Load widget and states from a JSON or YAML file.
+
+    Expected format::
+
+        {
+          "widget": {"type": "weather", ...},
+          "states": {"weather.home": {...}, ...}
+        }
+
+    Args:
+        path: Path to the data file.
+
+    Returns:
+        Tuple of ``(widget_dict, states_dict)``.
+
+    Raises:
+        ValueError: If the file format is unsupported or the
+            required ``widget`` key is missing.
+    """
+    text = path.read_text()
+    if path.suffix in (".yaml", ".yml"):
+        try:
+            import yaml  # noqa: PLC0415
+        except ImportError:
+            raise ValueError(
+                "PyYAML required for .yaml data files. "
+                "Install with: uv pip install pyyaml"
+            ) from None
+        data = yaml.safe_load(text)
+    else:
+        data = json.loads(text)
+
+    if not isinstance(data, dict):
+        raise ValueError(f"Data file must contain a JSON/YAML object: {path}")
+    widget = data.get("widget")
+    states = data.get("states", {})
+    if not widget:
+        raise ValueError(f"Data file must have a 'widget' key: {path}")
+    return widget, states
+
+
+# -------------------------------------------------------------------
+# File watcher
+# -------------------------------------------------------------------
+
+_WATCHED_EXTENSIONS = frozenset((".j2", ".json", ".yaml", ".yml"))
+
+
+class _ChangeHandler(FileSystemEventHandler):
+    """Signal file changes to SSE clients via a threading event.
+
+    Watches for modifications to Jinja2 templates and data
+    files.  Applies a 200ms debounce so rapid successive
+    edits (e.g. editor auto-save) produce only one reload.
+    """
+
+    def __init__(
+        self,
+        event: threading.Event,
+        state: _DesignState,
+    ) -> None:
+        """Initialize with a change event and design state.
+
+        Args:
+            event: Threading event to set on file change.
+            state: Shared design state (for data-file reload).
+        """
+        super().__init__()
+        self._event = event
+        self._state = state
+        self._last_trigger = 0.0
+
+    def on_modified(self, event) -> None:  # type: ignore[override]
+        """Handle file modification events.
+
+        Args:
+            event: Watchdog file system event.
+        """
+        if event.is_directory:
+            return
+        src = event.src_path
+        if not any(src.endswith(ext) for ext in _WATCHED_EXTENSIONS):
+            return
+        now = time.monotonic()
+        if now - self._last_trigger < 0.2:
+            return
+        self._last_trigger = now
+        _logger.info("Change detected: %s", src)
+        # Reload data file if it was the one that changed.
+        data_path = self._state.data_path
+        if data_path and Path(src).resolve() == data_path.resolve():
+            self._state.reload_data()
+        self._event.set()
+
+
+# -------------------------------------------------------------------
+# HTTP handler
+# -------------------------------------------------------------------
+
+
+class _DesignHandler(BaseHTTPRequestHandler):
+    """HTTP handler for the design tool preview server.
+
+    Routes:
+        ``GET  /``               -- three-panel HTML preview page
+        ``GET  /svg``            -- raw SVG (``image/svg+xml``)
+        ``GET  /png``            -- resvg-rasterized PNG
+        ``GET  /optimized.png``  -- e-ink optimized PNG
+        ``GET  /data``           -- current widget + states JSON
+        ``GET  /events``         -- SSE endpoint for live reload
+        ``POST /data``           -- update widget + states
+    """
+
+    server: _DesignServer
+
+    def do_GET(self) -> None:
+        """Route GET requests to the matching endpoint."""
+        path = self.path.split("?")[0]
+        routes = {
+            "/": self._serve_html,
+            "/svg": self._serve_svg,
+            "/png": self._serve_png,
+            "/optimized.png": self._serve_optimized,
+            "/data": self._serve_data,
+            "/events": self._serve_sse,
+        }
+        handler = routes.get(path)
+        if handler:
+            handler()
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_POST(self) -> None:
+        """Route POST requests to the matching endpoint."""
+        path = self.path.split("?")[0]
+        routes = {
+            "/data": self._handle_data_post,
+        }
+        handler = routes.get(path)
+        if handler:
+            handler()
+        else:
+            self.send_error(HTTPStatus.NOT_FOUND)
+
+    def _state(self) -> _DesignState:
+        """Access the shared design state from the server.
+
+        Returns:
+            The ``_DesignState`` instance attached to the
+            server.
+        """
+        return self.server.design_state
+
+    def _serve_html(self) -> None:
+        """Serve the three-panel HTML preview page."""
+        st = self._state()
+        initial = html.escape(st.data_json())
+        page = _HTML_TEMPLATE.format(
+            widget_type=st.widget_type,
+            device_name=st.preset.label,
+            width=st.preset.width,
+            height=st.preset.height,
+            grayscale_levels=st.preset.grayscale_levels,
+            port=st.port,
+            initial_data=initial,
+        )
+        body = page.encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_data(self) -> None:
+        """Serve the current widget and states as JSON."""
+        body = self._state().data_json().encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_data_post(self) -> None:
+        """Accept new widget + states JSON from the editor.
+
+        Validates the JSON payload, updates the shared state,
+        and triggers an SSE reload so all panels re-render.
+        """
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            self._text_response(
+                HTTPStatus.BAD_REQUEST,
+                f"Invalid JSON: {exc}",
+            )
+            return
+        widget = data.get("widget")
+        if not isinstance(widget, dict) or not widget:
+            self._text_response(
+                HTTPStatus.BAD_REQUEST,
+                "Missing or empty 'widget' key.",
+            )
+            return
+        states = data.get("states", {})
+        st = self._state()
+        st.apply_data(widget, states)
+        st.change_event.set()
+        self._text_response(HTTPStatus.OK, "OK")
+
+    def _text_response(self, status: HTTPStatus, text: str) -> None:
+        """Send a plain-text HTTP response.
+
+        Args:
+            status: HTTP status code.
+            text: Response body.
+        """
+        body = text.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_svg(self) -> None:
+        """Serve the raw SVG for the current widget."""
+        try:
+            widget, config = self._state().snapshot()
+            svg = _render_svg(widget, config)
+            body = svg.encode()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/svg+xml")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception:
+            self._serve_error_svg(traceback.format_exc())
+
+    def _serve_png(self) -> None:
+        """Serve the resvg-rasterized PNG."""
+        try:
+            widget, config = self._state().snapshot()
+            svg = _render_svg(widget, config)
+            png = _render_png(svg, config)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(png)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(png)
+        except Exception:
+            self._serve_error_svg(traceback.format_exc())
+
+    def _serve_optimized(self) -> None:
+        """Serve the e-ink optimized PNG."""
+        try:
+            widget, config = self._state().snapshot()
+            svg = _render_svg(widget, config)
+            png = _render_png(svg, config)
+            opt = _render_optimized(png, config)
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(opt)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(opt)
+        except Exception:
+            self._serve_error_svg(traceback.format_exc())
+
+    def _serve_error_svg(self, message: str) -> None:
+        """Return a rendering error as an SVG image.
+
+        Args:
+            message: Error traceback text to display.
+        """
+        safe = (
+            message.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+        )
+        lines = safe.split("\n")[:20]
+        text_els = "".join(
+            f'<text x="10" y="{30 + i * 16}" '
+            f'font-size="12" fill="red" '
+            f'font-family="monospace">{ln}</text>'
+            for i, ln in enumerate(lines)
+        )
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg"'
+            ' width="600" height="400">'
+            '<rect width="600" height="400" fill="white"/>'
+            f"{text_els}</svg>"
+        )
+        body = svg.encode()
+        # 200 is intentional: <img> tags hide content on
+        # error status codes, making the error invisible.
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/svg+xml")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_sse(self) -> None:
+        """Serve the SSE endpoint for live reload.
+
+        Keeps the connection open and sends ``reload`` events
+        when the file watcher detects template changes.  Sends
+        a keepalive comment every 15 seconds to prevent proxy
+        timeouts.
+        """
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        # Single Event means only one SSE client reliably
+        # receives each notification (acceptable for a
+        # single-tab dev tool).
+        change_event = self._state().change_event
+        try:
+            while True:
+                triggered = change_event.wait(timeout=15.0)
+                if triggered:
+                    change_event.clear()
+                    self.wfile.write(b"data: reload\n\n")
+                    self.wfile.flush()
+                else:
+                    self.wfile.write(b": keepalive\n\n")
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Route access logs through the module logger.
+
+        Suppresses noisy SSE keepalive polling.
+
+        Args:
+            format: Log format string.
+            *args: Format arguments.
+        """
+        if args and "/events" in str(args[0]):
+            return
+        _logger.debug(format, *args)
+
+
+class _DesignServer(ThreadingHTTPServer):
+    """Threaded HTTP server with attached design state.
+
+    Attributes:
+        design_state: Shared ``_DesignState`` instance
+            accessible by all request handler threads.
+    """
+
+    design_state: _DesignState
+
+
+# -------------------------------------------------------------------
+# CLI
+# -------------------------------------------------------------------
+
+
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed namespace with ``device``, ``widget``, ``port``,
+        and ``data`` attributes.
+    """
+    parser = argparse.ArgumentParser(
+        description=("Live-preview e-ink widget templates in a browser."),
+    )
+    known = sorted(_MOCK_DATA.keys())
+    parser.add_argument(
+        "--widget",
+        default="weather",
+        metavar="TYPE",
+        help=(
+            "Widget type to preview (default: weather). "
+            "Known types with built-in mock data: "
+            + ", ".join(known)
+            + ". Any other value starts with an empty "
+            "skeleton."
+        ),
+    )
+    parser.add_argument(
+        "--device",
+        choices=sorted(k for k in DEVICE_PRESETS if k != "custom"),
+        default="kindle_pw",
+        help="Device preset (default: kindle_pw).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8088,
+        help="HTTP server port (default: 8088).",
+    )
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "JSON/YAML file with widget config and entity "
+            "states.  Overrides --widget mock data."
+        ),
+    )
+    return parser.parse_args()
+
+
+# -------------------------------------------------------------------
+# Entry point
+# -------------------------------------------------------------------
+
+
+def main() -> None:
+    """Start the design tool server."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    args = _parse_args()
+    preset = DEVICE_PRESETS[args.device]
+
+    if args.data:
+        try:
+            widget, states = _load_data_file(args.data)
+        except ValueError as exc:
+            sys.exit(str(exc))
+        widget_type = widget.get("type", "unknown")
+    elif args.widget in _MOCK_DATA:
+        widget_type = args.widget
+        widget, states = _MOCK_DATA[args.widget]
+    else:
+        widget_type = args.widget
+        widget = {"type": widget_type, "x": 24, "y": 10}
+        states = {}
+        _logger.info(
+            "No mock data for '%s' — starting with empty skeleton",
+            widget_type,
+        )
+
+    extra: dict = {}
+    if widget_type == WidgetType.DEVICE_BATTERY:
+        extra["device_battery_level"] = 72
+
+    config = _build_config(preset, states, **extra)
+
+    state = _DesignState(
+        widget_type=widget_type,
+        widget=widget,
+        states=states,
+        config=config,
+        preset=preset,
+        port=args.port,
+        data_path=args.data,
+    )
+
+    # File watcher: monitor templates/ for .j2 changes.
+    observer = Observer()
+    handler = _ChangeHandler(state.change_event, state)
+    observer.schedule(handler, str(_TEMPLATE_DIR), recursive=True)
+    if args.data:
+        observer.schedule(
+            handler,
+            str(args.data.parent.resolve()),
+            recursive=False,
+        )
+    observer.start()
+
+    # HTTP server.
+    server = _DesignServer(("127.0.0.1", args.port), _DesignHandler)
+    server.design_state = state
+
+    url = f"http://localhost:{args.port}"
+    _logger.info("Design tool running at %s", url)
+    _logger.info(
+        "Widget: %s | Device: %s (%dx%d, %d-level)",
+        widget_type,
+        preset.label,
+        preset.width,
+        preset.height,
+        preset.grayscale_levels,
+    )
+    _logger.info("Press Ctrl+C to stop.")
+
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        _logger.info("Shutting down.")
+    finally:
+        observer.stop()
+        observer.join()
+        server.server_close()
+
+
+if __name__ == "__main__":
+    main()
