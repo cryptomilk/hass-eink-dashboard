@@ -244,6 +244,38 @@ type DisplayConfig = dict[str, Any]
 type SvgContextFn = Callable[[Widget, DisplayConfig], dict[str, object]]
 
 
+def _card_insets(
+    m: Any,
+    card_style: str,
+    grayscale_levels: int,
+) -> tuple[int, int]:
+    """Return (x_off, r_inset) for a card container.
+
+    Mirrors the inset logic in the ``card_container`` macro in
+    ``templates/_macros.svg.j2`` so callers can pre-compute
+    absolute positions in Python rather than in Jinja2.
+
+    Args:
+        m: ``WidgetMetrics`` namedtuple from ``_compute_metrics``.
+        card_style: One of ``"border"``, ``"left_bar"``, or
+            ``"none"`` (or any other value treated as ``"none"``).
+        grayscale_levels: Display grayscale depth; passed to
+            ``_left_bar_width`` to widen the bar on 2-level
+            displays.
+
+    Returns:
+        ``(x_off, r_inset)`` — the left and right pixel insets
+        for the content area inside the card frame.
+    """
+    from .render import _left_bar_width  # noqa: PLC0415
+
+    if card_style == "border":
+        return m.padding, m.padding
+    if card_style == "left_bar":
+        return _left_bar_width(m, grayscale_levels) + m.padding, 0
+    return 0, 0
+
+
 def _build_text_context(
     widget: Widget,
     config: DisplayConfig,
@@ -285,10 +317,7 @@ def _build_text_context(
     # Lazy import avoids circular dependency: render.py imports
     # svg_render.py at module level; importing render.py at
     # module level here would prevent initialisation.
-    from .render import (  # noqa: PLC0415
-        _compute_metrics,
-        _left_bar_width,
-    )
+    from .render import _compute_metrics  # noqa: PLC0415
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
@@ -323,15 +352,7 @@ def _build_text_context(
 
     # Compute card container insets — mirrors the card_container
     # macro's own logic so text_x can be pre-calculated in Python.
-    if card_style == "border":
-        x_off = m.padding
-        r_inset = m.padding
-    elif card_style == "left_bar":
-        x_off = _left_bar_width(m, grayscale_levels) + m.padding
-        r_inset = 0
-    else:
-        x_off = 0
-        r_inset = 0
+    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
 
     content_w = svg_w - x_off - r_inset
 
@@ -979,11 +1000,7 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from .render import (  # noqa: PLC0415
-        _compute_metrics,
-        _left_bar_width,
-        _load_font,
-    )
+    from .render import _compute_metrics, _load_font  # noqa: PLC0415
 
     x = widget.get("x", PADDING)
     svg_w = max(1, widget.get("w", config["width"] - x))
@@ -1007,18 +1024,7 @@ def _build_device_battery_context(
     label = f"{pct}%"
     m = _compute_metrics(h)
 
-    # Pre-compute card container insets, mirroring the card_container
-    # macro in _macros.svg.j2 so chip/icon widths can be capped to
-    # the available content area before the template renders.
-    if card_style == "border":
-        x_off = m.padding
-        r_inset = m.padding
-    elif card_style == "left_bar":
-        x_off = _left_bar_width(m, grayscale_levels) + m.padding
-        r_inset = 0
-    else:
-        x_off = 0
-        r_inset = 0
+    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
 
     if layout == "chip":
         content_w = svg_w - x_off - r_inset
@@ -1167,7 +1173,6 @@ def _build_status_icons_context(
         _PROBLEM_DEVICE_CLASSES,
         _compute_metrics,
         _device_class_icon,
-        _left_bar_width,
         _load_font,
     )
 
@@ -1197,18 +1202,7 @@ def _build_status_icons_context(
     chip_h = max(1, svg_h - title_advance)
     m = _compute_metrics(chip_h)
 
-    # Pre-compute card container insets, mirroring the
-    # card_container macro in _macros.svg.j2.
-    if card_style == "border":
-        x_off = m.padding
-        r_inset = m.padding
-    elif card_style == "left_bar":
-        x_off = _left_bar_width(m, grayscale_levels) + m.padding
-        r_inset = 0
-    else:
-        x_off = 0
-        r_inset = 0
-
+    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
     content_w = svg_w - x_off - r_inset
 
     # Chip sizing ratios — must match the chip macro in
