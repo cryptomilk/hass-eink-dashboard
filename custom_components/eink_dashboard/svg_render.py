@@ -1135,9 +1135,9 @@ def _build_device_battery_context(
         bar_y = (h - bar_h) // 2
         fill_w = int((bar_w - 2) * pct / 100) if bar_w > 2 else 0
 
-        # Clip SVG width to chip content so the editor resize
-        # box matches the rendered content.
-        svg_w = _widget_dim(widget, "w", x_off + chip_w)
+        # Clip SVG width to chip content plus card insets so the
+        # editor resize box matches the rendered content.
+        svg_w = _widget_dim(widget, "w", x_off + chip_w + r_inset)
 
         return {
             "w": svg_w,
@@ -1189,10 +1189,12 @@ def _build_device_battery_context(
     nub_y = icon_y + (body_h - nub_h) // 2
     fill_w = int((body_w - 2) * pct / 100)
 
-    # Clip SVG width to icon+text content so the editor resize
-    # box matches the rendered content.
+    # Clip SVG width to icon+text content plus card insets so
+    # the editor resize box matches the rendered content.
     svg_w = _widget_dim(
-        widget, "w", x_off + body_w + nub_gap + nub_w + gap + round(bbox[2])
+        widget,
+        "w",
+        x_off + body_w + nub_gap + nub_w + gap + round(bbox[2]) + r_inset,
     )
 
     return {
