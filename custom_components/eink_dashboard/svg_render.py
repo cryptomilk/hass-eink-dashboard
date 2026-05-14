@@ -271,6 +271,30 @@ def _title_layout(
     return font_sz, advance, svg_h - advance
 
 
+def _metrics_context(m: Any) -> dict[str, int]:
+    """Return the base card metric fields for a Jinja2 template context.
+
+    Extracts the four fields that every card-style widget passes to its
+    template (``m_border``, ``m_padding``, ``m_radius``,
+    ``m_left_bar``).  Call sites merge this dict into the full context
+    with ``**_metrics_context(m)`` and add extra metric fields
+    (``m_icon_dia`` etc.) individually when needed.
+
+    Args:
+        m: ``WidgetMetrics`` namedtuple from ``_compute_metrics``.
+
+    Returns:
+        Dict with four ``m_*`` keys ready to unpack into a context
+        dict.
+    """
+    return {
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+    }
+
+
 def _card_insets(
     m: Any,
     card_style: str,
@@ -422,10 +446,7 @@ def _build_text_context(
         "content_h": content_h,
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
     }
 
 
@@ -829,10 +850,7 @@ def _build_weather_context(
         "card_w": card_w,
         "total_h": total_h,
         "card_style": card_style,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
         "grayscale_levels": grayscale_levels,
         "icon_svg": cond_icon_svg,
         "icon_x": icon_x,
@@ -960,10 +978,7 @@ def _build_sensor_rows_context(
         "content_h": content_h,
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
         "m_icon_dia": m.icon_dia,
         "m_inner_gap": m.inner_gap,
         "m_font_primary": m.font_primary,
@@ -1061,10 +1076,7 @@ def _build_device_battery_context(
             "layout": "chip",
             "card_h": h,
             "card_style": card_style,
-            "m_border": m.border,
-            "m_padding": m.padding,
-            "m_radius": m.radius,
-            "m_left_bar": m.left_bar,
+            **_metrics_context(m),
             "grayscale_levels": grayscale_levels,
             "color_hex": color_hex,
             "label": label,
@@ -1114,10 +1126,7 @@ def _build_device_battery_context(
         "layout": "icon",
         "card_h": h,
         "card_style": card_style,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
         "grayscale_levels": grayscale_levels,
         "color_hex": color_hex,
         "label": label,
@@ -1300,10 +1309,7 @@ def _build_status_icons_context(
         "chip_h": chip_h,
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
         "chips": chips,
     }
 
@@ -1462,10 +1468,7 @@ def _build_waste_schedule_context(
         "content_h": content_h,
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
+        **_metrics_context(m),
         "m_icon_dia": m.icon_dia,
         "m_inner_gap": m.inner_gap,
         "m_font_primary": m.font_primary,
