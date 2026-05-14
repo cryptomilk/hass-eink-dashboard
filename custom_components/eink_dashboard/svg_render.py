@@ -370,6 +370,25 @@ def _card_insets(
     return 0, 0
 
 
+def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
+    """Return a widget dimension, clamped to >= 1.
+
+    Uses the explicit ``widget[key]`` value when present,
+    otherwise ``fallback``.  The clamp avoids zero-area SVG
+    viewports that would crash resvg.
+
+    Args:
+        widget: Widget config dict.
+        key: Dimension key (``"w"`` or ``"h"``).
+        fallback: Default when ``key`` is absent from
+            ``widget``.
+
+    Returns:
+        Dimension in pixels, >= 1.
+    """
+    return max(1, widget.get(key, fallback))
+
+
 def _build_text_context(
     widget: Widget,
     config: DisplayConfig,
@@ -423,13 +442,8 @@ def _build_text_context(
     title = widget.get("title", "")
     grayscale_levels = config.get("grayscale_levels", 16)
 
-    # Default viewport to remaining canvas when not specified.
-    # Clamp to >= 1: a widget at the canvas edge could produce a
-    # zero or negative dimension, which would crash resvg.
-    w_explicit = widget.get("w")
-    raw_w = w_explicit if w_explicit is not None else config["width"] - x
-    svg_w = max(1, raw_w)
-    svg_h = max(1, widget.get("h", config["height"] - y))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     m = _compute_metrics(content_h)
@@ -530,10 +544,8 @@ def _build_separator_context(
     style = widget.get("style", "line")
     grayscale_levels = config.get("grayscale_levels", 16)
 
-    # Clamp to >= 1: a widget at the canvas edge could produce a
-    # zero or negative dimension, which would crash resvg.
-    svg_w = max(1, widget.get("w", config["width"] - x))
-    svg_h = max(1, widget.get("h", config["height"] - y))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     if style == "bar":
         color: int = COLOR_GRAY
@@ -615,10 +627,10 @@ def _build_weather_context(
     entity_id = widget.get("entity", "")
     state = config.get("states", {}).get(entity_id)
     x = widget.get("x", PADDING)
-    svg_w = max(1, widget.get("w", config["width"] - x))
-    svg_h = max(1, widget.get("h", config["height"] - widget.get("y", 0)))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
 
     if state is None:
+        svg_h = _widget_dim(widget, "h", config["height"] - widget.get("y", 0))
         return {"w": svg_w, "h": svg_h, "has_state": False}
 
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
@@ -634,6 +646,9 @@ def _build_weather_context(
         card_w = w_override
     else:
         card_w = min(round(380 * scale), svg_w)
+        # Clip SVG to content width so the editor resize box
+        # matches the rendered content, not the full canvas.
+        svg_w = _widget_dim(widget, "w", card_w)
 
     # PIL fonts for text measurement only — never used for
     # drawing.  Affects: temp_h, temp_bbox (getbbox) and
@@ -687,6 +702,10 @@ def _build_weather_context(
     else:
         forecast_section_h = pad
     total_h = row1_h + detail_h + forecast_section_h + pad
+    # Default to content height so the SVG is no taller than its
+    # rendered content.  Without this, the editor resize box spans
+    # the full remaining canvas when no explicit h is configured.
+    svg_h = _widget_dim(widget, "h", total_h)
 
     # Content insets — mirror the card_container macro in
     # templates/_macros.svg.j2 (macro card_container, lines 41-74).
@@ -957,8 +976,8 @@ def _build_sensor_rows_context(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    svg_w = max(1, widget.get("w", config["width"] - x))
-    svg_h = max(1, widget.get("h", config["height"] - y))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     entity_ids: list[str] = widget.get("entities", [])
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -1069,9 +1088,9 @@ def _build_device_battery_context(
     from .render import _compute_metrics, _load_font  # noqa: PLC0415
 
     x = widget.get("x", PADDING)
-    svg_w = max(1, widget.get("w", config["width"] - x))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
     h: int = widget.get("h", 40)
-    svg_h = max(1, h)
+    svg_h = _widget_dim(widget, "h", h)
 
     level = config.get("device_battery_level")
     if level is None:
@@ -1115,6 +1134,10 @@ def _build_device_battery_context(
         chip_radius = h // 2
         bar_y = (h - bar_h) // 2
         fill_w = int((bar_w - 2) * pct / 100) if bar_w > 2 else 0
+
+        # Clip SVG width to chip content so the editor resize
+        # box matches the rendered content.
+        svg_w = _widget_dim(widget, "w", x_off + chip_w)
 
         return {
             "w": svg_w,
@@ -1165,6 +1188,12 @@ def _build_device_battery_context(
     icon_y = max(0, bbox[1] + (text_h - body_h) // 2)
     nub_y = icon_y + (body_h - nub_h) // 2
     fill_w = int((body_w - 2) * pct / 100)
+
+    # Clip SVG width to icon+text content so the editor resize
+    # box matches the rendered content.
+    svg_w = _widget_dim(
+        widget, "w", x_off + body_w + nub_gap + nub_w + gap + round(bbox[2])
+    )
 
     return {
         "w": svg_w,
@@ -1239,8 +1268,8 @@ def _build_status_icons_context(
     )
 
     x = widget.get("x", PADDING)
-    svg_w = max(1, widget.get("w", config["width"] - x))
-    svg_h = max(1, widget.get("h", 40))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", 40)
     title: str = widget.get("title", "")
     card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
     entity_ids: list[str] = widget.get("entities", [])
@@ -1416,8 +1445,8 @@ def _build_waste_schedule_context(
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
-    svg_w = max(1, widget.get("w", config["width"] - x))
-    svg_h = max(1, widget.get("h", config["height"] - y))
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     entity_id: str = widget.get("entity", "")
     entries: list[dict[str, str]] = widget.get("entries", [])
