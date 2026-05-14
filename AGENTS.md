@@ -62,7 +62,7 @@ widget):
 Do not write code directly. Invoke the three skills in order using the
 `Skill` tool — each one must complete before the next is called:
 1. `/implement-widget-tests` — write failing tests (TDD red phase)
-2. `/implement-widget-python` — implement the SVG template and Python
+2. `/implement-widget` — implement the SVG template and Python
    context builder (green phase)
 3. `/implement-widget-frontend` — canvas preview, TS types, editor schema
 

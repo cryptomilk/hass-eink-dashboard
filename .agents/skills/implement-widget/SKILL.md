@@ -1,7 +1,7 @@
 ---
-name: implement-widget-python
+name: implement-widget
 description: "Implement a widget's SVG template and Python context builder. Creates templates/{type}.svg.j2 and _build_{type}_context() in svg_render.py. Follows TDD green phase — makes existing tests pass."
-when_to_use: "When implementing the SVG template and context builder for a widget — whether new or being converted from PIL (any step 1.x of the SVG migration). Always run AFTER tests are written (TDD green phase)."
+when_to_use: "When implementing the SVG template and context builder for a new widget type. Always run AFTER tests are written (TDD green phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
 allowed-tools: Bash(uv *)
@@ -17,17 +17,14 @@ The output of this work is two artifacts:
 
 ## Before you start
 
-1. Read the existing PIL renderer for this widget in `render.py` (the
-   function named `render_$widget-type`) — it defines the visual elements,
-   layout logic, and state handling the SVG renderer must replicate.
-2. Read the existing tests (`TestRender{WidgetName}` in
+1. Read the existing tests (`TestRender{WidgetName}` in
    `tests/test_render.py`) — these define the expected behavior.
-3. Read `const.py` for `WidgetType`, `COLOR_*` constants, `PADDING`,
+2. Read `const.py` for `WidgetType`, `COLOR_*` constants, `PADDING`,
    `DEFAULT_CARD_STYLE`.
-4. Read `svg_render.py` for the Jinja2 environment, `_svg_to_png()`,
+3. Read `svg_render.py` for the Jinja2 environment, `_svg_to_png()`,
    icon filter functions (`_mdi_svg_filter`, `_weather_svg_filter`),
    and any existing `_build_*_context()` functions.
-5. Read `templates/_macros.svg.j2` for the three shared macros:
+4. Read `templates/_macros.svg.j2` for the three shared macros:
    `card_container`, `card_row`, `chip`.
 
 ## Current SVG infrastructure
@@ -50,24 +47,14 @@ The output of this work is two artifacts:
 
 ## Current SVG renderer registry
 
-If this grep returns empty, you are implementing the **first**
-SVG widget. Follow steps 4, 5, and 6 to create
-`_SVG_RENDERERS`, wire SVG dispatch in `render_dashboard()`,
-and add `render_widget_svg()`.
-
 !`grep -n "_SVG_RENDERERS" -A 12 custom_components/eink_dashboard/svg_render.py`
-
-## Current PIL renderer registry (to be pruned)
-
-!`grep -n "_RENDERERS\b" -A 12 custom_components/eink_dashboard/render.py`
 
 ## Imports
 
 Context builders need these imports from sibling modules.
-`_compute_metrics` and `_device_class_icon` live in `render.py`
-because they are shared between PIL and SVG pipelines.
-`_load_font` is PIL-only but used for text width measurement in
-chip layouts.
+`_compute_metrics`, `_device_class_icon`, and `_load_font` live in
+`render.py` to avoid circular imports — `svg_render.py` imports them
+lazily at call time.
 
 ```python
 from custom_components.eink_dashboard.const import (
@@ -107,38 +94,6 @@ from custom_components.eink_dashboard.render import (
 - **`_device_class_icon(attrs, state_val, domain)`** returns an MDI
   icon name without the `"mdi:"` prefix, or `None`. Extract domain:
   `entity_id.split(".")[0]`.
-
-## Converting an existing widget
-
-When replacing an existing PIL renderer:
-
-1. Create the SVG template and context builder (steps 2 and 3).
-2. Add an entry to `_SVG_RENDERERS` in `svg_render.py` (step 4).
-3. If this is the **first** widget being converted, wire SVG dispatch
-   in `render_dashboard()` (step 5) and add `render_widget_svg()`
-   to `svg_render.py` (step 6).
-4. Delete the old PIL `render_$widget-type()` function from `render.py`
-   and remove its `_RENDERERS` entry (step 7).
-5. Remove any constants that only that renderer used (e.g.
-   `_SENSOR_ROW_HEIGHT`, `FONT_SIZE_SENSOR_ROWS`). Only remove
-   constants your changes made unused.
-
-**Old PIL helpers — do NOT carry over to the SVG renderer:**
-- `_draw_card_container()`, `_draw_card_row()`, `_draw_chip()`,
-  `_draw_chip_flow()` — replaced by Jinja2 macros in `_macros.svg.j2`
-- `_load_icon()` — replaced by `_mdi_svg_filter()` / `_weather_svg_filter()`
-- `config["_image"]` — SVG renderers do not touch the PIL canvas
-- `_extract_multi_entity_params()`, `_resolve_entity()`,
-  `_draw_section_title()`, `_draw_indicator()` — legacy helpers
-
-**Keep using from `render.py`:**
-- `_compute_metrics(row_h)` — computes `WidgetMetrics` layout ratios
-- `_device_class_icon(attrs, state_val, domain)` — MDI name resolver
-- `_load_font(size)` — PIL font object, used ONLY for text width
-  measurement in chip layout (not for drawing)
-
-**Keep `_PROBLEM_DEVICE_CLASSES`** if it exists — the set of device
-classes that show as "problem" state (inverted chip) is shared logic.
 
 ## Implementation steps
 
@@ -403,100 +358,13 @@ def _build_{widget_type}_context(
 In `svg_render.py`, add to the `_SVG_RENDERERS` dict:
 
 ```python
-_SVG_RENDERERS: dict[str, ContextBuilderFn] = {
+_SVG_RENDERERS: dict[str, SvgContextFn] = {
     ...
     WidgetType.{WIDGET_TYPE}: _build_{widget_type}_context,
 }
 ```
 
-If `_SVG_RENDERERS` does not exist yet, create it alongside
-`render_widget_svg()` (step 6).
-
-### 5. Wire SVG dispatch in render_dashboard() (first widget only)
-
-Add this ONLY for the first widget conversion. Subsequent conversions
-just add entries to `_SVG_RENDERERS` — the dispatch is already wired.
-
-At the top of `render.py`, import from `svg_render`:
-
-```python
-from custom_components.eink_dashboard.svg_render import (
-    _SVG_RENDERERS,
-    _svg_to_png,
-    render_widget_svg,
-)
-```
-
-In `render_dashboard()`, before the PIL dispatch loop, handle SVG
-widgets:
-
-```python
-for widget in widget_list:
-    widget_type = widget.get("type")
-    if widget_type in _SVG_RENDERERS:
-        svg_str = render_widget_svg(widget, config)
-        widget_w = widget["w"]
-        widget_h = widget["h"]
-        widget_png = _svg_to_png(svg_str, widget_w, widget_h)
-        widget_img = Image.open(
-            io.BytesIO(widget_png)
-        ).convert("L")
-        img.paste(
-            widget_img,
-            (widget.get("x", PADDING), widget.get("y", 0)),
-        )
-        continue
-    # Existing PIL dispatch:
-    renderer = _RENDERERS.get(widget_type)
-    if renderer is not None:
-        renderer(draw, widget, config)
-```
-
-### 6. Add render_widget_svg() (if not yet present)
-
-If `render_widget_svg()` does not exist in `svg_render.py`, add it:
-
-```python
-def render_widget_svg(
-    widget: Widget,
-    config: DisplayConfig,
-) -> str:
-    """Render a widget to an SVG string.
-
-    Args:
-        widget: Widget config dict. Must have a ``"type"`` key
-            with a corresponding entry in ``_SVG_RENDERERS``.
-        config: DisplayConfig dict with ``states`` and display
-            dimensions.
-
-    Returns:
-        SVG markup string, ready to pass to ``_svg_to_png()``.
-    """
-    widget_type = widget.get("type")
-    builder = _SVG_RENDERERS[widget_type]
-    ctx = builder(widget, config)
-    tmpl = _jinja_env.get_template(
-        f"{widget_type}.svg.j2"
-    )
-    return tmpl.render(**ctx)
-```
-
-Also define the `ContextBuilderFn` type alias at module level if
-needed:
-
-```python
-type ContextBuilderFn = Callable[
-    [Widget, DisplayConfig], dict[str, object]
-]
-```
-
-### 7. Delete the PIL renderer
-
-- Remove `render_$widget-type()` from `render.py`.
-- Remove its entry from `_RENDERERS`.
-- Remove any constants that only that function used.
-
-### 8. Run tests
+### 5. Run tests
 
 ```bash
 uv run --group lint ruff check . && \
@@ -523,8 +391,7 @@ behavior.
   `None`, skip the entity and continue. Do not crash.
 - **Icon inlining via filter functions.** Call `_mdi_svg_filter(name,
   size)` or `_weather_svg_filter(condition, size)` in the context
-  builder and pass the returned string as `icon_svg`. Do NOT use
-  `_load_icon()` (PIL-only, deleted with the PIL renderer).
+  builder and pass the returned string as `icon_svg`.
 - **Font references in SVG.** Use `font-family="Roboto"` and
   `font-weight="500"` for Roboto Medium. No `_load_font()` calls in
   templates.
@@ -536,7 +403,6 @@ behavior.
 
 ## Key references
 
-- Widget behavior to replicate: existing PIL renderer in `render.py`
 - SVG macros: `card_container`, `card_row`, `chip` in
   `templates/_macros.svg.j2`
 - SVG pipeline: `_jinja_env`, `_svg_to_png()`, `_mdi_svg_filter()`,

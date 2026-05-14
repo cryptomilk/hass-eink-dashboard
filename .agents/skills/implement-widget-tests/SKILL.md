@@ -1,7 +1,7 @@
 ---
 name: implement-widget-tests
 description: "Write TDD tests for a widget type: structural tests (borders, dividers), alignment tests (icon centering), and scaling tests (proportional sizing). Uses test helpers from tests/helpers.py."
-when_to_use: "When writing tests for a new widget or converting an existing widget from PIL to SVG (any step 1.x of the SVG migration). Always run BEFORE implementing the renderer (TDD red phase)."
+when_to_use: "When writing tests for a new widget type. Always run BEFORE implementing the renderer (TDD red phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
 allowed-tools: Bash(uv *)
@@ -14,10 +14,7 @@ TDD red phase — tests must FAIL until the SVG renderer is implemented.
 
 ## Before you start
 
-1. Read the existing PIL renderer in `custom_components/eink_dashboard/render.py`
-   (if converting an existing widget) to understand the visual elements,
-   config parameters, and state handling the new SVG renderer must match.
-   For a new widget, read the task description / spec doc provided.
+1. Read the task description / spec doc for the new widget.
 2. Read `tests/helpers.py` for available test helpers.
 3. Read existing test classes in `tests/test_render.py` for patterns.
    The SEPARATOR tests (`TestRenderSeparator`) are the reference for
@@ -28,19 +25,6 @@ TDD red phase — tests must FAIL until the SVG renderer is implemented.
    the card container insets to use in pixel region calculations.
 5. Read `const.py` for `COLOR_BLACK=0`, `COLOR_WHITE=255`,
    `COLOR_GRAY=120`, `PADDING=24`.
-
-## Redesign vs. new widget
-
-**Redesigning an existing widget** (SENSOR_ROWS, STATUS_ICONS,
-WASTE_SCHEDULE, DEVICE_BATTERY): the old test class exists but tests the
-pre-redesign layout (flat text, `font_size`-based, no `w`/`h`, no
-`card_style`). **Replace the entire old test class** with a new one that
-tests the redesigned layout. Also update `MOCK_*_STATES` to include
-`device_class` in attributes (the old mocks may lack it — the redesigned
-renderers need it for icon resolution).
-
-**Adding a new widget** (PERSON, ALARM, LOCK, GRAPH): create a new test
-class and new mock states from scratch.
 
 ## Existing test classes
 
@@ -312,11 +296,9 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
    a short comment explaining what it verifies.
 
 8. **Engine-agnostic tests only**: Tests call `render_dashboard()` and
-   inspect PNG output. Do NOT import or call PIL drawing helpers
-   (`_draw_card_container`, `_draw_card_row`, `_draw_chip`, etc.) from
-   tests. Those helpers are deleted when the PIL pipeline is removed.
-   The entry point (`render_dashboard`) dispatches transparently to the
-   SVG pipeline.
+   inspect PNG output. Do NOT import or call internal drawing helpers
+   from tests. The entry point (`render_dashboard`) dispatches
+   transparently to the SVG pipeline in `svg_render.py`.
 
 ## Font metric tolerance
 
@@ -345,12 +327,11 @@ uv run --group test pytest \
 ```
 
 The tests define the expected behavior. The renderer implementation
-(via `/implement-widget-python`) makes them pass.
+(via `/implement-widget`) makes them pass.
 
 ## Key references
 
-- Widget behavior source: existing PIL renderer in `render.py` (for
-  conversions), or task description (for new widgets)
+- Widget behavior source: task description / spec doc for the new widget
 - Test helpers: `tests/helpers.py`
 - Reference structural tests: `TestRenderSeparator` in
   `tests/test_render.py`
