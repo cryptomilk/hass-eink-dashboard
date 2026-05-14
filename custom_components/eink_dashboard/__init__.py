@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    WidgetType,
 )
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
@@ -111,6 +112,47 @@ def _build_display_config(
     return config
 
 
+async def _fetch_forecasts(
+    hass: HomeAssistant,
+    widgets: list[dict[str, Any]],
+    states: dict[str, Any],
+) -> None:
+    """Fetch daily forecasts for weather widgets and inject into states.
+
+    Calls the ``weather.get_forecasts`` service for each unique
+    weather entity referenced by ``widgets`` and writes the forecast
+    list into ``states[entity_id]["attributes"]["forecast"]`` so
+    ``render_widget_svg`` sees the same data as the scheduled image
+    render path.
+
+    Args:
+        hass: Home Assistant instance.
+        widgets: Widget dicts to scan for weather entity IDs.
+        states: Mutable states dict built by ``_build_display_config``.
+    """
+    weather_entities: set[str] = set()
+    for w in widgets:
+        # WidgetType is a StrEnum: wire-format strings compare equal.
+        if w.get("type") == WidgetType.WEATHER:
+            eid = w.get("entity", "")
+            if eid and eid in states:
+                weather_entities.add(eid)
+
+    for entity_id in weather_entities:
+        try:
+            result = await hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity_id, "type": "daily"},
+                blocking=True,
+                return_response=True,
+            )
+            forecast = result.get(entity_id, {}).get("forecast") or []
+            states[entity_id]["attributes"]["forecast"] = forecast
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Could not fetch forecast for %s", entity_id)
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "eink_dashboard/render_widget",
@@ -161,6 +203,7 @@ async def ws_render_widget(
             return
         widget = widgets[idx]
     config = _build_display_config(hass, entry_id)
+    await _fetch_forecasts(hass, [widget], config["states"])
     try:
         svg = await hass.async_add_executor_job(
             render_widget_svg, widget, config
@@ -224,6 +267,7 @@ async def ws_render_widgets(
 
     widgets = msg.get("widgets") or list(entry_data["widgets"])
     config = _build_display_config(hass, entry_id)
+    await _fetch_forecasts(hass, widgets, config["states"])
 
     # Render all widgets in a single executor job: render_widget_svg
     # is CPU-bound (Jinja2 + resvg), and one thread per widget would

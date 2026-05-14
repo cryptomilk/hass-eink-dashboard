@@ -25,6 +25,7 @@ from homeassistant.helpers.template import Template, TemplateError
 from homeassistant.util import dt as dt_util
 from PIL import Image
 
+from . import _fetch_forecasts
 from .const import (
     DEFAULT_CONTRAST,
     DEFAULT_GRAYSCALE_LEVELS,
@@ -270,27 +271,12 @@ class EinkDashboardImage(ImageEntity):
             )
 
     async def _async_fetch_forecasts(self, states: dict[str, Any]) -> None:
-        """Fetch daily forecasts for weather widgets and inject into states."""
-        weather_entities: set[str] = set()
-        for w in self._widgets:
-            if w.get("type") == WidgetType.WEATHER:
-                eid = w.get("entity", "")
-                if eid and eid in states:
-                    weather_entities.add(eid)
+        """Fetch daily forecasts for weather widgets and inject into states.
 
-        for entity_id in weather_entities:
-            try:
-                result = await self.hass.services.async_call(
-                    "weather",
-                    "get_forecasts",
-                    {"entity_id": entity_id, "type": "daily"},
-                    blocking=True,
-                    return_response=True,
-                )
-                forecast = result.get(entity_id, {}).get("forecast") or []
-                states[entity_id]["attributes"]["forecast"] = forecast
-            except Exception:
-                _LOGGER.debug("Could not fetch forecast for %s", entity_id)
+        Delegates to the module-level ``_fetch_forecasts`` so the
+        logic is shared with the WebSocket preview handlers.
+        """
+        await _fetch_forecasts(self.hass, self._widgets, states)
 
     def _build_states(self) -> dict[str, Any]:
         """Snapshot all HA states as a plain dict for the renderer."""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -335,6 +336,105 @@ class TestWsRenderWidget:
         conn.send_result.assert_called_once_with(14, {"svg": "<svg/>"})
         conn.send_error.assert_not_called()
 
+    async def test_fetches_forecast_for_weather_widget(
+        self,
+    ) -> None:
+        # Forecast data is fetched via weather.get_forecasts and
+        # injected into config["states"] before rendering.
+        weather_state = _make_state(
+            "weather.home", "rainy", {"temperature": 9.8}
+        )
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+        }
+        hass = _make_hass(widgets=[widget], states=[weather_state])
+        conn = _make_connection()
+        msg = {
+            "id": 15,
+            "entry_id": "entry1",
+            "widget_index": 0,
+        }
+        forecast_payload = [
+            {"datetime": "2026-05-15T00:00:00", "temperature": 10}
+        ]
+        hass.services = MagicMock()
+        hass.services.async_call = AsyncMock(
+            return_value={"weather.home": {"forecast": forecast_payload}}
+        )
+
+        captured_config: dict = {}
+
+        def _capture(w, cfg):
+            captured_config.update(copy.deepcopy(cfg))
+            return "<svg/>"
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            side_effect=_capture,
+        ):
+            await ws_render_widget(hass, conn, msg)
+
+        attrs = captured_config["states"]["weather.home"]["attributes"]
+        assert attrs["forecast"] == forecast_payload
+        hass.services.async_call.assert_called_once_with(
+            "weather",
+            "get_forecasts",
+            {"entity_id": "weather.home", "type": "daily"},
+            blocking=True,
+            return_response=True,
+        )
+        conn.send_result.assert_called_once_with(15, {"svg": "<svg/>"})
+        conn.send_error.assert_not_called()
+
+    async def test_fetches_forecast_for_weather_widget_override(
+        self,
+    ) -> None:
+        # Forecast data is fetched when a weather widget is provided
+        # via msg["widget"] override (no stored widget consulted).
+        weather_state = _make_state(
+            "weather.home", "rainy", {"temperature": 9.8}
+        )
+        hass = _make_hass(widgets=[], states=[weather_state])
+        conn = _make_connection()
+        msg = {
+            "id": 16,
+            "entry_id": "entry1",
+            "widget_index": 0,
+            "widget": {"type": "weather", "entity": "weather.home"},
+        }
+        forecast_payload = [
+            {"datetime": "2026-05-15T00:00:00", "temperature": 10}
+        ]
+        hass.services = MagicMock()
+        hass.services.async_call = AsyncMock(
+            return_value={"weather.home": {"forecast": forecast_payload}}
+        )
+
+        captured_config: dict = {}
+
+        def _capture(w, cfg):
+            captured_config.update(copy.deepcopy(cfg))
+            return "<svg/>"
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            side_effect=_capture,
+        ):
+            await ws_render_widget(hass, conn, msg)
+
+        attrs = captured_config["states"]["weather.home"]["attributes"]
+        assert attrs["forecast"] == forecast_payload
+        hass.services.async_call.assert_called_once_with(
+            "weather",
+            "get_forecasts",
+            {"entity_id": "weather.home", "type": "daily"},
+            blocking=True,
+            return_response=True,
+        )
+        conn.send_result.assert_called_once_with(16, {"svg": "<svg/>"})
+        conn.send_error.assert_not_called()
+
 
 class TestCommandRegistration:
     async def test_command_registered_on_setup(self) -> None:
@@ -492,6 +592,54 @@ class TestWsRenderWidgets:
         conn.send_result.assert_called_once_with(
             7, {"svgs": ["<svg/>", "<svg/>"]}
         )
+        conn.send_error.assert_not_called()
+
+    async def test_fetches_forecast_for_weather_widget(
+        self,
+    ) -> None:
+        # Forecast data is fetched via weather.get_forecasts and
+        # injected into config["states"] before rendering all widgets.
+        weather_state = _make_state(
+            "weather.home", "rainy", {"temperature": 9.8}
+        )
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+        }
+        hass = _make_hass(widgets=[widget], states=[weather_state])
+        conn = _make_connection()
+        msg = {"id": 8, "entry_id": "entry1"}
+        forecast_payload = [
+            {"datetime": "2026-05-15T00:00:00", "temperature": 10}
+        ]
+        hass.services = MagicMock()
+        hass.services.async_call = AsyncMock(
+            return_value={"weather.home": {"forecast": forecast_payload}}
+        )
+
+        captured_configs: list[dict] = []
+
+        def _capture(w, cfg):
+            captured_configs.append(copy.deepcopy(cfg))
+            return "<svg/>"
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            side_effect=_capture,
+        ):
+            await ws_render_widgets(hass, conn, msg)
+
+        assert captured_configs, "renderer was not called"
+        attrs = captured_configs[0]["states"]["weather.home"]["attributes"]
+        assert attrs["forecast"] == forecast_payload
+        hass.services.async_call.assert_called_once_with(
+            "weather",
+            "get_forecasts",
+            {"entity_id": "weather.home", "type": "daily"},
+            blocking=True,
+            return_response=True,
+        )
+        conn.send_result.assert_called_once_with(8, {"svgs": ["<svg/>"]})
         conn.send_error.assert_not_called()
 
 
