@@ -138,9 +138,8 @@ def _compose_svg(
         # Strip leading whitespace then replace '<svg ' prefix so
         # that x/y attributes position the widget viewport.
         stripped = svg.lstrip()
-        assert stripped.startswith("<svg "), (
-            f"expected <svg prefix: {stripped[:40]!r}"
-        )
+        if not stripped.startswith("<svg "):
+            raise ValueError(f"expected <svg prefix: {stripped[:40]!r}")
         lines.append(f'<svg x="{x}" y="{y}" ' + stripped[4:])
     lines.append("</svg>")
     return "\n".join(lines)
@@ -587,8 +586,7 @@ def _build_weather_context(
 ) -> dict[str, object]:
     """Build Jinja2 template context for the weather widget.
 
-    Replicates the coordinate math from ``render_weather()``,
-    pre-computing every position and icon SVG string so the
+    Pre-computes every position and icon SVG string so the
     Jinja2 template contains no layout logic.
 
     Args:
@@ -833,17 +831,17 @@ def _build_weather_context(
         fc_icon_size = round(32 * scale)
 
         if forecast_days >= forecast_cols:
-            positions = list(range(forecast_days))
+            col_positions = list(range(forecast_days))
         elif forecast_days <= 1:
-            positions = [forecast_cols // 2]
+            col_positions = [forecast_cols // 2]
         else:
-            positions = [
+            col_positions = [
                 round(i * (forecast_cols - 1) / (forecast_days - 1))
                 for i in range(forecast_days)
             ]
 
         for idx, day in enumerate(forecast[:forecast_days]):
-            col_i = positions[idx]
+            col_i = col_positions[idx]
             cx = content_left + col_width * col_i + col_width // 2
             dt_str = day.get("datetime")
             if dt_str:
@@ -933,8 +931,7 @@ def _build_sensor_rows_context(
     """Build Jinja2 template context for the sensor_rows widget.
 
     Pre-computes every position and icon SVG string so the Jinja2
-    template contains no layout logic.  Mirrors the coordinate math
-    from ``render_sensor_rows()`` in ``render.py``.
+    template contains no layout logic.
 
     Args:
         widget: Widget config dict.  Recognised keys:
@@ -1106,6 +1103,8 @@ def _build_device_battery_context(
         bar_h = round(h * 0.36)
         bar_border = max(1, m.border // 2)
         font_sz = max(10, round(h * 0.46))
+        # PIL font for text measurement only — resvg does not
+        # expose text metrics, so widths are pre-computed here.
         font = _load_font(font_sz)
         text_w = round(font.getlength(label))
 
@@ -1272,6 +1271,8 @@ def _build_status_icons_context(
     icon_sz = round(chip_h * _CHIP_ICON_RATIO)
     icon_gap = round(chip_h * _CHIP_GAP_RATIO)
     font_sz = max(10, round(chip_h * _CHIP_FONT_RATIO))
+    # PIL font for text measurement only — resvg does not
+    # expose text metrics, so widths are pre-computed here.
     font = _load_font(font_sz)
     # Inter-chip gap equals icon size by design (same as PIL).
     inter_gap = round(chip_h * _CHIP_ICON_RATIO)
@@ -1300,7 +1301,7 @@ def _build_status_icons_context(
 
         has_icon = bool(icon_svg)
         icon_w = (icon_sz + icon_gap) if has_icon else 0
-        # Ink bounding box matches _chip_width() in render.py.
+        # Chip width: 2*pad + icon area + text ink width.
         label_bbox = font.getbbox(label)
         text_w = int(label_bbox[2] - label_bbox[0])
         chip_w = pad * 2 + icon_w + text_w
@@ -1527,6 +1528,17 @@ def _build_waste_schedule_context(
     }
 
 
+_SVG_RENDERERS: dict[str, SvgContextFn] = {
+    WidgetType.DEVICE_BATTERY: _build_device_battery_context,
+    WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
+    WidgetType.SEPARATOR: _build_separator_context,
+    WidgetType.STATUS_ICONS: _build_status_icons_context,
+    WidgetType.TEXT: _build_text_context,
+    WidgetType.WASTE_SCHEDULE: _build_waste_schedule_context,
+    WidgetType.WEATHER: _build_weather_context,
+}
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -1555,14 +1567,3 @@ def render_widget_svg(
     ctx = _SVG_RENDERERS[wtype](widget, config)
     tmpl = _jinja_env.get_template(f"{wtype}.svg.j2")
     return tmpl.render(**ctx)
-
-
-_SVG_RENDERERS: dict[str, SvgContextFn] = {
-    WidgetType.DEVICE_BATTERY: _build_device_battery_context,
-    WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
-    WidgetType.SEPARATOR: _build_separator_context,
-    WidgetType.STATUS_ICONS: _build_status_icons_context,
-    WidgetType.TEXT: _build_text_context,
-    WidgetType.WASTE_SCHEDULE: _build_waste_schedule_context,
-    WidgetType.WEATHER: _build_weather_context,
-}

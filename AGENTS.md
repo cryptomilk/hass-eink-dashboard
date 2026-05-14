@@ -18,11 +18,16 @@ After making changes, ALWAYS run:
 ## Architecture
 
 This is a Home Assistant custom component (`custom_components/eink_dashboard/`)
-that renders e-ink dashboard images as PNG bytes using Pillow and exposes them
-via an HA image entity and a public HTTP endpoint.
+that renders e-ink dashboard images as PNG bytes and exposes them via an HA
+image entity and a public HTTP endpoint.
 
 **Key files**:
-- `render.py` — rendering engine (PIL-based, grayscale)
+- `render.py` — rendering orchestrator and shared helpers (delegates to
+  `svg_render.py`; also holds `WidgetMetrics`, `_compute_metrics`,
+  `_load_font`, and other utilities imported lazily by `svg_render.py`)
+- `svg_render.py` — SVG rendering pipeline: Jinja2 templates, icon-inlining
+  filters, `render_widget_svg()`, `_compose_svg()`, `_svg_to_png()` via
+  `resvg_py`, and per-widget context builders (`_build_*_context()`)
 - `image.py` — `EinkDashboardImage` (`ImageEntity`), scheduled refresh, ETag tracking
 - `http.py` — unauthenticated HTTP view at `/api/eink_dashboard/{entry_id}/image.png` with ETag/304 support
 - `store.py` — `EinkDashboardStore`, persists widget list via HA's `Store` (`eink_dashboard.{entry_id}`)
@@ -35,17 +40,22 @@ via an HA image entity and a public HTTP endpoint.
 **Rendering entry point**: `render_dashboard(widget_list, config) -> bytes` in `render.py`
 - `config` is a `DisplayConfig` dict with `width`, `height`, `rotation`, and `states` (HA entity ID → state dict)
 - Default display: 758×1024 px, 8-bit grayscale (`"L"` mode)
-- Dispatches each widget to its renderer via `_RENDERERS`, optionally rotates, returns PNG bytes
+- Dispatches each widget to its SVG context builder via `_SVG_RENDERERS` in
+  `svg_render.py`, composes one root SVG, rasterises with `resvg_py`, then
+  applies rotation and e-ink optimisation, and returns PNG bytes
 
 **Widget types** (`WidgetType` in `const.py`): `TEXT`, `SEPARATOR`, `WEATHER`, `SENSOR_ROWS`, `DEVICE_BATTERY`, `STATUS_ICONS`, `WASTE_SCHEDULE`
 
 **Adding a widget type**:
 1. Add the new value to `WidgetType` in `const.py`
-2. Write a renderer function `render_foo(draw, widget, config) -> None` in `render.py`
-3. Register it in the `_RENDERERS` dict
-4. Add the widget type to `frontend/src/types/ha.d.ts`
-5. Add a `_renderFoo()` method in `frontend/src/eink-dashboard-card.ts` and wire it into `_render()`
-6. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
+2. Create `templates/foo.svg.j2` (may import `_macros.svg.j2` helpers)
+3. Write `_build_foo_context(widget, config) -> dict` in `svg_render.py`
+4. Register it in `_SVG_RENDERERS` in `svg_render.py`
+5. Add the widget type to `frontend/src/types/ha.d.ts`
+6. Add a `_renderFoo()` method in `frontend/src/eink-dashboard-card.ts`
+   and wire it into `_render()` (until Phase 4 replaces this with
+   inline SVG)
+7. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
 
 **Converting or redesigning a widget type** (PIL→SVG migration or new
 widget):
@@ -88,10 +98,12 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 falling back to PIL's built-in default.
 
 **Dual renderers**: Each widget type is rendered in two places that must stay
-in sync: `render.py` (PIL, produces the actual PNG) and
-`eink-dashboard-card.ts` (`_render*()` methods, canvas preview in the
-Lovelace editor). When changing layout, coordinates, or data fields in one,
-mirror the change in the other.
+in sync: `svg_render.py` (SVG template + context builder, produces the actual
+PNG via `resvg_py`) and `eink-dashboard-card.ts` (`_render*()` methods,
+Canvas 2D preview in the Lovelace editor, Phase 4 of the SVG migration will
+replace these with inline SVG). When changing layout, data fields, or
+coordinates, mirror the change in both renderers (until Phase 4
+replaces the Canvas 2D preview with inline SVG).
 
 **Tests** assert visual correctness by scanning pixel regions for dark/gray
 pixels. Helpers in `tests/helpers.py`: `pixel(img, x, y)` reads a grayscale
