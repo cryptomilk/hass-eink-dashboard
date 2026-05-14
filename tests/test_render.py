@@ -2000,9 +2000,8 @@ MOCK_STATUS_ICON_STATES = {
 
 
 class TestRenderStatusIcons:
-    # Verify rendering of status_icons widgets as pill-shaped chips
-    # with MDI icons, inverted problem-state chips, and card
-    # containers.
+    # Verify rendering of status_icons widgets as icon-and-text
+    # labels with MDI icons and card containers.
     _DEFAULTS: dict[str, object] = {
         "width": 500,
         "height": 200,
@@ -2014,9 +2013,9 @@ class TestRenderStatusIcons:
 
     # ── Structural tests ──────────────────────────────
 
-    def test_chip_pill_shape(self) -> None:
-        # Corner pixel is white (clipped by pill radius);
-        # border pixels inward along the top edge are dark.
+    def test_no_label_rect(self) -> None:
+        # Labels have no enclosing rectangle — the top-left
+        # corner is white (no border stroke).
         h = 40
         widgets = [
             {
@@ -2031,64 +2030,32 @@ class TestRenderStatusIcons:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Extreme top-left corner: outside the pill radius.
-        radius = h // 2
         assert pixel(img, 0, 0) == 255
-        # A few pixels inward from the radius along the top
-        # edge: inside the border stroke.
-        assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
+        assert pixel(img, 0, h - 1) == 255
 
-    def test_problem_chip_inverted(self) -> None:
-        # front_door: state=on, device_class=door (problem)
-        # → chip interior is filled black.
+    def test_auto_width(self) -> None:
+        # When no explicit w is set, the card border shrinks
+        # to fit the content instead of spanning the display.
         h = 40
         widgets = [
             {
                 "type": "status_icons",
                 "x": 0,
                 "y": 0,
-                "w": 400,
                 "h": h,
-                "entities": [
-                    "binary_sensor.front_door",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Check inside the left semicircle at the vertical
-        # midpoint: x=3 is 17 px from the cap centre (radius 20)
-        # and clear of the text column, so reliably black.
-        assert pixel(img, 3, h // 2) < 64
-
-    def test_normal_chip_outline(self) -> None:
-        # kitchen_window: state=off → not a problem →
-        # outlined chip with white interior.
-        h = 40
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
+                "card_style": "border",
                 "entities": [
                     "binary_sensor.kitchen_window",
                 ],
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Interior near the top of the left cap is white for
-        # a non-inverted chip.  At y=4 the cap centre (cx=20)
-        # is always content-free (no icon or text there).
-        cx = h // 2
-        assert pixel(img, cx, 4) >= 200
-        # The border itself has dark pixels along the top
-        # edge past the radius.
-        radius = h // 2
-        assert_has_dark_pixels(img, radius, 0, radius + 5, 3)
+        # Right quarter of the 500px canvas is white — the
+        # card border does not extend to the display edge.
+        assert_all_white(img, 375, 0, 500, h)
 
     def test_wrapping(self) -> None:
-        # Narrow w forces chips to wrap to the next row.
+        # Narrow w forces labels to wrap to the next row.
         h = 40
         gap = round(h * 0.29)
         widgets = [
@@ -2107,7 +2074,7 @@ class TestRenderStatusIcons:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Dark pixels must exist below the first chip row
+        # Dark pixels must exist below the first label row
         # (second row starts at y = h + gap).
         second_row_y = h + gap
         assert_has_dark_pixels(
@@ -2123,9 +2090,7 @@ class TestRenderStatusIcons:
     def test_icon_presence(self) -> None:
         # Entity with a mapped device_class (window →
         # window-closed-variant) renders an MDI icon in the
-        # chip's icon band.  The chip is not inverted so the
-        # background is white and dark icon pixels are
-        # distinguishable from the background.
+        # label's icon band.
         h = 40
         pad = round(h * 0.18)
         icon_sz = round(h * 0.29)
@@ -2171,7 +2136,7 @@ class TestRenderStatusIcons:
         title_advance = round(title_font_sz * 1.4)
         # Title area has content (threshold=200 catches gray text).
         assert_has_dark_pixels(img, 0, 0, 200, title_advance, threshold=200)
-        # Chip content starts below the title.
+        # Label content starts below the title.
         assert_has_dark_pixels(img, 0, title_advance, 400, title_advance + h)
 
     # ── Edge case tests ───────────────────────────────
@@ -2229,18 +2194,19 @@ class TestRenderStatusIcons:
         img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, 0, 0, 400, 40)
 
-    def test_motion_on_is_not_inverted(self) -> None:
-        # Motion sensor with state "on" is informational,
-        # not a problem — chip must NOT be inverted (no black
-        # fill).
+    def test_icon_fallback_from_entity_attr(self) -> None:
+        # Entity without a device_class mapping but with an
+        # icon attribute renders the icon via the mdi: fallback.
         h = 40
         pad = round(h * 0.18)
-        states = dict(MOCK_STATUS_ICON_STATES)
-        states["binary_sensor.motion"] = {
-            "state": "on",
-            "attributes": {
-                "friendly_name": "Motion",
-                "device_class": "motion",
+        icon_sz = round(h * 0.29)
+        states = {
+            "sensor.custom": {
+                "state": "on",
+                "attributes": {
+                    "friendly_name": "Custom",
+                    "icon": "mdi:washing-machine",
+                },
             },
         }
         widgets = [
@@ -2250,22 +2216,21 @@ class TestRenderStatusIcons:
                 "y": 0,
                 "w": 400,
                 "h": h,
-                "entities": [
-                    "binary_sensor.motion",
-                ],
+                "entities": ["sensor.custom"],
             }
         ]
         cfg = self._config(states=states)
         img = render_to_image(widgets, cfg)
-        # Interior near the top of the chip is white for a
-        # non-inverted chip (black-filled chip would be dark).
-        interior_x = pad + 5
-        assert pixel(img, interior_x, 4) == 255
+        # Icon band has dark pixels confirming the fallback
+        # icon was rendered.
+        icon_y0 = (h - icon_sz) // 2
+        icon_y1 = icon_y0 + icon_sz
+        assert_has_dark_pixels(img, pad, icon_y0, pad + icon_sz, icon_y1)
 
     # ── Scaling tests ─────────────────────────────────
 
     def test_scales_with_h(self) -> None:
-        # Doubling h roughly doubles chip content height.
+        # Doubling h roughly doubles label content height.
         h_small = 40
         h_large = 80
         entity = ["binary_sensor.kitchen_window"]
@@ -2307,9 +2272,7 @@ class TestRenderStatusIcons:
 
     def test_icon_vertically_centered(self) -> None:
         # Icon and text share the same vertical centre within
-        # the chip.  kitchen_window (state=off, not inverted)
-        # has a white background so both regions are
-        # measurable via content_bbox.
+        # the label.
         h = 40
         pad = round(h * 0.18)
         icon_sz = round(h * 0.29)
@@ -2341,7 +2304,7 @@ class TestRenderStatusIcons:
 
     def test_card_border(self) -> None:
         # Border style draws dark pixels on all four edges
-        # of the chip container.
+        # of the label container.
         h = 40
         W = 400
         m = _compute_metrics(h)
@@ -2395,7 +2358,7 @@ class TestRenderStatusIcons:
         assert_all_white(img, 395, 0, 400, 1)
 
     def test_card_none(self) -> None:
-        # No-decoration style has white corners — only chip
+        # No-decoration style has white corners — only label
         # content draws pixels.
         h = 40
         widgets = [

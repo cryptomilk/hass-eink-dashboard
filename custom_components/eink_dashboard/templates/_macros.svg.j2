@@ -204,11 +204,10 @@
 
 
 {#
-  chip -- draw a pill-shaped chip with optional icon and text label.
+  chip -- draw an icon-and-text label.
 
-  The pill end-caps are perfect semicircles (rx = ry = h // 2).
   All internal proportional sizing is driven by h:
-    pad  = h * 0.18  (horizontal padding inside pill)
+    pad  = h * 0.18  (horizontal padding)
     icon = h * 0.29  (icon size)
     gap  = h * 0.14  (icon-to-text gap)
     font = h * 0.46  (font size)
@@ -218,37 +217,26 @@
   unavailable in Jinja2).
 
   Parameters:
-    x, y   -- top-left of the chip
-    w      -- pre-computed chip width
-    h      -- chip height (controls all internal sizing)
+    x, y   -- top-left of the label
+    w      -- pre-computed label width
+    h      -- label height (controls all internal sizing)
     text   -- label text
-    border -- stroke width for pill outline
-    icon_svg -- pre-built icon SVG string (empty = text-only chip)
-    inverted -- when true, fill black and draw text/icon in white
+    border -- stroke width (unused, kept for call-site compat)
+    icon_svg -- pre-built icon SVG string (empty = text-only)
 #}
 {%- macro chip(
     x, y, w, h, text, border,
-    icon_svg="", inverted=false
+    icon_svg=""
 ) -%}
-{%- set radius = h // 2 -%}
-{%- set bg = "#000000" if inverted else "#ffffff" -%}
-{%- set fg = "#ffffff" if inverted else "#000000" -%}
 {%- set pad = h * 18 // 100 -%}
-{%- set icon_sz = h * 29 // 100 -%}
+{%- set icon_sz = h * 46 // 100 -%}
 {%- set icon_gap = h * 14 // 100 -%}
 {%- set font_sz = [10, h * 46 // 100]|max -%}
-<rect
-  x="{{ x }}" y="{{ y }}"
-  width="{{ w }}" height="{{ h }}"
-  rx="{{ radius }}" ry="{{ radius }}"
-  fill="{{ bg }}"
-  stroke="#000000"
-  stroke-width="{{ border }}"/>
 {%- if icon_svg -%}
 {%- set ix = x + pad -%}
 {%- set iy = y + (h - icon_sz) // 2 -%}
 <g transform="translate({{ ix }}, {{ iy }})"
-  style="color: {{ fg }}">{{ icon_svg }}</g>
+  style="color: #000000">{{ icon_svg }}</g>
 {%- endif -%}
 {%- set tx = x + pad + (icon_sz + icon_gap if icon_svg else 0) -%}
 <text
@@ -256,5 +244,5 @@
   font-family="Roboto"
   font-size="{{ font_sz }}"
   dominant-baseline="central"
-  fill="{{ fg }}">{{ text }}</text>
+  fill="#000000">{{ text }}</text>
 {%- endmacro -%}

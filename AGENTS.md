@@ -37,6 +37,12 @@ image entity and a public HTTP endpoint.
 - `sensor.py` — `EinkDashboardSensor`, exposes dashboard state as an HA sensor entity
 - `const.py` — enums, shared constants, and defaults
 
+**MDI icons**: SVG files in `icons/svg/mdi/` are inlined into widget
+templates by `_mdi_svg_filter()` in `svg_render.py`.  The upstream
+source is the `@mdi/svg` npm package installed in the frontend:
+`custom_components/eink_dashboard/frontend/node_modules/.pnpm/@mdi+svg@7.4.47/node_modules/@mdi/svg/svg/`.
+When adding new icons, copy the SVG file from that directory.
+
 **Rendering entry point**: `render_dashboard(widget_list, config) -> bytes` in `render.py`
 - `config` is a `DisplayConfig` dict with `width`, `height`, `rotation`, and `states` (HA entity ID → state dict)
 - Default display: 758×1024 px, 8-bit grayscale (`"L"` mode)

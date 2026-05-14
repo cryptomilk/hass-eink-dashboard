@@ -320,9 +320,8 @@ def test_card_row_icon_svg_renders(render_macro) -> None:
 # --- chip ------------------------------------------------------------------
 
 
-def test_chip_draws_pill_with_text(render_macro) -> None:
-    """Verify chip emits a pill border with dark edges and inner text."""
-    # h=40: radius=20, so corners at (x+20, y) and (x+w-20, y)
+def test_chip_renders_text(render_macro) -> None:
+    """Verify chip emits text without any pill border."""
     # chip at x=20, y=80, w=100, h=40
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
@@ -330,32 +329,17 @@ def test_chip_draws_pill_with_text(render_macro) -> None:
         + "{{ chip(x=20, y=80, w=100, h=40,"
         " text='OK', border=2) }}" + _SVG_CLOSE
     )
-    # Top border: dark pixels along the flat portion of the top edge
-    assert_has_dark_pixels(img, 40, 80, 100, 83)
-    # Pill corners are clipped: pixels at exact corners should be white
-    assert pixel(img, 20, 80) == 255  # top-left corner
-    assert pixel(img, 119, 80) == 255  # top-right corner
-    # Interior: text area should have dark pixels
-    assert_has_dark_pixels(img, 35, 85, 110, 115)
-
-
-def test_chip_inverted_has_dark_fill(render_macro) -> None:
-    """Verify inverted chip fills the pill black."""
-    img = render_macro(
-        "{%- from '_macros.svg.j2' import chip -%}"
-        + _SVG_OPEN
-        + "{{ chip(x=20, y=80, w=100, h=40,"
-        " text='ERR', border=2, inverted=true) }}" + _SVG_CLOSE
-    )
-    # Center of the chip should be black (or very dark)
-    assert pixel(img, 70, 100) < 50
+    # No pill border: top-left corner of chip area is white
+    assert pixel(img, 20, 80) == 255
+    # Text area should have dark pixels
+    assert_has_dark_pixels(img, 25, 85, 110, 115)
 
 
 def test_chip_with_icon(render_macro) -> None:
     """Verify chip with an inlined icon has dark pixels in the icon area."""
-    # h=40: icon_sz = 40*29//100 = 11; pad = 40*18//100 = 7
-    # icon at x=20+7=27, y=80+(40-11)//2=94
-    icon_svg = _mdi_svg_filter("thermometer", 11)
+    # h=40: icon_sz = 40*46//100 = 18; pad = 40*18//100 = 7
+    # icon at x=20+7=27, y=80+(40-18)//2=91
+    icon_svg = _mdi_svg_filter("thermometer", 18)
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
@@ -363,5 +347,5 @@ def test_chip_with_icon(render_macro) -> None:
         " text='Warm', border=2, icon_svg=icon_svg) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
-    # Icon region: left side of chip interior (roughly x=27..38, y=94..105)
-    assert_has_dark_pixels(img, 27, 90, 40, 110)
+    # Icon region: left side of chip interior
+    assert_has_dark_pixels(img, 27, 88, 46, 112)

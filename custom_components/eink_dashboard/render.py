@@ -148,6 +148,11 @@ _BINARY_SENSOR_DEVICE_CLASS_ICONS: dict[str, tuple[str, str]] = {
     "tamper": ("shield-check", "shield-alert"),
     "update": ("package", "package-up"),
     "vibration": ("crop-portrait", "vibrate"),
+    "washing_machine": (
+        "washing-machine",
+        "washing-machine-alert",
+    ),
+    "dishwasher": ("dishwasher", "dishwasher-alert"),
 }
 
 
@@ -260,11 +265,11 @@ def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
     return m.left_bar
 
 
-# Proportional sizing constants for pill-shaped chips.  Imported by
-# ``_build_status_icons_context()`` in ``svg_render.py`` for chip
-# layout calculations in the SVG pipeline.
+# Proportional sizing constants for icon-and-text labels.
+# Imported by ``_build_status_icons_context()`` in
+# ``svg_render.py`` for layout calculations in the SVG pipeline.
 _CHIP_PAD_RATIO: float = 0.18
-_CHIP_ICON_RATIO: float = 0.29
+_CHIP_ICON_RATIO: float = 0.46
 _CHIP_GAP_RATIO: float = 0.14
 _CHIP_FONT_RATIO: float = 0.46
 

@@ -1232,17 +1232,17 @@ def _build_status_icons_context(
 ) -> dict[str, object]:
     """Build Jinja2 template context for the status_icons widget.
 
-    Renders binary sensor entities as pill-shaped chips.  Problem
-    entities (state ``"on"`` and device_class in
-    ``_PROBLEM_DEVICE_CLASSES``) use inverted chips (black fill,
-    white text/icon).  Chips flow left-to-right with row wrapping.
-    An optional title is drawn in gray above the chip area.
+    Renders binary sensor entities as icon-and-text labels that
+    flow left-to-right with row wrapping.  An optional title is
+    drawn in gray above the label area.
 
-    The SVG ``height`` is set to the full content height, which
-    may exceed the declared widget ``h`` when chips wrap to
-    multiple rows.  ``render_dashboard()`` calls ``_svg_to_png()``
-    without an explicit height override so the rasterised PNG is
-    tall enough to hold all rows.
+    Icons are resolved from the entity's ``device_class`` via
+    ``_device_class_icon``, falling back to the entity's ``icon``
+    attribute (e.g. ``mdi:washing-machine``).
+
+    When no explicit ``w`` is set on the widget, the SVG width
+    shrinks to fit the laid-out content so the card border does
+    not stretch across the full display.
 
     Args:
         widget: Widget config dict.  Recognised keys: ``x``,
@@ -1263,7 +1263,6 @@ def _build_status_icons_context(
         _CHIP_GAP_RATIO,
         _CHIP_ICON_RATIO,
         _CHIP_PAD_RATIO,
-        _PROBLEM_DEVICE_CLASSES,
         _compute_metrics,
         _device_class_icon,
         _load_font,
@@ -1305,8 +1304,8 @@ def _build_status_icons_context(
     # PIL font for text measurement only — resvg does not
     # expose text metrics, so widths are pre-computed here.
     font = _load_font(font_sz)
-    # Inter-chip gap equals icon size by design (same as PIL).
-    inter_gap = round(chip_h * _CHIP_ICON_RATIO)
+    # Vertical gap between wrapped label rows.
+    inter_gap = round(chip_h * _CHIP_PAD_RATIO)
 
     # Build chip descriptors with pre-computed widths.
     chips: list[dict[str, Any]] = []
@@ -1317,14 +1316,13 @@ def _build_status_icons_context(
         attrs = state.get("attributes", {})
         label: str = attrs.get("friendly_name", entity_id)
         state_val: str = state.get("state", "")
-        device_class: str = attrs.get("device_class", "")
         domain = entity_id.split(".")[0]
 
-        is_problem = (
-            state_val == "on" and device_class in _PROBLEM_DEVICE_CLASSES
-        )
-
         icon_name = _device_class_icon(attrs, state_val, domain)
+        if icon_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                icon_name = raw[4:]
         icon_svg: markupsafe.Markup | str = ""
         if icon_name:
             with contextlib.suppress(FileNotFoundError):
@@ -1332,7 +1330,7 @@ def _build_status_icons_context(
 
         has_icon = bool(icon_svg)
         icon_w = (icon_sz + icon_gap) if has_icon else 0
-        # Chip width: 2*pad + icon area + text ink width.
+        # Label width: 2*pad + icon area + text ink width.
         label_bbox = font.getbbox(label)
         text_w = int(label_bbox[2] - label_bbox[0])
         chip_w = pad * 2 + icon_w + text_w
@@ -1341,7 +1339,6 @@ def _build_status_icons_context(
             {
                 "text": label,
                 "icon_svg": icon_svg,
-                "inverted": is_problem,
                 "w": chip_w,
                 "x": 0,
                 "y": 0,
@@ -1374,9 +1371,14 @@ def _build_status_icons_context(
         chip["y"] = cur_y
         cur_x += chip["w"]
 
-    # SVG height covers title + all chip rows (may exceed svg_h
-    # when chips wrap to more than one row).
+    # SVG height covers title + all label rows (may exceed svg_h
+    # when labels wrap to more than one row).
     total_h = chips[-1]["y"] + chip_h
+
+    # Shrink SVG width to fit content when no explicit w is set.
+    if "w" not in widget:
+        content_extent = max(c["x"] + c["w"] for c in chips) + r_inset
+        svg_w = content_extent
 
     return {
         "w": svg_w,
