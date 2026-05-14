@@ -18,6 +18,7 @@ _HA_MODULES = [
     "homeassistant.components.http",
     "homeassistant.components.image",
     "homeassistant.components.sensor",
+    "homeassistant.components.websocket_api",
     "homeassistant.config_entries",
     "homeassistant.core",
     "homeassistant.helpers",
@@ -266,6 +267,34 @@ class _StubTemplate:
 
 
 template_mod.Template = _StubTemplate  # type: ignore[attr-defined]
+
+ws_api_mod = sys.modules["homeassistant.components.websocket_api"]
+
+
+def _ws_command(
+    schema: dict,
+) -> object:
+    """Stub for @websocket_command -- records command name on the handler."""
+
+    def decorator(func: object) -> object:
+        # vol.Required("type") has the same hash as "type", so
+        # schema["type"] works even when the key is vol.Required.
+        func._ws_command = schema["type"]  # type: ignore[attr-defined]
+        func._ws_schema = schema  # type: ignore[attr-defined]
+        return func
+
+    return decorator
+
+
+ws_api_mod.websocket_command = _ws_command  # type: ignore[attr-defined]
+# Pass-through so tests can await the handler directly.
+ws_api_mod.async_response = lambda f: f  # type: ignore[attr-defined]
+ws_api_mod.async_register_command = MagicMock()  # type: ignore[attr-defined]
+ws_api_mod.ActiveConnection = type(  # type: ignore[attr-defined]
+    "ActiveConnection", (), {}
+)
+ws_api_mod.ERR_NOT_FOUND = "not_found"  # type: ignore[attr-defined]
+ws_api_mod.ERR_UNKNOWN_ERROR = "unknown_error"  # type: ignore[attr-defined]
 
 sensor_mod = sys.modules["homeassistant.components.sensor"]
 

@@ -1,0 +1,248 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from homeassistant.components import websocket_api
+
+from custom_components.eink_dashboard import (
+    async_setup,
+    ws_render_widget,
+)
+from custom_components.eink_dashboard.const import DOMAIN
+
+
+def _make_state(entity_id: str, state: str, attributes: dict) -> MagicMock:
+    s = MagicMock()
+    s.entity_id = entity_id
+    s.state = state
+    s.attributes = attributes
+    return s
+
+
+def _make_hass(
+    entry_id: str = "entry1",
+    widgets: list | None = None,
+    options: dict | None = None,
+    states: list | None = None,
+    *,
+    entry_missing: bool = False,
+) -> MagicMock:
+    hass = MagicMock()
+    hass.http = MagicMock()
+    hass.http.register_view = MagicMock()
+    hass.http.async_register_static_paths = AsyncMock()
+
+    ha_entry = MagicMock()
+    ha_entry.options = options or {
+        "device_model": "custom",
+        "width": 758,
+        "height": 1024,
+    }
+
+    if entry_missing:
+        hass.data = {}
+    else:
+        hass.data = {
+            DOMAIN: {
+                entry_id: {
+                    "widgets": widgets or [],
+                    "entry": ha_entry,
+                }
+            }
+        }
+
+    mock_states = states or []
+    hass.states.async_all = MagicMock(return_value=mock_states)
+
+    # Execute the function synchronously so tests don't need asyncio.
+    async def _executor_job(func, *args):
+        return func(*args)
+
+    hass.async_add_executor_job = _executor_job
+    return hass
+
+
+def _make_connection() -> MagicMock:
+    conn = MagicMock()
+    conn.send_result = MagicMock()
+    conn.send_error = MagicMock()
+    return conn
+
+
+class TestWsRenderWidget:
+    async def test_returns_svg_for_valid_widget(self) -> None:
+        # Happy path: handler renders the requested widget and returns SVG.
+        widget = {"type": "separator", "y": 50}
+        hass = _make_hass(widgets=[widget])
+        conn = _make_connection()
+        msg = {"id": 1, "entry_id": "entry1", "widget_index": 0}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ):
+            await ws_render_widget(hass, conn, msg)
+
+        conn.send_result.assert_called_once_with(1, {"svg": "<svg/>"})
+        conn.send_error.assert_not_called()
+
+    async def test_unknown_entry_id_sends_error(self) -> None:
+        # Unknown entry_id: handler sends ERR_NOT_FOUND without rendering.
+        hass = _make_hass(entry_missing=True)
+        conn = _make_connection()
+        msg = {"id": 2, "entry_id": "missing", "widget_index": 0}
+
+        await ws_render_widget(hass, conn, msg)
+
+        conn.send_error.assert_called_once()
+        args = conn.send_error.call_args.args
+        assert args[0] == 2
+        assert args[1] == websocket_api.ERR_NOT_FOUND
+        conn.send_result.assert_not_called()
+
+    async def test_widget_index_out_of_range_sends_error(self) -> None:
+        # Index beyond widget list: handler sends ERR_NOT_FOUND.
+        hass = _make_hass(widgets=[{"type": "separator"}])
+        conn = _make_connection()
+        msg = {"id": 3, "entry_id": "entry1", "widget_index": 5}
+
+        await ws_render_widget(hass, conn, msg)
+
+        conn.send_error.assert_called_once()
+        assert conn.send_error.call_args.args[1] == websocket_api.ERR_NOT_FOUND
+        conn.send_result.assert_not_called()
+
+    async def test_negative_widget_index_sends_error(self) -> None:
+        # Negative index: handler sends ERR_NOT_FOUND.
+        hass = _make_hass(widgets=[{"type": "separator"}])
+        conn = _make_connection()
+        msg = {"id": 4, "entry_id": "entry1", "widget_index": -1}
+
+        await ws_render_widget(hass, conn, msg)
+
+        conn.send_error.assert_called_once()
+        assert conn.send_error.call_args.args[1] == websocket_api.ERR_NOT_FOUND
+        conn.send_result.assert_not_called()
+
+    async def test_config_uses_entry_dimensions(self) -> None:
+        # Config dict passed to the renderer has width/height from options.
+        widget = {"type": "separator"}
+        hass = _make_hass(
+            widgets=[widget],
+            options={"width": 400, "height": 300},
+        )
+        conn = _make_connection()
+        msg = {"id": 5, "entry_id": "entry1", "widget_index": 0}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ) as mock_render:
+            await ws_render_widget(hass, conn, msg)
+
+        _, config = mock_render.call_args.args
+        assert config["width"] == 400
+        assert config["height"] == 300
+
+    async def test_config_includes_entity_states(self) -> None:
+        # States from hass.states are passed through to the renderer.
+        widget = {"type": "separator"}
+        mock_state = _make_state(
+            "sensor.temp", "21.5", {"unit_of_measurement": "°C"}
+        )
+        hass = _make_hass(widgets=[widget], states=[mock_state])
+        conn = _make_connection()
+        msg = {"id": 6, "entry_id": "entry1", "widget_index": 0}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ) as mock_render:
+            await ws_render_widget(hass, conn, msg)
+
+        _, config = mock_render.call_args.args
+        assert "sensor.temp" in config["states"]
+        assert config["states"]["sensor.temp"]["state"] == "21.5"
+
+    async def test_config_includes_grayscale_levels(self) -> None:
+        # grayscale_levels from the device preset is present in the config.
+        widget = {"type": "separator"}
+        hass = _make_hass(
+            widgets=[widget],
+            options={
+                "device_model": "kindle_pw",
+                "width": 758,
+                "height": 1024,
+            },
+        )
+        conn = _make_connection()
+        msg = {"id": 8, "entry_id": "entry1", "widget_index": 0}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ) as mock_render:
+            await ws_render_widget(hass, conn, msg)
+
+        _, config = mock_render.call_args.args
+        assert config["grayscale_levels"] == 16
+
+    async def test_render_called_with_correct_widget(self) -> None:
+        # The renderer receives the widget at the requested index.
+        widgets = [
+            {"type": "separator"},
+            {"type": "text", "text": "hello"},
+        ]
+        hass = _make_hass(widgets=widgets)
+        conn = _make_connection()
+        msg = {"id": 7, "entry_id": "entry1", "widget_index": 1}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            return_value="<svg/>",
+        ) as mock_render:
+            await ws_render_widget(hass, conn, msg)
+
+        widget_arg, _ = mock_render.call_args.args
+        assert widget_arg == widgets[1]
+
+    async def test_ws_command_attribute(self) -> None:
+        # Handler has the correct WebSocket command name set by the decorator.
+        assert (
+            ws_render_widget._ws_command  # type: ignore[attr-defined]
+            == "eink_dashboard/render_widget"
+        )
+
+    async def test_render_error_sends_unknown_error(self) -> None:
+        # Renderer exception: handler sends ERR_UNKNOWN_ERROR, not a result.
+        widget = {"type": "separator"}
+        hass = _make_hass(widgets=[widget])
+        conn = _make_connection()
+        msg = {"id": 9, "entry_id": "entry1", "widget_index": 0}
+
+        with patch(
+            "custom_components.eink_dashboard.render_widget_svg",
+            side_effect=KeyError("separator"),
+        ):
+            await ws_render_widget(hass, conn, msg)
+
+        conn.send_error.assert_called_once()
+        args = conn.send_error.call_args.args
+        assert args[0] == 9
+        assert args[1] == websocket_api.ERR_UNKNOWN_ERROR
+        conn.send_result.assert_not_called()
+
+
+class TestCommandRegistration:
+    async def test_command_registered_on_setup(self) -> None:
+        # async_setup() registers ws_render_widget via async_register_command.
+        hass = _make_hass()
+        hass.data = {}
+
+        with patch(
+            "custom_components.eink_dashboard.websocket_api"
+            ".async_register_command"
+        ) as mock_reg:
+            await async_setup(hass, {})
+
+        mock_reg.assert_called_once_with(hass, ws_render_widget)

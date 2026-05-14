@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import voluptuous as vol
+from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
@@ -15,9 +17,10 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .const import DEVICE_PRESETS, DOMAIN
+from .const import DEFAULT_HEIGHT, DEFAULT_WIDTH, DEVICE_PRESETS, DOMAIN
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
+from .svg_render import render_widget_svg
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +59,98 @@ async def _async_update_listener(
 ) -> None:
     """Re-register the device when options are updated."""
     _register_device(hass, entry)
+
+
+def _build_display_config(
+    hass: HomeAssistant, entry_id: str
+) -> dict[str, Any]:
+    """Build a DisplayConfig for rendering a widget preview.
+
+    Snapshots current HA entity states and reads display dimensions
+    from the config entry options.  Caller must ensure ``entry_id``
+    exists in ``hass.data[DOMAIN]``.
+
+    Args:
+        hass: Home Assistant instance.
+        entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
+
+    Returns:
+        Dict with ``width``, ``height``, ``grayscale_levels``, and
+        ``states`` keys suitable for ``render_widget_svg()``.
+    """
+    entry_data = hass.data[DOMAIN][entry_id]
+    entry = entry_data["entry"]
+    device_model = entry.options.get("device_model", "custom")
+    preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
+    states: dict[str, Any] = {}
+    for state in hass.states.async_all():
+        states[state.entity_id] = {
+            "state": state.state,
+            "attributes": dict(state.attributes),
+        }
+    return {
+        "width": entry.options.get("width", DEFAULT_WIDTH),
+        "height": entry.options.get("height", DEFAULT_HEIGHT),
+        "grayscale_levels": preset.grayscale_levels,
+        "states": states,
+    }
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "eink_dashboard/render_widget",
+        vol.Required("entry_id"): str,
+        vol.Required("widget_index"): int,
+    }
+)
+@websocket_api.async_response
+async def ws_render_widget(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return the SVG string for a single widget.
+
+    Args:
+        hass: Home Assistant instance.
+        connection: Active WebSocket connection.
+        msg: Validated message dict containing ``entry_id``
+            (str) and ``widget_index`` (int).
+    """
+    entry_id = msg["entry_id"]
+    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if entry_data is None:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_NOT_FOUND,
+            f"Config entry not found: {entry_id}",
+        )
+        return
+
+    widgets = entry_data["widgets"]
+    idx = msg["widget_index"]
+    if idx < 0 or idx >= len(widgets):
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_NOT_FOUND,
+            f"Widget index out of range: {idx}",
+        )
+        return
+
+    widget = widgets[idx]
+    config = _build_display_config(hass, entry_id)
+    try:
+        svg = await hass.async_add_executor_job(
+            render_widget_svg, widget, config
+        )
+    except Exception as exc:  # noqa: BLE001
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_UNKNOWN_ERROR,
+            str(exc),
+        )
+        return
+    connection.send_result(msg["id"], {"svg": svg})
 
 
 _FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -97,6 +192,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         hass,
         f"/eink_dashboard/frontend/eink-dashboard-card.js?v={_VERSION}",
     )
+    websocket_api.async_register_command(hass, ws_render_widget)
     _LOGGER.debug("async_setup: complete")
     return True
 
