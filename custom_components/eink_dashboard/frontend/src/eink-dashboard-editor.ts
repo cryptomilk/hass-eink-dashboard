@@ -100,7 +100,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   },
   status_icons: {
     label: "Status Icons",
-    description: "Binary sensor states as pill-shaped chips",
+    description: "Entity states as icon-and-text labels",
     icon: "mdi:checkbox-marked-circle",
     defaults: {
       type: "status_icons",
@@ -110,6 +110,8 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       w: 400,
       h: 40,
       entities: [],
+      show_icon: true,
+      show_state: false,
       card_style: DEFAULT_CARD_STYLE,
     },
   },
@@ -570,7 +572,19 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette-outline",
-      schema: [cardStyleSelector()],
+      schema: [
+        {
+          name: "show_icon",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_state",
+          default: false,
+          selector: { boolean: {} },
+        },
+        cardStyleSelector(),
+      ],
     },
   ],
 

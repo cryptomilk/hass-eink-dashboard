@@ -65,6 +65,15 @@ _CONDITION_TO_SVG: dict[str, str] = {
     "exceptional": "wi-na",
 }
 
+# Entity states treated as "active" for the filled circle
+# indicator.  Covers binary_sensor/switch ("on"), cover ("open"),
+# person ("home"), media_player ("playing"), sun ("above_horizon").
+# Sensor entities with numeric states never match and always render
+# as outlined.
+_ACTIVE_STATES: frozenset[str] = frozenset(
+    {"on", "open", "home", "playing", "above_horizon"}
+)
+
 
 def _svg_to_png(
     svg: str,
@@ -1232,13 +1241,18 @@ def _build_status_icons_context(
 ) -> dict[str, object]:
     """Build Jinja2 template context for the status_icons widget.
 
-    Renders binary sensor entities as icon-and-text labels that
-    flow left-to-right with row wrapping.  An optional title is
-    drawn in gray above the label area.
+    Renders entities as icon-and-text labels that flow
+    left-to-right with row wrapping.  Each icon sits inside a
+    state circle: filled gray when active (``state`` is in
+    ``_ACTIVE_STATES``), outlined when inactive.  An optional title
+    is drawn in gray above the label area.
 
     Icons are resolved from the entity's ``device_class`` via
     ``_device_class_icon``, falling back to the entity's ``icon``
     attribute (e.g. ``mdi:washing-machine``).
+
+    When ``show_state`` is true, the entity state is appended to
+    the label (e.g. "Front Door · On").
 
     When no explicit ``w`` is set on the widget, the SVG width
     shrinks to fit the laid-out content so the card border does
@@ -1247,7 +1261,8 @@ def _build_status_icons_context(
     Args:
         widget: Widget config dict.  Recognised keys: ``x``,
             ``y``, ``w``, ``h`` (default 40), ``title``,
-            ``card_style``, ``entities``.
+            ``card_style``, ``show_icon``, ``show_state``,
+            ``entities``.
         config: Display config with ``states`` and
             ``grayscale_levels``.
 
@@ -1261,6 +1276,7 @@ def _build_status_icons_context(
     from .render import (  # noqa: PLC0415
         _CHIP_FONT_RATIO,
         _CHIP_GAP_RATIO,
+        _CHIP_ICON_INNER_RATIO,
         _CHIP_ICON_RATIO,
         _CHIP_PAD_RATIO,
         _compute_metrics,
@@ -1295,17 +1311,21 @@ def _build_status_icons_context(
     x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
     content_w = svg_w - x_off - r_inset
 
+    show_icon: bool = widget.get("show_icon", True)
+    show_state: bool = widget.get("show_state", False)
+
     # Chip sizing ratios — must match the chip macro in
     # _macros.svg.j2.
-    pad = round(chip_h * _CHIP_PAD_RATIO)
-    icon_sz = round(chip_h * _CHIP_ICON_RATIO)
-    icon_gap = round(chip_h * _CHIP_GAP_RATIO)
-    font_sz = max(10, round(chip_h * _CHIP_FONT_RATIO))
+    pad = int(chip_h * _CHIP_PAD_RATIO)
+    icon_dia = int(chip_h * _CHIP_ICON_RATIO)
+    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
+    icon_gap = int(chip_h * _CHIP_GAP_RATIO)
+    font_sz = max(10, int(chip_h * _CHIP_FONT_RATIO))
     # PIL font for text measurement only — resvg does not
     # expose text metrics, so widths are pre-computed here.
     font = _load_font(font_sz)
     # Vertical gap between wrapped label rows.
-    inter_gap = round(chip_h * _CHIP_PAD_RATIO)
+    inter_gap = int(chip_h * _CHIP_PAD_RATIO)
 
     # Build chip descriptors with pre-computed widths.
     chips: list[dict[str, Any]] = []
@@ -1318,27 +1338,39 @@ def _build_status_icons_context(
         state_val: str = state.get("state", "")
         domain = entity_id.split(".")[0]
 
-        icon_name = _device_class_icon(attrs, state_val, domain)
-        if icon_name is None:
-            raw = attrs.get("icon", "")
-            if raw.startswith("mdi:"):
-                icon_name = raw[4:]
+        # Icon resolution — skipped entirely when show_icon
+        # is disabled.
         icon_svg: markupsafe.Markup | str = ""
-        if icon_name:
-            with contextlib.suppress(FileNotFoundError):
-                icon_svg = _mdi_svg_filter(icon_name, icon_sz)
+        if show_icon:
+            icon_name = _device_class_icon(
+                attrs,
+                state_val,
+                domain,
+            )
+            if icon_name is None:
+                raw = attrs.get("icon", "")
+                if raw.startswith("mdi:"):
+                    icon_name = raw[4:]
+            if icon_name:
+                with contextlib.suppress(FileNotFoundError):
+                    icon_svg = _mdi_svg_filter(
+                        icon_name,
+                        icon_sz,
+                    )
 
         has_icon = bool(icon_svg)
-        icon_w = (icon_sz + icon_gap) if has_icon else 0
+        icon_w = (icon_dia + icon_gap) if has_icon else 0
         # Label width: 2*pad + icon area + text ink width.
-        label_bbox = font.getbbox(label)
+        text = f"{label} · {state_val.capitalize()}" if show_state else label
+        label_bbox = font.getbbox(text)
         text_w = int(label_bbox[2] - label_bbox[0])
         chip_w = pad * 2 + icon_w + text_w
 
         chips.append(
             {
-                "text": label,
+                "text": text,
                 "icon_svg": icon_svg,
+                "active": state_val in _ACTIVE_STATES,
                 "w": chip_w,
                 "x": 0,
                 "y": 0,

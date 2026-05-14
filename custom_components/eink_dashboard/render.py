@@ -269,7 +269,8 @@ def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
 # Imported by ``_build_status_icons_context()`` in
 # ``svg_render.py`` for layout calculations in the SVG pipeline.
 _CHIP_PAD_RATIO: float = 0.18
-_CHIP_ICON_RATIO: float = 0.46
+_CHIP_ICON_RATIO: float = 0.64
+_CHIP_ICON_INNER_RATIO: float = 0.6
 _CHIP_GAP_RATIO: float = 0.14
 _CHIP_FONT_RATIO: float = 0.46
 

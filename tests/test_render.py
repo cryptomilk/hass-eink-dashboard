@@ -2057,7 +2057,7 @@ class TestRenderStatusIcons:
     def test_wrapping(self) -> None:
         # Narrow w forces labels to wrap to the next row.
         h = 40
-        gap = round(h * 0.29)
+        gap = int(h * 0.18)
         widgets = [
             {
                 "type": "status_icons",
@@ -2088,15 +2088,11 @@ class TestRenderStatusIcons:
     # ── Content tests ─────────────────────────────────
 
     def test_icon_presence(self) -> None:
-        # Entity with a mapped device_class (window →
-        # window-closed-variant) renders an MDI icon in the
-        # label's icon band.
+        # Entity with a mapped device_class renders an MDI icon
+        # inside a state circle.
         h = 40
-        pad = round(h * 0.18)
-        icon_sz = round(h * 0.29)
-        # Vertical span of the icon within the chip.
-        icon_y0 = (h - icon_sz) // 2
-        icon_y1 = icon_y0 + icon_sz
+        pad = int(h * 0.18)
+        icon_dia = int(h * 0.64)
         widgets = [
             {
                 "type": "status_icons",
@@ -2110,10 +2106,15 @@ class TestRenderStatusIcons:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Dark pixels in the icon-only band (text starts at
-        # pad + icon_sz + gap, well outside this region) confirm
-        # the icon was rendered.
-        assert_has_dark_pixels(img, pad, icon_y0, pad + icon_sz, icon_y1)
+        # Circle area has dark pixels (outlined circle stroke
+        # or icon content).
+        assert_has_dark_pixels(
+            img,
+            pad,
+            0,
+            pad + icon_dia,
+            h,
+        )
 
     def test_title(self) -> None:
         # Title text is rendered above the chip area in gray.
@@ -2198,8 +2199,8 @@ class TestRenderStatusIcons:
         # Entity without a device_class mapping but with an
         # icon attribute renders the icon via the mdi: fallback.
         h = 40
-        pad = round(h * 0.18)
-        icon_sz = round(h * 0.29)
+        pad = int(h * 0.18)
+        icon_dia = int(h * 0.64)
         states = {
             "sensor.custom": {
                 "state": "on",
@@ -2221,11 +2222,162 @@ class TestRenderStatusIcons:
         ]
         cfg = self._config(states=states)
         img = render_to_image(widgets, cfg)
-        # Icon band has dark pixels confirming the fallback
-        # icon was rendered.
-        icon_y0 = (h - icon_sz) // 2
-        icon_y1 = icon_y0 + icon_sz
-        assert_has_dark_pixels(img, pad, icon_y0, pad + icon_sz, icon_y1)
+        # Circle area has dark pixels confirming the fallback
+        # icon was rendered inside the state circle.
+        assert_has_dark_pixels(
+            img,
+            pad,
+            0,
+            pad + icon_dia,
+            h,
+        )
+
+    # ── State indicator tests ────────────────────────
+
+    def test_circle_filled_when_on(self) -> None:
+        # Entity with state "on" has a filled gray circle —
+        # the circle centre is dark.
+        h = 40
+        pad = int(h * 0.18)
+        icon_dia = int(h * 0.64)
+        cx = pad + icon_dia // 2
+        cy = h // 2
+        states = {
+            "binary_sensor.front_door": {
+                "state": "on",
+                "attributes": {
+                    "friendly_name": "Front Door",
+                    "device_class": "door",
+                },
+            },
+        }
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.front_door",
+                ],
+            }
+        ]
+        cfg = self._config(states=states)
+        img = render_to_image(widgets, cfg)
+        # Circle interior near the edge (away from icon
+        # content) should be gray-filled.
+        assert pixel(img, cx - icon_dia // 2 + 2, cy) < 160
+
+    def test_circle_outlined_when_off(self) -> None:
+        # Entity with state "off" has an outlined circle —
+        # the circle interior is white with a dark stroke.
+        h = 80
+        pad = int(h * 0.18)
+        icon_dia = int(h * 0.64)
+        icon_r = icon_dia // 2
+        cx = pad + icon_r
+        cy = h // 2
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": [
+                    "binary_sensor.kitchen_window",
+                ],
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Outlined circle has dark stroke at the top.
+        circle_top = cy - icon_r
+        assert_has_dark_pixels(
+            img,
+            cx - 2,
+            circle_top,
+            cx + 2,
+            circle_top + 4,
+        )
+        # Gap between stroke and icon is white.  Probe 3 px
+        # inside the left edge of the circle, where the icon
+        # SVG (60 % of circle dia) hasn't started yet.
+        probe_x = pad + 3
+        assert pixel(img, probe_x, cy) >= 200
+
+    def test_show_state_text(self) -> None:
+        # show_state appends the entity state to the label text,
+        # making the rendered content wider.
+        h = 40
+        entity = ["binary_sensor.kitchen_window"]
+        base_widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": entity,
+            }
+        ]
+        state_widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "show_state": True,
+                "entities": entity,
+            }
+        ]
+        img_base = render_to_image(base_widgets, self._config())
+        img_state = render_to_image(
+            state_widgets,
+            self._config(),
+        )
+        # The state-text variant has wider content.
+        bbox_base = content_bbox(img_base, 0, 0, 400, h)
+        bbox_state = content_bbox(img_state, 0, 0, 400, h)
+        assert bbox_state[2] > bbox_base[2]
+
+    def test_show_icon_false_no_circle(self) -> None:
+        # show_icon=False suppresses the icon circle — the
+        # label starts near the left edge without a circle gap.
+        h = 40
+        entity = ["binary_sensor.kitchen_window"]
+        widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "show_icon": False,
+                "entities": entity,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Circle area (pad..pad+icon_dia) is white — no circle
+        # drawn.  Text starts at pad, so check only the circle
+        # area past where text ink could appear by verifying
+        # content is narrower than the icon variant.
+        icon_widgets = [
+            {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": entity,
+            }
+        ]
+        img_icon = render_to_image(icon_widgets, self._config())
+        bbox_no = content_bbox(img, 0, 0, 400, h)
+        bbox_yes = content_bbox(img_icon, 0, 0, 400, h)
+        # Without icon circle, content is narrower.
+        assert bbox_no[2] < bbox_yes[2]
 
     # ── Scaling tests ─────────────────────────────────
 
@@ -2271,12 +2423,12 @@ class TestRenderStatusIcons:
     # ── Alignment tests ───────────────────────────────
 
     def test_icon_vertically_centered(self) -> None:
-        # Icon and text share the same vertical centre within
-        # the label.
+        # Icon circle and text share the same vertical centre
+        # within the label.
         h = 40
-        pad = round(h * 0.18)
-        icon_sz = round(h * 0.29)
-        icon_gap = round(h * 0.14)
+        pad = int(h * 0.18)
+        icon_dia = int(h * 0.64)
+        icon_gap = int(h * 0.14)
         widgets = [
             {
                 "type": "status_icons",
@@ -2290,12 +2442,12 @@ class TestRenderStatusIcons:
             }
         ]
         img = render_to_image(widgets, self._config())
-        text_start = pad + icon_sz + icon_gap
+        text_start = pad + icon_dia + icon_gap
         # tolerance=3.0: resvg dominant-baseline="central"
         # differs slightly from PIL's ascender-based centering.
         assert_vertically_centered(
             img,
-            icon_region=(pad, 0, pad + icon_sz, h),
+            icon_region=(pad, 0, pad + icon_dia, h),
             text_region=(text_start, 0, 300, h),
             tolerance=3.0,
         )

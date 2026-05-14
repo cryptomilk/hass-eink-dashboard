@@ -7,6 +7,9 @@ import pytest
 import resvg_py
 from PIL import Image
 
+from custom_components.eink_dashboard.render import (
+    _CHIP_ICON_INNER_RATIO,
+)
 from custom_components.eink_dashboard.svg_render import (
     _TEMPLATE_DIR,
     _jinja_env,
@@ -335,11 +338,13 @@ def test_chip_renders_text(render_macro) -> None:
     assert_has_dark_pixels(img, 25, 85, 110, 115)
 
 
-def test_chip_with_icon(render_macro) -> None:
-    """Verify chip with an inlined icon has dark pixels in the icon area."""
-    # h=40: icon_sz = 40*46//100 = 18; pad = 40*18//100 = 7
-    # icon at x=20+7=27, y=80+(40-18)//2=91
-    icon_svg = _mdi_svg_filter("thermometer", 18)
+def test_chip_with_icon_draws_circle(render_macro) -> None:
+    """Verify chip with icon draws an outlined state circle."""
+    # h=40: icon_dia = 40*64//100 = 25; pad = 40*18//100 = 7
+    # circle centre at x=20+7+12=39, y=80+20=100
+    icon_dia = 40 * 64 // 100
+    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
+    icon_svg = _mdi_svg_filter("thermometer", icon_sz)
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
@@ -347,5 +352,46 @@ def test_chip_with_icon(render_macro) -> None:
         " text='Warm', border=2, icon_svg=icon_svg) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
-    # Icon region: left side of chip interior
-    assert_has_dark_pixels(img, 27, 88, 46, 112)
+    # Circle stroke is visible at the icon area edges.
+    pad = 40 * 18 // 100
+    assert_has_dark_pixels(
+        img,
+        20 + pad,
+        80,
+        20 + pad + icon_dia,
+        120,
+    )
+
+
+def test_chip_with_active_icon_fills_circle(render_macro) -> None:
+    """Verify chip with active=true draws a filled gray circle."""
+    # h=40: icon_dia = 25; pad = 7; cx = 20+7+12 = 39, cy = 100.
+    # Probe 2px inside the left edge of the circle — this region
+    # is inside the fill but outside the 60% icon area, so it must
+    # be gray (not white).
+    icon_dia = 40 * 64 // 100
+    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
+    icon_svg = _mdi_svg_filter("thermometer", icon_sz)
+    img = render_macro(
+        "{%- from '_macros.svg.j2' import chip -%}"
+        + _SVG_OPEN
+        + "{{ chip(x=20, y=80, w=120, h=40,"
+        " text='Warm', border=2, icon_svg=icon_svg,"
+        " active=true) }}" + _SVG_CLOSE,
+        icon_svg=icon_svg,
+    )
+    pad = 40 * 18 // 100
+    icon_r = icon_dia // 2
+    icon_cx = 20 + pad + icon_r
+    icon_cy = 80 + 40 // 2
+    # Probe just inside the left arc of the filled circle.
+    probe_x = icon_cx - icon_r + 2
+    assert_has_gray_pixels(
+        img,
+        probe_x,
+        icon_cy - 1,
+        probe_x + 2,
+        icon_cy + 1,
+        low=100,
+        high=160,
+    )

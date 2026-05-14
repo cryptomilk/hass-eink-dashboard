@@ -167,6 +167,8 @@ export interface StatusIconsWidget extends WidgetBase {
   type: "status_icons";
   title?: string;
   entities?: string[];
+  show_icon?: boolean;
+  show_state?: boolean;
   card_style?: CardStyle;
 }
 
