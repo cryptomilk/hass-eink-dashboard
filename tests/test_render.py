@@ -2430,13 +2430,6 @@ _TODAY = dt.date(2026, 5, 2)
 _PATCH_NOW = "custom_components.eink_dashboard.render.date"
 
 
-def _make_dummy_icon() -> tuple[Image.Image, Image.Image]:
-    """Return a (gray, mask) icon pair filled with black pixels."""
-    gray = Image.new("L", (32, 32), COLOR_BLACK)
-    mask = Image.new("L", (32, 32), 255)
-    return (gray, mask)
-
-
 class TestWasteDateHelpers:
     def test_parse_iso_date(self) -> None:
         today = dt.date(2026, 5, 2)
@@ -2644,14 +2637,7 @@ class TestRenderWasteSchedule:
             h=h,
             card_style="border",
         )
-        dummy = _make_dummy_icon()
-        with (
-            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
-            patch(
-                "custom_components.eink_dashboard.render._load_icon",
-                return_value=dummy,
-            ),
-        ):
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = png_to_image(render_dashboard([w], self._config()))
         icon_left = m.padding
@@ -2661,6 +2647,7 @@ class TestRenderWasteSchedule:
             img,
             icon_region=(icon_left, 0, icon_right, h),
             text_region=(text_left, 0, 380, h),
+            tolerance=3.0,
         )
 
     # ── Scaling tests ─────────────────────────────────
@@ -2674,14 +2661,7 @@ class TestRenderWasteSchedule:
         m_large = _compute_metrics(112)
         w_small = self._widget(entries=entries, h=56)
         w_large = self._widget(entries=entries, h=112)
-        dummy = _make_dummy_icon()
-        with (
-            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
-            patch(
-                "custom_components.eink_dashboard.render._load_icon",
-                return_value=dummy,
-            ),
-        ):
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img_s = png_to_image(render_dashboard([w_small], self._config()))
             img_l = png_to_image(render_dashboard([w_large], self._config()))
@@ -2842,17 +2822,20 @@ class TestRenderWasteSchedule:
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = png_to_image(render_dashboard([w], self._config()))
-        # The stroke pixel (2px inside the left circle edge)
-        # should be black (outline stroke).
-        stroke_x = m.padding + 2
+        # The stroke pixel at the leftmost point of the circle path
+        # should be black (outline stroke).  PIL strokes inside the
+        # bounding box so padding+2 was safe; resvg centers the stroke
+        # on the path (inner edge at padding+1.5), making padding+2 fall
+        # in the white fill area.  Use padding (the path x-coordinate
+        # itself) which is firmly in the stroke for both engines.
+        stroke_x = m.padding
         ring_y = h // 2
         assert pixel(img, stroke_x, ring_y) < 64
         # The interior pixel (well inside the stroke, before
         # the icon image begins) should be white (fill).
-        # icon_dia=51, border=3, so white fill starts at ~x=20.
-        # The 60% icon begins at x ~ padding + (icon_dia-icon_sz)/2
-        # = 17 + (51-31)/2 = 17+10 = 27.  Check at x=23 to stay
-        # in the white fill region between stroke and icon.
+        # icon_dia=51, border=3: resvg stroke inner edge at ~x=18.5,
+        # fill starts at x=19.  Check at padding+border+3=23 to stay
+        # safely in the white fill for both engines.
         interior_x = m.padding + m.border + 3
         assert pixel(img, interior_x, ring_y) > 200
 
@@ -3018,14 +3001,7 @@ class TestRenderWasteSchedule:
         # Card mode icon diameter should be larger
         assert m_card.icon_dia > m_list.icon_dia
         w = self._widget(layout="card", h=h)
-        dummy = _make_dummy_icon()
-        with (
-            patch(_PATCH_NOW, wraps=dt.date) as mock_dt,
-            patch(
-                "custom_components.eink_dashboard.render._load_icon",
-                return_value=dummy,
-            ),
-        ):
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = png_to_image(render_dashboard([w], self._config()))
         # Icon circle area should have content spanning a

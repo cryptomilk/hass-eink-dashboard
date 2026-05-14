@@ -1,0 +1,57 @@
+{%- from "_macros.svg.j2" import card_container, card_row -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+{%- if has_rows -%}
+{%- if title -%}
+<text
+  x="0" y="0"
+  font-family="Roboto"
+  font-size="{{ title_font_sz }}"
+  dominant-baseline="hanging"
+  fill="#787878">{{ title }}</text>
+{%- endif -%}
+{#- x_off and r_inset are yielded by the card_container macro and
+    depend on card_style — they cannot be pre-computed in Python
+    without duplicating the macro's inset logic.  The arithmetic
+    expressions below are the only deliberate exception to the
+    "no layout logic in templates" rule. -#}
+{%- call(x_off, r_inset) card_container(
+    x=0, y=content_y, w=w, h=content_h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    padding=m_padding, left_bar=m_left_bar,
+    grayscale_levels=grayscale_levels) -%}
+{%- for row in rows -%}
+{#- row.y is an absolute SVG coordinate pre-computed in Python.
+    card_container emits plain SVG elements without a <g transform>,
+    so absolute coordinates are correct inside this caller block. -#}
+{{ card_row(
+    x=x_off, y=row.y,
+    w=w - x_off - r_inset, row_h=row_h,
+    padding=m_padding, icon_dia=m_icon_dia,
+    inner_gap=m_inner_gap, border=m_border,
+    font_primary=m_font_primary,
+    font_secondary=m_font_secondary,
+    primary=row.primary,
+    secondary=row.secondary,
+    value=row.value,
+    icon_svg=row.icon_svg,
+    icon_fill=row.icon_fill,
+    icon_outline=row.icon_outline,
+    value_fill=row.value_fill,
+    secondary_fill=row.secondary_fill,
+    letter=row.letter) }}
+{%- if not loop.last -%}
+<line
+  x1="{{ x_off + m_padding }}"
+  y1="{{ row.y + row_h }}"
+  x2="{{ w - r_inset - m_padding }}"
+  y2="{{ row.y + row_h }}"
+  stroke="#787878"
+  stroke-width="{{ m_divider }}"/>
+{%- endif -%}
+{%- endfor -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

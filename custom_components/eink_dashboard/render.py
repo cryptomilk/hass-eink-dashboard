@@ -747,6 +747,20 @@ _PROBLEM_DEVICE_CLASSES = {
 }
 
 
+def _get_today() -> date:
+    """Return today's date.
+
+    Thin wrapper around ``date.today()`` so the SVG context builder
+    can call this function and tests can patch
+    ``custom_components.eink_dashboard.render.date`` to control
+    the return value via this scope.
+
+    Returns:
+        Today's date as a ``datetime.date`` instance.
+    """
+    return date.today()
+
+
 def _parse_days_until(raw: str, today: date) -> int | None:
     """Parse a date string into the number of days from *today*.
 
@@ -808,182 +822,7 @@ def _format_relative_date(days: int | None, raw: str) -> str:
     return f"in {days} days"
 
 
-def render_waste_schedule(
-    draw: ImageDraw.ImageDraw,
-    widget: Widget,
-    config: DisplayConfig,
-) -> None:
-    """Draw waste collection entries as card rows with urgency styling.
-
-    Supports two layouts: ``"list"`` (default) shows all entries
-    due within 3 days as rows with dividers, ``"card"`` shows only
-    the most urgent entry using the full widget height.
-
-    Data comes from a single entity whose attributes contain
-    waste types as keys with ISO date values.  The ``entries``
-    config maps attribute keys to short display labels.
-
-    Args:
-        draw: PIL ImageDraw context.
-        widget: Widget config with entity, entries, x, y, w, h,
-            layout, card_style, and optional title.
-        config: Display config with states and _image.
-    """
-    img: Image.Image = config["_image"]
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
-    w = widget.get("w", config["width"] - x)
-    h = widget.get("h", 168)
-    title = widget.get("title", "")
-    entity_id: str = widget.get("entity", "")
-    entries: list[dict[str, str]] = widget.get("entries", [])
-    layout = widget.get("layout", "list")
-    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
-
-    if not entity_id or not entries:
-        return
-
-    state = states.get(entity_id)
-    if state is None:
-        _LOGGER.debug(
-            "render_waste_schedule: entity %r not in states",
-            entity_id,
-        )
-        return
-    attrs = state.get("attributes", {})
-
-    # Title above the card (gray, scales with h)
-    if title:
-        title_font_sz = max(10, round(h * 0.14))
-        title_font = _load_font(title_font_sz)
-        draw.text(
-            (x, y),
-            title,
-            fill=COLOR_GRAY,
-            font=title_font,
-        )
-        title_advance = round(title_font_sz * 1.4)
-        y += title_advance
-        h -= title_advance
-
-    # Resolve entries: look up each attribute, parse days,
-    # filter to the 0–3 day range.  Entries are appended in
-    # config order, which matters for the stable sort below —
-    # equal-days entries stay in the order the user configured them.
-    today = date.today()
-    visible: list[tuple[str, str, int]] = []
-    for entry in entries:
-        attr_key = entry.get("attribute", "")
-        label = entry.get("label") or attr_key
-        raw = str(attrs.get(attr_key, ""))
-        if not raw:
-            continue
-        days = _parse_days_until(raw, today)
-        if days is None or days < 0 or days > 3:
-            continue
-        visible.append((label, raw, days))
-
-    if not visible:
-        return
-
-    if layout == "card":
-        # Show the most urgent entry (lowest days value).
-        # Stable sort: equal-days entries keep config order.
-        visible.sort(key=lambda e: e[2])
-        label, raw, days = visible[0]
-        row_h = h
-        m = _compute_metrics(row_h)
-        x_off, r_inset = _draw_card_container(
-            draw,
-            x,
-            y,
-            w,
-            h,
-            m,
-            card_style,
-            grayscale_levels,
-        )
-        cx, cw = x + x_off, w - x_off - r_inset
-        # Black icon for today/tomorrow, outline for days 2-3
-        icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
-        use_outline = days >= 2
-        icon = _load_icon("mdi:trash-can", m.icon_dia)
-        date_str = _format_relative_date(days, raw)
-        # Today entries get black date text for urgency
-        sf = COLOR_BLACK if days == 0 else COLOR_GRAY
-        _draw_card_row(
-            draw,
-            img,
-            cx,
-            y,
-            cw,
-            row_h,
-            m,
-            primary=label,
-            secondary=date_str,
-            icon=icon,
-            icon_fill=icon_fill,
-            icon_outline=use_outline,
-            secondary_fill=sf,
-        )
-    else:
-        # List layout: one row per visible entry
-        n = len(visible)
-        row_h = h // n
-        m = _compute_metrics(row_h)
-        x_off, r_inset = _draw_card_container(
-            draw,
-            x,
-            y,
-            w,
-            h,
-            m,
-            card_style,
-            grayscale_levels,
-        )
-        cx, cw = x + x_off, w - x_off - r_inset
-        icon = _load_icon("mdi:trash-can", m.icon_dia)
-
-        for i, (label, raw, days) in enumerate(visible):
-            row_y = y + i * row_h
-            icon_fill = COLOR_BLACK if days <= 1 else COLOR_GRAY
-            use_outline = days >= 2
-            date_str = _format_relative_date(days, raw)
-            # Today entries get black date text for urgency
-            vf = COLOR_BLACK if days == 0 else COLOR_GRAY
-            _draw_card_row(
-                draw,
-                img,
-                cx,
-                row_y,
-                cw,
-                row_h,
-                m,
-                primary=label,
-                value=date_str,
-                icon=icon,
-                icon_fill=icon_fill,
-                icon_outline=use_outline,
-                value_fill=vf,
-            )
-            # Gray divider between rows (not after last)
-            if i < n - 1:
-                div_y = row_y + row_h
-                draw.line(
-                    [
-                        (cx + m.padding, div_y),
-                        (cx + cw - m.padding, div_y),
-                    ],
-                    fill=COLOR_GRAY,
-                    width=m.divider,
-                )
-
-
-_RENDERERS: dict[WidgetType, RendererFn] = {
-    WidgetType.WASTE_SCHEDULE: render_waste_schedule,
-}
+_RENDERERS: dict[WidgetType, RendererFn] = {}
 
 
 def render_dashboard(

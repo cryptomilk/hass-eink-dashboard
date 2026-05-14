@@ -1235,6 +1235,184 @@ def _build_status_icons_context(
     }
 
 
+def _build_waste_schedule_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the waste_schedule widget.
+
+    Renders waste collection entries as card rows with urgency
+    styling.  Each entry maps an entity attribute (ISO date string
+    or integer day offset) to a short label and colour scheme:
+
+    - ``days <= 1``: black-filled icon circle; date text is black
+      when ``days == 0`` (today) and gray otherwise.
+    - ``days >= 2``: outlined icon circle (white fill, black
+      stroke); date text is gray.
+
+    Two layouts are supported via the ``layout`` parameter:
+
+    - ``"list"`` (default): one row per visible entry, each with a
+      gray horizontal divider between rows; date is shown as a
+      right-aligned ``value`` string.
+    - ``"card"``: only the most urgent entry (lowest day count)
+      using the full widget height; date is shown as a
+      ``secondary`` line below the primary label.
+
+    Only entries within the 0–3 day range are rendered.  Entries
+    with missing, unparseable, or out-of-range dates are silently
+    skipped.
+
+    Args:
+        widget: Widget config dict.  Recognised keys: ``entity``
+            (entity ID whose attributes hold the dates),
+            ``entries`` (list of ``{"attribute": …, "label": …}``
+            dicts), ``layout`` (``"list"`` or ``"card"``),
+            ``card_style``, ``title``, ``x``, ``y``, ``w``, ``h``.
+        config: Display config with ``states`` (entity ID →
+            state dict) and ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by
+        ``waste_schedule.svg.j2``.  Returns
+        ``{"w": …, "h": …, "has_rows": False}`` when the entity
+        is absent from states, ``entries`` is empty, or no entries
+        fall within the visible day range.
+    """
+    from .render import (  # noqa: PLC0415
+        _compute_metrics,
+        _format_relative_date,
+        _get_today,
+        _parse_days_until,
+    )
+
+    x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
+    svg_w = max(1, widget.get("w", config["width"] - x))
+    svg_h = max(1, widget.get("h", config["height"] - y))
+
+    entity_id: str = widget.get("entity", "")
+    entries: list[dict[str, str]] = widget.get("entries", [])
+    layout: str = widget.get("layout", "list")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    title: str = widget.get("title", "")
+    states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    _empty: dict[str, object] = {
+        "w": svg_w,
+        "h": svg_h,
+        "has_rows": False,
+    }
+    if not entity_id or not entries:
+        return _empty
+
+    entity_state = states.get(entity_id)
+    if entity_state is None:
+        return _empty
+
+    attrs = entity_state.get("attributes", {})
+
+    # Title above the card consumes vertical space; derives
+    # from svg_h so it scales with the widget height.
+    content_y = 0
+    content_h = svg_h
+    title_font_sz = 0
+    if title:
+        title_font_sz = max(10, round(svg_h * 0.14))
+        title_advance = round(title_font_sz * 1.4)
+        content_y = title_advance
+        content_h = svg_h - title_advance
+
+    # Resolve visible entries: parse dates, filter to 0–3 days.
+    # Config order is preserved — equal-day entries keep the
+    # order the user configured them, matching the PIL renderer.
+    # Use _get_today() from render.py so tests can patch
+    # "custom_components.eink_dashboard.render.date" to control
+    # the date returned here.
+    today = _get_today()
+    visible: list[tuple[str, str, int]] = []
+    for entry in entries:
+        attr_key = entry.get("attribute", "")
+        label = entry.get("label") or attr_key
+        raw = str(attrs.get(attr_key, ""))
+        if not raw:
+            continue
+        days = _parse_days_until(raw, today)
+        if days is None or days < 0 or days > 3:
+            continue
+        visible.append((label, raw, days))
+
+    if not visible:
+        return _empty
+
+    if layout == "card":
+        # Most urgent entry only (stable sort: equal days keep
+        # config order), displayed at full widget height.
+        visible.sort(key=lambda e: e[2])
+        visible = [visible[0]]
+        row_h = content_h
+    else:
+        row_h = content_h // len(visible)
+
+    m = _compute_metrics(row_h)
+
+    # Build the trash-can icon SVG once; all entries share the
+    # same icon, only the circle fill/outline differs.
+    icon_sz = m.icon_dia * 6 // 10
+    icon_svg = _mdi_svg_filter("trash-can", icon_sz)
+
+    rows: list[dict[str, object]] = []
+    for i, (label, raw, days) in enumerate(visible):
+        date_str = _format_relative_date(days, raw)
+        # days == 0 (today): black date text for urgency.
+        # days >= 1: gray date text.
+        date_fill = "#000000" if days == 0 else "#787878"
+        use_outline = days >= 2
+        # Outlined circles ignore icon_fill (macro uses white
+        # fill + black stroke), but we still pass it correctly.
+        icon_fill = "#000000" if days <= 1 else "#787878"
+        rows.append(
+            {
+                "y": content_y + i * row_h,
+                "primary": label,
+                # Card layout: date as secondary (below primary).
+                # List layout: date as right-aligned value.
+                "secondary": date_str if layout == "card" else "",
+                "value": "" if layout == "card" else date_str,
+                "icon_svg": icon_svg,
+                "icon_outline": use_outline,
+                "icon_fill": icon_fill,
+                "secondary_fill": date_fill,
+                "value_fill": date_fill,
+                "letter": "",
+            }
+        )
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "has_rows": True,
+        "title": title,
+        "title_font_sz": title_font_sz,
+        "content_y": content_y,
+        "content_h": content_h,
+        "card_style": card_style,
+        "grayscale_levels": grayscale_levels,
+        "m_border": m.border,
+        "m_padding": m.padding,
+        "m_radius": m.radius,
+        "m_left_bar": m.left_bar,
+        "m_icon_dia": m.icon_dia,
+        "m_inner_gap": m.inner_gap,
+        "m_font_primary": m.font_primary,
+        "m_font_secondary": m.font_secondary,
+        "m_divider": m.divider,
+        "row_h": row_h,
+        "rows": rows,
+    }
+
+
 def render_widget_svg(
     widget: Widget,
     config: DisplayConfig,
@@ -1271,5 +1449,6 @@ _SVG_RENDERERS: dict[str, SvgContextFn] = {
     WidgetType.SEPARATOR: _build_separator_context,
     WidgetType.STATUS_ICONS: _build_status_icons_context,
     WidgetType.TEXT: _build_text_context,
+    WidgetType.WASTE_SCHEDULE: _build_waste_schedule_context,
     WidgetType.WEATHER: _build_weather_context,
 }
