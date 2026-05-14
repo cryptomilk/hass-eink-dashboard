@@ -5,6 +5,11 @@ from typing import Any
 
 from PIL import Image, ImageChops
 
+from custom_components.eink_dashboard.render import (
+    WidgetMetrics,
+    render_dashboard,
+)
+
 
 def make_config(defaults: dict[str, Any], **overrides: Any) -> dict[str, Any]:
     """Build a display config dict from defaults with overrides.
@@ -24,6 +29,25 @@ def make_config(defaults: dict[str, Any], **overrides: Any) -> dict[str, Any]:
 def png_to_image(png_bytes: bytes) -> Image.Image:
     """Convert PNG bytes to a PIL Image."""
     return Image.open(io.BytesIO(png_bytes))
+
+
+def render_to_image(
+    widgets: list[dict[str, Any]],
+    config: dict[str, Any],
+) -> Image.Image:
+    """Render widgets to a grayscale PIL Image.
+
+    Convenience wrapper combining ``render_dashboard`` and
+    ``png_to_image`` into a single call.
+
+    Args:
+        widgets: Widget description dicts.
+        config: Display configuration dict (width, height, states…).
+
+    Returns:
+        Grayscale PIL Image.
+    """
+    return png_to_image(render_dashboard(widgets, config))
 
 
 def pixel(img: Image.Image, x: int, y: int) -> int:
@@ -96,6 +120,61 @@ def assert_has_dark_pixels(
         for y in range(y1, y2)
         for x in range(x1, x2)
     ), f"no dark pixels (< {threshold}) in ({x1},{y1})–({x2},{y2})"
+
+
+def assert_card_border(
+    img: Image.Image,
+    w: int,
+    h: int,
+    m: WidgetMetrics,
+    *,
+    x0: int = 0,
+    y0: int = 0,
+    bottom_margin: int = 1,
+) -> None:
+    """Assert dark pixels on all four edges of a card border at ``(x0, y0)``.
+
+    Checks the top, bottom, left, and right edges of a rounded-rectangle
+    card frame.  Corner regions (inset by ``m.radius``) are skipped to
+    avoid false negatives from corner rounding.
+
+    Args:
+        img: A grayscale ("L" mode) PIL image.
+        w: Widget width in pixels.
+        h: Widget height in pixels.
+        m: WidgetMetrics computed for the card's row height.
+        x0: Left origin of the card in image coordinates.  Default 0.
+        y0: Top origin of the card in image coordinates.  Default 0.
+        bottom_margin: Extra pixels subtracted from the bottom-edge top
+            bound and added to the bottom bound.  Default 1 accommodates
+            PIL stroke rounding at the border edge.  Pass 0 when the
+            widget fills the image vertically, leaving no pixel row
+            below ``h``.
+    """
+    # Top edge
+    assert_has_dark_pixels(
+        img, x0 + m.radius, y0, x0 + w - m.radius, y0 + m.border
+    )
+    # Bottom edge
+    assert_has_dark_pixels(
+        img,
+        x0 + m.radius,
+        y0 + h - m.border - bottom_margin,
+        x0 + w - m.radius,
+        min(y0 + h + bottom_margin, img.height),
+    )
+    # Left edge
+    assert_has_dark_pixels(
+        img, x0, y0 + m.radius, x0 + m.border, y0 + h - m.radius
+    )
+    # Right edge
+    assert_has_dark_pixels(
+        img,
+        x0 + w - m.border,
+        y0 + m.radius,
+        x0 + w,
+        y0 + h - m.radius,
+    )
 
 
 def assert_all_white(

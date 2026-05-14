@@ -80,10 +80,10 @@ from custom_components.eink_dashboard.render import (
     _device_class_icon, render_dashboard,
 )
 from tests.helpers import (
-    assert_all_white, assert_has_dark_pixels,
+    assert_all_white, assert_card_border, assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally, assert_vertically_centered,
-    content_bbox, make_config, pixel, png_to_image,
+    content_bbox, make_config, pixel, render_to_image,
 )
 ```
 
@@ -118,8 +118,10 @@ the old test class in-place (same position in the file).
   pixels dark)
 - **Icon circle**: dark/gray pixels in the icon area
 
+Use `assert_card_border(img, w, h, m)` for the four-edge border check
+(default `bottom_margin=1` accommodates PIL stroke rounding).
 Use `assert_has_dark_pixels()`, `assert_all_white()`,
-`assert_has_gray_pixels()`.
+`assert_has_gray_pixels()` for everything else.
 
 ### 2. Alignment tests — verify layout relationships
 
@@ -224,7 +226,7 @@ class TestRender{WidgetName}:
             "x": PADDING, "y": 0, "w": 350, "h": 56,
             "entities": ["sensor.temperature"],
         }]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING, 0, 350, 56)
 
     def test_{widget}_empty_entities_white(self) -> None:
@@ -234,7 +236,7 @@ class TestRender{WidgetName}:
             "x": PADDING, "y": 0, "w": 350, "h": 56,
             "entities": [],
         }]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, PADDING, 0, 350, 56)
 
     def test_{widget}_icon_centered_with_text(self) -> None:
@@ -245,7 +247,7 @@ class TestRender{WidgetName}:
             "x": 0, "y": 0, "w": 400, "h": 56,
             "entities": ["sensor.temperature"],
         }]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_vertically_centered(
             img,
             icon_region=(m.padding, 0, m.padding + m.icon_dia, 56),

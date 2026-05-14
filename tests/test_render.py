@@ -26,6 +26,7 @@ from custom_components.eink_dashboard.render import (
 )
 from tests.helpers import (
     assert_all_white,
+    assert_card_border,
     assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
@@ -33,7 +34,7 @@ from tests.helpers import (
     content_bbox,
     make_config,
     pixel,
-    png_to_image,
+    render_to_image,
 )
 
 MOCK_WEATHER_STATE = {
@@ -80,41 +81,31 @@ MOCK_WEATHER_STATE = {
 class TestRenderDashboard:
     def test_empty_widget_list_returns_white_image(self) -> None:
         config = {"width": 100, "height": 100}
-        result = render_dashboard([], config)
-
-        img = png_to_image(result)
+        img = render_to_image([], config)
         assert img.mode == "L"
         assert img.size == (100, 100)
         assert pixel(img, 50, 50) == 255
 
     def test_returns_valid_png(self) -> None:
         config = {"width": 200, "height": 300}
-        result = render_dashboard([], config)
-
-        img = png_to_image(result)
+        img = render_to_image([], config)
         assert img.format == "PNG"
         assert img.size == (200, 300)
 
     def test_rotation_90(self) -> None:
         config = {"width": 200, "height": 100, "rotation": 90}
-        result = render_dashboard([], config)
-
-        img = png_to_image(result)
+        img = render_to_image([], config)
         assert img.size == (100, 200)
 
     def test_rotation_270(self) -> None:
         config = {"width": 200, "height": 100, "rotation": 270}
-        result = render_dashboard([], config)
-
-        img = png_to_image(result)
+        img = render_to_image([], config)
         assert img.size == (100, 200)
 
     def test_unknown_widget_type_is_skipped(self) -> None:
         config = {"width": 100, "height": 100}
         widgets = [{"type": "nonexistent", "x": 10, "y": 10}]
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, config)
         assert img.size == (100, 100)
 
 
@@ -139,7 +130,7 @@ class TestRenderText:
                 "font_size": 20,
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # x=10 start; right bound 100 = left half of 200px canvas
         assert_has_dark_pixels(img, 10, 10, 100, 40)
 
@@ -155,7 +146,7 @@ class TestRenderText:
                 "align": "right",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Right 60px of 200px canvas — where short right-aligned text
         # lands when anchored to the right edge.
         assert_has_dark_pixels(img, 140, 10, 200, 40)
@@ -172,7 +163,7 @@ class TestRenderText:
                 "align": "right",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Left 40% of 200px canvas — comfortably clear of
         # right-aligned "Hi" which lands near the right edge.
         assert_all_white(img, 0, 10, 80, 40)
@@ -189,7 +180,7 @@ class TestRenderText:
                 "align": "center",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Middle 40px band (80–120) of 200px canvas — centered
         # "Hi" at font_size 20 should fall in this range.
         assert_has_dark_pixels(img, 80, 10, 120, 40)
@@ -206,13 +197,13 @@ class TestRenderText:
                 "color": 160,
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_has_gray_pixels(img, 10, 10, 80, 40, low=100, high=200)
 
     def test_text_empty_string_is_white(self) -> None:
         # An empty text string produces no visible content.
         widgets = [{"type": "text", "x": 0, "y": 0, "text": ""}]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, 0, 0, 200, 100)
 
     def test_text_explicit_w_constrains_right_align(self) -> None:
@@ -229,7 +220,7 @@ class TestRenderText:
                 "w": 100,
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Right half of w=100 — right-aligned "Hi" anchors to x=100.
         assert_has_dark_pixels(img, 50, 0, 100, 30)
         # Left 40px of w=100 — clear of right-aligned "Hi".
@@ -238,33 +229,29 @@ class TestRenderText:
     def test_text_scales_with_font_size(self) -> None:
         # Doubling font_size approximately doubles rendered glyph height.
         config = self._config(width=400, height=200)
-        small = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "text",
-                        "x": 0,
-                        "y": 0,
-                        "text": "X",
-                        "font_size": 20,
-                    }
-                ],
-                config,
-            )
+        small = render_to_image(
+            [
+                {
+                    "type": "text",
+                    "x": 0,
+                    "y": 0,
+                    "text": "X",
+                    "font_size": 20,
+                }
+            ],
+            config,
         )
-        large = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "text",
-                        "x": 0,
-                        "y": 0,
-                        "text": "X",
-                        "font_size": 40,
-                    }
-                ],
-                config,
-            )
+        large = render_to_image(
+            [
+                {
+                    "type": "text",
+                    "x": 0,
+                    "y": 0,
+                    "text": "X",
+                    "font_size": 40,
+                }
+            ],
+            config,
         )
         assert_scales_proportionally(
             small,
@@ -290,22 +277,9 @@ class TestRenderText:
                 "card_style": "border",
             }
         ]
-        img = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=60))
-        )
+        img = render_to_image(widgets, self._config(width=400, height=60))
         m = _compute_metrics(60)
-        # Top edge
-        assert_has_dark_pixels(img, m.radius, 0, 400 - m.radius, m.border)
-        # Bottom edge
-        assert_has_dark_pixels(
-            img, m.radius, 60 - m.border, 400 - m.radius, 60
-        )
-        # Left edge
-        assert_has_dark_pixels(img, 0, m.radius, m.border, 60 - m.radius)
-        # Right edge
-        assert_has_dark_pixels(
-            img, 400 - m.border, m.radius, 400, 60 - m.radius
-        )
+        assert_card_border(img, 400, 60, m, bottom_margin=0)
 
     def test_text_card_left_bar(self) -> None:
         # card_style="left_bar" draws a solid gray bar on the left
@@ -322,9 +296,7 @@ class TestRenderText:
                 "card_style": "left_bar",
             }
         ]
-        img = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=60))
-        )
+        img = render_to_image(widgets, self._config(width=400, height=60))
         m = _compute_metrics(60)
         # The midpoint of the bar must be solid gray (not text
         # anti-aliasing): the bar fill color is #787878 = 120.
@@ -348,9 +320,7 @@ class TestRenderText:
                 "card_style": "none",
             }
         ]
-        img = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=60))
-        )
+        img = render_to_image(widgets, self._config(width=400, height=60))
         # No border — corners must be white
         assert pixel(img, 0, 0) == 255
         assert pixel(img, 399, 0) == 255
@@ -391,9 +361,7 @@ class TestRenderText:
                 "card_style": "border",
             }
         ]
-        img = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=60))
-        )
+        img = render_to_image(widgets, self._config(width=400, height=60))
         m = _compute_metrics(60)
         # Gap between border and content padding — should be white
         # in the straight section of the border (past the corner radius).
@@ -425,25 +393,21 @@ class TestRenderText:
                 "title": "Section",
             }
         ]
-        img_with = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=80))
-        )
+        img_with = render_to_image(widgets, self._config(width=400, height=80))
         # Without a title the canvas top should be darker (main text).
-        img_without = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "text",
-                        "x": 0,
-                        "y": 0,
-                        "w": 400,
-                        "h": 80,
-                        "text": "Hello",
-                        "font_size": 20,
-                    }
-                ],
-                self._config(width=400, height=80),
-            )
+        img_without = render_to_image(
+            [
+                {
+                    "type": "text",
+                    "x": 0,
+                    "y": 0,
+                    "w": 400,
+                    "h": 80,
+                    "text": "Hello",
+                    "font_size": 20,
+                }
+            ],
+            self._config(width=400, height=80),
         )
         # The two renders must differ (title moves the main text down)
         assert img_with.tobytes() != img_without.tobytes()
@@ -470,9 +434,7 @@ class TestRenderText:
                 "card_style": "border",
             }
         ]
-        img = png_to_image(
-            render_dashboard(widgets, self._config(width=400, height=h))
-        )
+        img = render_to_image(widgets, self._config(width=400, height=h))
         m = _compute_metrics(h)
         # Text must appear in the middle vertical band — at least some
         # dark pixels between 25 % and 75 % of the card height.
@@ -495,7 +457,7 @@ class TestRenderSeparator:
     def test_separator_default_horizontal_line(self) -> None:
         # Default: horizontal line, 2px black, spans PADDING to width-PADDING.
         widgets = [{"type": "separator", "x": PADDING, "y": 50}]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert pixel(img, PADDING, 50) == COLOR_BLACK
         assert pixel(img, 275, 50) == COLOR_BLACK
         # Below PADDING should be white
@@ -509,7 +471,7 @@ class TestRenderSeparator:
         widgets = [
             {"type": "separator", "x": PADDING, "y": 50, "style": "bar"}
         ]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert_has_gray_pixels(img, PADDING, 50, 275, 56)
         assert_all_white(img, PADDING, 58, 275, 70)
 
@@ -523,7 +485,7 @@ class TestRenderSeparator:
                 "direction": "vertical",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert pixel(img, 50, PADDING) == COLOR_BLACK
         assert pixel(img, 50, 175) == COLOR_BLACK
         # Above PADDING should be white
@@ -543,14 +505,14 @@ class TestRenderSeparator:
                 "style": "bar",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert_has_gray_pixels(img, 50, PADDING, 56, 175)
         assert_all_white(img, 58, PADDING, 70, 175)
 
     def test_separator_explicit_length(self) -> None:
         # length=100 limits the separator to 100px from x.
         widgets = [{"type": "separator", "x": PADDING, "y": 50, "length": 100}]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert_has_dark_pixels(img, PADDING, 50, PADDING + 100, 52)
         assert pixel(img, PADDING + 102, 50) == 255
 
@@ -565,7 +527,7 @@ class TestRenderSeparator:
                 "length": 80,
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._CONFIG))
+        img = render_to_image(widgets, self._CONFIG)
         assert_has_dark_pixels(img, 50, PADDING, 52, PADDING + 80)
         assert pixel(img, 50, PADDING + 82) == 255
 
@@ -575,7 +537,7 @@ class TestRenderSeparator:
         widgets = [
             {"type": "separator", "x": PADDING, "y": 50, "style": "bar"}
         ]
-        img = png_to_image(render_dashboard(widgets, config))
+        img = render_to_image(widgets, config)
         bb = content_bbox(img, PADDING, 50, 275, 70)
         assert bb is not None
         bar_h = bb[3] - bb[1]
@@ -585,7 +547,7 @@ class TestRenderSeparator:
         # style="line" stays 2px even on 2-level displays.
         config = {**self._CONFIG, "grayscale_levels": 2}
         widgets = [{"type": "separator", "x": PADDING, "y": 50}]
-        img = png_to_image(render_dashboard(widgets, config))
+        img = render_to_image(widgets, config)
         assert pixel(img, 100, 52) == 255
 
 
@@ -608,9 +570,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
 
     def test_weather_draws_forecast(self) -> None:
@@ -623,9 +583,7 @@ class TestRenderWeather:
                 "forecast_days": 3,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, 50, 110, 550, 200)
 
     def test_weather_missing_entity_is_noop(self) -> None:
@@ -637,9 +595,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, 0, 0, 600, 400)
 
     def test_weather_no_forecast(self) -> None:
@@ -662,11 +618,10 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(
+        img = render_to_image(
             widgets,
             {"width": 600, "height": 300, "states": states},
         )
-        img = png_to_image(result)
         assert img.size == (600, 300)
         assert_has_dark_pixels(
             img, PADDING, 10, PADDING + 90, 100, threshold=200
@@ -682,9 +637,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(
             img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
@@ -701,9 +654,7 @@ class TestRenderWeather:
             }
         ]
         config = self._config(width=800, height=480)
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, config)
         # Temperature drawn in the left area
         assert_has_dark_pixels(img, PADDING + 106, 10, 350, 70)
         # Detail chips row (humidity, pressure, wind, cloud)
@@ -723,9 +674,7 @@ class TestRenderWeather:
             }
         ]
         config = self._config(width=350, height=250)
-        result = render_dashboard(widgets, config)
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, config)
         assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
         assert_has_dark_pixels(img, PADDING, 80, 326, 100)
 
@@ -739,9 +688,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING, 80, 500, 100)
 
     def test_weather_forecast_precipitation(self) -> None:
@@ -755,9 +702,7 @@ class TestRenderWeather:
                 "forecast_days": 3,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Forecast area with hi/lo temps and precipitation
         assert_has_dark_pixels(img, 50, 150, 550, 210)
 
@@ -772,9 +717,7 @@ class TestRenderWeather:
                 "forecast_days": 3,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # High temp row (y ~ 162 at s=1: forecast_y+52)
         assert_has_dark_pixels(img, 50, 155, 550, 175)
         # Low temp row (y ~ 180 at s=1: forecast_y+70)
@@ -800,11 +743,10 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(
+        img = render_to_image(
             widgets,
             {"width": 600, "height": 200, "states": states},
         )
-        img = png_to_image(result)
         assert_has_dark_pixels(
             img, PADDING, 10, PADDING + 90, 100, threshold=200
         )
@@ -820,8 +762,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Icon area: starts at x + icon_pad, y + icon_pad.
         # At s=1, icon_pad=10, icon_size=80.
         assert_has_dark_pixels(
@@ -853,8 +794,7 @@ class TestRenderWeather:
                 "forecast_days": 3,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Natural width at s=1: right_edge = 24 + 380 = 404.
         # available_w = 404 - 24 - 24 = 356.
         # n_cols=5, col_width = 356 // 5 = 71.
@@ -884,8 +824,7 @@ class TestRenderWeather:
                 "y": 10,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Hi/lo text near right edge (x=360..404, y=20..80).
         assert_has_dark_pixels(img, 360, 20, 404, 80)
         # Area between temperature end (~280) and hi/lo
@@ -904,8 +843,7 @@ class TestRenderWeather:
                 "forecast_days": 3,
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Natural width: right_edge = 404.
         # pad=10, content_left=34, content_w=360.
         # n_cols=5, col_width=72, content_width=360.
@@ -917,6 +855,10 @@ class TestRenderWeather:
     def test_weather_card_border(self) -> None:
         # Border style wraps the entire weather layout in a
         # rounded-rectangle outline drawn on all four edges.
+        # assert_card_border is not used here because the bottom
+        # edge needs a dynamically computed total_h derived from
+        # the weather layout formula (icon, detail, separator,
+        # forecast zones).
         m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
         widgets = [
             {
@@ -928,7 +870,7 @@ class TestRenderWeather:
                 "card_style": "border",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Top edge (inset by m.radius to avoid rounded corners)
         assert_has_dark_pixels(img, m.radius, 0, 400 - m.radius, m.border)
         # Left edge
@@ -976,7 +918,7 @@ class TestRenderWeather:
                 "card_style": "left_bar",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Gray bar spans the full height; 2px vertical inset
         # avoids sub-pixel edge effects at widget boundaries.
         # +1 because PIL rectangle uses inclusive coordinates so the
@@ -1006,7 +948,7 @@ class TestRenderWeather:
                 "card_style": "none",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # No border decoration at corners
         assert_all_white(img, 0, 0, 3, 3)
         assert_all_white(img, 397, 0, 400, 3)
@@ -1037,7 +979,7 @@ class TestRenderWeather:
                 "card_style": "border",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Top edge at y=oy
         assert_has_dark_pixels(
             img,
@@ -1140,40 +1082,8 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
-        # Top edge
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            0,
-            400 - m.radius,
-            m.border,
-        )
-        # Bottom edge — +1 margin accommodates PIL's inset
-        # stroke rounding at larger border widths.
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            56 - m.border - 1,
-            400 - m.radius,
-            57,
-        )
-        # Left edge
-        assert_has_dark_pixels(
-            img,
-            0,
-            m.radius,
-            m.border,
-            56 - m.radius,
-        )
-        # Right edge
-        assert_has_dark_pixels(
-            img,
-            400 - m.border,
-            m.radius,
-            400,
-            56 - m.radius,
-        )
+        img = render_to_image(widgets, self._config())
+        assert_card_border(img, 400, 56, m)
 
     def test_sensor_rows_card_left_bar(self) -> None:
         # Left_bar style draws gray pixels on the left edge;
@@ -1192,7 +1102,7 @@ class TestRenderSensorRows:
                 "card_style": "left_bar",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # The bar fills the full height [0, 56]; 2px inset
         # avoids sub-pixel edge effects.
         assert_has_gray_pixels(
@@ -1223,7 +1133,7 @@ class TestRenderSensorRows:
                 "card_style": "none",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Top-left corner should be white (no border, no bar)
         assert_all_white(img, 0, 0, 3, 3)
         # Far right edge should be white
@@ -1263,7 +1173,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Divider sits at row boundary y=56, gray colored
         assert_has_gray_pixels(
             img,
@@ -1292,7 +1202,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # With only one entity there is no row boundary, so the
         # area just below the card (y=56..60) must be white —
         # no divider line bleeds out.
@@ -1319,7 +1229,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Icon region: inside the card padding, spanning the
         # icon diameter area.
         icon_left = m.padding
@@ -1358,8 +1268,8 @@ class TestRenderSensorRows:
                 "sensor.living_room_temperature",
             ],
         }
-        img_s = png_to_image(render_dashboard([widget_small], self._config()))
-        img_l = png_to_image(render_dashboard([widget_large], self._config()))
+        img_s = render_to_image([widget_small], self._config())
+        img_l = render_to_image([widget_large], self._config())
         assert_scales_proportionally(
             img_s,
             img_l,
@@ -1395,7 +1305,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Icon circle area
         assert_has_dark_pixels(
             img,
@@ -1430,7 +1340,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Title is rendered in COLOR_GRAY, so assert gray pixels
         # (not just any dark pixels) in the title region.
         assert_has_gray_pixels(img, 0, 0, 200, 20)
@@ -1451,7 +1361,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # The lower half of the text area (below midpoint)
         # should contain gray pixels from secondary text.
         text_left = m.padding + m.icon_dia + m.inner_gap
@@ -1484,7 +1394,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Row 0 (y=0..56) holds missing entity — should be
         # empty because the renderer skips it, leaving a gap.
         assert_all_white(img, m.padding, 2, 380, 54)
@@ -1511,7 +1421,7 @@ class TestRenderSensorRows:
                 "entities": [],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, 0, 0, 400, 300)
 
     def test_sensor_rows_binary_sensor(self) -> None:
@@ -1530,7 +1440,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Icon area should have content (gray circle + icon)
         assert_has_dark_pixels(
             img,
@@ -1564,7 +1474,7 @@ class TestRenderSensorRows:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_has_gray_pixels(
             img,
             m.padding,
@@ -1591,7 +1501,7 @@ class TestRenderSensorRows:
                 "entities": ["sensor.no_device_class"],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Icon circle area should have content (gray circle
         # with white letter)
         assert_has_dark_pixels(
@@ -1624,8 +1534,7 @@ class TestRenderDeviceBattery:
         # Verify the fill bar renders inside the battery body.
         # At 75%: fill_w = int((30-2)*75/100) = 21 px.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Fill region: (PADDING+1, icon_y+1) to (PADDING+22, icon_y+bh-1)
         # icon_y=30, bh=14 → fill at (25, 31) to (46, 43)
         assert_has_dark_pixels(img, PADDING + 1, 31, PADDING + 22, 43)
@@ -1634,8 +1543,7 @@ class TestRenderDeviceBattery:
         # Verify percentage label appears to the right of the icon.
         # Text starts at x + 30 + 1 + 3 + 4 = x + 38
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING + 38, 29, PADDING + 80, 47)
 
     def test_icon_draws_nub(self) -> None:
@@ -1643,8 +1551,7 @@ class TestRenderDeviceBattery:
         # Nub at (PADDING+31, nub_y) to (PADDING+33, nub_y+8)
         # nub_y = icon_y + (14-8)//2 = 30 + 3 = 33
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(
             img,
             PADDING + 31,
@@ -1658,8 +1565,7 @@ class TestRenderDeviceBattery:
         # Verify the battery body outline (gray rectangle).
         # Body from (PADDING, 30) to (PADDING+30, 44)
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Top edge of body
         assert_has_dark_pixels(
             img, PADDING, 30, PADDING + 30, 31, threshold=200
@@ -1673,8 +1579,7 @@ class TestRenderDeviceBattery:
         # Verify the battery icon is vertically centred against
         # the text label.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Icon region: battery body area
         # Text region: right of nub+gap
         assert_vertically_centered(
@@ -1687,10 +1592,7 @@ class TestRenderDeviceBattery:
     def test_icon_zero_percent(self) -> None:
         # Verify 0% shows outline only, no fill.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=0)
-        )
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config(device_battery_level=0))
         # Outline is present (gray, threshold=200)
         assert_has_dark_pixels(
             img, PADDING, 30, PADDING + 34, 44, threshold=200
@@ -1702,10 +1604,7 @@ class TestRenderDeviceBattery:
         # Verify 100% fills the entire battery body interior.
         # fill_w = int((30-2)*100/100) = 28
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=100)
-        )
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config(device_battery_level=100))
         assert_has_dark_pixels(img, PADDING + 1, 31, PADDING + 29, 43)
 
     def test_icon_scales_with_h(self) -> None:
@@ -1721,31 +1620,27 @@ class TestRenderDeviceBattery:
                 "device_battery_level": 75,
             }
         )
-        img_small = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "device_battery",
-                        "x": 0,
-                        "y": 0,
-                        "h": 40,
-                    }
-                ],
-                cfg_small,
-            )
+        img_small = render_to_image(
+            [
+                {
+                    "type": "device_battery",
+                    "x": 0,
+                    "y": 0,
+                    "h": 40,
+                }
+            ],
+            cfg_small,
         )
-        img_large = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "device_battery",
-                        "x": 0,
-                        "y": 0,
-                        "h": 80,
-                    }
-                ],
-                cfg_large,
-            )
+        img_large = render_to_image(
+            [
+                {
+                    "type": "device_battery",
+                    "x": 0,
+                    "y": 0,
+                    "h": 80,
+                }
+            ],
+            cfg_large,
         )
         assert_scales_proportionally(
             img_small,
@@ -1760,8 +1655,7 @@ class TestRenderDeviceBattery:
         # Verify that omitting layout defaults to "icon" and renders
         # the battery body (not a chip).
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Battery body outline at (PADDING, 30)
         assert_has_dark_pixels(
             img, PADDING, 30, PADDING + 30, 44, threshold=200
@@ -1772,17 +1666,13 @@ class TestRenderDeviceBattery:
     def test_none_level_is_noop(self) -> None:
         # Verify null battery level produces a blank canvas.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=None)
-        )
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config(device_battery_level=None))
         assert_all_white(img, 0, 0, 400, 100)
 
     def test_missing_key_is_noop(self) -> None:
         # Verify absent device_battery_level key produces blank canvas.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        result = render_dashboard(widgets, {"width": 400, "height": 100})
-        img = png_to_image(result)
+        img = render_to_image(widgets, {"width": 400, "height": 100})
         assert_all_white(img, 0, 0, 400, 100)
 
     def test_icon_low_battery_forces_black(self) -> None:
@@ -1794,12 +1684,8 @@ class TestRenderDeviceBattery:
             "y": 20,
         }
         cfg = self._config(device_battery_level=15)
-        gray_img = png_to_image(
-            render_dashboard([{**base, "color": COLOR_GRAY}], cfg)
-        )
-        black_img = png_to_image(
-            render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
-        )
+        gray_img = render_to_image([{**base, "color": COLOR_GRAY}], cfg)
+        black_img = render_to_image([{**base, "color": COLOR_BLACK}], cfg)
         assert gray_img.tobytes() == black_img.tobytes()
         # Verify something was actually drawn (guards against both
         # renders producing blank images, which would also be equal).
@@ -1818,12 +1704,8 @@ class TestRenderDeviceBattery:
             "layout": "chip",
         }
         cfg = self._config(device_battery_level=10)
-        gray_img = png_to_image(
-            render_dashboard([{**base, "color": COLOR_GRAY}], cfg)
-        )
-        black_img = png_to_image(
-            render_dashboard([{**base, "color": COLOR_BLACK}], cfg)
-        )
+        gray_img = render_to_image([{**base, "color": COLOR_GRAY}], cfg)
+        black_img = render_to_image([{**base, "color": COLOR_BLACK}], cfg)
         assert gray_img.tobytes() == black_img.tobytes()
         # Verify the chip was actually rendered with dark pixels.
         assert_has_dark_pixels(
@@ -1844,8 +1726,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Extreme corner should be white (outside pill radius)
         assert pixel(img, PADDING, 10) == 255
         # A few pixels inward along the top edge should have border
@@ -1863,8 +1744,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Fill bar should exist in the left portion of the bar
         assert_has_dark_pixels(img, PADDING + 8, 18, PADDING + 42, 36)
         # Right 25% of bar interior should be unfilled
@@ -1882,8 +1762,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        result = render_dashboard(widgets, self._config())
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config())
         # Text should appear in the right portion of the chip
         assert_has_dark_pixels(img, PADDING + 60, 14, PADDING + 150, 46)
 
@@ -1899,10 +1778,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=0)
-        )
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config(device_battery_level=0))
         # The chip outline should still be present
         assert_has_dark_pixels(img, PADDING + 10, 10, PADDING + 150, 50)
         # Interior of the bar should be white (no fill)
@@ -1920,10 +1796,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        result = render_dashboard(
-            widgets, self._config(device_battery_level=100)
-        )
-        img = png_to_image(result)
+        img = render_to_image(widgets, self._config(device_battery_level=100))
         # Right portion that is white at 75% should be filled
         assert_has_dark_pixels(img, PADDING + 43, 24, PADDING + 54, 36)
 
@@ -1950,8 +1823,8 @@ class TestRenderDeviceBattery:
             }
         ]
         cfg = self._config()
-        img_small = png_to_image(render_dashboard(small_widgets, cfg))
-        img_large = png_to_image(render_dashboard(large_widgets, cfg))
+        img_small = render_to_image(small_widgets, cfg)
+        img_large = render_to_image(large_widgets, cfg)
         assert_scales_proportionally(
             img_small,
             img_large,
@@ -1978,19 +1851,8 @@ class TestRenderDeviceBattery:
                 "layout": "icon",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
-        # Top edge (skip rounded corners at both ends)
-        assert_has_dark_pixels(img, m.radius, 0, 200 - m.radius, m.border)
-        # Bottom edge (+1 margin for PIL stroke rounding)
-        assert_has_dark_pixels(
-            img, m.radius, 56 - m.border - 1, 200 - m.radius, 57
-        )
-        # Left edge
-        assert_has_dark_pixels(img, 0, m.radius, m.border, 56 - m.radius)
-        # Right edge
-        assert_has_dark_pixels(
-            img, 200 - m.border, m.radius, 200, 56 - m.radius
-        )
+        img = render_to_image(widgets, self._config())
+        assert_card_border(img, 200, 56, m)
         # Content (battery icon) renders inside the card
         assert_has_dark_pixels(
             img, m.padding, 5, m.padding + 40, 56, threshold=200
@@ -2011,19 +1873,8 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
-        # Top edge (skip rounded corners at both ends)
-        assert_has_dark_pixels(img, m.radius, 0, 200 - m.radius, m.border)
-        # Bottom edge (+1 margin for PIL stroke rounding)
-        assert_has_dark_pixels(
-            img, m.radius, 56 - m.border - 1, 200 - m.radius, 57
-        )
-        # Left edge
-        assert_has_dark_pixels(img, 0, m.radius, m.border, 56 - m.radius)
-        # Right edge
-        assert_has_dark_pixels(
-            img, 200 - m.border, m.radius, 200, 56 - m.radius
-        )
+        img = render_to_image(widgets, self._config())
+        assert_card_border(img, 200, 56, m)
         # Content (fill bar) renders inside the card
         assert_has_dark_pixels(img, m.padding + 5, 15, m.padding + 60, 45)
 
@@ -2043,7 +1894,7 @@ class TestRenderDeviceBattery:
                 "layout": "icon",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # The bar must extend into the lower portion of the card
         # (below the battery icon at ~y=6–20).
         assert_has_gray_pixels(
@@ -2073,7 +1924,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_has_gray_pixels(
             img,
             0,
@@ -2116,7 +1967,7 @@ class TestRenderDeviceBattery:
                 "layout": "chip",
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Top-left corner: white (no border)
         assert_all_white(img, 0, 0, 3, 3)
         # Right edge: white (no border)
@@ -2186,7 +2037,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Extreme top-left corner: outside the pill radius.
         radius = h // 2
         assert pixel(img, 0, 0) == 255
@@ -2210,7 +2061,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Check inside the left semicircle at the vertical
         # midpoint: x=3 is 17 px from the cap centre (radius 20)
         # and clear of the text column, so reliably black.
@@ -2232,7 +2083,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Interior near the top of the left cap is white for
         # a non-inverted chip.  At y=4 the cap centre (cx=20)
         # is always content-free (no icon or text there).
@@ -2262,7 +2113,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Dark pixels must exist below the first chip row
         # (second row starts at y = h + gap).
         second_row_y = h + gap
@@ -2300,7 +2151,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Dark pixels in the icon-only band (text starts at
         # pad + icon_sz + gap, well outside this region) confirm
         # the icon was rendered.
@@ -2322,7 +2173,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         title_font_sz = max(10, round(h * 0.14))
         title_advance = round(title_font_sz * 1.4)
         # Title area has content (threshold=200 catches gray text).
@@ -2344,7 +2195,7 @@ class TestRenderStatusIcons:
                 "entities": [],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, 0, 0, 500, 200)
 
     def test_all_entities_missing_noop(self) -> None:
@@ -2363,7 +2214,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_all_white(img, 0, 0, 500, 200)
 
     def test_missing_entity_skipped(self) -> None:
@@ -2382,7 +2233,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, 0, 0, 400, 40)
 
     def test_motion_on_is_not_inverted(self) -> None:
@@ -2412,7 +2263,7 @@ class TestRenderStatusIcons:
             }
         ]
         cfg = self._config(states=states)
-        img = png_to_image(render_dashboard(widgets, cfg))
+        img = render_to_image(widgets, cfg)
         # Interior near the top of the chip is white for a
         # non-inverted chip (black-filled chip would be dark).
         interior_x = pad + 5
@@ -2425,35 +2276,31 @@ class TestRenderStatusIcons:
         h_small = 40
         h_large = 80
         entity = ["binary_sensor.kitchen_window"]
-        img_s = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "status_icons",
-                        "x": 0,
-                        "y": 0,
-                        "w": 400,
-                        "h": h_small,
-                        "entities": entity,
-                    }
-                ],
-                self._config(),
-            )
+        img_s = render_to_image(
+            [
+                {
+                    "type": "status_icons",
+                    "x": 0,
+                    "y": 0,
+                    "w": 400,
+                    "h": h_small,
+                    "entities": entity,
+                }
+            ],
+            self._config(),
         )
-        img_l = png_to_image(
-            render_dashboard(
-                [
-                    {
-                        "type": "status_icons",
-                        "x": 0,
-                        "y": 0,
-                        "w": 400,
-                        "h": h_large,
-                        "entities": entity,
-                    }
-                ],
-                self._config(),
-            )
+        img_l = render_to_image(
+            [
+                {
+                    "type": "status_icons",
+                    "x": 0,
+                    "y": 0,
+                    "w": 400,
+                    "h": h_large,
+                    "entities": entity,
+                }
+            ],
+            self._config(),
         )
         assert_scales_proportionally(
             img_s,
@@ -2486,7 +2333,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         text_start = pad + icon_sz + icon_gap
         # tolerance=3.0: resvg dominant-baseline="central"
         # differs slightly from PIL's ascender-based centering.
@@ -2518,39 +2365,8 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
-        # Top edge
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            0,
-            W - m.radius,
-            m.border,
-        )
-        # Bottom edge — +1 accommodates stroke rounding.
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            h - m.border - 1,
-            W - m.radius,
-            h + 1,
-        )
-        # Left edge
-        assert_has_dark_pixels(
-            img,
-            0,
-            m.radius,
-            m.border,
-            h - m.radius,
-        )
-        # Right edge
-        assert_has_dark_pixels(
-            img,
-            W - m.border,
-            m.radius,
-            W,
-            h - m.radius,
-        )
+        img = render_to_image(widgets, self._config())
+        assert_card_border(img, W, h, m)
 
     def test_card_left_bar(self) -> None:
         # Left_bar style draws gray pixels on the left edge;
@@ -2570,7 +2386,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # The bar fills the full height; 2px inset avoids
         # sub-pixel edge effects at top/bottom.
         assert_has_gray_pixels(
@@ -2602,7 +2418,7 @@ class TestRenderStatusIcons:
                 ],
             }
         ]
-        img = png_to_image(render_dashboard(widgets, self._config()))
+        img = render_to_image(widgets, self._config())
         # Top-left corner: no border, no bar.
         assert_all_white(img, 0, 0, 3, 3)
         # Far right edge: no decoration.
@@ -2726,39 +2542,8 @@ class TestRenderWasteSchedule:
         w = self._widget(card_style="border")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
-        # Top edge
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            0,
-            400 - m.radius,
-            m.border,
-        )
-        # Bottom edge
-        assert_has_dark_pixels(
-            img,
-            m.radius,
-            168 - m.border - 1,
-            400 - m.radius,
-            169,
-        )
-        # Left edge
-        assert_has_dark_pixels(
-            img,
-            0,
-            m.radius,
-            m.border,
-            168 - m.radius,
-        )
-        # Right edge
-        assert_has_dark_pixels(
-            img,
-            400 - m.border,
-            m.radius,
-            400,
-            168 - m.radius,
-        )
+            img = render_to_image([w], self._config())
+        assert_card_border(img, 400, 168, m)
 
     def test_card_left_bar(self) -> None:
         # Left_bar style draws gray pixels on the left edge;
@@ -2768,7 +2553,7 @@ class TestRenderWasteSchedule:
         w = self._widget(card_style="left_bar")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         assert_has_gray_pixels(
             img,
             0,
@@ -2786,7 +2571,7 @@ class TestRenderWasteSchedule:
         w = self._widget(card_style="none")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Top-left corner should be white
         assert_all_white(img, 0, 0, 3, 3)
         # Far right edge should be white
@@ -2810,7 +2595,7 @@ class TestRenderWasteSchedule:
         w = self._widget()
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Divider at first row boundary (y = row_h)
         assert_has_gray_pixels(
             img,
@@ -2830,7 +2615,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Area just below the row must be white
         assert_all_white(img, 0, 57, 400, 60)
 
@@ -2851,7 +2636,7 @@ class TestRenderWasteSchedule:
         )
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         icon_left = m.padding
         icon_right = icon_left + m.icon_dia
         text_left = icon_right + m.inner_gap
@@ -2875,8 +2660,8 @@ class TestRenderWasteSchedule:
         w_large = self._widget(entries=entries, h=112)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img_s = png_to_image(render_dashboard([w_small], self._config()))
-            img_l = png_to_image(render_dashboard([w_large], self._config()))
+            img_s = render_to_image([w_small], self._config())
+            img_l = render_to_image([w_large], self._config())
         assert_scales_proportionally(
             img_s,
             img_l,
@@ -2904,7 +2689,7 @@ class TestRenderWasteSchedule:
         w = self._widget()
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Row 0 (Restmuell, days=1)
         assert_has_dark_pixels(
             img,
@@ -2945,7 +2730,7 @@ class TestRenderWasteSchedule:
         )
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Title area near the top
         assert_has_dark_pixels(img, 0, 0, 200, 20)
 
@@ -2959,7 +2744,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Only one visible entry; content should exist
         assert_has_dark_pixels(
             img,
@@ -2973,7 +2758,7 @@ class TestRenderWasteSchedule:
     def test_empty_entries_noop(self) -> None:
         # Empty entries list produces a white canvas.
         w = self._widget(entries=[])
-        img = png_to_image(render_dashboard([w], self._config()))
+        img = render_to_image([w], self._config())
         assert_all_white(img, 0, 0, 400, 300)
 
     def test_entity_missing_noop(self) -> None:
@@ -2981,7 +2766,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entity="sensor.nonexistent")
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         assert_all_white(img, 0, 0, 400, 300)
 
     def test_urgency_today_black_icon(self) -> None:
@@ -2997,7 +2782,7 @@ class TestRenderWasteSchedule:
         # Restmuell = 2026-05-03; today = 2026-05-03 → days=0
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = dt.date(2026, 5, 3)
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Check the ring along the horizontal centerline
         # where we're guaranteed to be inside the circle
         # but outside the 60%-scaled icon.
@@ -3016,7 +2801,7 @@ class TestRenderWasteSchedule:
         # Restmuell = 2026-05-03; today = 2026-05-02 → days=1
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         ring_x = m.padding + 4
         ring_y = h // 2
         assert pixel(img, ring_x, ring_y) < 64
@@ -3033,7 +2818,7 @@ class TestRenderWasteSchedule:
         # Biotonne = 2026-05-04; today = 2026-05-02 → days=2
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # The stroke pixel at the leftmost point of the circle path
         # should be black (outline stroke).  PIL strokes inside the
         # bounding box so padding+2 was safe; resvg centers the stroke
@@ -3059,7 +2844,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Dark pixels near right edge (value text area)
         assert_has_dark_pixels(
             img,
@@ -3081,7 +2866,7 @@ class TestRenderWasteSchedule:
         # Restmuell = 2026-05-03; today = 2026-05-03 → days=0
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = dt.date(2026, 5, 3)
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         assert any(
             pixel(img, x, y) < 64
             for y in range(0, 56)
@@ -3098,7 +2883,7 @@ class TestRenderWasteSchedule:
         # Restmuell = 2026-05-03; today = 2026-05-02 → days=1
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Should have gray pixels (date label "tomorrow")
         assert_has_gray_pixels(img, 300, 0, 400, 56)
         # Should NOT have black pixels — date is gray for days=1
@@ -3125,9 +2910,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(
-                render_dashboard([w], self._config(states=states))
-            )
+            img = render_to_image([w], self._config(states=states))
         assert_all_white(img, 0, 0, 400, 300)
 
     def test_beyond_3_days_skipped(self) -> None:
@@ -3148,9 +2931,7 @@ class TestRenderWasteSchedule:
         # 2026-05-06 is 4 days from 2026-05-02 → filtered
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(
-                render_dashboard([w], self._config(states=states))
-            )
+            img = render_to_image([w], self._config(states=states))
         assert_all_white(img, 0, 0, 400, 300)
 
     def test_integer_attribute_value(self) -> None:
@@ -3170,9 +2951,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=56)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(
-                render_dashboard([w], self._config(states=states))
-            )
+            img = render_to_image([w], self._config(states=states))
         assert_has_dark_pixels(
             img,
             0,
@@ -3191,7 +2970,7 @@ class TestRenderWasteSchedule:
         w = self._widget(layout="card", h=h)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Content should exist (most urgent = Restmuell,
         # days=1)
         assert_has_dark_pixels(
@@ -3215,7 +2994,7 @@ class TestRenderWasteSchedule:
         w = self._widget(layout="card", h=h)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            img = png_to_image(render_dashboard([w], self._config()))
+            img = render_to_image([w], self._config())
         # Icon circle area should have content spanning a
         # large vertical range
         icon_bb = content_bbox(
@@ -3246,11 +3025,10 @@ class TestFontSizeControls:
                 "font_size": 11,
             }
         ]
-        result = render_dashboard(
+        img = render_to_image(
             widgets,
             {"width": 400, "height": 200, "states": MOCK_WEATHER_STATE},
         )
-        img = png_to_image(result)
         assert_has_dark_pixels(img, PADDING + 22, 10, PADDING + 100, 40)
         # Detail chips at detail_y=35 (wrong /22 divisor shifts them to y=46)
         assert_has_dark_pixels(img, PADDING, 35, PADDING + 200, 46)
@@ -3266,11 +3044,10 @@ class TestFontSizeControls:
                 "font_size": 20,
             }
         ]
-        result = render_dashboard(
+        img = render_to_image(
             widgets,
             {"width": 400, "height": 100, "device_battery_level": 75},
         )
-        img = png_to_image(result)
         assert_has_dark_pixels(img, PADDING + 32, 10, PADDING + 90, 40)
 
 
