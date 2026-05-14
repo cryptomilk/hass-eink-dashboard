@@ -1,11 +1,10 @@
-"""PIL-based rendering engine for e-ink dashboard widgets."""
+"""Dashboard rendering orchestrator and PIL utility helpers."""
 
 from __future__ import annotations
 
 import functools
 import io
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -19,11 +18,11 @@ from .const import (
     COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     PADDING,
-    WidgetType,
 )
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
+    _compose_svg,
     _svg_to_png,
     render_widget_svg,
 )
@@ -32,7 +31,6 @@ _LOGGER = logging.getLogger(__name__)
 
 type Widget = dict[str, Any]
 type DisplayConfig = dict[str, Any]
-type RendererFn = Callable[[ImageDraw.ImageDraw, Widget, DisplayConfig], None]
 
 _FONTS_DIR = Path(__file__).parent / "fonts"
 _ICONS_DIR = Path(__file__).parent / "icons" / "png"
@@ -837,21 +835,33 @@ def _format_relative_date(days: int | None, raw: str) -> str:
     return f"in {days} days"
 
 
-_RENDERERS: dict[WidgetType, RendererFn] = {}
-
-
 def render_dashboard(
     widget_list: list[Widget],
     config: DisplayConfig,
 ) -> bytes:
-    """Render all widgets onto a grayscale canvas and return PNG bytes."""
+    """Render all widgets into a single SVG, rasterise, and return PNG.
+
+    Collects per-widget SVG strings, composes them into one root SVG
+    document via ``_compose_svg``, rasterises the result with a single
+    ``resvg`` call, then applies rotation and e-ink optimisation.
+
+    Args:
+        widget_list: Widget configuration dicts.  Each must have a
+            ``"type"`` key matching a registered SVG renderer.
+        config: Display config with ``width``, ``height``, ``rotation``,
+            and entity ``states``.  Defaults to 600×800 if dimensions
+            are absent.
+
+    Returns:
+        PNG image bytes ready for delivery to the e-ink display.
+    """
     config = {"width": 600, "height": 800, **config}
     w = config["width"]
     h = config["height"]
-    img = Image.new("L", (w, h), COLOR_WHITE)
-    config["_image"] = img
-    draw = ImageDraw.Draw(img)
 
+    # Collect SVG strings and canvas positions for each widget.
+    svg_parts: list[str] = []
+    positions: list[tuple[int, int]] = []
     for widget in widget_list:
         widget_type = widget.get("type")
         if widget_type is None:
@@ -860,45 +870,26 @@ def render_dashboard(
                 widget,
             )
             continue
-
-        # SVG-first dispatch: render to PNG and paste onto the
-        # canvas.  Fall back to the PIL renderer otherwise.
-        if widget_type in _SVG_RENDERERS:
-            wx = widget.get("x", PADDING)
-            wy = widget.get("y", 0)
-            sw = widget.get("w", w - wx)
-            sh = widget.get("h", h - wy)
-            _LOGGER.debug(
-                "render_dashboard: SVG rendering type=%s at (%d,%d) %dx%d",
-                widget_type,
-                wx,
-                wy,
-                sw,
-                sh,
-            )
-            svg = render_widget_svg(widget, config)
-            # Omit height so resvg uses the SVG's intrinsic
-            # height.  Widgets whose content wraps beyond the
-            # declared h (e.g. status_icons) set the SVG height
-            # to the full content height in their context builder.
-            png = _svg_to_png(svg, sw)
-            widget_img = Image.open(io.BytesIO(png)).convert("L")
-            img.paste(widget_img, (wx, wy))
-            continue
-
-        renderer = _RENDERERS.get(widget_type)
-        if renderer is None:
+        if widget_type not in _SVG_RENDERERS:
             _LOGGER.warning(
                 "render_dashboard: unknown widget type %r, skipping",
                 widget_type,
             )
             continue
+        wx = widget.get("x", PADDING)
+        wy = widget.get("y", 0)
         _LOGGER.debug(
-            "render_dashboard: rendering widget type=%s entity=%s",
+            "render_dashboard: SVG rendering type=%s at (%d,%d)",
             widget_type,
-            widget.get("entity", "N/A"),
+            wx,
+            wy,
         )
-        renderer(draw, widget, config)
+        svg_parts.append(render_widget_svg(widget, config))
+        positions.append((wx, wy))
+
+    composed = _compose_svg(svg_parts, positions, w, h)
+    png = _svg_to_png(composed, w, h)
+    img = Image.open(io.BytesIO(png)).convert("L")
 
     mn, mx = img.getextrema()
     _LOGGER.debug(

@@ -3,6 +3,7 @@
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- if has_state -%}
+{# xo and ri are unused — absolute positions are pre-computed by the context builder #}
 {%- call(xo, ri) card_container(
     x=0, y=0, w=card_w, h=total_h,
     card_style=card_style,

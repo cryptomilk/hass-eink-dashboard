@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Benchmark the e-ink dashboard PIL rendering pipeline.
+"""Benchmark the e-ink dashboard SVG rendering pipeline.
 
-Measures per-stage timings for the existing PIL pipeline so each
-SVG conversion (Phase 1+) can be compared against this baseline.
+Measures per-stage timings for the SVG pipeline.
 Runs without a Home Assistant installation.
 
-Stage names here reflect the PIL pipeline.  When the SVG pipeline
-is added, additional stages (context building, template rendering,
-SVG rasterisation) will be benchmarked alongside these for comparison.
+Stages measured:
+  svg_render   -- per-widget Jinja2 context build + template render
+  svg_compose  -- _compose_svg() nesting all widgets into one root SVG
+  svg_rasterise -- resvg rasterisation (_svg_to_png())
+  eink_optimize -- optimize_for_eink() dithering / quantisation
+  end_to_end   -- full wall-clock time including PNG encode
 
 Usage:
     python3 scripts/bench_render.py
@@ -16,8 +18,7 @@ Usage:
 
 # ---------------------------------------------------------------------------
 # PIL baseline (kindle_pw, 758x1024, 16-level, optimize=True)
-# Run `python scripts/bench_render.py --device kindle_pw --iterations 50`
-# to populate these numbers.
+# Recorded before the SVG migration.  All 7 widgets, 50 iterations.
 #
 # Stage              min    median     p95     max  (ms)
 # canvas_setup      0.01      0.04    0.06    0.07
@@ -27,6 +28,19 @@ Usage:
 # end_to_end       24.42     25.09   25.63   26.33
 #
 # Peak RSS: 36.3 MB
+# ---------------------------------------------------------------------------
+#
+# SVG baseline (kindle_pw, 758x1024, 16-level, optimize=True)
+# Recorded after SVG migration (step 2.1).  All 7 widgets, 20 iterations.
+#
+# Stage              min    median     p95     max  (ms)
+# svg_render        1.11      1.22    1.36    1.38
+# svg_compose       0.01      0.01    0.01    0.02
+# svg_rasterise   117.43    118.20  120.27  121.42
+# eink_optimize    14.46     14.77   15.06   15.34
+# end_to_end      143.14    144.40  146.98  148.16
+#
+# Peak RSS: 48.6 MB
 # ---------------------------------------------------------------------------
 """
 
@@ -42,7 +56,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from _bootstrap import PKG, import_module
-from PIL import Image, ImageDraw
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Bootstrap: import const, optimize, render without HA
@@ -50,21 +64,23 @@ from PIL import Image, ImageDraw
 import_module(f"{PKG}.const")
 import_module(f"{PKG}.optimize")
 import_module(f"{PKG}.svg_render")
-_render_mod = import_module(f"{PKG}.render")
+import_module(f"{PKG}.render")
 
 from custom_components.eink_dashboard.const import (  # noqa: E402
-    COLOR_WHITE,
     DEVICE_PRESETS,
+    PADDING,
     DevicePreset,
     WidgetType,
 )
 from custom_components.eink_dashboard.optimize import (  # noqa: E402
     optimize_for_eink,
 )
-
-# Private dict mapping WidgetType -> renderer function.  Accessed
-# here to time individual widget renders without calling render_dashboard.
-_RENDERERS = _render_mod._RENDERERS  # type: ignore[attr-defined]
+from custom_components.eink_dashboard.svg_render import (  # noqa: E402
+    _SVG_RENDERERS,
+    _compose_svg,
+    _svg_to_png,
+    render_widget_svg,
+)
 
 # ---------------------------------------------------------------------------
 # Mock data for all 7 widget types
@@ -363,75 +379,102 @@ def _bench(
     config: dict,
     n: int,
 ) -> list[_BenchResult]:
-    """Benchmark the PIL rendering pipeline with per-stage timing.
+    """Benchmark the SVG rendering pipeline with per-stage timing.
 
-    Decomposes render_dashboard() (render.py:1950-2002) into three
-    timed stages: canvas setup, widget rendering, and e-ink
-    optimization.  PNG encoding is not a separate stage but is
-    included in the end_to_end wall-clock measurement.  Runs ``n``
-    timed iterations; call once before this function for a warmup
-    to populate font/icon caches.
+    Decomposes the SVG pipeline into four timed stages: per-widget
+    Jinja2 rendering, SVG composition, resvg rasterisation, and
+    e-ink optimisation.  PNG encoding is not a separate stage but
+    is included in the end_to_end wall-clock measurement.  Runs
+    ``n`` timed iterations; call once before this function for a
+    warmup to populate font/icon LRU caches.
 
     Args:
         widgets: Widget config dicts to render.
-        config: DisplayConfig dict (without ``_image`` key).
+        config: DisplayConfig dict.
         n: Number of measured iterations.
 
     Returns:
-        List of four ``_BenchResult`` objects for stages
-        ``canvas_setup``, ``widget_render``, ``eink_optimize``,
-        and ``end_to_end``.
+        List of six ``_BenchResult`` objects for stages
+        ``svg_render``, ``svg_compose``, ``svg_rasterise``,
+        ``per_widget_rasterise``, ``eink_optimize``, and
+        ``end_to_end``.  ``per_widget_rasterise`` times N separate
+        resvg calls (one per widget) so it can be compared directly
+        against the single-call ``svg_rasterise`` stage.
     """
-    # Apply the same width/height floor as render_dashboard()
-    # (render.py:1955) so the benchmark uses identical defaults.
     config = {"width": 600, "height": 800, **config}
     w = config["width"]
     h = config["height"]
 
-    canvas = _BenchResult("canvas_setup")
-    render = _BenchResult("widget_render")
-    opt = _BenchResult("eink_optimize")
-    e2e = _BenchResult("end_to_end")
+    stage_svgrender = _BenchResult("svg_render")
+    stage_compose = _BenchResult("svg_compose")
+    stage_rasterise = _BenchResult("svg_rasterise")
+    stage_per_widget = _BenchResult("per_widget_rasterise")
+    stage_opt = _BenchResult("eink_optimize")
+    stage_e2e = _BenchResult("end_to_end")
 
     for _ in range(n):
         t_all = time.perf_counter_ns()
 
-        # Stage 1: canvas setup (mirrors render_dashboard lines 1955-1960)
+        # Stage 1: per-widget context build + Jinja2 template render.
         t0 = time.perf_counter_ns()
-        cfg = {**config}
-        img = Image.new("L", (w, h), COLOR_WHITE)
-        cfg["_image"] = img
-        draw = ImageDraw.Draw(img)
-        canvas.times_ns.append(time.perf_counter_ns() - t0)
-
-        # Stage 2: widget rendering (mirrors lines 1962-1979)
-        t0 = time.perf_counter_ns()
+        svg_parts: list[str] = []
+        positions: list[tuple[int, int]] = []
+        widths: list[int] = []
         for widget in widgets:
-            renderer = _RENDERERS.get(widget.get("type"))
-            if renderer is not None:
-                renderer(draw, widget, cfg)
-        render.times_ns.append(time.perf_counter_ns() - t0)
+            wtype = widget.get("type")
+            if wtype not in _SVG_RENDERERS:
+                continue
+            wx = widget.get("x", PADDING)
+            svg_parts.append(render_widget_svg(widget, config))
+            positions.append((wx, widget.get("y", 0)))
+            widths.append(widget.get("w", w - wx))
+        stage_svgrender.times_ns.append(time.perf_counter_ns() - t0)
 
-        # Rotation (mirrors render.py:1988-1990).  Default presets
-        # have rotation=0 so this is a no-op for the baseline.
+        # Stage 2: compose all widget SVGs into one root document.
+        t0 = time.perf_counter_ns()
+        composed = _compose_svg(svg_parts, positions, w, h)
+        stage_compose.times_ns.append(time.perf_counter_ns() - t0)
+
+        # Stage 3a: single resvg call for the composed dashboard.
+        t0 = time.perf_counter_ns()
+        png = _svg_to_png(composed, w, h)
+        stage_rasterise.times_ns.append(time.perf_counter_ns() - t0)
+
+        # Stage 3b: N separate resvg calls, one per widget.  Mirrors
+        # the pre-2.1 per-widget approach so both strategies can be
+        # compared directly.  Output is discarded; only time matters.
+        t0 = time.perf_counter_ns()
+        for svg, sw in zip(svg_parts, widths, strict=True):
+            _svg_to_png(svg, sw)
+        stage_per_widget.times_ns.append(time.perf_counter_ns() - t0)
+
+        img = Image.open(io.BytesIO(png)).convert("L")
+
+        # Rotation (default presets have rotation=0, so no-op).
         rotation = config.get("rotation", 0)
         if rotation:
             img = img.rotate(rotation, expand=True)
 
-        # Stage 3: e-ink optimization (mirrors line 1992)
+        # Stage 4: e-ink optimisation (dithering / quantisation).
         t0 = time.perf_counter_ns()
-        img = optimize_for_eink(img, cfg)
-        opt.times_ns.append(time.perf_counter_ns() - t0)
+        img = optimize_for_eink(img, config)
+        stage_opt.times_ns.append(time.perf_counter_ns() - t0)
 
-        # PNG encoding (mirrors lines 2000-2001).  Not a separate
-        # stage; its cost is captured by end_to_end.
+        # PNG encoding: cost captured by end_to_end, not separately.
         buf = io.BytesIO()
         img.save(buf, "PNG")
         buf.getvalue()
 
-        e2e.times_ns.append(time.perf_counter_ns() - t_all)
+        stage_e2e.times_ns.append(time.perf_counter_ns() - t_all)
 
-    return [canvas, render, opt, e2e]
+    return [
+        stage_svgrender,
+        stage_compose,
+        stage_rasterise,
+        stage_per_widget,
+        stage_opt,
+        stage_e2e,
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +572,7 @@ def _parse_args() -> argparse.Namespace:
         ``widget`` attributes.
     """
     parser = argparse.ArgumentParser(
-        description=("Benchmark the e-ink dashboard PIL rendering pipeline.")
+        description=("Benchmark the e-ink dashboard SVG rendering pipeline.")
     )
     parser.add_argument(
         "--device",

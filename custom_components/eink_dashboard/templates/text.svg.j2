@@ -10,7 +10,8 @@
   dominant-baseline="hanging"
   fill="#787878">{{ title }}</text>
 {%- endif -%}
-{%- call(x_off, r_inset) card_container(
+{# xo and ri are unused — absolute positions are pre-computed by the context builder #}
+{%- call(xo, ri) card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
     radius=m_radius, border=m_border,

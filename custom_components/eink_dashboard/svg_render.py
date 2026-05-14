@@ -40,6 +40,7 @@ _FONTS_DIR = Path(__file__).parent / "fonts"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _ICONS_DIR = Path(__file__).parent / "icons" / "svg"
 _ICONS_DIR_RESOLVED = _ICONS_DIR.resolve()
+_MDI_DIR_RESOLVED = (_ICONS_DIR / "mdi").resolve()
 
 # SVG XML namespace used by all icon files.
 _SVG_NS = "http://www.w3.org/2000/svg"
@@ -101,6 +102,48 @@ def _svg_to_png(
             skip_system_fonts=True,
         )
     )
+
+
+def _compose_svg(
+    svg_parts: list[str],
+    positions: list[tuple[int, int]],
+    width: int,
+    height: int,
+) -> str:
+    """Compose per-widget SVGs into a single root SVG document.
+
+    Each widget SVG is positioned by injecting ``x``/``y`` attributes
+    into its root ``<svg>`` tag.  Widget templates always produce output
+    starting with ``<svg `` (Jinja2 ``{%- -%}`` strips leading
+    whitespace), so the injection is a simple string prefix swap.
+
+    Args:
+        svg_parts: Rendered SVG strings, one per widget.
+        positions: ``(x, y)`` pixel offset for each widget on the
+            dashboard canvas, in the same order as ``svg_parts``.
+        width: Dashboard canvas width in pixels.
+        height: Dashboard canvas height in pixels.
+
+    Returns:
+        A single SVG document containing all widgets positioned
+        within a root viewport of ``width`` × ``height``.
+    """
+    lines: list[str] = [
+        f'<svg xmlns="http://www.w3.org/2000/svg"'
+        f' width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}">',
+        f'<rect width="{width}" height="{height}" fill="white"/>',
+    ]
+    for svg, (x, y) in zip(svg_parts, positions, strict=True):
+        # Strip leading whitespace then replace '<svg ' prefix so
+        # that x/y attributes position the widget viewport.
+        stripped = svg.lstrip()
+        assert stripped.startswith("<svg "), (
+            f"expected <svg prefix: {stripped[:40]!r}"
+        )
+        lines.append(f'<svg x="{x}" y="{y}" ' + stripped[4:])
+    lines.append("</svg>")
+    return "\n".join(lines)
 
 
 @functools.cache
@@ -177,7 +220,7 @@ def _mdi_svg_filter(name: str, size: int) -> str:
         FileNotFoundError: If the icon file does not exist.
     """
     icon_path = (_ICONS_DIR / "mdi" / f"{name}.svg").resolve()
-    if not icon_path.is_relative_to(_ICONS_DIR_RESOLVED):
+    if not icon_path.is_relative_to(_MDI_DIR_RESOLVED):
         raise ValueError(f"Invalid icon name: {name!r}")
     return markupsafe.Markup(
         _build_inline_svg(_load_svg_paths(icon_path), size, "0 0 24 24")
@@ -202,6 +245,7 @@ def _weather_svg_filter(condition: str, size: int) -> str:
         KeyError: If ``condition`` is not in ``_CONDITION_TO_SVG``.
         FileNotFoundError: If the icon file does not exist.
     """
+    # No traversal guard — condition is from a fixed dict.
     filename = _CONDITION_TO_SVG[condition]
     paths = _load_svg_paths((_ICONS_DIR / f"{filename}.svg").resolve())
     return markupsafe.Markup(_build_inline_svg(paths, size, "0 0 30 30"))
@@ -593,7 +637,9 @@ def _build_weather_context(
     else:
         card_w = min(round(380 * scale), svg_w)
 
-    # PIL fonts for text measurement only — never used for drawing.
+    # PIL fonts for text measurement only — never used for
+    # drawing.  Affects: temp_h, temp_bbox (getbbox) and
+    # text_w_i (getlength) below.
     font_xl = _load_font(round(64 * scale))
     font_sm = _load_font(round(16 * scale))
 
@@ -923,6 +969,10 @@ def _build_sensor_rows_context(
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
+    # Resolve to present entities only so row_h is divided
+    # by the actual rendered count, not the configured count.
+    # Absent entities would otherwise leave silent blank gaps.
+    entity_ids = [eid for eid in entity_ids if eid in states]
     if not entity_ids:
         return {"w": svg_w, "h": svg_h, "has_entities": False}
 
@@ -932,9 +982,7 @@ def _build_sensor_rows_context(
 
     rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entity_ids):
-        state = states.get(entity_id)
-        if state is None:
-            continue
+        state = states[entity_id]
 
         attrs = state.get("attributes", {})
         domain = entity_id.split(".")[0]

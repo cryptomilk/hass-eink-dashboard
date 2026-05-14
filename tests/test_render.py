@@ -1378,9 +1378,10 @@ class TestRenderSensorRows:
     def test_sensor_rows_missing_entity_skipped(
         self,
     ) -> None:
-        # A nonexistent entity is skipped; remaining entities
-        # still render.
-        m = _compute_metrics(56)
+        # A nonexistent entity is filtered out before row_h is
+        # computed, so the present entity fills the full height
+        # with no blank gap above it.
+        m = _compute_metrics(112)
         widgets = [
             {
                 "type": "sensor_rows",
@@ -1395,15 +1396,12 @@ class TestRenderSensorRows:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Row 0 (y=0..56) holds missing entity — should be
-        # empty because the renderer skips it, leaving a gap.
-        assert_all_white(img, m.padding, 2, 380, 54)
-        # Row 1 (y=56..112) holds the valid entity —
-        # should have dark content (icon + text).
+        # sensor.humidity is the only resolved entity and
+        # occupies the full 112 px height.
         assert_has_dark_pixels(
             img,
             m.padding,
-            58,
+            2,
             380,
             110,
             threshold=200,
