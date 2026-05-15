@@ -1,8 +1,9 @@
 # E-Ink Dashboard for Home Assistant
 
 Home Assistant custom component that renders e-ink dashboard images as PNG
-directly from entity state using Pillow, and serves them to Kindle and TRMNL
-devices. No Chromium, no ImageMagick, no Node.js.
+from entity state using SVG templates rasterised by resvg, and serves them
+to Kindle and TRMNL devices. No headless browser or other server component
+required running.
 
 ## Features
 
@@ -13,7 +14,7 @@ devices. No Chromium, no ImageMagick, no Node.js.
 - **Portrait and landscape** - rotation is handled automatically based on the
   device preset and chosen orientation
 - **WYSIWYG Lovelace editor** - drag, resize, and configure widgets on a
-  canvas preview that matches your device's exact pixel dimensions
+  server-rendered SVG preview that matches your device's exact pixel dimensions
 - **Pull and push delivery** - devices can fetch the image on their own
   schedule (Kindle) or have HA push it via webhook (TRMNL)
 - **E-ink optimization** - optional post-processing pipeline: autocontrast,
@@ -134,8 +135,8 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
    have one E-Ink Dashboard entry, you can omit `config_entry` and the card
    will auto-discover it.
 
-4. Save. The card shows a live canvas preview at the exact pixel dimensions
-   of your device.
+4. Save. The card shows a live server-rendered SVG preview at the exact pixel
+   dimensions of your device.
 
 ### Editing widgets
 
@@ -144,8 +145,8 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
    configure each widget's properties in the form.
 3. Click **Save** to persist the layout. The image entity is refreshed
    immediately.
-4. Click **Show rendered image** to fetch the actual Pillow-rendered PNG for
-   a pixel-exact comparison with the canvas preview.
+4. Click **Show rendered image** to fetch the actual server-rendered PNG for
+   a preview of what the device will display.
 
 ### Available widgets (Work in progress)
 
