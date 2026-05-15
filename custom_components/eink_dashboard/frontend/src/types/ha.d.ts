@@ -47,6 +47,7 @@ export interface HaFormElement extends HTMLElement {
   data: Record<string, unknown>;
   schema: HaFormSchema[];
   computeLabel: (schema: HaFormSchema) => string;
+  computeHelper: (schema: HaFormSchema) => string;
 }
 
 export interface HaSelectOption {
@@ -183,6 +184,7 @@ export interface WasteScheduleWidget extends WidgetBase {
   entity?: string;
   entries?: WasteScheduleEntry[];
   layout?: "list" | "card";
+  show_all?: boolean;
   card_style?: CardStyle;
 }
 

@@ -3042,6 +3042,49 @@ class TestRenderWasteSchedule:
             img = render_to_image([w], self._config(states=states))
         assert_all_white(img, 0, 0, 400, 300)
 
+    def test_show_all_renders_far_entry(self) -> None:
+        # With show_all=True, entries beyond 3 days are rendered.
+        states = {
+            "sensor.waste_collection": {
+                "state": "far",
+                "attributes": {
+                    "friendly_name": "Waste",
+                    "Restmuell": "2026-05-09",
+                },
+            },
+        }
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        # 2026-05-09 is 7 days from 2026-05-02 → normally filtered
+        w = self._widget(entries=entries, h=56, show_all=True)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config(states=states))
+        assert_has_dark_pixels(img, 0, 0, 400, 56, threshold=200)
+
+    def test_show_all_false_keeps_default_cutoff(self) -> None:
+        # With show_all=False (or omitted), entries beyond 3 days
+        # are still filtered and the widget renders blank.
+        states = {
+            "sensor.waste_collection": {
+                "state": "far",
+                "attributes": {
+                    "friendly_name": "Waste",
+                    "Restmuell": "2026-05-09",
+                },
+            },
+        }
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        # 2026-05-09 is 7 days from 2026-05-02 → filtered
+        w = self._widget(entries=entries, h=56, show_all=False)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config(states=states))
+        assert_all_white(img, 0, 0, 400, 300)
+
     def test_integer_attribute_value(self) -> None:
         # Integer strings in attributes parse correctly.
         states = {

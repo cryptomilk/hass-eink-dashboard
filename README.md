@@ -159,7 +159,7 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | Sensor Rows | Label / value rows for a list of sensors |
 | Battery Bar | Horizontal battery level bar with percentage |
 | Status Icons | Row of filled/outline squares for binary sensors |
-| Waste Schedule | Upcoming waste collection dates (today, tomorrow, in N days) |
+| [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |
 
 All widgets support `x`, `y` positioning and `font_size`. Most support a `w`
 (width) override to constrain rendering to a sub-region of the display.

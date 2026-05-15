@@ -129,6 +129,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       h: 168,
       entries: [],
       layout: "list",
+      show_all: false,
       card_style: DEFAULT_CARD_STYLE,
     },
   },
@@ -616,6 +617,11 @@ export const SCHEMAS: Record<
             },
           },
         },
+        {
+          name: "show_all",
+          default: false,
+          selector: { boolean: {} },
+        },
       ],
     },
     {
@@ -639,6 +645,12 @@ export const SCHEMAS: Record<
   ],
 };
 
+export const HELPERS: Record<string, string> = {
+  show_all:
+    "When off, the widget is empty if no collection falls "
+    + "within the next 3 days.",
+};
+
 export const LABELS: Record<string, string> = {
   text: "Text",
   entity: "Entity",
@@ -651,6 +663,7 @@ export const LABELS: Record<string, string> = {
   align: "Align",
   card_style: "Card style",
   layout: "Layout",
+  show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
 };
@@ -1113,6 +1126,7 @@ class EinkDashboardEditor extends HTMLElement {
     form.data = formData;
     form.schema = schemaFn(this._display);
     form.computeLabel = (s) => LABELS[s.name] || s.name;
+    form.computeHelper = (s) => HELPERS[s.name] || "";
     form.addEventListener(
       "value-changed",
       ((ev: CustomEvent<{ value: Record<string, unknown> }>) => {
@@ -1266,6 +1280,18 @@ class EinkDashboardEditor extends HTMLElement {
       "Select which waste types to display and set "
       + "short labels for each.";
     section.appendChild(hint);
+
+    const docHint = document.createElement("div");
+    docHint.className = "entries-hint";
+    const docLink = document.createElement("a");
+    docLink.href =
+      "https://github.com/cryptomilk/hass-eink-dashboard"
+      + "/blob/main/docs/waste_schedule.md";
+    docLink.target = "_blank";
+    docLink.rel = "noopener noreferrer";
+    docLink.textContent = "Setup guide";
+    docHint.appendChild(docLink);
+    section.appendChild(docHint);
 
     // Build a lookup for existing entries
     const existing = new Map<string, string>();

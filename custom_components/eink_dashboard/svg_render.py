@@ -1452,15 +1452,17 @@ def _build_waste_schedule_context(
       using the full widget height; date is shown as a
       ``secondary`` line below the primary label.
 
-    Only entries within the 0–3 day range are rendered.  Entries
-    with missing, unparseable, or out-of-range dates are silently
-    skipped.
+    By default only entries within the 0–3 day range are rendered.
+    When ``show_all`` is ``True``, entries with any future date are
+    included regardless of distance.  Entries with missing,
+    unparseable, or past dates are always silently skipped.
 
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``
             (entity ID whose attributes hold the dates),
             ``entries`` (list of ``{"attribute": …, "label": …}``
             dicts), ``layout`` (``"list"`` or ``"card"``),
+            ``show_all`` (``bool``, default ``False``),
             ``card_style``, ``title``, ``x``, ``y``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
             state dict) and ``grayscale_levels``.
@@ -1489,6 +1491,7 @@ def _build_waste_schedule_context(
     layout: str = widget.get("layout", "list")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
+    show_all: bool = bool(widget.get("show_all", False))
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
@@ -1522,7 +1525,9 @@ def _build_waste_schedule_context(
         if not raw:
             continue
         days = _parse_days_until(raw, today)
-        if days is None or days < 0 or days > 3:
+        if days is None or days < 0:
+            continue
+        if not show_all and days > 3:
             continue
         visible.append((label, raw, days))
 
