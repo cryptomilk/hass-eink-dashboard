@@ -152,6 +152,8 @@ def _compose_svg(
     for svg, (x, y) in zip(svg_parts, positions, strict=True):
         # Strip leading whitespace then replace '<svg ' prefix so
         # that x/y attributes position the widget viewport.
+        # Templates must emit '<svg ' (space after tag name, not
+        # a newline) for this prefix swap to work.
         stripped = svg.lstrip()
         if not stripped.startswith("<svg "):
             raise ValueError(f"expected <svg prefix: {stripped[:40]!r}")
@@ -786,8 +788,10 @@ def _build_weather_context(
     temp_bbox = font_xl.getbbox(temp_text)
     temp_h = temp_bbox[3] - temp_bbox[1]
 
-    # Card metrics — always compute so they can be passed to the
-    # card_container macro even when card_style is "none".
+    # Card metrics — 48 at scale=1 gives card-level metrics
+    # (padding~10, radius~10) matching the original PIL layout.
+    # Always compute so they can be passed to the card_container
+    # macro even when card_style is "none".
     m = _compute_metrics(round(48 * scale))
     top_pad = m.padding if card_style != "none" else pad
 
@@ -1374,6 +1378,8 @@ def _build_status_icons_context(
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
+    # Chip wrapping determines total_h dynamically, so
+    # _auto_row_height (fixed row count) does not apply here.
     svg_h = _widget_dim(widget, "h", 40)
     title: str = widget.get("title", "")
     card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
