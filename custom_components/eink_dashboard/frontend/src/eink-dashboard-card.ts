@@ -259,6 +259,7 @@ class EinkDashboardCard extends HTMLElement {
         .scale-wrapper {
           position: relative;
           overflow: hidden;
+          border: 1px solid var(--divider-color, #e0e0e0);
         }
         .svg-canvas {
           position: absolute;
@@ -299,7 +300,7 @@ class EinkDashboardCard extends HTMLElement {
           gap: 6px;
           padding: 4px 8px;
           border-top: 1px solid var(--divider-color, #e0e0e0);
-          background: var(--card-background-color, #fff);
+          background: #e0e0e0;
         }
         .toggle-btn {
           font-size: 12px;
@@ -334,6 +335,7 @@ class EinkDashboardCard extends HTMLElement {
           font-weight: 500;
           color: var(--primary-text-color, #212121);
           line-height: 1.2;
+          background: #e0e0e0;
         }
         .copy-btn {
           font-size: 12px;
