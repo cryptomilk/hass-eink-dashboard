@@ -720,7 +720,6 @@ def _build_weather_context(
         _DAY_ABBREV,
         _compute_metrics,
         _fmt_temp,
-        _left_bar_width,
         _load_font,
     )
 
@@ -807,23 +806,16 @@ def _build_weather_context(
     # the full remaining canvas when no explicit h is configured.
     svg_h = _widget_dim(widget, "h", total_h)
 
-    # Content insets — mirror the card_container macro in
-    # templates/_macros.svg.j2 (macro card_container, lines 41-74).
-    # The macro's caller(xo, ri) values are intentionally unused in
-    # the template; all positions are pre-computed here so they stay
-    # in Python, not Jinja2.
+    # Content insets — "border" and "left_bar" use the shared
+    # helper; "none" applies its own pad so that the weather card
+    # content never touches the viewport edge.
+    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
     if card_style == "none":
         content_left = pad
         content_w = card_w - 2 * pad
-    elif card_style == "border":
-        content_left = m.padding
-        content_w = card_w - 2 * m.padding
-    elif card_style == "left_bar":
-        content_left = _left_bar_width(m, grayscale_levels) + m.padding
-        content_w = card_w - content_left
     else:
-        content_left = 0
-        content_w = card_w
+        content_left = x_off
+        content_w = card_w - x_off - r_inset
 
     content_top = top_pad
 
