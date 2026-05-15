@@ -22,6 +22,11 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import (
     _DEFAULT_ROW_H,
+    _auto_row_height,
+    _card_insets,
+    _metrics_context,
+    _row_content_pads,
+    _title_layout,
     render_widget_svg,
 )
 from tests.helpers import (
@@ -3461,3 +3466,82 @@ class TestComputeMetrics:
         m = _compute_metrics(56)
         for f in dataclasses.fields(WidgetMetrics):
             assert isinstance(getattr(m, f.name), int), f"{f.name} is not int"
+
+
+class TestHelperFunctions:
+    """Unit tests for shared helpers in svg_render.py."""
+
+    def test_metrics_context_keys(self) -> None:
+        """All keys are m_-prefixed and include baseline values."""
+        ctx = _metrics_context(_compute_metrics(56))
+        assert all(k.startswith("m_") for k in ctx)
+        assert ctx["m_padding"] == 12
+
+    def test_card_insets_border(self) -> None:
+        """Border style insets padding on both sides."""
+        m = _compute_metrics(56)
+        assert _card_insets(m, "border", 16) == (
+            m.padding,
+            m.padding,
+        )
+
+    def test_card_insets_left_bar(self) -> None:
+        """Left-bar style insets bar_w + padding on the left."""
+        m = _compute_metrics(56)
+        assert _card_insets(m, "left_bar", 16) == (
+            m.left_bar + m.padding,
+            0,
+        )
+
+    def test_card_insets_left_bar_2level(self) -> None:
+        """2-level display widens the bar via max(10, left_bar*3).
+
+        Mirrors the Jinja2 macro: ``[10, left_bar * 3]|max``.
+        """
+        m = _compute_metrics(56)
+        bar_w = max(10, m.left_bar * 3)
+        assert _card_insets(m, "left_bar", 2) == (
+            bar_w + m.padding,
+            0,
+        )
+
+    def test_card_insets_none(self) -> None:
+        """No card style produces zero insets."""
+        m = _compute_metrics(56)
+        assert _card_insets(m, "none", 16) == (0, 0)
+
+    def test_auto_row_height_no_title(self) -> None:
+        """Without title, height is num_rows * _DEFAULT_ROW_H."""
+        assert _auto_row_height("", 2) == 2 * _DEFAULT_ROW_H
+
+    def test_auto_row_height_with_title(self) -> None:
+        """With title, content_h matches target within 1 px."""
+        h = _auto_row_height("Title", 2)
+        _, _, content_h = _title_layout("Title", h)
+        assert abs(content_h - 2 * _DEFAULT_ROW_H) <= 1
+
+    def test_auto_row_height_rejects_zero_rows(self) -> None:
+        """num_rows < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="num_rows"):
+            _auto_row_height("", 0)
+
+    def test_row_content_pads_border(self) -> None:
+        """Border container provides both insets; row adds none."""
+        m = _compute_metrics(56)
+        assert _row_content_pads(m, "border", 16) == (0, 0)
+
+    def test_row_content_pads_left_bar(self) -> None:
+        """Left-bar container provides left inset; row adds right."""
+        m = _compute_metrics(56)
+        assert _row_content_pads(m, "left_bar", 16) == (
+            0,
+            m.padding,
+        )
+
+    def test_row_content_pads_none(self) -> None:
+        """No container insets; row provides padding on both sides."""
+        m = _compute_metrics(56)
+        assert _row_content_pads(m, "none", 16) == (
+            m.padding,
+            m.padding,
+        )
