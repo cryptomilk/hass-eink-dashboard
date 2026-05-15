@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import functools
 from collections.abc import Callable
+from dataclasses import fields as dc_fields
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -342,8 +343,6 @@ def _metrics_context(m: WidgetMetrics) -> dict[str, object]:
         Dict with ``m_*`` keys for every ``WidgetMetrics`` field,
         ready to unpack into a template context dict.
     """
-    from dataclasses import fields as dc_fields  # noqa: PLC0415
-
     return {f"m_{f.name}": getattr(m, f.name) for f in dc_fields(m)}
 
 
@@ -448,7 +447,7 @@ def _auto_row_height(
 def _row_content_pads(
     m: WidgetMetrics,
     card_style: str,
-    grayscale_levels: int = 16,
+    grayscale_levels: int,
 ) -> tuple[int, int]:
     """Return (lpad, rpad) for a card_row inside a card_container.
 
