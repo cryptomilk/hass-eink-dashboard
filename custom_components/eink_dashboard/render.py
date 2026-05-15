@@ -1,11 +1,12 @@
 """Dashboard rendering orchestrator and shared utility helpers.
 
 Thin wrapper around the SVG pipeline in ``svg_render.py``.
-``render_dashboard()`` composes per-widget SVGs, rasterises with
-resvg, and applies rotation plus e-ink optimisation.  Shared
-helpers (``_load_font``, ``_compute_metrics``, ``_fmt_temp``, etc.)
-live here to avoid circular imports — ``svg_render.py`` imports
-them lazily at call time.
+``render_dashboard()`` rasterises each widget SVG individually,
+pastes onto a canvas, and applies rotation plus e-ink
+optimisation.  Shared helpers (``_load_font``,
+``_compute_metrics``, ``_fmt_temp``, etc.) live here to avoid
+circular imports — ``svg_render.py`` imports them lazily at call
+time.
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ from .const import PADDING
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
-    _compose_svg,
     _svg_to_png,
     render_widget_svg,
 )
@@ -371,11 +371,13 @@ def render_dashboard(
     widget_list: list[Widget],
     config: DisplayConfig,
 ) -> bytes:
-    """Render all widgets into a single SVG, rasterise, and return PNG.
+    """Render widgets to PNG bytes for e-ink display.
 
-    Collects per-widget SVG strings, composes them into one root SVG
-    document via ``_compose_svg``, rasterises the result with a single
-    ``resvg`` call, then applies rotation and e-ink optimisation.
+    Rasterises each widget SVG individually at its intrinsic size,
+    pastes the results onto a white canvas, then applies rotation
+    and e-ink optimisation.  Per-widget rasterisation is ~3x faster
+    than composing one large SVG because resvg's cost scales with
+    document complexity and pixmap area.
 
     Args:
         widget_list: Widget configuration dicts.  Each must have a
@@ -391,9 +393,8 @@ def render_dashboard(
     w = config["width"]
     h = config["height"]
 
-    # Collect SVG strings and canvas positions for each widget.
-    svg_parts: list[str] = []
-    positions: list[tuple[int, int]] = []
+    img = Image.new("L", (w, h), 255)
+
     for widget in widget_list:
         widget_type = widget.get("type")
         if widget_type is None:
@@ -416,12 +417,10 @@ def render_dashboard(
             wx,
             wy,
         )
-        svg_parts.append(render_widget_svg(widget, config))
-        positions.append((wx, wy))
-
-    composed = _compose_svg(svg_parts, positions, w, h)
-    png = _svg_to_png(composed, w, h)
-    img = Image.open(io.BytesIO(png)).convert("L")
+        svg = render_widget_svg(widget, config)
+        png = _svg_to_png(svg)
+        wimg = Image.open(io.BytesIO(png)).convert("L")
+        img.paste(wimg, (wx, wy))
 
     mn, mx = img.getextrema()
     _LOGGER.debug(

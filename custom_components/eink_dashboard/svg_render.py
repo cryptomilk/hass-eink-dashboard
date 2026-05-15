@@ -83,7 +83,7 @@ _ACTIVE_STATES: frozenset[str] = frozenset(
 
 def _svg_to_png(
     svg: str,
-    width: int,
+    width: int | None = None,
     height: int | None = None,
 ) -> bytes:
     """Rasterise an SVG string to PNG bytes via resvg.
@@ -92,16 +92,16 @@ def _svg_to_png(
     HA OS, Docker, and dev machines.  Only fonts shipped in the
     ``fonts/`` directory are available to the renderer.
 
-    When ``height`` is ``None``, resvg uses the SVG document's
-    intrinsic height.  Widgets whose content can exceed their
-    declared ``h`` (e.g. ``status_icons`` with wrapping chips)
-    set the SVG height to the full content height and omit the
-    explicit override so the rasterised PNG is tall enough to hold
-    all rows.
+    When ``width`` or ``height`` is ``None``, resvg uses the SVG
+    document's intrinsic dimension.  There are two usage modes:
+    pass both as ``None`` (production per-widget rendering) so
+    each widget renders at its declared size; or pass explicit
+    values to scale to a fixed viewport (design tool, tests).
 
     Args:
         svg: SVG document as a string.
-        width: Output width in pixels.
+        width: Output width in pixels, or ``None`` to use the
+            SVG's intrinsic width.
         height: Output height in pixels, or ``None`` to use the
             SVG's intrinsic height.
 
