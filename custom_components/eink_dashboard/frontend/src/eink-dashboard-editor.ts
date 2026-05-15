@@ -716,10 +716,18 @@ class EinkDashboardEditor extends HTMLElement {
   private _display: DisplayConfig = { width: 0, height: 0 };
   private _expandedIndex = -1;
   private _built = false;
+  private _saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+  }
+
+  disconnectedCallback(): void {
+    if (this._saveTimeout !== null) {
+      clearTimeout(this._saveTimeout);
+      this._saveTimeout = null;
+    }
   }
 
   // ── Public API ─────────────────────────────────────────────────
@@ -871,6 +879,13 @@ class EinkDashboardEditor extends HTMLElement {
           font-weight: 500;
         }
         .save-btn:hover { opacity: 0.9; }
+        .save-btn.saving {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+        .save-btn.saved {
+          background: var(--success-color, #4caf50);
+        }
         .entries-section {
           margin-top: 12px;
           padding: 8px 0;
@@ -1475,6 +1490,42 @@ class EinkDashboardEditor extends HTMLElement {
       .querySelectorAll<HTMLElement>(".widget-item");
     const last = items[items.length - 1];
     if (last) last.scrollIntoView({ block: "nearest" });
+  }
+
+  /**
+   * Drive the Save button's visual state from the card after the
+   * async API call completes.
+   *
+   * @param state - "saving" while the request is in-flight, "saved"
+   *   on success (auto-reverts to idle after 2 s), "idle" to reset.
+   */
+  setSaveState(state: "idle" | "saving" | "saved"): void {
+    const btn = this.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".save-btn",
+    );
+    if (!btn) return;
+    if (this._saveTimeout) {
+      clearTimeout(this._saveTimeout);
+      this._saveTimeout = null;
+    }
+    if (state === "saving") {
+      btn.textContent = "Saving…";
+      btn.classList.add("saving");
+      btn.classList.remove("saved");
+      btn.disabled = true;
+    } else if (state === "saved") {
+      btn.textContent = "Saved!";
+      btn.classList.remove("saving");
+      btn.classList.add("saved");
+      btn.disabled = false;
+      this._saveTimeout = setTimeout(() => {
+        this.setSaveState("idle");
+      }, 2000);
+    } else {
+      btn.textContent = "Save";
+      btn.classList.remove("saving", "saved");
+      btn.disabled = false;
+    }
   }
 
   /** Emit a "save" event with a snapshot of the widget list. */

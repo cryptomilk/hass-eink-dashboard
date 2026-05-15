@@ -214,6 +214,7 @@ export interface EinkEditorElement extends HTMLElement {
   hass: HomeAssistant | null;
   setWidgets(widgets: Widget[]): void;
   setDisplay(display: DisplayConfig): void;
+  setSaveState(state: "idle" | "saving" | "saved"): void;
 }
 
 // ── Global augmentations ──────────────────────────────────────────────────────

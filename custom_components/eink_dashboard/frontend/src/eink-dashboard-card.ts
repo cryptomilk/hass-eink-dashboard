@@ -432,6 +432,7 @@ class EinkDashboardCard extends HTMLElement {
   private async _onSave(ev: CustomEvent<{ widgets: Widget[] }>): Promise<void> {
     if (this._saving) return;
     this._saving = true;
+    this._editor?.setSaveState("saving");
     try {
       const entryId = this._resolvedEntryId;
       await this._hass!.callApi(
@@ -445,10 +446,14 @@ class EinkDashboardCard extends HTMLElement {
         this._editor.setDisplay(this._layout.display);
       }
       this._saveError.style.display = "none";
+      // Must follow setWidgets: _rebuild replaces shadow DOM, so the
+      // button queried inside setSaveState must already be the new node.
+      this._editor?.setSaveState("saved");
     } catch (err) {
       console.error("Failed to save layout:", err);
       this._saveError.textContent = `Save failed: ${(err as Error).message || err}`;
       this._saveError.style.display = "block";
+      this._editor?.setSaveState("idle");
     } finally {
       this._saving = false;
     }
