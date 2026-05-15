@@ -1561,6 +1561,60 @@ class TestRenderSensorRows:
         assert m is not None
         assert int(m.group(1)) == explicit_h
 
+    def test_sensor_rows_border_single_padding(self) -> None:
+        # With card_style="border", card_container yields x_off=padding
+        # so card_row must not add its own padding again.  The icon
+        # circle left arc should appear in the strip m.padding..2*m.padding;
+        # double-padding would push the circle entirely past 2*m.padding.
+        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        widgets = [
+            {
+                "type": "sensor_rows",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "border",
+                "entities": ["sensor.living_room_temperature"],
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_has_dark_pixels(
+            img,
+            metrics.padding,
+            0,
+            2 * metrics.padding,
+            _DEFAULT_ROW_H,
+            threshold=200,
+        )
+
+    def test_sensor_rows_left_bar_single_padding(self) -> None:
+        # With card_style="left_bar", card_container yields
+        # x_off = bar_w + m.padding.  The icon circle left arc should
+        # appear in the strip (bar_w+m.padding)..(bar_w+2*m.padding);
+        # double-padding would push it entirely past bar_w+2*m.padding.
+        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        # For grayscale_levels=16 (default), bar_w == m.left_bar.
+        bar_w = metrics.left_bar
+        widgets = [
+            {
+                "type": "sensor_rows",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "left_bar",
+                "entities": ["sensor.living_room_temperature"],
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_has_dark_pixels(
+            img,
+            bar_w + metrics.padding,
+            0,
+            bar_w + 2 * metrics.padding,
+            _DEFAULT_ROW_H,
+            threshold=200,
+        )
+
 
 class TestRenderDeviceBattery:
     # Verify rendering of device battery widgets in both icon and chip
@@ -2781,6 +2835,28 @@ class TestRenderWasteSchedule:
             img = render_to_image([w], self._config())
         # Area just below the row must be white
         assert_all_white(img, 0, 57, 400, 60)
+
+    def test_waste_schedule_border_single_padding(self) -> None:
+        # With card_style="border", card_container yields x_off=padding
+        # so card_row must not add its own padding again.  The icon
+        # circle left arc should appear in the strip m.padding..2*m.padding;
+        # double-padding would push it entirely past 2*m.padding.
+        entries = [{"attribute": "Restmuell", "label": "Restmuell"}]
+        w = self._widget(
+            entries=entries, h=_DEFAULT_ROW_H, card_style="border"
+        )
+        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        assert_has_dark_pixels(
+            img,
+            metrics.padding,
+            0,
+            2 * metrics.padding,
+            _DEFAULT_ROW_H,
+            threshold=200,
+        )
 
     # ── Alignment tests ───────────────────────────────
 

@@ -109,6 +109,8 @@
     primary_fill   -- hex color for primary text
     secondary_fill -- hex color for secondary text
     value_fill     -- hex color for value text
+    lpad      -- left padding override; -1 (default) uses padding
+    rpad      -- right padding override; -1 (default) uses padding
 #}
 {%- macro card_row(
     x, y, w, row_h,
@@ -120,9 +122,12 @@
     letter="",
     primary_fill="#000000",
     secondary_fill="#787878",
-    value_fill="#787878"
+    value_fill="#787878",
+    lpad=-1, rpad=-1
 ) -%}
-{%- set icon_cx = x + padding + icon_dia // 2 -%}
+{%- set lpad = lpad if lpad >= 0 else padding -%}
+{%- set rpad = rpad if rpad >= 0 else padding -%}
+{%- set icon_cx = x + lpad + icon_dia // 2 -%}
 {%- set icon_cy = y + row_h // 2 -%}
 {%- set icon_r = icon_dia // 2 -%}
 {# Icon circle -- outline or solid fill #}
@@ -157,7 +162,7 @@
   dominant-baseline="central"
   fill="{{ lc }}">{{ letter }}</text>
 {%- endif -%}
-{%- set tx = x + padding + icon_dia + inner_gap -%}
+{%- set tx = x + lpad + icon_dia + inner_gap -%}
 {# Text block -- vertically center primary + optional secondary #}
 {%- if secondary -%}
 {# (row_h * 4 + 50) // 100 is integer rounding of row_h * 0.04,
@@ -193,7 +198,7 @@
 {# Right-aligned value text #}
 {%- if value -%}
 <text
-  x="{{ x + w - padding }}" y="{{ y + row_h // 2 }}"
+  x="{{ x + w - rpad }}" y="{{ y + row_h // 2 }}"
   font-family="Roboto"
   font-size="{{ font_secondary }}"
   text-anchor="end"

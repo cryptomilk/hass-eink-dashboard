@@ -69,8 +69,8 @@ from custom_components.eink_dashboard.render import (
 ```
 
 `_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
-`_auto_row_height`, and `_DEFAULT_ROW_H` are already in
-`svg_render.py` — call them directly, no import needed.
+`_auto_row_height`, `_row_content_pads`, and `_DEFAULT_ROW_H` are
+already in `svg_render.py` — call them directly, no import needed.
 
 ## Macro usage notes
 
@@ -84,7 +84,10 @@ from custom_components.eink_dashboard.render import (
 - **`card_row`** expects all sizes from `WidgetMetrics` fields plus
   `icon_svg` (pre-built SVG string, empty string for letter fallback)
   and `letter` (single uppercase char, empty string when icon_svg is
-  set). `primary` is the entity label; `secondary` is the state + unit.
+  set). `primary` is the entity label; `secondary` is the state +
+  unit. Pass `lpad`/`rpad` from `_row_content_pads()` to prevent
+  double-padding when a card style already provides insets; use the
+  same values for `x1`/`x2` of any divider `<line>` between rows.
 - **`chip`** requires pre-computed `w` because text width depends on
   font metrics unavailable in Jinja2. The context builder must compute
   chip widths using `_load_font(size).getlength(text)` from PIL — the
@@ -144,12 +147,13 @@ is opaque when composited onto the dashboard canvas:
     secondary=row.secondary,
     value=row.value,
     icon_svg=row.icon_svg,
-    letter=row.letter) }}
+    letter=row.letter,
+    lpad=lpad, rpad=rpad) }}
 {%- if not loop.last -%}
 <line
-  x1="{{ x_off + m.padding }}"
+  x1="{{ x_off + lpad }}"
   y1="{{ row.y + row_h }}"
-  x2="{{ w - r_inset - m.padding }}"
+  x2="{{ w - r_inset - rpad }}"
   y2="{{ row.y + row_h }}"
   stroke="#787878" stroke-width="{{ m.divider }}"/>
 {%- endif -%}
@@ -241,6 +245,9 @@ def _build_{widget_type}_context(
     h = _widget_dim(widget, "h", _auto_row_height(title, n))
     row_h = h // n
     m = _compute_metrics(row_h)
+    lpad, rpad = _row_content_pads(
+        m, card_style, grayscale_levels
+    )
 
     rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entities):
@@ -284,6 +291,8 @@ def _build_{widget_type}_context(
         "grayscale_levels": grayscale_levels,
         "rows": rows,
         "row_h": row_h,
+        "lpad": lpad,
+        "rpad": rpad,
     }
 ```
 

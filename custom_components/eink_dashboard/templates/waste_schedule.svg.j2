@@ -11,11 +11,9 @@
   dominant-baseline="hanging"
   fill="#787878">{{ title }}</text>
 {%- endif -%}
-{#- x_off and r_inset are yielded by the card_container macro and
-    depend on card_style — they cannot be pre-computed in Python
-    without duplicating the macro's inset logic.  The arithmetic
-    expressions below are the only deliberate exception to the
-    "no layout logic in templates" rule. -#}
+{#- x_off and r_inset are yielded by card_container; lpad/rpad
+    come from _row_content_pads() in Python and avoid double-padding
+    the icon when a card style is active. -#}
 {%- call(x_off, r_inset) card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
@@ -41,12 +39,13 @@
     icon_outline=row.icon_outline,
     value_fill=row.value_fill,
     secondary_fill=row.secondary_fill,
-    letter=row.letter) }}
+    letter=row.letter,
+    lpad=lpad, rpad=rpad) }}
 {%- if not loop.last -%}
 <line
-  x1="{{ x_off + m_padding }}"
+  x1="{{ x_off + lpad }}"
   y1="{{ row.y + row_h }}"
-  x2="{{ w - r_inset - m_padding }}"
+  x2="{{ w - r_inset - rpad }}"
   y2="{{ row.y + row_h }}"
   stroke="#787878"
   stroke-width="{{ m_divider }}"/>

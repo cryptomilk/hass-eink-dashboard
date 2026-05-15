@@ -443,6 +443,52 @@ def _auto_row_height(
     return svg_h
 
 
+def _row_content_pads(
+    m: Any,
+    card_style: str,
+    grayscale_levels: int = 16,
+) -> tuple[int, int]:
+    """Return (lpad, rpad) for a card_row inside a card_container.
+
+    The ``card_container`` macro already insets the content area via
+    ``_card_insets``.  Without adjustment, ``card_row`` would add
+    its own ``padding`` on top, resulting in double-padding.
+
+    This function derives ``lpad``/``rpad`` directly from
+    ``_card_insets`` so both stay in sync: when the container
+    provides a non-zero inset on a side, the row contributes zero
+    padding on that side; when the container provides no inset, the
+    row supplies the full ``m.padding``.
+
+    Resulting total insets from card edge to content:
+    - ``"border"``: ``m.padding`` on both sides (container left +
+      right, row adds nothing).
+    - ``"left_bar"``: ``bar_w + m.padding`` on the left (container
+      provides both bar and padding offset), ``m.padding`` on the
+      right (row only, container has zero right inset).
+    - ``"none"``: ``m.padding`` on both sides (row only, container
+      has zero insets on both sides).
+
+    Args:
+        m: ``WidgetMetrics`` from ``_compute_metrics``.
+        card_style: One of ``"border"``, ``"left_bar"``, or
+            ``"none"`` (or any unrecognised value treated as
+            ``"none"``).
+        grayscale_levels: Forwarded to ``_card_insets`` so the
+            ``"left_bar"`` width is computed correctly on 2-level
+            displays.
+
+    Returns:
+        ``(lpad, rpad)`` — left and right padding for the
+        ``card_row`` macro.  Rows should pass these as
+        ``lpad=lpad, rpad=rpad``.
+    """
+    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+    return lpad, rpad
+
+
 def _build_text_context(
     widget: Widget,
     config: DisplayConfig,
@@ -1055,6 +1101,7 @@ def _build_sensor_rows_context(
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     row_h = content_h // len(entity_ids)
     m = _compute_metrics(row_h)
+    lpad, rpad = _row_content_pads(m, card_style, grayscale_levels)
 
     rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entity_ids):
@@ -1110,6 +1157,8 @@ def _build_sensor_rows_context(
         "m_divider": m.divider,
         "row_h": row_h,
         "rows": rows,
+        "lpad": lpad,
+        "rpad": rpad,
     }
 
 
@@ -1600,6 +1649,7 @@ def _build_waste_schedule_context(
     row_h = content_h // num_display_rows
 
     m = _compute_metrics(row_h)
+    lpad, rpad = _row_content_pads(m, card_style, grayscale_levels)
 
     # Build the trash-can icon SVG once; all entries share the
     # same icon, only the circle fill/outline differs.
@@ -1651,6 +1701,8 @@ def _build_waste_schedule_context(
         "m_divider": m.divider,
         "row_h": row_h,
         "rows": rows,
+        "lpad": lpad,
+        "rpad": rpad,
     }
 
 

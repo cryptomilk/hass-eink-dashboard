@@ -307,6 +307,13 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 #   "none"     -> (0, 0)
 # Content width (cw):
 #   cw = w - x_off - right_inset
+# _row_content_pads(m, card_style, grayscale_levels) returns
+# (lpad, rpad): padding card_row applies inside the container.
+#   "border"   -> (0, 0)         container already provides both
+#   "left_bar" -> (0, m.padding) container covers left; row covers right
+#   "none"     -> (m.padding, m.padding)  row provides all padding
+# Icon circle left arc lands at x_off + lpad, NOT x_off + m.padding.
+# Divider lines span x_off + lpad .. w - right_inset - rpad.
 ```
 
 ## Lessons from completed TDD cycles
