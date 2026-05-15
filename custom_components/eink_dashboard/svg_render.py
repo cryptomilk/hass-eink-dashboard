@@ -428,6 +428,8 @@ def _auto_row_height(
     Returns:
         Total widget height in pixels.
     """
+    if num_rows < 1:
+        raise ValueError(f"num_rows must be >= 1, got {num_rows}")
     target = num_rows * row_h
     if not title:
         return target
@@ -1186,7 +1188,7 @@ def _build_device_battery_context(
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
     h: int = widget.get("h", 40)
-    svg_h = _widget_dim(widget, "h", h)
+    svg_h = _widget_dim(widget, "h", 40)
 
     level = config.get("device_battery_level")
     if level is None:
@@ -1203,7 +1205,7 @@ def _build_device_battery_context(
     color_hex = f"#{color:02x}{color:02x}{color:02x}"
 
     label = f"{pct}%"
-    m = _compute_metrics(h)
+    m = _compute_metrics(svg_h)
 
     x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
 
