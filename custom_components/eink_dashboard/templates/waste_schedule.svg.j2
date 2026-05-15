@@ -4,20 +4,13 @@
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- if has_rows -%}
-{{- widget_title(title, title_font_sz) -}}
-{#- x_off and r_inset are yielded by card_container; lpad/rpad
-    come from _row_content_pads() in Python and avoid double-padding
-    the icon when a card style is active. -#}
-{%- call(x_off, r_inset) card_container(
+{{ widget_title(title, title_font_sz) }}
+{%- call card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
     radius=m_radius, border=m_border,
-    padding=m_padding, left_bar=m_left_bar,
-    grayscale_levels=grayscale_levels) -%}
+    bar_width=bar_width) -%}
 {%- for row in rows -%}
-{#- row.y is an absolute SVG coordinate pre-computed in Python.
-    card_container emits plain SVG elements without a <g transform>,
-    so absolute coordinates are correct inside this caller block. -#}
 {{ card_row(
     x=x_off, y=row.y,
     w=w - x_off - r_inset, row_h=row_h,

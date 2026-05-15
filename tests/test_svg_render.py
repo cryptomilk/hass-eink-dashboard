@@ -178,10 +178,10 @@ def test_card_container_border_draws_rounded_rect(render_macro) -> None:
     img = render_macro(
         "{%- from '_macros.svg.j2' import card_container -%}"
         + _SVG_OPEN
-        + "{% call(xo, ri) card_container("
+        + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
         " card_style='border',"
-        " radius=12, border=3, padding=12) %}"
+        " radius=12, border=3) %}"
         "{% endcall %}" + _SVG_CLOSE
     )
     # Top border: dark pixels across the middle of the top edge
@@ -204,10 +204,10 @@ def test_card_container_left_bar_draws_gray(render_macro) -> None:
     img = render_macro(
         "{%- from '_macros.svg.j2' import card_container -%}"
         + _SVG_OPEN
-        + "{% call(xo, ri) card_container("
+        + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
         " card_style='left_bar',"
-        " left_bar=6, padding=10) %}"
+        " bar_width=6) %}"
         "{% endcall %}" + _SVG_CLOSE
     )
     # Gray bar in the left_bar area (x=10..16, middle of height)
@@ -217,22 +217,23 @@ def test_card_container_left_bar_draws_gray(render_macro) -> None:
     assert_all_white(img, 20, 10, 390, 190)
 
 
-def test_card_container_left_bar_widens_for_2_level(render_macro) -> None:
-    """Verify left_bar widens to max(10, left_bar*3) on 2-level displays."""
-    # left_bar=4 → bar_w = max(10, 4*3) = 12
+def test_card_container_left_bar_precomputed_width(
+    render_macro,
+) -> None:
+    """Verify left_bar renders at the pre-computed bar_width."""
+    # bar_width=12 (pre-computed by Python, e.g. max(10, 4*3))
     img = render_macro(
         "{%- from '_macros.svg.j2' import card_container -%}"
         + _SVG_OPEN
-        + "{% call(xo, ri) card_container("
+        + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
         " card_style='left_bar',"
-        " left_bar=4, padding=8, grayscale_levels=2) %}"
+        " bar_width=12) %}"
         "{% endcall %}" + _SVG_CLOSE
     )
-    # Widened bar covers x=10..22 (10 + 12); check near the right
-    # edge of the widened bar.
+    # Bar covers x=10..22 (10 + 12); check near the right edge.
     assert_has_gray_pixels(img, 10, 50, 22, 150)
-    # Area well past the widened bar should be white
+    # Area well past the bar should be white
     assert_all_white(img, 35, 10, 390, 190)
 
 
@@ -246,7 +247,7 @@ def test_card_container_none_caller_invoked(render_macro) -> None:
     img = render_macro(
         "{%- from '_macros.svg.j2' import card_container -%}"
         + _SVG_OPEN
-        + "{% call(xo, ri) card_container("
+        + "{% call card_container("
         "x=10, y=10, w=380, h=180, card_style='none') %}"
         "<rect x='150' y='90' width='30' height='20' fill='black'/>"
         "{% endcall %}" + _SVG_CLOSE

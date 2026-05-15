@@ -37,19 +37,18 @@
 
 {#
   card_container -- draw card decoration and wrap inner content.
-  Inset logic is mirrored by _card_insets() in svg_render.py.
 
-  Use with Jinja2 {% call %} so the macro body wraps the widget's
-  inner content.  The macro passes back (x_off, right_inset) so the
-  caller can compute the content area: content_x = x + x_off and
-  content_w = w - x_off - right_inset.
+  Purely decorative: emits the border rect or left-bar rect for the
+  chosen card_style, then renders the caller block.  All content
+  positioning is pre-computed in Python via _card_insets(); this
+  macro only draws the chrome.
 
-    {% call(x_off, r_inset) card_container(
+    {% call card_container(
         x=0, y=0, w=400, h=200,
         card_style="border",
-        radius=m.radius, border=m.border,
-        padding=m.padding, left_bar=m.left_bar) %}
-      ... widget content at x_off / r_inset offsets ...
+        radius=m_radius, border=m_border,
+        bar_width=bar_width) %}
+      ... widget content at pre-computed positions ...
     {% endcall %}
 
   Parameters:
@@ -59,16 +58,14 @@
                  values are treated as "none" (no decoration)
     radius    -- corner radius for "border" style
     border    -- stroke width for "border" style
-    padding   -- inner padding returned to caller as x_off / r_inset
-    left_bar  -- bar width for "left_bar" style (before 2-level
-                 widening)
-    grayscale_levels -- display depth; bar widens when <= 2
+    bar_width -- pre-computed bar width for "left_bar" style
+                 (Python is the single source of truth)
 #}
 {%- macro card_container(
     x, y, w, h,
     card_style="none",
-    radius=0, border=2, padding=0,
-    left_bar=0, grayscale_levels=16
+    radius=0, border=2,
+    bar_width=0
 ) -%}
 {%- if card_style == "border" -%}
 {# SVG strokes are centred on the path (half inside, half outside).
@@ -82,20 +79,15 @@
   fill="none"
   stroke="#000000"
   stroke-width="{{ border }}"/>
-{{ caller(padding, padding) }}
+{{ caller() }}
 {%- elif card_style == "left_bar" -%}
-{%- if grayscale_levels <= 2 -%}
-{%- set bar_w = [10, left_bar * 3]|max -%}
-{%- else -%}
-{%- set bar_w = left_bar -%}
-{%- endif -%}
 <rect
   x="{{ x }}" y="{{ y }}"
-  width="{{ bar_w }}" height="{{ h }}"
+  width="{{ bar_width }}" height="{{ h }}"
   fill="#787878"/>
-{{ caller(bar_w + padding, 0) }}
+{{ caller() }}
 {%- else -%}
-{{ caller(0, 0) }}
+{{ caller() }}
 {%- endif -%}
 {%- endmacro -%}
 

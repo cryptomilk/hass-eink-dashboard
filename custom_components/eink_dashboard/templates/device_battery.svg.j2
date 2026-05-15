@@ -3,13 +3,11 @@
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- if has_level -%}
-{# xo and ri are unused — absolute positions are pre-computed by the context builder #}
-{%- call(xo, ri) card_container(
+{%- call card_container(
     x=0, y=0, w=w, h=card_h,
     card_style=card_style,
     radius=m_radius, border=m_border,
-    padding=m_padding, left_bar=m_left_bar,
-    grayscale_levels=grayscale_levels) -%}
+    bar_width=bar_width) -%}
 {%- if layout == "chip" -%}
 <rect x="{{ chip_x }}" y="0" width="{{ chip_w }}" height="{{ card_h }}"
   rx="{{ chip_radius }}" ry="{{ chip_radius }}" fill="#ffffff"

@@ -322,7 +322,8 @@ def _title_layout(
         ``(title_font_sz, content_y, content_h)`` where
         ``title_font_sz`` is 0 when ``title`` is empty,
         ``content_y`` is the top of the card area (below the
-        title), and ``content_h`` is the remaining height.
+        title, or 0 when ``title`` is empty), and
+        ``content_h`` is the remaining height.
     """
     if not title:
         return 0, 0, svg_h
@@ -352,12 +353,14 @@ def _card_insets(
     m: WidgetMetrics,
     card_style: str,
     grayscale_levels: int,
-) -> tuple[int, int]:
-    """Return (x_off, r_inset) for a card container.
+) -> tuple[int, int, int]:
+    """Return (x_off, r_inset, bar_width) for a card container.
 
-    Mirrors the inset logic in the ``card_container`` macro in
-    ``templates/_macros.svg.j2`` so callers can pre-compute
-    absolute positions in Python rather than in Jinja2.
+    The ``card_container`` macro in ``_macros.svg.j2`` is purely
+    decorative; all content positioning uses these insets computed
+    in Python.  ``bar_width`` is the pre-computed left-bar width
+    (including 2-level widening) so the macro never recalculates
+    it — Python is the single source of truth.
 
     Args:
         m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
@@ -368,16 +371,18 @@ def _card_insets(
             displays.
 
     Returns:
-        ``(x_off, r_inset)`` — the left and right pixel insets
-        for the content area inside the card frame.
+        ``(x_off, r_inset, bar_width)`` — the left and right
+        pixel insets for the content area inside the card frame,
+        and the rendered bar width (0 when not ``"left_bar"``).
     """
     from .render import _left_bar_width  # noqa: PLC0415
 
     if card_style == "border":
-        return m.padding, m.padding
+        return m.padding, m.padding, 0
     if card_style == "left_bar":
-        return _left_bar_width(m, grayscale_levels) + m.padding, 0
-    return 0, 0
+        bar_w = _left_bar_width(m, grayscale_levels)
+        return bar_w + m.padding, 0, bar_w
+    return 0, 0, 0
 
 
 def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
@@ -446,52 +451,6 @@ def _auto_row_height(
     return svg_h
 
 
-def _row_content_pads(
-    m: WidgetMetrics,
-    card_style: str,
-    grayscale_levels: int,
-) -> tuple[int, int]:
-    """Return (lpad, rpad) for a card_row inside a card_container.
-
-    The ``card_container`` macro already insets the content area via
-    ``_card_insets``.  Without adjustment, ``card_row`` would add
-    its own ``padding`` on top, resulting in double-padding.
-
-    This function derives ``lpad``/``rpad`` directly from
-    ``_card_insets`` so both stay in sync: when the container
-    provides a non-zero inset on a side, the row contributes zero
-    padding on that side; when the container provides no inset, the
-    row supplies the full ``m.padding``.
-
-    Resulting total insets from card edge to content:
-    - ``"border"``: ``m.padding`` on both sides (container left +
-      right, row adds nothing).
-    - ``"left_bar"``: ``bar_w + m.padding`` on the left (container
-      provides both bar and padding offset), ``m.padding`` on the
-      right (row only, container has zero right inset).
-    - ``"none"``: ``m.padding`` on both sides (row only, container
-      has zero insets on both sides).
-
-    Args:
-        m: ``WidgetMetrics`` from ``_compute_metrics``.
-        card_style: One of ``"border"``, ``"left_bar"``, or
-            ``"none"`` (or any unrecognised value treated as
-            ``"none"``).
-        grayscale_levels: Forwarded to ``_card_insets`` so the
-            ``"left_bar"`` width is computed correctly on 2-level
-            displays.
-
-    Returns:
-        ``(lpad, rpad)`` — left and right padding for the
-        ``card_row`` macro.  Rows should pass these as
-        ``lpad=lpad, rpad=rpad``.
-    """
-    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
-    lpad = m.padding if x_off == 0 else 0
-    rpad = m.padding if r_inset == 0 else 0
-    return lpad, rpad
-
-
 def _build_text_context(
     widget: Widget,
     config: DisplayConfig,
@@ -526,7 +485,7 @@ def _build_text_context(
         ``text_x``, ``text_y``, ``text_anchor``, ``baseline``);
         optional title attributes (``title``, ``title_font_sz``,
         ``title_x``); card container inputs (``card_style``,
-        ``content_y``, ``content_h``, ``grayscale_levels``,
+        ``content_y``, ``content_h``, ``bar_width``,
         ``m_border``, ``m_padding``, ``m_radius``,
         ``m_left_bar``).
     """
@@ -551,9 +510,7 @@ def _build_text_context(
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     m = _compute_metrics(content_h)
 
-    # Compute card container insets — mirrors the card_container
-    # macro's own logic so text_x can be pre-calculated in Python.
-    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
 
     content_w = svg_w - x_off - r_inset
 
@@ -605,7 +562,7 @@ def _build_text_context(
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         **_metrics_context(m),
     }
 
@@ -814,11 +771,14 @@ def _build_weather_context(
     # Content insets — "border" and "left_bar" use the shared
     # helper; "none" applies its own pad so that the weather card
     # content never touches the viewport edge.
-    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
     if card_style == "none":
         content_left = pad
         content_w = card_w - 2 * pad
+        bar_width = 0
     else:
+        x_off, r_inset, bar_width = _card_insets(
+            m, card_style, grayscale_levels
+        )
         content_left = x_off
         content_w = card_w - x_off - r_inset
 
@@ -1011,7 +971,7 @@ def _build_weather_context(
         "total_h": total_h,
         "card_style": card_style,
         **_metrics_context(m),
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         "icon_svg": cond_icon_svg,
         "icon_x": icon_x,
         "icon_y": icon_y,
@@ -1098,7 +1058,12 @@ def _build_sensor_rows_context(
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     row_h = content_h // len(entity_ids)
     m = _compute_metrics(row_h)
-    lpad, rpad = _row_content_pads(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    # When the card container already insets content on a side,
+    # the row contributes zero padding on that side to avoid
+    # double-padding.
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
 
     rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entity_ids):
@@ -1145,10 +1110,12 @@ def _build_sensor_rows_context(
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         **_metrics_context(m),
         "row_h": row_h,
         "rows": rows,
+        "x_off": x_off,
+        "r_inset": r_inset,
         "lpad": lpad,
         "rpad": rpad,
     }
@@ -1210,7 +1177,7 @@ def _build_device_battery_context(
     label = f"{pct}%"
     m = _compute_metrics(svg_h)
 
-    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
 
     if layout == "chip":
         content_w = svg_w - x_off - r_inset
@@ -1245,10 +1212,10 @@ def _build_device_battery_context(
             "h": svg_h,
             "has_level": True,
             "layout": "chip",
-            "card_h": h,
+            "card_h": svg_h,
             "card_style": card_style,
             **_metrics_context(m),
-            "grayscale_levels": grayscale_levels,
+            "bar_width": bar_width,
             "color_hex": color_hex,
             "label": label,
             "font_sz": font_sz,
@@ -1303,10 +1270,10 @@ def _build_device_battery_context(
         "h": svg_h,
         "has_level": True,
         "layout": "icon",
-        "card_h": h,
+        "card_h": svg_h,
         "card_style": card_style,
         **_metrics_context(m),
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         "color_hex": color_hex,
         "label": label,
         "font_sz": font_sz,
@@ -1402,7 +1369,7 @@ def _build_status_icons_context(
     chip_h = max(1, content_h)
     m = _compute_metrics(chip_h)
 
-    x_off, r_inset = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
     content_w = svg_w - x_off - r_inset
 
     show_icon: bool = widget.get("show_icon", True)
@@ -1516,7 +1483,7 @@ def _build_status_icons_context(
         "title_advance": title_advance,
         "chip_h": chip_h,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         **_metrics_context(m),
         "chips": chips,
     }
@@ -1643,7 +1610,9 @@ def _build_waste_schedule_context(
     row_h = content_h // num_display_rows
 
     m = _compute_metrics(row_h)
-    lpad, rpad = _row_content_pads(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
 
     # Build the trash-can icon SVG once; all entries share the
     # same icon, only the circle fill/outline differs.
@@ -1686,10 +1655,12 @@ def _build_waste_schedule_context(
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "bar_width": bar_width,
         **_metrics_context(m),
         "row_h": row_h,
         "rows": rows,
+        "x_off": x_off,
+        "r_inset": r_inset,
         "lpad": lpad,
         "rpad": rpad,
     }
