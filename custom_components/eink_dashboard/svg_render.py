@@ -12,12 +12,17 @@ Icon SVG files are inlined as ``<path>`` elements via Jinja2 filters
 occurs only once per icon per process lifetime.
 """
 
+from __future__ import annotations
+
 import contextlib
 import functools
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .render import WidgetMetrics
 from xml.sax.saxutils import quoteattr
 
 import defusedxml.ElementTree as ET
@@ -323,32 +328,27 @@ def _title_layout(
     return font_sz, advance, svg_h - advance
 
 
-def _metrics_context(m: Any) -> dict[str, int]:
-    """Return the base card metric fields for a Jinja2 template context.
+def _metrics_context(m: WidgetMetrics) -> dict[str, object]:
+    """Return all metric fields for a Jinja2 template context.
 
-    Extracts the four fields that every card-style widget passes to its
-    template (``m_border``, ``m_padding``, ``m_radius``,
-    ``m_left_bar``).  Call sites merge this dict into the full context
-    with ``**_metrics_context(m)`` and add extra metric fields
-    (``m_icon_dia`` etc.) individually when needed.
+    Serialises every ``WidgetMetrics`` field into a ``m_``-prefixed
+    dict so templates can reference any metric without the Python
+    context builder having to cherry-pick individual fields.
 
     Args:
-        m: ``WidgetMetrics`` namedtuple from ``_compute_metrics``.
+        m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
 
     Returns:
-        Dict with four ``m_*`` keys ready to unpack into a context
-        dict.
+        Dict with ``m_*`` keys for every ``WidgetMetrics`` field,
+        ready to unpack into a template context dict.
     """
-    return {
-        "m_border": m.border,
-        "m_padding": m.padding,
-        "m_radius": m.radius,
-        "m_left_bar": m.left_bar,
-    }
+    from dataclasses import fields as dc_fields  # noqa: PLC0415
+
+    return {f"m_{f.name}": getattr(m, f.name) for f in dc_fields(m)}
 
 
 def _card_insets(
-    m: Any,
+    m: WidgetMetrics,
     card_style: str,
     grayscale_levels: int,
 ) -> tuple[int, int]:
@@ -359,7 +359,7 @@ def _card_insets(
     absolute positions in Python rather than in Jinja2.
 
     Args:
-        m: ``WidgetMetrics`` namedtuple from ``_compute_metrics``.
+        m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
         card_style: One of ``"border"``, ``"left_bar"``, or
             ``"none"`` (or any other value treated as ``"none"``).
         grayscale_levels: Display grayscale depth; passed to
@@ -444,7 +444,7 @@ def _auto_row_height(
 
 
 def _row_content_pads(
-    m: Any,
+    m: WidgetMetrics,
     card_style: str,
     grayscale_levels: int = 16,
 ) -> tuple[int, int]:
@@ -1150,11 +1150,6 @@ def _build_sensor_rows_context(
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
         **_metrics_context(m),
-        "m_icon_dia": m.icon_dia,
-        "m_inner_gap": m.inner_gap,
-        "m_font_primary": m.font_primary,
-        "m_font_secondary": m.font_secondary,
-        "m_divider": m.divider,
         "row_h": row_h,
         "rows": rows,
         "lpad": lpad,
@@ -1694,11 +1689,6 @@ def _build_waste_schedule_context(
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
         **_metrics_context(m),
-        "m_icon_dia": m.icon_dia,
-        "m_inner_gap": m.inner_gap,
-        "m_font_primary": m.font_primary,
-        "m_font_secondary": m.font_secondary,
-        "m_divider": m.divider,
         "row_h": row_h,
         "rows": rows,
         "lpad": lpad,
