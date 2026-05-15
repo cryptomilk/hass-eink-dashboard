@@ -1,16 +1,10 @@
-{%- from "_macros.svg.j2" import card_container, chip -%}
+{%- from "_macros.svg.j2" import widget_title, card_container,
+    chip -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ total_h }}">
 <rect width="{{ w }}" height="{{ total_h }}" fill="white"/>
 {%- if has_entities -%}
-{%- if title -%}
-<text
-  x="0" y="0"
-  font-family="Roboto"
-  font-size="{{ title_font_sz }}"
-  dominant-baseline="hanging"
-  fill="#787878">{{ title }}</text>
-{%- endif -%}
+{{- widget_title(title, title_font_sz) -}}
 {# xo and ri unused — chip positions are pre-computed by the
    context builder with card container insets already applied.
    h=total_h-title_advance so the decoration covers all chip

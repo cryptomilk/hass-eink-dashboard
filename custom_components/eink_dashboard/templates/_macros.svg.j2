@@ -7,8 +7,33 @@
   no layout math happens inside a macro.
 
   Usage:
-    {%- from "_macros.svg.j2" import card_container, card_row, chip -%}
+    {%- from "_macros.svg.j2" import widget_title, card_container,
+        card_row, chip -%}
 #}
+
+{#
+  widget_title -- draw the optional gray title label above a card.
+
+  Emits a single <text> element at (x, 0) with dominant-baseline="hanging"
+  so the title sits flush at the top of the widget viewport.  When title
+  is empty the macro emits nothing.
+
+  Parameters:
+    title     -- title string; empty = no output
+    font_sz   -- font size in pixels
+    x         -- horizontal position (default 0)
+#}
+{%- macro widget_title(title, font_sz, x=0) -%}
+{%- if title -%}
+<text
+  x="{{ x }}" y="0"
+  font-family="Roboto"
+  font-size="{{ font_sz }}"
+  dominant-baseline="hanging"
+  fill="#787878">{{ title }}</text>
+{%- endif -%}
+{%- endmacro -%}
+
 
 {#
   card_container -- draw card decoration and wrap inner content.

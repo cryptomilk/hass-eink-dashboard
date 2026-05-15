@@ -1,15 +1,8 @@
-{%- from "_macros.svg.j2" import card_container -%}
+{%- from "_macros.svg.j2" import widget_title, card_container -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
-{%- if title -%}
-<text
-  x="{{ title_x }}" y="0"
-  font-family="Roboto"
-  font-size="{{ title_font_sz }}"
-  dominant-baseline="hanging"
-  fill="#787878">{{ title }}</text>
-{%- endif -%}
+{{- widget_title(title, title_font_sz, x=title_x) -}}
 {# xo and ri are unused — absolute positions are pre-computed by the context builder #}
 {%- call(xo, ri) card_container(
     x=0, y=content_y, w=w, h=content_h,

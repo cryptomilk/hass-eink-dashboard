@@ -1,16 +1,10 @@
-{%- from "_macros.svg.j2" import card_container, card_row -%}
+{%- from "_macros.svg.j2" import widget_title, card_container,
+    card_row -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- if has_entities -%}
-{%- if title -%}
-<text
-  x="0" y="0"
-  font-family="Roboto"
-  font-size="{{ title_font_sz }}"
-  dominant-baseline="hanging"
-  fill="#787878">{{ title }}</text>
-{%- endif -%}
+{{- widget_title(title, title_font_sz) -}}
 {#- x_off and r_inset are yielded by card_container; lpad/rpad
     come from _row_content_pads() in Python and avoid double-padding
     the icon when a card style is active. -#}
