@@ -56,12 +56,17 @@ from the same ratios the renderer uses — no hardcoded magic numbers.
 ## Imports
 
 ```python
+import re
+
 from custom_components.eink_dashboard.const import (
     COLOR_BLACK, COLOR_GRAY, PADDING, DEFAULT_CARD_STYLE,
 )
 from custom_components.eink_dashboard.render import (
     WidgetMetrics, _compute_metrics,
     _device_class_icon, render_dashboard,
+)
+from custom_components.eink_dashboard.svg_render import (
+    _DEFAULT_ROW_H, render_widget_svg,
 )
 from tests.helpers import (
     assert_all_white, assert_card_border, assert_has_dark_pixels,
@@ -131,6 +136,44 @@ coordinates.
 - Missing attributes: handles absent `device_class`, `friendly_name`
 - Edge cases: empty entity list, single entity
 
+### 5. Auto-sizing tests — row-based widgets only
+
+For row-based widgets (height derived from content rows), verify the
+auto-sizing fallback.  Use `render_widget_svg` directly — a
+full-canvas PNG from `render_dashboard` cannot reveal the widget's
+own height attribute.
+
+- **No `h`, one row**: `SVG height == _DEFAULT_ROW_H`
+- **No `h`, N rows**: `SVG height == N * _DEFAULT_ROW_H`
+- **Explicit `h` preserved**: widget with explicit `h` produces that
+  exact height regardless of row count
+
+```python
+def test_{widget}_auto_height_single_row(self) -> None:
+    # Without explicit h, one row produces height _DEFAULT_ROW_H.
+    w = {
+        "type": "$widget-type",
+        "x": 0, "y": 0, "w": 400,
+        "entities": ["sensor.temperature"],
+    }
+    svg = render_widget_svg(w, self._config())
+    m = re.search(r'height="(\d+)"', svg)
+    assert m is not None
+    assert int(m.group(1)) == _DEFAULT_ROW_H
+
+def test_{widget}_explicit_h_preserved(self) -> None:
+    # An explicit h overrides auto-sizing.
+    w = {
+        "type": "$widget-type",
+        "x": 0, "y": 0, "w": 400, "h": 200,
+        "entities": ["sensor.temperature"],
+    }
+    svg = render_widget_svg(w, self._config())
+    m = re.search(r'height="(\d+)"', svg)
+    assert m is not None
+    assert int(m.group(1)) == 200
+```
+
 ## Mock state setup
 
 Define mock states at **module level** (not pytest fixtures —
@@ -171,6 +214,8 @@ total widget height. All internal dimensions derive from `h`.
 
 ```python
 # Card-style widget (sensor_rows, waste_schedule, person, alarm)
+# "h" is optional: omit it for auto-sizing (height =
+# num_rows * _DEFAULT_ROW_H).  Include it to test explicit override.
 widget = {
     "type": "$widget-type",
     "x": PADDING, "y": 0, "w": 350, "h": 112,
@@ -299,6 +344,9 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
    inspect PNG output. Do NOT import or call internal drawing helpers
    from tests. The entry point (`render_dashboard`) dispatches
    transparently to the SVG pipeline in `svg_render.py`.
+   **Exception**: auto-sizing tests (§5) call `render_widget_svg`
+   directly to read the SVG `height` attribute — it cannot be inferred
+   from a full-canvas PNG.
 
 ## Font metric tolerance
 

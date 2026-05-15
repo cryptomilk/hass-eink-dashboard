@@ -398,6 +398,51 @@ def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
     return max(1, widget.get(key, fallback))
 
 
+# Default row height for auto-sizing row-based widgets.  Produces
+# readable metrics via _compute_metrics(56): font_primary=18,
+# icon_dia=36, padding=12, inner_gap=12.
+_DEFAULT_ROW_H = 56
+
+
+def _auto_row_height(
+    title: str,
+    num_rows: int,
+    row_h: int = _DEFAULT_ROW_H,
+) -> int:
+    """Compute natural widget height from content row count.
+
+    Returns a height such that when ``_title_layout(title, result)``
+    is called the resulting ``content_h`` equals ``num_rows * row_h``
+    (within 1 px rounding).  When ``title`` is empty, this simplifies
+    to ``num_rows * row_h``.
+
+    Used as the fallback for ``_widget_dim`` so row-based widgets size
+    to their content instead of filling the remaining canvas.
+
+    Args:
+        title: Widget title string.  Empty means no title.
+        num_rows: Number of content rows to accommodate.
+            Must be at least 1.
+        row_h: Target height per content row in pixels.
+
+    Returns:
+        Total widget height in pixels.
+    """
+    target = num_rows * row_h
+    if not title:
+        return target
+    # _title_layout subtracts an advance from svg_h, creating a
+    # dependency: advance depends on svg_h.  Iterate to find the
+    # fixpoint.  round() in _title_layout creates a 1-px staircase
+    # that can cause a 1-step oscillation, so 3 iterations (not 2)
+    # guarantee convergence to within ±1 px of target.
+    svg_h = target
+    for _ in range(3):
+        _, _, content_h = _title_layout(title, svg_h)
+        svg_h = svg_h + (target - content_h)
+    return svg_h
+
+
 def _build_text_context(
     widget: Widget,
     config: DisplayConfig,
@@ -963,9 +1008,9 @@ def _build_sensor_rows_context(
 
     Args:
         widget: Widget config dict.  Recognised keys:
-            ``x`` (default ``PADDING``), ``y`` (default 0),
+            ``x`` (default ``PADDING``),
             ``w`` (default remaining canvas width),
-            ``h`` (default remaining canvas height),
+            ``h`` (default content height; auto-sized when absent),
             ``entities`` (list of entity IDs),
             ``title`` (optional section label drawn above
             the card), ``card_style``.
@@ -984,9 +1029,7 @@ def _build_sensor_rows_context(
     )
 
     x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
-    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     entity_ids: list[str] = widget.get("entities", [])
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -999,8 +1042,16 @@ def _build_sensor_rows_context(
     # Absent entities would otherwise leave silent blank gaps.
     entity_ids = [eid for eid in entity_ids if eid in states]
     if not entity_ids:
-        return {"w": svg_w, "h": svg_h, "has_entities": False}
+        return {
+            "w": svg_w,
+            "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
+            "has_entities": False,
+        }
 
+    # Auto-size: default to content height so the widget is no
+    # taller than its rendered rows.  Explicit "h" in the widget
+    # config overrides this, preserving backward compatibility.
+    svg_h = _widget_dim(widget, "h", _auto_row_height(title, len(entity_ids)))
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
     row_h = content_h // len(entity_ids)
     m = _compute_metrics(row_h)
@@ -1463,7 +1514,7 @@ def _build_waste_schedule_context(
             ``entries`` (list of ``{"attribute": …, "label": …}``
             dicts), ``layout`` (``"list"`` or ``"card"``),
             ``show_all`` (``bool``, default ``False``),
-            ``card_style``, ``title``, ``x``, ``y``, ``w``, ``h``.
+            ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
             state dict) and ``grayscale_levels``.
 
@@ -1482,9 +1533,7 @@ def _build_waste_schedule_context(
     )
 
     x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
-    svg_h = _widget_dim(widget, "h", config["height"] - y)
 
     entity_id: str = widget.get("entity", "")
     entries: list[dict[str, str]] = widget.get("entries", [])
@@ -1497,7 +1546,7 @@ def _build_waste_schedule_context(
 
     empty_ctx: dict[str, object] = {
         "w": svg_w,
-        "h": svg_h,
+        "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
         "has_rows": False,
     }
     if not entity_id or not entries:
@@ -1508,9 +1557,9 @@ def _build_waste_schedule_context(
         return empty_ctx
 
     attrs = entity_state.get("attributes", {})
-    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
 
-    # Resolve visible entries: parse dates, filter to 0–3 days.
+    # Resolve visible entries before computing height so the
+    # auto-sizing fallback knows how many rows to accommodate.
     # Config order is preserved — equal-day entries keep the
     # order the user configured them, matching the PIL renderer.
     # Use _get_today() from render.py so tests can patch
@@ -1539,9 +1588,16 @@ def _build_waste_schedule_context(
         # config order), displayed at full widget height.
         visible.sort(key=lambda e: e[2])
         visible = [visible[0]]
-        row_h = content_h
-    else:
-        row_h = content_h // len(visible)
+
+    # Auto-size: default to content height so the widget is no
+    # taller than its rendered rows.  Explicit "h" in the widget
+    # config overrides this, preserving backward compatibility.
+    num_display_rows = len(visible)
+    svg_h = _widget_dim(widget, "h", _auto_row_height(title, num_display_rows))
+    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+    # card layout always trims visible to one entry above, so
+    # num_display_rows == 1 and the division is equivalent to content_h.
+    row_h = content_h // num_display_rows
 
     m = _compute_metrics(row_h)
 

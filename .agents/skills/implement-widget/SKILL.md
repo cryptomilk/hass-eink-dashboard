@@ -59,6 +59,7 @@ lazily at call time.
 ```python
 from custom_components.eink_dashboard.const import (
     DEFAULT_CARD_STYLE,
+    PADDING,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
@@ -67,7 +68,8 @@ from custom_components.eink_dashboard.render import (
 )
 ```
 
-`_mdi_svg_filter` and `_weather_svg_filter` are already in
+`_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
+`_auto_row_height`, and `_DEFAULT_ROW_H` are already in
 `svg_render.py` — call them directly, no import needed.
 
 ## Macro usage notes
@@ -209,15 +211,16 @@ def _build_{widget_type}_context(
     """Build template context for $widget-type widget.
 
     Args:
-        widget: Widget config dict with x, y, w, h, entities,
-            card_style.
+        widget: Widget config dict with x, w, h, entities,
+            card_style, title.
         config: DisplayConfig with states and grayscale_levels.
 
     Returns:
         Template context dict.
     """
-    w = widget["w"]
-    h = widget["h"]
+    x = widget.get("x", PADDING)
+    w = _widget_dim(widget, "w", config["width"] - x)
+    title: str = widget.get("title", "")
     card_style = widget.get(
         "card_style", DEFAULT_CARD_STYLE
     )
@@ -227,7 +230,15 @@ def _build_{widget_type}_context(
 
     n = len(entities)
     if n == 0:
-        return {"w": w, "h": h, "rows": [], "m": None}
+        return {
+            "w": w,
+            "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
+            "rows": [],
+            "m": None,
+        }
+    # Row-based: auto-size height to fit n rows at
+    # _DEFAULT_ROW_H px each.  An explicit "h" overrides this.
+    h = _widget_dim(widget, "h", _auto_row_height(title, n))
     row_h = h // n
     m = _compute_metrics(row_h)
 
@@ -288,8 +299,9 @@ def _build_{widget_type}_context(
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build template context for $widget-type widget."""
-    w = widget["w"]
-    h = widget["h"]
+    x = widget.get("x", PADDING)
+    w = _widget_dim(widget, "w", config["width"] - x)
+    h = _widget_dim(widget, "h", _DEFAULT_ROW_H)
     entities = widget.get("entities", [])
     states = config.get("states", {})
     m = _compute_metrics(h)
@@ -411,3 +423,5 @@ behavior.
 - Icon name resolution: `_device_class_icon()` in `render.py`
 - Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120`,
   `COLOR_LIGHT_GRAY=180` in `const.py`
+- Auto-sizing helpers: `_widget_dim`, `_auto_row_height`,
+  `_DEFAULT_ROW_H` in `svg_render.py` (no import needed)

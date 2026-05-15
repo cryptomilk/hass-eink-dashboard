@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as dt
+import re
 from unittest.mock import patch
 
 import pytest
@@ -18,6 +19,10 @@ from custom_components.eink_dashboard.render import (
     _load_font,
     _parse_days_until,
     render_dashboard,
+)
+from custom_components.eink_dashboard.svg_render import (
+    _DEFAULT_ROW_H,
+    render_widget_svg,
 )
 from tests.helpers import (
     assert_all_white,
@@ -1505,6 +1510,56 @@ class TestRenderSensorRows:
             56,
             threshold=200,
         )
+
+    # ── Auto-sizing tests ─────────────────────────────
+
+    def test_sensor_rows_auto_height_single_entity(self) -> None:
+        # Without explicit h, widget height equals _DEFAULT_ROW_H.
+        w = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "entities": ["sensor.living_room_temperature"],
+        }
+        svg = render_widget_svg(w, self._config())
+        # Parse height from the SVG viewport attribute.
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == _DEFAULT_ROW_H
+
+    def test_sensor_rows_auto_height_two_entities(self) -> None:
+        # Without explicit h, widget height equals 2 * _DEFAULT_ROW_H.
+        w = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "entities": [
+                "sensor.living_room_temperature",
+                "sensor.living_room_temperature",
+            ],
+        }
+        svg = render_widget_svg(w, self._config())
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == 2 * _DEFAULT_ROW_H
+
+    def test_sensor_rows_explicit_h_preserved(self) -> None:
+        # An explicit h overrides auto-sizing.
+        explicit_h = 200
+        w = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": explicit_h,
+            "entities": ["sensor.living_room_temperature"],
+        }
+        svg = render_widget_svg(w, self._config())
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == explicit_h
 
 
 class TestRenderDeviceBattery:
@@ -3159,6 +3214,55 @@ class TestRenderWasteSchedule:
         icon_h = icon_bb[3] - icon_bb[1]
         # Icon should span at least 40% of widget height
         assert icon_h > h * 0.4
+
+    # ── Auto-sizing tests ─────────────────────────────
+
+    def test_waste_schedule_auto_height_single_entry(self) -> None:
+        # Without explicit h, widget height equals _DEFAULT_ROW_H.
+        w = {
+            "type": "waste_schedule",
+            "entity": "sensor.waste_collection",
+            "entries": [{"attribute": "Restmuell", "label": "Restmuell"}],
+            "x": 0,
+            "y": 0,
+            "w": 400,
+        }
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == _DEFAULT_ROW_H
+
+    def test_waste_schedule_auto_height_three_entries(self) -> None:
+        # Without explicit h, widget height equals 3 * _DEFAULT_ROW_H.
+        # Relies on all three _ENTRIES attributes being present and
+        # within 0–3 days in MOCK_WASTE_SCHEDULE_STATES on _TODAY.
+        w = {
+            "type": "waste_schedule",
+            "entity": "sensor.waste_collection",
+            "entries": list(self._ENTRIES),
+            "x": 0,
+            "y": 0,
+            "w": 400,
+        }
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == 3 * _DEFAULT_ROW_H
+
+    def test_waste_schedule_explicit_h_preserved(self) -> None:
+        # An explicit h overrides auto-sizing.
+        explicit_h = 300
+        w = self._widget(h=explicit_h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        m = re.search(r'height="(\d+)"', svg)
+        assert m is not None
+        assert int(m.group(1)) == explicit_h
 
 
 class TestFontSizeControls:
