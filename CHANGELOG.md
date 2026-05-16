@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Media Source platform exposing rendered dashboard PNGs in HA's Media Browser,
+  enabling delivery to screens running OpenDisplay.
+- TRMNL battery level support in the `device_battery` widget.
+- Snap-to-widget-edges in the Lovelace editor: hold Shift while dragging a
+  widget to align it to the nearest edge of any other widget.
+- Design tool: interactive resize handles on the Raw SVG preview panel.
+  Corner handles resize width and height; left/right edge handles resize
+  width only. A dashed blue outline tracks the widget bounds, and handles
+  snap to the widget's actual rendered content area.
+
+### Changed
+
+- Editor resize model: corner handles (nw/ne/sw/se) resize width and
+  height; left/right edge handles (w/e) resize width only. Font size
+  scales proportionally on corner resize for text and weather widgets.
+- Bumped `resvg-py` to 0.3.2 for fontdb caching support.
+- Weather widget: main temperature is now rendered in bold.
+
+### Fixed
+
+- Spurious `RuntimeError` logged during HA shutdown when the image
+  refresh executor is already stopped is now suppressed.
+- `device_battery` widget resize box now matches the rendered content
+  width instead of a hardcoded 200 px default.
+
 ## [0.2.0] - 2026-05-15
 
 ### Added
