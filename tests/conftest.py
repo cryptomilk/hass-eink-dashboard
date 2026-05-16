@@ -17,6 +17,8 @@ _HA_MODULES = [
     "homeassistant.components.frontend",
     "homeassistant.components.http",
     "homeassistant.components.image",
+    "homeassistant.components.media_player",
+    "homeassistant.components.media_source",
     "homeassistant.components.sensor",
     "homeassistant.components.websocket_api",
     "homeassistant.config_entries",
@@ -74,6 +76,91 @@ image_mod.ImageEntity = type(  # type: ignore[attr-defined]
         "async_write_ha_state": lambda self: None,
     },
 )
+
+media_player_mod = sys.modules["homeassistant.components.media_player"]
+
+
+class _BrowseError(Exception):
+    pass
+
+
+class _MediaClass:
+    APP = "app"
+    IMAGE = "image"
+
+
+media_player_mod.BrowseError = _BrowseError  # type: ignore[attr-defined]
+media_player_mod.MediaClass = _MediaClass  # type: ignore[attr-defined]
+
+media_source_mod = sys.modules["homeassistant.components.media_source"]
+
+
+class _PlayMedia:
+    def __init__(self, url: str, mime_type: str) -> None:
+        self.url = url
+        self.mime_type = mime_type
+
+
+class _BrowseMediaSource:
+    def __init__(
+        self,
+        *,
+        domain: str | None,
+        identifier: str | None,
+        media_class: str,
+        media_content_type: str,
+        title: str,
+        can_play: bool,
+        can_expand: bool,
+        children: list | None = None,
+        children_media_class: str | None = None,
+        thumbnail: str | None = None,
+    ) -> None:
+        self.domain = domain
+        self.identifier = identifier
+        self.media_class = media_class
+        self.media_content_type = media_content_type
+        self.title = title
+        self.can_play = can_play
+        self.can_expand = can_expand
+        self.children = children
+        self.children_media_class = children_media_class
+        self.thumbnail = thumbnail
+
+
+class _MediaSource:
+    name: str | None = None
+
+    def __init__(self, domain: str) -> None:
+        self.domain = domain
+        if not self.name:
+            self.name = domain
+
+
+class _MediaSourceItem:
+    # Mirrors the real MediaSourceItem dataclass signature.
+    def __init__(
+        self,
+        hass: object,
+        domain: str | None,
+        identifier: str,
+        target_media_player: str | None = None,
+    ) -> None:
+        self.hass = hass
+        self.domain = domain
+        self.identifier = identifier
+        self.target_media_player = target_media_player
+
+
+class _Unresolvable(Exception):
+    pass
+
+
+media_source_mod.BrowseMediaSource = _BrowseMediaSource  # type: ignore[attr-defined]
+media_source_mod.MediaSource = _MediaSource  # type: ignore[attr-defined]
+media_source_mod.MediaSourceItem = _MediaSourceItem  # type: ignore[attr-defined]
+media_source_mod.PlayMedia = _PlayMedia  # type: ignore[attr-defined]
+media_source_mod.Unresolvable = _Unresolvable  # type: ignore[attr-defined]
 
 config_entries = sys.modules["homeassistant.config_entries"]
 config_entries.ConfigEntry = MagicMock  # type: ignore[attr-defined]

@@ -65,6 +65,7 @@ include = [
     "custom_components/eink_dashboard/config_flow.py",
     "custom_components/eink_dashboard/image.py",
     "custom_components/eink_dashboard/http.py",
+    "custom_components/eink_dashboard/media_source.py",
     "custom_components/eink_dashboard/sensor.py",
     "custom_components/eink_dashboard/store.py",
 ]
