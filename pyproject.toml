@@ -37,7 +37,33 @@ line-length = 79
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C90"]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "BLE",   # flake8-blind-except
+    "SIM",   # flake8-simplify
+    "C90",   # mccabe complexity
+    "RUF",   # ruff-specific rules
+    "ASYNC", # flake8-async
+    "PERF",  # perflint
+    "PGH",   # pygrep-hooks
+    "G",     # flake8-logging
+    "T20",   # flake8-print
+    "TC",    # flake8-type-checking
+]
+ignore = [
+    "RUF001", # ambiguous Unicode in strings (intentional: –, ×, etc.)
+    "RUF002", # ambiguous Unicode in docstrings
+    "RUF003", # ambiguous Unicode in comments
+]
+
+[tool.ruff.lint.per-file-ignores]
+# print(), broad exception catches, and post-bootstrap imports are
+# expected in CLI scripts
+"scripts/*.py" = ["T201", "BLE001", "E402"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 25

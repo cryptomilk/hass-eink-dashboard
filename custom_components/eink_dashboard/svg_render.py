@@ -375,7 +375,7 @@ def _card_insets(
         pixel insets for the content area inside the card frame,
         and the rendered bar width (0 when not ``"left_bar"``).
     """
-    from .render import _left_bar_width  # noqa: PLC0415
+    from .render import _left_bar_width
 
     if card_style == "border":
         return m.padding, m.padding, 0
@@ -492,7 +492,7 @@ def _build_text_context(
     # Lazy import avoids circular dependency: render.py imports
     # svg_render.py at module level; importing render.py at
     # module level here would prevent initialisation.
-    from .render import _compute_metrics  # noqa: PLC0415
+    from .render import _compute_metrics
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
@@ -676,7 +676,7 @@ def _build_weather_context(
     # Lazy imports avoid circular dependency: render.py imports
     # svg_render.py at module level; if svg_render.py imported
     # render.py at module level the initialisation would fail.
-    from .render import (  # noqa: PLC0415
+    from .render import (
         _DAY_ABBREV,
         _compute_metrics,
         _fmt_temp,
@@ -1026,7 +1026,7 @@ def _build_sensor_rows_context(
         ``{"w": …, "h": …, "has_entities": False}`` when
         the entities list is empty.
     """
-    from .render import (  # noqa: PLC0415
+    from .render import (
         _compute_metrics,
         _device_class_icon,
     )
@@ -1153,7 +1153,7 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from .render import _compute_metrics, _load_font  # noqa: PLC0415
+    from .render import _compute_metrics, _load_font
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -1332,7 +1332,7 @@ def _build_status_icons_context(
         when the entity list is empty or all listed entities are
         absent from ``states``.
     """
-    from .render import (  # noqa: PLC0415
+    from .render import (
         _CHIP_FONT_RATIO,
         _CHIP_GAP_RATIO,
         _CHIP_ICON_INNER_RATIO,
@@ -1535,7 +1535,7 @@ def _build_waste_schedule_context(
         is absent from states, ``entries`` is empty, or no entries
         fall within the visible day range.
     """
-    from .render import (  # noqa: PLC0415
+    from .render import (
         _compute_metrics,
         _format_relative_date,
         _get_today,

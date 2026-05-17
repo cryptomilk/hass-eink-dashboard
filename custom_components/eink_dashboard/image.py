@@ -7,13 +7,10 @@ import hashlib
 import io
 import logging
 import time
-from collections.abc import Callable
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.image import ImageEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import (
     async_get_clientsession,
 )
@@ -24,6 +21,12 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.template import Template, TemplateError
 from homeassistant.util import dt as dt_util
 from PIL import Image
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.config_entries import ConfigEntry
+    from homeassistant.core import HomeAssistant
 
 from . import _fetch_forecasts
 from .battery import resolve_battery_level
@@ -54,7 +57,7 @@ def _is_image_blank(image_bytes: bytes) -> bool:
         if img.mode != "L":
             img = img.convert("L")
         return not any(b < 200 for b in img.tobytes())
-    except Exception:
+    except Exception:  # noqa: BLE001
         return False
 
 

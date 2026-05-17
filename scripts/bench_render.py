@@ -79,16 +79,16 @@ import_module(f"{PKG}.optimize")
 import_module(f"{PKG}.svg_render")
 import_module(f"{PKG}.render")
 
-from custom_components.eink_dashboard.const import (  # noqa: E402
+from custom_components.eink_dashboard.const import (
     DEVICE_PRESETS,
     PADDING,
     DevicePreset,
     WidgetType,
 )
-from custom_components.eink_dashboard.optimize import (  # noqa: E402
+from custom_components.eink_dashboard.optimize import (
     optimize_for_eink,
 )
-from custom_components.eink_dashboard.svg_render import (  # noqa: E402
+from custom_components.eink_dashboard.svg_render import (
     _SVG_RENDERERS,
     _svg_to_png,
     render_widget_svg,

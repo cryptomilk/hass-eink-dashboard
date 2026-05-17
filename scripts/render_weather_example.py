@@ -17,7 +17,7 @@ from pathlib import Path
 # Bootstrap: make `custom_components.eink_dashboard.{render,const}` importable
 # directly without going through the package __init__.py (which pulls in HA).
 # ---------------------------------------------------------------------------
-from _bootstrap import PKG, import_module  # noqa: E402
+from _bootstrap import PKG, import_module
 
 # Register in dependency order so relative imports in each module resolve
 # against already-loaded siblings rather than falling back to __init__.py.

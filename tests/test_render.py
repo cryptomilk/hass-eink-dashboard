@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import re
+from typing import ClassVar
 from unittest.mock import patch
 
 import pytest
@@ -115,7 +116,7 @@ class TestRenderDashboard:
 
 class TestRenderText:
     # Verify rendering of the text widget (SVG pipeline).
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 200,
         "height": 100,
     }
@@ -456,7 +457,7 @@ class TestRenderText:
 
 
 class TestRenderSeparator:
-    _CONFIG = {"width": 300, "height": 200}
+    _CONFIG: ClassVar[dict[str, object]] = {"width": 300, "height": 200}
 
     def test_separator_default_horizontal_line(self) -> None:
         # Default: horizontal line, 2px black, spans PADDING to width-PADDING.
@@ -556,7 +557,7 @@ class TestRenderSeparator:
 
 
 class TestRenderWeather:
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 600,
         "height": 400,
         "states": MOCK_WEATHER_STATE,
@@ -1059,7 +1060,7 @@ MOCK_SENSOR_STATES = {
 class TestRenderSensorRows:
     # Verify rendering of redesigned sensor_rows widgets
     # using card container + icon circles + two-line text.
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 400,
         "height": 300,
         "states": MOCK_SENSOR_STATES,
@@ -1625,7 +1626,7 @@ class TestRenderDeviceBattery:
     # layouts.  Icon layout renders a compact battery outline with fill
     # bar sized proportionally from h (default h=40 → 30×14 body).
     # Chip layout uses w/h-based sizing with a pill-shaped container.
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 400,
         "height": 100,
         "device_battery_level": 75,
@@ -2115,7 +2116,7 @@ MOCK_STATUS_ICON_STATES = {
 class TestRenderStatusIcons:
     # Verify rendering of status_icons widgets as icon-and-text
     # labels with MDI icons and card containers.
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 500,
         "height": 200,
         "states": MOCK_STATUS_ICON_STATES,
@@ -2725,13 +2726,13 @@ class TestRenderWasteSchedule:
     # using card container + trash-can icon + urgency styling.
     # Data model: single entity with attribute-based dates.
 
-    _ENTRIES: list[dict[str, str]] = [
+    _ENTRIES: ClassVar[list[dict[str, str]]] = [
         {"attribute": "Restmuell", "label": "Restmuell"},
         {"attribute": "Biotonne", "label": "Bio"},
         {"attribute": "Papier", "label": "Papier"},
     ]
 
-    _DEFAULTS: dict[str, object] = {
+    _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 400,
         "height": 300,
         "states": MOCK_WASTE_SCHEDULE_STATES,
@@ -3394,7 +3395,7 @@ class TestLoadFont:
         assert regular is not medium
         # When the TTF is available, verify the actual font style
         if hasattr(medium, "getname"):
-            family, style = medium.getname()
+            _family, style = medium.getname()
             if style != "Regular":
                 assert style == "Medium"
 
