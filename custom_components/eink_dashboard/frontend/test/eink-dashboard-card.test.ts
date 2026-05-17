@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   snap,
+  snapToEdges,
   buildHeaderText,
   shouldShowCopyUrl,
   diagScaleFontSize,
@@ -68,6 +69,118 @@ describe("diagScaleFontSize", () => {
     // Guard against division by zero when the widget has zero dimensions.
     const result = diagScaleFontSize("se", 10, 10, 32, 0, 0, 8, 72);
     expect(result).toBe(32);
+  });
+});
+
+describe("snapToEdges", () => {
+  it("returns grid snap when there are no targets", () => {
+    // With nothing to snap to, each axis falls back to snap().
+    expect(snapToEdges({ x: 13, y: 13, w: 100, h: 50 }, []))
+      .toEqual({ x: 16, y: 16 });
+  });
+
+  it("snaps left edge to target left edge (alignment)", () => {
+    // Candidate left=105, target left=100 — distance 5 within threshold.
+    const result = snapToEdges(
+      { x: 105, y: 0, w: 80, h: 40 },
+      [{ x: 100, y: 200, w: 60, h: 40 }],
+    );
+    expect(result.x).toBe(100);
+  });
+
+  it("snaps left edge to target right edge (abutment)", () => {
+    // Candidate left=147, target right=150 — distance 3 within threshold.
+    const result = snapToEdges(
+      { x: 147, y: 0, w: 80, h: 40 },
+      [{ x: 50, y: 200, w: 100, h: 40 }],
+    );
+    expect(result.x).toBe(150);
+  });
+
+  it("snaps right edge to target left edge (abutment)", () => {
+    // Candidate right=190, target left=200 — distance 10 within threshold.
+    // Candidate shifts right by 10 so right=200, meaning x=100.
+    const result = snapToEdges(
+      { x: 90, y: 0, w: 100, h: 40 },
+      [{ x: 200, y: 200, w: 60, h: 40 }],
+    );
+    expect(result.x).toBe(100);
+  });
+
+  it("snaps right edge to target right edge (alignment)", () => {
+    // Candidate right=195, target right=200 — distance 5 within threshold.
+    // Candidate shifts right by 5 so right=200, meaning x=100.
+    const result = snapToEdges(
+      { x: 95, y: 0, w: 100, h: 40 },
+      [{ x: 50, y: 200, w: 150, h: 40 }],
+    );
+    expect(result.x).toBe(100);
+  });
+
+  it("snaps Y axis independently of X", () => {
+    // X: nearest edge is target left=300, distance=250 — beyond
+    // threshold, falls back to grid. Y: top-to-top distance=5,
+    // within threshold — snaps to 200.
+    const result = snapToEdges(
+      { x: 50, y: 195, w: 80, h: 60 },
+      [{ x: 300, y: 200, w: 80, h: 60 }],
+    );
+    expect(result.x).toBe(snap(50)); // grid fallback
+    expect(result.y).toBe(200);      // edge snap
+  });
+
+  it("falls back to grid snap when beyond threshold", () => {
+    // All edges more than 12px away — grid snap applies.
+    const result = snapToEdges(
+      { x: 170, y: 80, w: 80, h: 40 },
+      [{ x: 100, y: 200, w: 50, h: 40 }],
+    );
+    expect(result.x).toBe(snap(170));
+    expect(result.y).toBe(snap(80));
+  });
+
+  it("picks the closest edge when multiple targets overlap", () => {
+    // Target A right=100, target B left=103. Candidate left=101.
+    // Distance to A=1, distance to B=2 — snaps to A.
+    const result = snapToEdges(
+      { x: 101, y: 0, w: 80, h: 40 },
+      [
+        { x: 20, y: 200, w: 80, h: 40 },  // right edge = 100
+        { x: 103, y: 200, w: 60, h: 40 }, // left edge = 103
+      ],
+    );
+    expect(result.x).toBe(100);
+  });
+
+  it("respects a custom threshold parameter", () => {
+    // Distance 5; with threshold=4 it should NOT snap.
+    const result = snapToEdges(
+      { x: 105, y: 0, w: 80, h: 40 },
+      [{ x: 100, y: 200, w: 60, h: 40 }],
+      4,
+    );
+    expect(result.x).toBe(snap(105));
+  });
+
+  it("snaps when candidate edge exactly matches target edge", () => {
+    // Distance 0 — no shift needed; result equals the raw position.
+    const result = snapToEdges(
+      { x: 100, y: 0, w: 80, h: 40 },
+      [{ x: 100, y: 200, w: 60, h: 40 }],
+    );
+    expect(result.x).toBe(100);
+  });
+
+  it("handles zero-dimension candidate (wrapper absent from DOM)", () => {
+    // w=0/h=0 is what the call site produces when dragWrapper is
+    // null. All four X pairs collapse to two distinct edges (left
+    // == right), but the function must still return a valid result.
+    const result = snapToEdges(
+      { x: 104, y: 0, w: 0, h: 0 },
+      [{ x: 100, y: 200, w: 60, h: 40 }],
+    );
+    // Left=104 is 4px from target left=100 — within threshold.
+    expect(result.x).toBe(100);
   });
 });
 

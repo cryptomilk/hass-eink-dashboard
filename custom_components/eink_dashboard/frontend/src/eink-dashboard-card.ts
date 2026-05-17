@@ -11,6 +11,7 @@ import type {
   RenderWidgetsResponse,
   RenderWidgetResponse,
   Handle,
+  WidgetBounds,
 } from "./types/ha.js";
 
 const CARD_TAG = "eink-dashboard-card";
@@ -25,6 +26,73 @@ const FONT_SIZE_DEVICE_BATTERY = 24;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function snap(v: number): number { return Math.round(v / GRID) * GRID; }
+
+const EDGE_SNAP_THRESHOLD = 12;
+
+/**
+ * Snap a candidate widget to the nearest edge of any target
+ * widget, per axis independently.
+ *
+ * For each axis the function checks all 4 edge-pair combinations
+ * (left↔left, left↔right, right↔left, right↔right for X; same
+ * for top/bottom on Y).  If the closest match on an axis is within
+ * `threshold` pixels the candidate is shifted so those edges align.
+ * When no target edge is within threshold the axis falls back to
+ * grid snap.
+ *
+ * @param candidate - Bounding box of the widget being dragged, at
+ *   the raw (unsnapped) candidate position.
+ * @param targets - Bounding boxes of all other widgets.
+ * @param threshold - Maximum pixel distance to trigger a snap.
+ * @returns Snapped { x, y } position for the candidate widget.
+ */
+export function snapToEdges(
+  candidate: WidgetBounds,
+  targets: WidgetBounds[],
+  threshold: number = EDGE_SNAP_THRESHOLD,
+): { x: number; y: number } {
+  const cL = candidate.x;
+  const cR = candidate.x + candidate.w;
+  const cT = candidate.y;
+  const cB = candidate.y + candidate.h;
+
+  // Sentinel: anything within threshold beats the initial value.
+  let bestDx = threshold + 1;
+  let snapX = snap(candidate.x);
+  let bestDy = threshold + 1;
+  let snapY = snap(candidate.y);
+
+  for (const t of targets) {
+    const tL = t.x;
+    const tR = t.x + t.w;
+    const tT = t.y;
+    const tB = t.y + t.h;
+
+    // X-axis: check all 4 candidate-edge / target-edge pairs.
+    for (const [ce, te] of [
+      [cL, tL], [cL, tR], [cR, tL], [cR, tR],
+    ] as [number, number][]) {
+      const dist = Math.abs(ce - te);
+      if (dist < bestDx) {
+        bestDx = dist;
+        snapX = candidate.x + (te - ce);
+      }
+    }
+
+    // Y-axis: check all 4 candidate-edge / target-edge pairs.
+    for (const [ce, te] of [
+      [cT, tT], [cT, tB], [cB, tT], [cB, tB],
+    ] as [number, number][]) {
+      const dist = Math.abs(ce - te);
+      if (dist < bestDy) {
+        bestDy = dist;
+        snapY = candidate.y + (te - ce);
+      }
+    }
+  }
+
+  return { x: snapX, y: snapY };
+}
 
 export function buildHeaderText(device: { name: string }): string {
   return device.name || "E-Ink Dashboard";
@@ -796,6 +864,33 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   /**
+   * Collect bounding boxes of all widgets except the one at
+   * excludeIndex, using DOM wrapper geometry for accurate
+   * rendered dimensions.
+   *
+   * @param excludeIndex - Index of the widget currently being
+   *   dragged; it is omitted from the result.
+   * @returns Array of WidgetBounds for all other widgets.
+   */
+  private _getSnapTargets(excludeIndex: number): WidgetBounds[] {
+    const targets: WidgetBounds[] = [];
+    if (!this._layout) return targets;
+    const { widgets } = this._layout;
+    for (let i = 0; i < widgets.length; i++) {
+      if (i === excludeIndex) continue;
+      const wr = this._wrapperAt(i);
+      if (!wr) continue;
+      targets.push({
+        x: wr.offsetLeft,
+        y: wr.offsetTop,
+        w: wr.offsetWidth,
+        h: wr.offsetHeight,
+      });
+    }
+    return targets;
+  }
+
+  /**
    * Compute resize handle positions for the widget at index.
    *
    * Returns corner handles (nw/ne/sw/se) for most widget
@@ -1162,12 +1257,46 @@ class EinkDashboardCard extends HTMLElement {
       const w = this._layout.widgets[this._dragIndex] as MutableWidget;
       const s = this._dragWidgetStart!;
       const { width, height } = this._layout.display;
-      w.x = snap(Math.max(0, Math.min(width - 1, s.x + dx)));
-      w.y = snap(Math.max(0, Math.min(height - 1, s.y + dy)));
-      if (s.x2 !== undefined) {
-        w.x2 = snap(Math.max(0, Math.min(width - 1, s.x2 + dx)));
-        w.y2 = snap(Math.max(0, Math.min(height - 1, (s.y2 ?? 0) + dy)));
+
+      // Raw candidate position, clamped to display bounds.
+      const rawX = Math.max(0, Math.min(width - 1, s.x + dx));
+      const rawY = Math.max(0, Math.min(height - 1, s.y + dy));
+
+      if (event.shiftKey) {
+        // Shift held: snap to nearest edge of any other widget.
+        const dragWrapper = this._wrapperAt(this._dragIndex);
+        const candidate: WidgetBounds = {
+          x: rawX,
+          y: rawY,
+          w: dragWrapper?.offsetWidth ?? 0,
+          h: dragWrapper?.offsetHeight ?? 0,
+        };
+        const snapped = snapToEdges(
+          candidate, this._getSnapTargets(this._dragIndex),
+        );
+        // Edge snap can shift the candidate past the display edge;
+        // re-clamp after the snap.
+        w.x = Math.max(0, Math.min(width - 1, snapped.x));
+        w.y = Math.max(0, Math.min(height - 1, snapped.y));
+      } else {
+        w.x = snap(rawX);
+        w.y = snap(rawY);
       }
+
+      // x2/y2 are absolute coordinates, not offsets, so they
+      // don't follow x/y automatically — shift them by the same
+      // total displacement as the primary point.
+      if (s.x2 !== undefined) {
+        const shiftX = w.x - s.x;
+        const shiftY = w.y - s.y;
+        w.x2 = Math.max(
+          0, Math.min(width - 1, s.x2 + shiftX),
+        );
+        w.y2 = Math.max(
+          0, Math.min(height - 1, (s.y2 ?? 0) + shiftY),
+        );
+      }
+
       // Update CSS directly; no server round-trip during drag.
       const wrapper = this._wrapperAt(this._dragIndex);
       if (wrapper) {
