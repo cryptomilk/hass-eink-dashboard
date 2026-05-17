@@ -663,6 +663,8 @@ export const LABELS: Record<string, string> = {
   align: "Align",
   card_style: "Card style",
   layout: "Layout",
+  show_icon: "Show icon",
+  show_state: "Show state",
   show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
