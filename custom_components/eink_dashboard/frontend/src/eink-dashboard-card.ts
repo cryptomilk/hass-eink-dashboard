@@ -17,7 +17,7 @@ import type {
 const CARD_TAG = "eink-dashboard-card";
 const GRID = 8;
 const PADDING = 24;
-const HANDLE_SIZE = 8;
+const HANDLE_SIZE = 12;
 const MIN_RESIZE_FONT_SIZE = 8;
 const MAX_RESIZE_FONT_SIZE = 72;
 const FONT_SIZE_WEATHER = 32;
@@ -348,6 +348,14 @@ class EinkDashboardCard extends HTMLElement {
           outline: 2px dashed rgba(3, 169, 244, 0.6);
           outline-offset: 2px;
         }
+        .svg-canvas.edit-mode .widget-wrapper::before {
+          content: '';
+          position: absolute;
+          top: -10px;
+          right: -10px;
+          bottom: -10px;
+          left: -10px;
+        }
         .resize-handle {
           position: absolute;
           width: ${HANDLE_SIZE}px;
@@ -356,6 +364,14 @@ class EinkDashboardCard extends HTMLElement {
           border: 1px solid #fff;
           z-index: 10;
           box-sizing: border-box;
+        }
+        .svg-canvas.edit-mode .resize-handle::before {
+          content: '';
+          position: absolute;
+          top: -8px;
+          right: -8px;
+          bottom: -8px;
+          left: -8px;
         }
         img.server-render {
           display: block;
