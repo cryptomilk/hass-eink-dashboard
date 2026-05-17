@@ -1052,6 +1052,13 @@ class EinkDashboardCard extends HTMLElement {
     });
   }
 
+  /** Hide the resize handle squares without touching the hover outline. */
+  private _hideHandles(): void {
+    for (const hEl of this._handleEls) {
+      hEl.style.display = "none";
+    }
+  }
+
   /**
    * Hide all resize handles and clear the hover outline from
    * the currently hovered wrapper.
@@ -1061,9 +1068,7 @@ class EinkDashboardCard extends HTMLElement {
       this._wrapperAt(this._hoverIndex)?.classList.remove("edit-hover");
     }
     this._hoverIndex = -1;
-    for (const hEl of this._handleEls) {
-      hEl.style.display = "none";
-    }
+    this._hideHandles();
   }
 
   /**
@@ -1126,8 +1131,8 @@ class EinkDashboardCard extends HTMLElement {
       this._resizeStartY = event.clientY;
       this._resizeWidgetStart = s;
       this._svgContainer!.style.cursor = this._getResizeCursor(handleId, w);
-      // Hide handles while the resize drag is in progress.
-      this._clearHandles();
+      // Hide handle squares during drag; keep the blue outline visible.
+      this._hideHandles();
       return;
     }
 
