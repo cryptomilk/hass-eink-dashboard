@@ -62,6 +62,7 @@ exclude = [
 [[tool.ty.overrides]]
 include = [
     "custom_components/eink_dashboard/__init__.py",
+    "custom_components/eink_dashboard/battery_sensor.py",
     "custom_components/eink_dashboard/config_flow.py",
     "custom_components/eink_dashboard/image.py",
     "custom_components/eink_dashboard/http.py",

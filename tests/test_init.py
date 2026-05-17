@@ -7,6 +7,7 @@ from custom_components.eink_dashboard import (
     async_setup_entry,
     async_unload_entry,
 )
+from custom_components.eink_dashboard.battery import resolve_battery_level
 from custom_components.eink_dashboard.const import DOMAIN
 from custom_components.eink_dashboard.http import (
     EinkLayoutView,
@@ -254,6 +255,100 @@ class TestAsyncUpdateListener:
             model="Kindle Paperwhite 4",
             suggested_area="Kitchen",
         )
+
+
+class TestResolveBatteryLevel:
+    def _make_sensor(
+        self, level: int | None, is_charging: bool = False
+    ) -> MagicMock:
+        sensor = MagicMock()
+        sensor.native_value = level
+        sensor.extra_state_attributes = {"is_charging": is_charging}
+        return sensor
+
+    def test_entity_id_takes_priority_over_sensor(self) -> None:
+        # battery_entity_id wins even when internal sensor has a value.
+        sensor = self._make_sensor(50)
+        states = {"sensor.trmnl_battery": {"state": "85", "attributes": {}}}
+        level, is_charging = resolve_battery_level(
+            "sensor.trmnl_battery", states, sensor
+        )
+        assert level == 85
+        assert is_charging is False
+
+    def test_falls_back_to_sensor_when_no_entity_id(self) -> None:
+        # No entity_id configured → internal sensor is used.
+        sensor = self._make_sensor(42, is_charging=True)
+        level, is_charging = resolve_battery_level(None, {}, sensor)
+        assert level == 42
+        assert is_charging is True
+
+    def test_entity_id_state_clamped_to_0_100(self) -> None:
+        # Values outside 0–100 are clamped.
+        states = {"sensor.trmnl_battery": {"state": "150", "attributes": {}}}
+        level, _ = resolve_battery_level("sensor.trmnl_battery", states, None)
+        assert level == 100
+
+        states = {"sensor.trmnl_battery": {"state": "-5", "attributes": {}}}
+        level, _ = resolve_battery_level("sensor.trmnl_battery", states, None)
+        assert level == 0
+
+    def test_entity_id_missing_from_states_falls_through_to_sensor(
+        self,
+    ) -> None:
+        # Entity ID configured but not present in states → sensor is used.
+        sensor = self._make_sensor(30)
+        level, _ = resolve_battery_level("sensor.trmnl_battery", {}, sensor)
+        assert level == 30
+
+    def test_entity_id_invalid_state_falls_through_to_sensor(self) -> None:
+        # Entity present but unparseable state → sensor is used.
+        sensor = self._make_sensor(25)
+        states = {
+            "sensor.trmnl_battery": {"state": "unavailable", "attributes": {}}
+        }
+        level, _ = resolve_battery_level(
+            "sensor.trmnl_battery", states, sensor
+        )
+        assert level == 25
+
+    def test_no_entity_no_sensor_returns_none(self) -> None:
+        # No data source → (None, False).
+        level, is_charging = resolve_battery_level(None, {}, None)
+        assert level is None
+        assert is_charging is False
+
+    def test_sensor_with_none_value_returns_none(self) -> None:
+        # Internal sensor exists but has no reading yet → (None, False).
+        sensor = self._make_sensor(None)
+        level, is_charging = resolve_battery_level(None, {}, sensor)
+        assert level is None
+        assert is_charging is False
+
+    def test_entity_id_float_state_truncated(self) -> None:
+        # Float state strings are truncated (not rounded) to int.
+        states = {
+            "sensor.trmnl_battery": {
+                "state": "78.9",
+                "attributes": {},
+            }
+        }
+        level, _ = resolve_battery_level("sensor.trmnl_battery", states, None)
+        assert level == 78
+
+    def test_entity_id_is_charging_read_from_attributes(self) -> None:
+        # is_charging is read from the entity's attributes, not hardcoded.
+        states = {
+            "sensor.trmnl_battery": {
+                "state": "50",
+                "attributes": {"is_charging": True},
+            }
+        }
+        level, is_charging = resolve_battery_level(
+            "sensor.trmnl_battery", states, None
+        )
+        assert level == 50
+        assert is_charging is True
 
 
 class TestAsyncUnloadEntry:

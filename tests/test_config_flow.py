@@ -41,7 +41,9 @@ def _make_options_flow(options: dict) -> EinkDashboardOptionsFlow:
         def config_entry(self):  # type: ignore[override]
             return _entry
 
-    return _Flow()
+    flow = _Flow()
+    flow.hass = MagicMock()
+    return flow
 
 
 class TestEinkDashboardConfigFlow:
@@ -644,6 +646,169 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] == "create_entry"
         assert "area_id" not in result["data"]
+
+    async def test_device_settings_battery_entity_id_saved(self) -> None:
+        # battery_entity_id submitted via device_settings is saved for
+        # non-Kindle devices (custom stays custom → immediate entry).
+        flow = _make_options_flow(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "width": 600,
+                "height": 800,
+                "rotation": 0,
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "custom",
+                "orientation": "portrait",
+                "battery_entity_id": "sensor.trmnl_battery",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["battery_entity_id"] == "sensor.trmnl_battery"
+
+    async def test_device_settings_battery_entity_id_removed(self) -> None:
+        # Submitting without battery_entity_id removes a previously-stored
+        # value.
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "battery_entity_id": "sensor.trmnl_battery",
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert "battery_entity_id" not in result["data"]
+
+    async def test_device_settings_battery_entity_id_propagated_trmnl(
+        self,
+    ) -> None:
+        # battery_entity_id survives the TRMNL screen_portion_options step.
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+            }
+        )
+        await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "battery_entity_id": "sensor.trmnl_battery",
+            }
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["battery_entity_id"] == "sensor.trmnl_battery"
+
+    async def test_device_settings_battery_entity_id_removed_trmnl(
+        self,
+    ) -> None:
+        # Clearing battery_entity_id on TRMNL removes it through
+        # screen_portion_options.
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "battery_entity_id": "sensor.trmnl_battery",
+            }
+        )
+        await flow.async_step_device_settings(
+            {"device_model": "trmnl_og", "orientation": "landscape"}
+        )
+        result = await flow.async_step_screen_portion_options(
+            {"screen_portion": "full"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert "battery_entity_id" not in result["data"]
+
+    async def test_device_settings_switch_to_kindle_removes_battery_entity_id(
+        self,
+    ) -> None:
+        # Switching from a TRMNL device to Kindle removes battery_entity_id
+        # because Kindle pushes battery via query params (no picker shown).
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "battery_entity_id": "sensor.trmnl_battery",
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert "battery_entity_id" not in result["data"]
+
+    async def test_device_settings_kindle_has_no_battery_picker(
+        self,
+    ) -> None:
+        # Kindle devices report battery via query params, so the external
+        # battery entity picker must not appear in the form schema.
+        flow = _make_options_flow(
+            {"device_model": "kindle_pw", "orientation": "portrait"}
+        )
+        result = await flow.async_step_device_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "battery_entity_id" not in field_names
+
+    async def test_device_settings_trmnl_has_battery_picker(self) -> None:
+        # TRMNL devices show the external battery entity picker.
+        flow = _make_options_flow(
+            {"device_model": "trmnl_og", "orientation": "landscape"}
+        )
+        result = await flow.async_step_device_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "battery_entity_id" in field_names
+
+    async def test_device_settings_battery_picker_excludes_own_sensor(
+        self,
+    ) -> None:
+        # When the entity registry maps the own sensor, it is excluded
+        # from the EntitySelector to prevent the user picking it.
+        from tests.conftest import entity_reg_mod  # type: ignore[import]
+
+        mock_reg = entity_reg_mod.async_get.return_value
+        mock_reg.async_get_entity_id.return_value = "sensor.eink_battery"
+        try:
+            flow = _make_options_flow(
+                {"device_model": "trmnl_og", "orientation": "landscape"}
+            )
+            result = await flow.async_step_device_settings(None)
+
+            battery_key = next(
+                k
+                for k in result["data_schema"].schema
+                if hasattr(k, "schema") and k.schema == "battery_entity_id"
+            )
+            selector = result["data_schema"].schema[battery_key]
+            assert selector.config.get("exclude_entities") == [
+                "sensor.eink_battery"
+            ]
+        finally:
+            mock_reg.async_get_entity_id.return_value = None
 
     async def test_screen_portion_options_shows_form(self) -> None:
         # TRMNL device_settings routes to screen_portion_options.

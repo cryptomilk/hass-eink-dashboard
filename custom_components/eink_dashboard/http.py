@@ -7,6 +7,7 @@ import logging
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
+from .battery import build_entity_state, resolve_battery_level
 from .const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
@@ -41,12 +42,17 @@ class EinkLayoutView(HomeAssistantView):
         device_model = entry.options.get("device_model", "custom")
         preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
 
-        battery_sensor = entry_data.get("battery_sensor")
-        device_battery_level = None
-        if battery_sensor is not None:
-            raw = battery_sensor.native_value
-            if raw is not None:
-                device_battery_level = int(raw)
+        battery_entity_id = entry.options.get("battery_entity_id")
+        states: dict = {}
+        if battery_entity_id:
+            entity_state = build_entity_state(hass, battery_entity_id)
+            if entity_state is not None:
+                states[battery_entity_id] = entity_state
+        device_battery_level, _ = resolve_battery_level(
+            battery_entity_id,
+            states,
+            entry_data.get("battery_sensor"),
+        )
 
         return web.json_response(
             {

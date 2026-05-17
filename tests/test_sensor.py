@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-from custom_components.eink_dashboard.const import DOMAIN
-from custom_components.eink_dashboard.sensor import (
+from custom_components.eink_dashboard.battery_sensor import (
     EinkDashboardBatterySensor,
-    async_setup_entry,
 )
+from custom_components.eink_dashboard.const import DOMAIN
+from custom_components.eink_dashboard.sensor import async_setup_entry
 
 
 def _make_entry(entry_id: str = "test_entry_id") -> MagicMock:

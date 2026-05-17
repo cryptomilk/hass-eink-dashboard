@@ -264,6 +264,8 @@ def _make_layout_request(
     store: MagicMock | None = None,
     entity: MagicMock | None = None,
     battery_sensor: MagicMock | None = None,
+    battery_entity_id: str | None = None,
+    battery_entity_state: str | None = None,
     json_error: bool = False,
 ) -> web.Request:
     request = MagicMock(spec=web.Request)
@@ -275,9 +277,12 @@ def _make_layout_request(
     if entry_missing:
         hass.data = {}
     else:
+        ha_opts = options or {"width": 758, "height": 1024}
+        if battery_entity_id is not None:
+            ha_opts = {**ha_opts, "battery_entity_id": battery_entity_id}
         ha_entry = MagicMock()
         ha_entry.title = "Test Dashboard"
-        ha_entry.options = options or {"width": 758, "height": 1024}
+        ha_entry.options = ha_opts
         ha_entry.data = data or {}
         entry_data: dict = {
             "widgets": widgets or [],
@@ -290,6 +295,13 @@ def _make_layout_request(
         if battery_sensor is not None:
             entry_data["battery_sensor"] = battery_sensor
         hass.data = {"eink_dashboard": {entry_id: entry_data}}
+        if battery_entity_id and battery_entity_state is not None:
+            ha_state = MagicMock()
+            ha_state.state = battery_entity_state
+            ha_state.attributes = {}
+            hass.states.get.return_value = ha_state
+        else:
+            hass.states.get.return_value = None
     request.app = {"hass": hass}
     return request
 
@@ -429,6 +441,55 @@ class TestEinkLayoutView:
 
         device = json.loads(response.text)["device"]
         assert device["device_battery_level"] is None
+
+    async def test_layout_battery_from_entity_id(self) -> None:
+        # battery_entity_id option overrides internal sensor.
+        view = EinkLayoutView()
+        request = _make_layout_request(
+            battery_entity_id="sensor.trmnl_battery",
+            battery_entity_state="63",
+        )
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["device_battery_level"] == 63
+
+    async def test_layout_battery_entity_id_priority_over_sensor(
+        self,
+    ) -> None:
+        # battery_entity_id wins even when internal sensor also has a value.
+        view = EinkLayoutView()
+        sensor = MagicMock()
+        sensor.native_value = 50
+        request = _make_layout_request(
+            battery_sensor=sensor,
+            battery_entity_id="sensor.trmnl_battery",
+            battery_entity_state="77",
+        )
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["device_battery_level"] == 77
+
+    async def test_layout_battery_entity_id_missing_state_falls_through(
+        self,
+    ) -> None:
+        # Entity ID configured but state not found → falls back to sensor.
+        view = EinkLayoutView()
+        sensor = MagicMock()
+        sensor.native_value = 40
+        request = _make_layout_request(
+            battery_sensor=sensor,
+            battery_entity_id="sensor.trmnl_battery",
+            battery_entity_state=None,
+        )
+
+        response = await view.get(request, "test_entry")
+
+        device = json.loads(response.text)["device"]
+        assert device["device_battery_level"] == 40
 
 
 class TestEinkLayoutViewPost:

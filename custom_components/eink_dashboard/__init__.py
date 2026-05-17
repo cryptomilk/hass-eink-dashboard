@@ -17,6 +17,7 @@ from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
+from .battery import resolve_battery_level
 from .const import (
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
@@ -83,7 +84,7 @@ def _build_display_config(
 
     Returns:
         Dict with ``width``, ``height``, ``grayscale_levels``,
-        ``states``, and (when a battery sensor is registered)
+        ``states``, and (when battery data is available)
         ``device_battery_level`` and ``device_battery_charging``
         keys suitable for ``render_widget_svg()``.
     """
@@ -107,12 +108,14 @@ def _build_display_config(
         ),
         "states": states,
     }
-    battery_sensor = entry_data.get("battery_sensor")
-    if battery_sensor is not None:
-        config["device_battery_level"] = battery_sensor.native_value
-        config["device_battery_charging"] = (
-            battery_sensor.extra_state_attributes.get("is_charging", False)
-        )
+    level, is_charging = resolve_battery_level(
+        entry.options.get("battery_entity_id"),
+        states,
+        entry_data.get("battery_sensor"),
+    )
+    if level is not None:
+        config["device_battery_level"] = level
+        config["device_battery_charging"] = is_charging
     return config
 
 

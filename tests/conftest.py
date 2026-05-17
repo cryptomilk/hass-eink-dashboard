@@ -29,6 +29,7 @@ _HA_MODULES = [
     "homeassistant.helpers.config_validation",
     "homeassistant.helpers.device_registry",
     "homeassistant.helpers.entity_platform",
+    "homeassistant.helpers.entity_registry",
     "homeassistant.helpers.event",
     "homeassistant.helpers.selector",
     "homeassistant.helpers.storage",
@@ -263,6 +264,13 @@ device_reg_mod = sys.modules["homeassistant.helpers.device_registry"]
 device_reg_mod.async_get = MagicMock()  # type: ignore[attr-defined]
 device_reg_mod.DeviceInfo = lambda **kw: kw  # type: ignore[attr-defined]
 
+_default_entity_registry = MagicMock()
+_default_entity_registry.async_get_entity_id.return_value = None
+entity_reg_mod = sys.modules["homeassistant.helpers.entity_registry"]
+entity_reg_mod.async_get = MagicMock(  # type: ignore[attr-defined]
+    return_value=_default_entity_registry
+)
+
 storage_mod = sys.modules["homeassistant.helpers.storage"]
 storage_mod.Store = MagicMock  # type: ignore[attr-defined]
 
@@ -319,6 +327,19 @@ class _TextSelector:
         return value
 
 
+class _EntitySelectorConfig(dict):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(kwargs)
+
+
+class _EntitySelector:
+    def __init__(self, config: object = None) -> None:
+        self.config = config
+
+    def __call__(self, value: object) -> object:
+        return value
+
+
 selector_mod = sys.modules["homeassistant.helpers.selector"]
 selector_mod.SelectSelectorMode = _SelectSelectorMode  # type: ignore[attr-defined]
 selector_mod.SelectSelectorConfig = _SelectSelectorConfig  # type: ignore[attr-defined]
@@ -328,6 +349,8 @@ selector_mod.AreaSelector = _AreaSelector  # type: ignore[attr-defined]
 selector_mod.TextSelectorType = _TextSelectorType  # type: ignore[attr-defined]
 selector_mod.TextSelectorConfig = _TextSelectorConfig  # type: ignore[attr-defined]
 selector_mod.TextSelector = _TextSelector  # type: ignore[attr-defined]
+selector_mod.EntitySelectorConfig = _EntitySelectorConfig  # type: ignore[attr-defined]
+selector_mod.EntitySelector = _EntitySelector  # type: ignore[attr-defined]
 
 template_mod = sys.modules["homeassistant.helpers.template"]
 

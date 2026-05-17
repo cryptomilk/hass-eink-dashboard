@@ -26,6 +26,7 @@ from homeassistant.util import dt as dt_util
 from PIL import Image
 
 from . import _fetch_forecasts
+from .battery import resolve_battery_level
 from .const import (
     DEFAULT_CONTRAST,
     DEFAULT_GRAYSCALE_LEVELS,
@@ -192,18 +193,16 @@ class EinkDashboardImage(ImageEntity):
                     ),
                     "states": states,
                 }
-                battery_sensor = self.hass.data[DOMAIN][
-                    self._entry.entry_id
-                ].get("battery_sensor")
-                if battery_sensor is not None:
-                    config["device_battery_level"] = (
-                        battery_sensor.native_value
-                    )
-                    config["device_battery_charging"] = (
-                        battery_sensor.extra_state_attributes.get(
-                            "is_charging", False
-                        )
-                    )
+                level, is_charging = resolve_battery_level(
+                    self._entry.options.get("battery_entity_id"),
+                    states,
+                    self.hass.data[DOMAIN][self._entry.entry_id].get(
+                        "battery_sensor"
+                    ),
+                )
+                if level is not None:
+                    config["device_battery_level"] = level
+                    config["device_battery_charging"] = is_charging
                 widgets = self._resolve_templates(self._widgets)
                 _LOGGER.debug(
                     "_async_refresh: rendering %d widgets at %dx%d",

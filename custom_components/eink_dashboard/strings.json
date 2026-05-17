@@ -40,7 +40,7 @@
       },
       "trmnl_setup": {
         "title": "TRMNL Setup",
-        "description": "Before entering the webhook URL, create a plugin on trmnl.com:\n\n1. Go to [**Plugins → Webhook Image**]({trmnl_plugin_url})\n2. Give it a name, set **Image Fit Mode** to **Contain**, and click **Save**\n3. Copy the **Webhook URL** shown on the plugin page\n\nSelect **Submit** when ready to enter the URL."
+        "description": "Before entering the webhook URL, create a plugin on trmnl.com:\n\n1. Go to [**Plugins → Webhook Image**]({trmnl_plugin_url})\n2. Give it a name, set **Image Fit Mode** to **Contain**, and click **Save**\n3. Copy the **Webhook URL** shown on the plugin page\n\nSelect **Submit** when ready to enter the URL.\n\n**Battery level widget:** To display your TRMNL's battery level, install the [**TRMNL**]({trmnl_integration_url}) integration separately, then select its battery sensor in Device Settings. See the [TRMNL guide]({trmnl_docs_url}) for details."
       },
       "trmnl_webhook": {
         "title": "TRMNL Webhook",
@@ -85,11 +85,13 @@
         "data": {
           "device_model": "Device model",
           "orientation": "Device orientation",
-          "area": "Area"
+          "area": "Area",
+          "battery_entity_id": "Battery sensor"
         },
         "data_description": {
           "device_model": "Select your e-ink display model",
-          "orientation": "Portrait or landscape layout"
+          "orientation": "Portrait or landscape layout",
+          "battery_entity_id": "Entity providing battery level for the Device Battery widget, see the [setup guide]({trmnl_docs_url}) for details"
         }
       },
       "screen_portion_options": {

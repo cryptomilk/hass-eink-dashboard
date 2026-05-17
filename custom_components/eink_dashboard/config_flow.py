@@ -14,8 +14,11 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     AreaSelector,
+    EntitySelector,
+    EntitySelectorConfig,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -322,7 +325,16 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="trmnl_setup",
             data_schema=vol.Schema({}),
             description_placeholders={
-                "trmnl_plugin_url": "https://trmnl.com/plugin_settings?keyname=webhook_image",
+                "trmnl_plugin_url": (
+                    "https://trmnl.com/plugin_settings?keyname=webhook_image"
+                ),
+                "trmnl_integration_url": (
+                    "https://www.home-assistant.io/integrations/trmnl"
+                ),
+                "trmnl_docs_url": (
+                    "https://github.com/cryptomilk/hass-eink-dashboard"
+                    "/blob/main/docs/trmnl.md"
+                ),
             },
         )
 
@@ -494,38 +506,63 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update device model, orientation, and area assignment."""
         opts = self.config_entry.options
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "device_model",
-                    default=opts.get("device_model", "kindle_pw"),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(DEVICE_PRESETS.keys()),
-                        translation_key="device_model",
-                        mode=SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Required(
-                    "orientation",
-                    default=opts.get("orientation", "portrait"),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=["portrait", "landscape"],
-                        translation_key="orientation",
-                    )
-                ),
+        # Kindle devices push battery via HTTP query params; all other
+        # devices need an explicit HA entity configured.
+        has_push_battery = opts.get("device_model", "").startswith("kindle_")
+        schema_dict: dict[Any, Any] = {
+            vol.Required(
+                "device_model",
+                default=opts.get("device_model", "kindle_pw"),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(DEVICE_PRESETS.keys()),
+                    translation_key="device_model",
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                "orientation",
+                default=opts.get("orientation", "portrait"),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=["portrait", "landscape"],
+                    translation_key="orientation",
+                )
+            ),
+            vol.Optional(
+                "area",
+                description={"suggested_value": opts.get("area_id")},
+            ): AreaSelector(),
+        }
+        if not has_push_battery:
+            ent_reg = er.async_get(self.hass)
+            own_id = ent_reg.async_get_entity_id(
+                "sensor",
+                DOMAIN,
+                f"{self.config_entry.entry_id}_battery",
+            )
+            exclude = [own_id] if own_id else []
+            schema_dict[
                 vol.Optional(
-                    "area",
-                    description={"suggested_value": opts.get("area_id")},
-                ): AreaSelector(),
-            }
-        )
+                    "battery_entity_id",
+                    description={
+                        "suggested_value": opts.get("battery_entity_id")
+                    },
+                )
+            ] = EntitySelector(
+                EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="battery",
+                    exclude_entities=exclude,
+                )
+            )
+        schema = vol.Schema(schema_dict)
         if user_input is not None:
             validated = schema(user_input)
             device_model = validated["device_model"]
             orientation = validated["orientation"]
             area_id = validated.get("area")
+            battery_entity_id = validated.get("battery_entity_id")
 
             self._data = {
                 "device_model": device_model,
@@ -533,6 +570,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             }
             if area_id:
                 self._data["area_id"] = area_id
+            if battery_entity_id:
+                self._data["battery_entity_id"] = battery_entity_id
 
             if device_model == "custom":
                 if opts.get("device_model") == "custom":
@@ -540,6 +579,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     new_opts.update(self._data)
                     if "area_id" not in self._data:
                         new_opts.pop("area_id", None)
+                    if "battery_entity_id" not in self._data:
+                        new_opts.pop("battery_entity_id", None)
                     return self.async_create_entry(data=new_opts)
                 return await self.async_step_custom_resolution()
 
@@ -562,11 +603,19 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             )
             if "area_id" not in self._data:
                 new_opts.pop("area_id", None)
+            if "battery_entity_id" not in self._data:
+                new_opts.pop("battery_entity_id", None)
             return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
             step_id="device_settings",
             data_schema=schema,
+            description_placeholders={
+                "trmnl_docs_url": (
+                    "https://github.com/cryptomilk/hass-eink-dashboard"
+                    "/blob/main/docs/trmnl.md"
+                ),
+            },
         )
 
     async def async_step_screen_portion_options(
@@ -632,6 +681,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             )
             if "area_id" not in self._data:
                 new_opts.pop("area_id", None)
+            if "battery_entity_id" not in self._data:
+                new_opts.pop("battery_entity_id", None)
             return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
@@ -663,6 +714,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             )
             if "area_id" not in self._data:
                 opts.pop("area_id", None)
+            if "battery_entity_id" not in self._data:
+                opts.pop("battery_entity_id", None)
             return self.async_create_entry(data=opts)
         return self.async_show_form(
             step_id="custom_resolution",
