@@ -757,7 +757,9 @@ def _build_weather_context(
     # PIL fonts for text measurement only — never used for
     # drawing.  Affects: temp_h, temp_bbox (getbbox) and
     # text_w_i (getlength) below.
-    font_xl = _load_font(round(64 * scale))
+    # Bold is used for font_xl because the temperature text renders
+    # with font-weight="bold" in the SVG template.
+    font_xl = _load_font(round(64 * scale), bold=True)
     font_sm = _load_font(round(16 * scale))
 
     # Entity attributes.

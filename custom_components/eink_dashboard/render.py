@@ -38,7 +38,7 @@ _FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 
 
 def _load_font(
-    size: int, medium: bool = False
+    size: int, medium: bool = False, bold: bool = False
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load Roboto at the given pixel size, falling back to PIL default.
 
@@ -46,24 +46,31 @@ def _load_font(
         size: Font size in pixels (clamped to a minimum of 1).
         medium: When True, load Roboto Medium (weight 500) instead of
             Roboto Regular (weight 400).
+        bold: When True, load Roboto Bold (weight 700). Takes
+            precedence over ``medium``.
 
     Returns:
         A FreeTypeFont loaded from the TTF file, or the PIL built-in
         default font if the TTF is not found.
     """
-    return _load_font_cached(max(1, size), medium)
+    return _load_font_cached(max(1, size), medium, bold)
 
 
 @functools.cache
 def _load_font_cached(
-    size: int, medium: bool
+    size: int, medium: bool, bold: bool = False
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load a font at the given size (unclamped, cached).
 
     Separated from _load_font so that size=0 and size=1 produce distinct
     cache entries instead of colliding after the clamp.
     """
-    filename = "Roboto-Medium.ttf" if medium else "Roboto-Regular.ttf"
+    if bold:
+        filename = "Roboto-Bold.ttf"
+    elif medium:
+        filename = "Roboto-Medium.ttf"
+    else:
+        filename = "Roboto-Regular.ttf"
     ttf_path = _FONTS_DIR / filename
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
