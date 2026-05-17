@@ -11,6 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
       - run: uv run --group lint ruff check .
 
   format:
@@ -18,6 +20,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
       - run: uv run --group format ruff format --check .
 
   typecheck:
@@ -25,6 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
       - run: uv run --group typecheck ty check
 
   test:
@@ -35,6 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
       - run: uv run --group test pytest
       - uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()

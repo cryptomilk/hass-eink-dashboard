@@ -2,7 +2,7 @@
 name = "hass-eink-dashboard"
 version = "0.2.0"
 description = "Home Assistant custom component that renders e-ink dashboard images from entity state"
-requires-python = ">=3.13"
+requires-python = ">=3.14.2"
 license = "Apache-2.0"
 dependencies = [
     "defusedxml>=0.7.1",
@@ -11,9 +11,9 @@ dependencies = [
 ]
 
 [dependency-groups]
-lint = ["ruff>=0.11"]
-format = ["ruff>=0.11"]
-typecheck = ["defusedxml>=0.7", "Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty"]
+lint = ["ruff>=0.15"]
+format = ["ruff>=0.15"]
+typecheck = ["defusedxml>=0.7", "Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty", "homeassistant>=2026.3.0"]
 test = [
     "defusedxml>=0.7.1",
     "Pillow>=12.2.0",
@@ -58,17 +58,3 @@ exclude = [
     ".tmp/",
     "scripts/",
 ]
-
-[[tool.ty.overrides]]
-include = [
-    "custom_components/eink_dashboard/__init__.py",
-    "custom_components/eink_dashboard/battery_sensor.py",
-    "custom_components/eink_dashboard/config_flow.py",
-    "custom_components/eink_dashboard/image.py",
-    "custom_components/eink_dashboard/http.py",
-    "custom_components/eink_dashboard/media_source.py",
-    "custom_components/eink_dashboard/sensor.py",
-    "custom_components/eink_dashboard/store.py",
-]
-[tool.ty.overrides.rules]
-unresolved-import = "ignore"

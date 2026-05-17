@@ -154,7 +154,14 @@ async def _fetch_forecasts(
                 blocking=True,
                 return_response=True,
             )
-            forecast = result.get(entity_id, {}).get("forecast") or []
+            if result is None:
+                continue
+            entity_data = result.get(entity_id)
+            forecast = (
+                entity_data.get("forecast")
+                if isinstance(entity_data, dict)
+                else None
+            ) or []
             states[entity_id]["attributes"]["forecast"] = forecast
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Could not fetch forecast for %s", entity_id)

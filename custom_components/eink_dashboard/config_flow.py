@@ -22,6 +22,7 @@ from homeassistant.helpers.selector import (
     AreaSelector,
     EntitySelector,
     EntitySelectorConfig,
+    SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -115,7 +116,7 @@ _STEP_WEBHOOK_SCHEMA = vol.Schema(
 def _screen_portion_options(
     width: int,
     height: int,
-) -> list[dict[str, str]]:
+) -> list[SelectOptionDict]:
     """Build screen-portion selector options for given dimensions.
 
     Args:
@@ -126,19 +127,19 @@ def _screen_portion_options(
         Option dicts for full, half, quarter, and custom.
     """
     return [
-        {
-            "value": "full",
-            "label": f"Full screen ({width}x{height})",
-        },
-        {
-            "value": "half",
-            "label": f"Half screen ({width // 2}x{height})",
-        },
-        {
-            "value": "quarter",
-            "label": (f"Quarter screen ({width // 2}x{height // 2})"),
-        },
-        {"value": "custom", "label": "Custom"},
+        SelectOptionDict(
+            value="full",
+            label=f"Full screen ({width}x{height})",
+        ),
+        SelectOptionDict(
+            value="half",
+            label=f"Half screen ({width // 2}x{height})",
+        ),
+        SelectOptionDict(
+            value="quarter",
+            label=f"Quarter screen ({width // 2}x{height // 2})",
+        ),
+        SelectOptionDict(value="custom", label="Custom"),
     ]
 
 
@@ -392,7 +393,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="trmnl_webhook",
             data_schema=_STEP_WEBHOOK_SCHEMA,
-            **({"errors": errors} if errors else {}),
+            errors=errors or None,
         )
 
 
@@ -519,7 +520,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="add_webhook",
             data_schema=_STEP_WEBHOOK_SCHEMA,
-            **({"errors": errors} if errors else {}),
+            errors=errors or None,
         )
 
     async def async_step_remove_webhook(
@@ -534,8 +535,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             ]
             return self.async_create_entry(data=opts)
         webhooks = self.config_entry.options.get("webhook_urls", [])
-        options = [
-            {"value": wh["url"], "label": wh["name"]} for wh in webhooks
+        options: list[SelectOptionDict] = [
+            SelectOptionDict(value=wh["url"], label=wh["name"])
+            for wh in webhooks
         ]
         schema = vol.Schema(
             {
