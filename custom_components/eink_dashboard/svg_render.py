@@ -652,6 +652,51 @@ _DETAIL_ICON_MAP: dict[str, str] = {
 }
 
 
+def _cap_weather_font_xl(
+    font_xl_size: int,
+    font_xl: Any,
+    font_sm: Any,
+    font_xs: Any,
+    temp_text: str,
+    avail: int,
+    today_hi: str,
+    today_lo: str,
+    today_precip: str,
+) -> int:
+    """Return font_xl capped so the temperature text fits in avail px.
+
+    Measures the widest hi/lo/precipitation string to determine how far
+    that column protrudes leftward from its right anchor, then reduces
+    font_xl proportionally if the temperature text would overlap it.
+
+    Args:
+        font_xl_size: Nominal xl font size in pixels.
+        font_xl: PIL font loaded at font_xl_size (for text measurement).
+        font_sm: PIL font for hi/lo text measurement.
+        font_xs: PIL font for precipitation text measurement.
+        temp_text: Formatted temperature string (e.g. "13.8°C").
+        avail: Pixel budget between temp_x and the hi/lo column.
+        today_hi: High-temperature string (may be empty).
+        today_lo: Low-temperature string (may be empty).
+        today_precip: Precipitation string (may be empty).
+
+    Returns:
+        Capped font size; equals font_xl_size when text already fits.
+    """
+    hilo_w = 0
+    if today_hi:
+        hilo_w = max(hilo_w, round(font_sm.getlength(today_hi)))
+    if today_lo:
+        hilo_w = max(hilo_w, round(font_sm.getlength(today_lo)))
+    if today_precip:
+        hilo_w = max(hilo_w, round(font_xs.getlength(today_precip)))
+    budget = avail - hilo_w
+    temp_w = round(font_xl.getlength(temp_text))
+    if budget > 0 and temp_w > budget:
+        return round(font_xl_size * budget / temp_w)
+    return font_xl_size
+
+
 def _build_weather_context(
     widget: Widget,
     config: DisplayConfig,
@@ -817,6 +862,19 @@ def _build_weather_context(
         if p_val is not None:
             today_precip = f"{p_val}{precip_unit_fc}"
 
+    # Cap font_xl so temp text doesn't overlap the hi/lo column.
+    font_xl_size = _cap_weather_font_xl(
+        round(64 * scale),
+        font_xl,
+        font_sm,
+        _load_font(round(14 * scale)),
+        temp_text,
+        hilo_right - temp_x - pad,
+        today_hi,
+        today_lo,
+        today_precip,
+    )
+
     # row1_bottom mirrors PIL's max() between icon bottom and
     # the bottom of the temperature glyph.
     temp_y_pil = icon_cy - temp_bbox[1] - temp_h // 2
@@ -979,7 +1037,7 @@ def _build_weather_context(
         "temp_text": temp_text,
         "temp_x": temp_x,
         "temp_y": temp_y,
-        "font_xl": round(64 * scale),
+        "font_xl": font_xl_size,
         "font_sm": round(16 * scale),
         # font_xs is template-only; no PIL measurement needed.
         "font_xs": round(14 * scale),
