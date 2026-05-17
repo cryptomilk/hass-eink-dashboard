@@ -690,22 +690,20 @@ class TestEinkDashboardOptionsFlow:
     async def test_device_settings_battery_entity_id_propagated_trmnl(
         self,
     ) -> None:
-        # battery_entity_id survives the TRMNL screen_portion_options step.
+        # battery_entity_id survives inline screen_portion_section save.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
                 "orientation": "landscape",
             }
         )
-        await flow.async_step_device_settings(
+        result = await flow.async_step_device_settings(
             {
                 "device_model": "trmnl_og",
                 "orientation": "landscape",
                 "battery_entity_id": "sensor.trmnl_battery",
+                "screen_portion_section": {"screen_portion": "full"},
             }
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "full"}
         )
 
         assert result["type"] == "create_entry"
@@ -715,7 +713,7 @@ class TestEinkDashboardOptionsFlow:
         self,
     ) -> None:
         # Clearing battery_entity_id on TRMNL removes it through
-        # screen_portion_options.
+        # inline section save.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
@@ -723,11 +721,12 @@ class TestEinkDashboardOptionsFlow:
                 "battery_entity_id": "sensor.trmnl_battery",
             }
         )
-        await flow.async_step_device_settings(
-            {"device_model": "trmnl_og", "orientation": "landscape"}
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "full"}
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "full"},
+            }
         )
 
         assert result["type"] == "create_entry"
@@ -745,8 +744,14 @@ class TestEinkDashboardOptionsFlow:
                 "battery_entity_id": "sensor.trmnl_battery",
             }
         )
+        # The form includes screen_portion_section because opts was TRMNL;
+        # HA always submits all fields even from collapsed sections.
         result = await flow.async_step_device_settings(
-            {"device_model": "kindle_pw", "orientation": "portrait"}
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "screen_portion_section": {"screen_portion": "full"},
+            }
         )
 
         assert result["type"] == "create_entry"
@@ -810,24 +815,26 @@ class TestEinkDashboardOptionsFlow:
         finally:
             mock_reg.async_get_entity_id.return_value = None
 
-    async def test_screen_portion_options_shows_form(self) -> None:
-        # TRMNL device_settings routes to screen_portion_options.
+    async def test_screen_portion_options_shows_form_on_fallback(
+        self,
+    ) -> None:
+        # Switching from Kindle to TRMNL has no section in the form, so
+        # device_settings falls back to the screen_portion_options step.
         flow = _make_options_flow(
             {
-                "device_model": "trmnl_og",
-                "orientation": "landscape",
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
             }
         )
-        await flow.async_step_device_settings(
+        result = await flow.async_step_device_settings(
             {"device_model": "trmnl_og", "orientation": "landscape"}
         )
-        result = await flow.async_step_screen_portion_options(None)
 
         assert result["type"] == "form"
         assert result["step_id"] == "screen_portion_options"
 
-    async def test_screen_portion_options_full_saves(self) -> None:
-        # "full" in options flow saves the preset's native dimensions.
+    async def test_inline_section_full_saves(self) -> None:
+        # "full" saves via inline section when model/orientation unchanged.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
@@ -835,11 +842,12 @@ class TestEinkDashboardOptionsFlow:
                 "screen_portion": "half",
             }
         )
-        await flow.async_step_device_settings(
-            {"device_model": "trmnl_og", "orientation": "landscape"}
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "full"}
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "full"},
+            }
         )
 
         assert result["type"] == "create_entry"
@@ -847,67 +855,144 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 480
         assert result["data"]["screen_portion"] == "full"
 
-    async def test_screen_portion_options_half_halves_width(
+    async def test_inline_section_half_halves_width(
         self,
     ) -> None:
-        # "half" in options flow halves the width.
+        # "half" saves via inline section, halving the width.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
                 "orientation": "landscape",
             }
         )
-        await flow.async_step_device_settings(
-            {"device_model": "trmnl_og", "orientation": "landscape"}
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "half"}
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "half"},
+            }
         )
 
         assert result["type"] == "create_entry"
         assert result["data"]["width"] == 400
         assert result["data"]["height"] == 480
 
-    async def test_screen_portion_options_quarter_halves_both(
+    async def test_inline_section_quarter_halves_both(
         self,
     ) -> None:
-        # "quarter" in options flow halves both dimensions.
+        # "quarter" saves via inline section, halving both dimensions.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
                 "orientation": "landscape",
             }
         )
-        await flow.async_step_device_settings(
-            {"device_model": "trmnl_og", "orientation": "landscape"}
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "quarter"}
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "quarter"},
+            }
         )
 
         assert result["type"] == "create_entry"
         assert result["data"]["width"] == 400
         assert result["data"]["height"] == 240
 
-    async def test_screen_portion_options_custom_routes_to_resolution(
+    async def test_inline_section_custom_routes_to_resolution(
         self,
     ) -> None:
-        # "custom" in options flow routes to custom_resolution.
+        # "custom" via inline section routes to custom_resolution step.
         flow = _make_options_flow(
             {
                 "device_model": "trmnl_og",
                 "orientation": "landscape",
             }
         )
-        await flow.async_step_device_settings(
-            {"device_model": "trmnl_og", "orientation": "landscape"}
-        )
-        result = await flow.async_step_screen_portion_options(
-            {"screen_portion": "custom"}
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "custom"},
+            }
         )
 
         assert result["type"] == "form"
         assert result["step_id"] == "custom_resolution"
+
+    async def test_section_in_schema_for_trmnl_device(self) -> None:
+        # Form for an existing TRMNL device includes screen_portion_section.
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+            }
+        )
+        result = await flow.async_step_device_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "screen_portion_section" in field_names
+
+    async def test_section_absent_for_kindle_device(self) -> None:
+        # Form for a Kindle device omits the screen_portion_section.
+        flow = _make_options_flow(
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+            }
+        )
+        result = await flow.async_step_device_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "screen_portion_section" not in field_names
+
+    async def test_trmnl_model_change_falls_back(self) -> None:
+        # Changing TRMNL model falls back to separate step so labels
+        # for the new model's dimensions are shown correctly.
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_x",
+                "orientation": "landscape",
+                "screen_portion_section": {"screen_portion": "full"},
+            }
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "screen_portion_options"
+
+    async def test_trmnl_orientation_change_falls_back(self) -> None:
+        # Changing orientation falls back to the separate step so the
+        # dimension labels shown reflect the new orientation.
+        flow = _make_options_flow(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "landscape",
+            }
+        )
+        result = await flow.async_step_device_settings(
+            {
+                "device_model": "trmnl_og",
+                "orientation": "portrait",
+                "screen_portion_section": {"screen_portion": "full"},
+            }
+        )
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "screen_portion_options"
 
     async def test_device_settings_custom_routes_to_resolution(
         self,

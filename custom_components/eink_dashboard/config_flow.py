@@ -14,6 +14,9 @@ from homeassistant.config_entries import (
     OptionsFlow,
 )
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import (
+    section as flow_section,
+)
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import (
     AreaSelector,
@@ -109,6 +112,36 @@ _STEP_WEBHOOK_SCHEMA = vol.Schema(
 )
 
 
+def _screen_portion_options(
+    width: int,
+    height: int,
+) -> list[dict[str, str]]:
+    """Build screen-portion selector options for given dimensions.
+
+    Args:
+        width: Display width in pixels.
+        height: Display height in pixels.
+
+    Returns:
+        Option dicts for full, half, quarter, and custom.
+    """
+    return [
+        {
+            "value": "full",
+            "label": f"Full screen ({width}x{height})",
+        },
+        {
+            "value": "half",
+            "label": f"Half screen ({width // 2}x{height})",
+        },
+        {
+            "value": "quarter",
+            "label": (f"Quarter screen ({width // 2}x{height // 2})"),
+        },
+        {"value": "custom", "label": "Custom"},
+    ]
+
+
 class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     """Multi-step config flow for creating a new dashboard entry."""
 
@@ -195,19 +228,9 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             device_model, orientation
         )
 
-        orientation_indicator = (
-            "▭  Landscape" if width > height else "▮  Portrait"
-        )
+        orientation_indicator = "Landscape" if width > height else "Portrait"
 
-        options = [
-            {"value": "full", "label": f"Full screen ({width}x{height})"},
-            {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
-            {
-                "value": "quarter",
-                "label": f"Quarter screen ({width // 2}x{height // 2})",
-            },
-            {"value": "custom", "label": "Custom"},
-        ]
+        options = _screen_portion_options(width, height)
         schema = vol.Schema(
             {
                 vol.Required("screen_portion", default="full"): SelectSelector(
@@ -380,6 +403,33 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         """Initialise options flow state."""
         super().__init__()
         self._data: dict[str, Any] = {}
+
+    def _save_display_entry(
+        self,
+        extra: dict[str, Any],
+    ) -> ConfigFlowResult:
+        """Merge display keys into stored opts and create entry.
+
+        Combines the stored options with ``self._data`` and any
+        display-specific overrides in *extra*, then strips
+        optional fields that were cleared.
+
+        Args:
+            extra: Display-specific keys (width, height,
+                rotation, optimize, grayscale_levels, and
+                optionally screen_portion) merged after
+                ``self._data``.
+
+        Returns:
+            A create_entry ConfigFlowResult.
+        """
+        opts = deepcopy(dict(self.config_entry.options))
+        opts.update({**self._data, **extra})
+        if "area_id" not in self._data:
+            opts.pop("area_id", None)
+        if "battery_entity_id" not in self._data:
+            opts.pop("battery_entity_id", None)
+        return self.async_create_entry(data=opts)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -556,6 +606,34 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     exclude_entities=exclude,
                 )
             )
+        # When the stored device is already TRMNL, include screen_portion
+        # as a collapsed section so the user can update it in one step.
+        # Labels are computed from the current stored model/orientation;
+        # when the user changes either, we fall back to the separate step
+        # so they see correct dimension labels for the new config.
+        is_trmnl = opts.get("device_model", "").startswith("trmnl_")
+        if is_trmnl:
+            sp_w, sp_h, _, _ = resolve_display(
+                opts["device_model"],
+                opts.get("orientation", "landscape"),
+            )
+            stored_portion = opts.get("screen_portion", "full")
+            schema_dict[vol.Required("screen_portion_section")] = flow_section(
+                vol.Schema(
+                    {
+                        vol.Required(
+                            "screen_portion",
+                            default=stored_portion,
+                        ): SelectSelector(
+                            SelectSelectorConfig(
+                                options=_screen_portion_options(sp_w, sp_h),
+                                mode=SelectSelectorMode.LIST,
+                            )
+                        ),
+                    }
+                ),
+                {"collapsed": True},
+            )
         schema = vol.Schema(schema_dict)
         if user_input is not None:
             validated = schema(user_input)
@@ -575,25 +653,38 @@ class EinkDashboardOptionsFlow(OptionsFlow):
 
             if device_model == "custom":
                 if opts.get("device_model") == "custom":
-                    new_opts = deepcopy(dict(opts))
-                    new_opts.update(self._data)
-                    if "area_id" not in self._data:
-                        new_opts.pop("area_id", None)
-                    if "battery_entity_id" not in self._data:
-                        new_opts.pop("battery_entity_id", None)
-                    return self.async_create_entry(data=new_opts)
+                    return self._save_display_entry({})
                 return await self.async_step_custom_resolution()
 
             if device_model.startswith("trmnl_"):
+                section_data = validated.get("screen_portion_section")
+                model_same = device_model == opts.get("device_model")
+                orient_same = orientation == opts.get("orientation")
+                if section_data and model_same and orient_same:
+                    portion = section_data["screen_portion"]
+                    if portion == "custom":
+                        return await self.async_step_custom_resolution()
+                    w, h, rot, preset = resolve_display(
+                        device_model, orientation
+                    )
+                    fw, fh = apply_screen_portion(w, h, portion)
+                    return self._save_display_entry(
+                        {
+                            "width": fw,
+                            "height": fh,
+                            "rotation": rot,
+                            "optimize": preset.optimize,
+                            "grayscale_levels": preset.grayscale_levels,
+                            "screen_portion": portion,
+                        }
+                    )
                 return await self.async_step_screen_portion_options()
 
             width, height, rotation, preset = resolve_display(
                 device_model, orientation
             )
-            new_opts = deepcopy(dict(opts))
-            new_opts.update(
+            return self._save_display_entry(
                 {
-                    **self._data,
                     "width": width,
                     "height": height,
                     "rotation": rotation,
@@ -601,11 +692,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "grayscale_levels": preset.grayscale_levels,
                 }
             )
-            if "area_id" not in self._data:
-                new_opts.pop("area_id", None)
-            if "battery_entity_id" not in self._data:
-                new_opts.pop("battery_entity_id", None)
-            return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
             step_id="device_settings",
@@ -632,19 +718,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         )
         opts = self.config_entry.options
 
-        orientation_indicator = (
-            "▭  Landscape" if width > height else "▮  Portrait"
-        )
+        orientation_indicator = "Landscape" if width > height else "Portrait"
 
-        options = [
-            {"value": "full", "label": f"Full screen ({width}x{height})"},
-            {"value": "half", "label": f"Half screen ({width // 2}x{height})"},
-            {
-                "value": "quarter",
-                "label": f"Quarter screen ({width // 2}x{height // 2})",
-            },
-            {"value": "custom", "label": "Custom"},
-        ]
+        options = _screen_portion_options(width, height)
         stored_portion = opts.get("screen_portion", "full")
         schema = vol.Schema(
             {
@@ -667,10 +743,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             final_width, final_height = apply_screen_portion(
                 width, height, portion
             )
-            new_opts = deepcopy(dict(opts))
-            new_opts.update(
+            return self._save_display_entry(
                 {
-                    **self._data,
                     "width": final_width,
                     "height": final_height,
                     "rotation": rotation,
@@ -679,11 +753,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "screen_portion": portion,
                 }
             )
-            if "area_id" not in self._data:
-                new_opts.pop("area_id", None)
-            if "battery_entity_id" not in self._data:
-                new_opts.pop("battery_entity_id", None)
-            return self.async_create_entry(data=new_opts)
 
         return self.async_show_form(
             step_id="screen_portion_options",
@@ -701,10 +770,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             return await self.async_step_device_settings()
         if user_input is not None:
             validated = _STEP_CUSTOM_RESOLUTION_SCHEMA(user_input)
-            opts = deepcopy(dict(self.config_entry.options))
-            opts.update(
+            return self._save_display_entry(
                 {
-                    **self._data,
                     "width": validated["width"],
                     "height": validated["height"],
                     "rotation": 0,
@@ -712,11 +779,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                 }
             )
-            if "area_id" not in self._data:
-                opts.pop("area_id", None)
-            if "battery_entity_id" not in self._data:
-                opts.pop("battery_entity_id", None)
-            return self.async_create_entry(data=opts)
         return self.async_show_form(
             step_id="custom_resolution",
             data_schema=_STEP_CUSTOM_RESOLUTION_SCHEMA,

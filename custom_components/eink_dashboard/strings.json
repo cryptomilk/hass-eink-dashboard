@@ -16,7 +16,7 @@
         }
       },
       "screen_portion": {
-        "title": "Screen portion — {orientation_info}",
+        "title": "Screen portion ({orientation_info})",
         "data": {
           "screen_portion": "Screen portion"
         },
@@ -92,10 +92,21 @@
           "device_model": "Select your e-ink display model",
           "orientation": "Portrait or landscape layout",
           "battery_entity_id": "Entity providing battery level for the Device Battery widget, see the [setup guide]({trmnl_docs_url}) for details"
+        },
+        "sections": {
+          "screen_portion_section": {
+            "name": "Screen portion",
+            "data": {
+              "screen_portion": "Screen portion"
+            },
+            "data_description": {
+              "screen_portion": "Select how much of the screen this dashboard occupies"
+            }
+          }
         }
       },
       "screen_portion_options": {
-        "title": "Screen portion — {orientation_info}",
+        "title": "Screen portion ({orientation_info})",
         "data": {
           "screen_portion": "Screen portion"
         },

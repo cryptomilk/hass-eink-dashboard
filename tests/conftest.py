@@ -4,6 +4,8 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import voluptuous as vol
+
 
 def _stub_module(name: str) -> ModuleType:
     mod = ModuleType(name)
@@ -22,6 +24,7 @@ _HA_MODULES = [
     "homeassistant.components.sensor",
     "homeassistant.components.websocket_api",
     "homeassistant.config_entries",
+    "homeassistant.data_entry_flow",
     "homeassistant.core",
     "homeassistant.helpers",
     "homeassistant.helpers.aiohttp_client",
@@ -162,6 +165,36 @@ media_source_mod.MediaSource = _MediaSource  # type: ignore[attr-defined]
 media_source_mod.MediaSourceItem = _MediaSourceItem  # type: ignore[attr-defined]
 media_source_mod.PlayMedia = _PlayMedia  # type: ignore[attr-defined]
 media_source_mod.Unresolvable = _Unresolvable  # type: ignore[attr-defined]
+
+data_entry_flow_mod = sys.modules["homeassistant.data_entry_flow"]
+
+
+class _FlowSection:
+    """Stub for data_entry_flow.section.
+
+    Delegates validation to the inner schema so voluptuous
+    can process section fields during schema(user_input) calls.
+    Options are validated the same way real HA does.
+    """
+
+    CONFIG_SCHEMA = vol.Schema(
+        {vol.Optional("collapsed", default=False): bool}
+    )
+
+    def __init__(
+        self,
+        schema: object,
+        options: dict | None = None,
+    ) -> None:
+        self.schema = schema
+        self.options = self.CONFIG_SCHEMA(options or {})
+
+    def __call__(self, value: object) -> object:
+        """Validate section value against inner schema."""
+        return self.schema(value)
+
+
+data_entry_flow_mod.section = _FlowSection  # type: ignore[attr-defined]
 
 config_entries = sys.modules["homeassistant.config_entries"]
 config_entries.ConfigEntry = MagicMock  # type: ignore[attr-defined]
