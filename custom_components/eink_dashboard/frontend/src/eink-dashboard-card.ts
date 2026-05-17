@@ -4,7 +4,6 @@ import type {
   HomeAssistant,
   Widget,
   SeparatorWidget,
-  DeviceBatteryWidget,
   LayoutResponse,
   EinkEditorElement,
   ConfigEntry,
@@ -18,10 +17,8 @@ const CARD_TAG = "eink-dashboard-card";
 const GRID = 8;
 const PADDING = 24;
 const HANDLE_SIZE = 12;
-const MIN_RESIZE_FONT_SIZE = 8;
-const MAX_RESIZE_FONT_SIZE = 72;
-const FONT_SIZE_WEATHER = 32;
-const FONT_SIZE_DEVICE_BATTERY = 24;
+// Pre-snap floor; effective minimum is snap(20) = 24.
+const MIN_RESIZE_DIM = 20;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,42 +103,106 @@ export function shouldShowCopyUrl(model: string, hasWebhooks: boolean): boolean 
 }
 
 /**
- * Scale font_size proportionally by the diagonal distance
- * change during a corner resize drag.
+ * Compute the new position/size after a left or right edge drag.
  *
- * The signed delta for each axis is derived from the handle id
- * so that dragging any corner outward always increases the font.
+ * The left ("w") handle moves the left edge and adjusts width
+ * inversely; the right ("e") handle moves only the right edge.
+ * Both clamp so the widget stays within [0, displayWidth] and
+ * never shrinks below minDim.
  *
- * @param handle - Corner handle id ("nw"|"ne"|"sw"|"se").
+ * @param handle - "w" (left edge) or "e" (right edge).
+ * @param dx - Horizontal drag delta in display pixels.
+ * @param startX - Widget x at drag start.
+ * @param startW - Widget width at drag start.
+ * @param displayWidth - Dashboard display width (right boundary).
+ * @param minDim - Minimum allowed dimension in pixels.
+ * @returns New { x?, w } — x is absent for the "e" handle.
+ */
+export function applyEdgeResize(
+  handle: "w" | "e",
+  dx: number,
+  startX: number,
+  startW: number,
+  displayWidth: number,
+  minDim: number,
+): { x?: number; w: number } {
+  const startRight = startX + startW;
+  if (handle === "e") {
+    const newRight = Math.max(
+      startX + minDim, Math.min(displayWidth, startRight + dx),
+    );
+    return { w: snap(newRight - startX) };
+  }
+  const newX = snap(Math.max(0, Math.min(startRight - minDim, startX + dx)));
+  return { x: newX, w: startRight - newX };
+}
+
+/**
+ * Compute the new position/size after a corner handle drag.
+ *
+ * Each corner moves its two adjacent edges. Opposite edges stay
+ * fixed via startRight/startBottom. Moving edges are grid-snapped
+ * first; the derived dimension is computed by subtraction (no
+ * second snap) so the fixed edge never jitters. Results are
+ * clamped to minDim minimum, x/y ≥ 0, and display bounds.
+ *
+ * @param handle - One of "nw", "ne", "sw", "se".
  * @param dx - Horizontal drag delta in display pixels.
  * @param dy - Vertical drag delta in display pixels.
- * @param startFs - font_size at drag start.
- * @param renderedW - Widget width at drag start.
- * @param renderedH - Widget height at drag start.
- * @param minFs - Minimum allowed font_size.
- * @param maxFs - Maximum allowed font_size.
- * @returns New font_size clamped to [minFs, maxFs].
+ * @param startX - Widget x at drag start.
+ * @param startY - Widget y at drag start.
+ * @param startW - Widget width at drag start.
+ * @param startH - Widget height at drag start.
+ * @param minDim - Minimum allowed dimension in pixels.
+ * @param displayWidth - Dashboard display width (right boundary).
+ * @param displayHeight - Dashboard display height (bottom boundary).
+ * @returns New { x?, y?, w, h } — x/y absent when that edge is fixed.
  */
-export function diagScaleFontSize(
-  handle: string,
+export function applyCornerResize(
+  handle: "nw" | "ne" | "sw" | "se",
   dx: number,
   dy: number,
-  startFs: number,
-  renderedW: number,
-  renderedH: number,
-  minFs: number,
-  maxFs: number,
-): number {
-  // Guard against zero-size widget (avoids division by zero).
-  const startDiag = Math.sqrt(renderedW ** 2 + renderedH ** 2);
-  if (startDiag === 0) return startFs;
-  const sdx = (handle === "ne" || handle === "se") ? dx : -dx;
-  const sdy = (handle === "nw" || handle === "ne") ? -dy : dy;
-  const newDiag = Math.sqrt(
-    (renderedW + sdx) ** 2 + (renderedH + sdy) ** 2,
-  );
-  return Math.max(minFs, Math.min(maxFs,
-    Math.round(startFs * newDiag / startDiag)));
+  startX: number,
+  startY: number,
+  startW: number,
+  startH: number,
+  minDim: number,
+  displayWidth: number,
+  displayHeight: number,
+): { x?: number; y?: number; w: number; h: number } {
+  const startRight = startX + startW;
+  const startBottom = startY + startH;
+  if (handle === "se") {
+    return {
+      w: snap(Math.max(minDim, Math.min(displayWidth - startX, startW + dx))),
+      h: snap(Math.max(minDim, Math.min(displayHeight - startY, startH + dy))),
+    };
+  }
+  if (handle === "ne") {
+    const newY = snap(Math.max(0, Math.min(startBottom - minDim, startY + dy)));
+    return {
+      y: newY,
+      w: snap(Math.max(minDim, Math.min(displayWidth - startX, startW + dx))),
+      h: startBottom - newY,
+    };
+  }
+  if (handle === "sw") {
+    const newX = snap(Math.max(0, Math.min(startRight - minDim, startX + dx)));
+    return {
+      x: newX,
+      w: startRight - newX,
+      h: snap(Math.max(minDim, Math.min(displayHeight - startY, startH + dy))),
+    };
+  }
+  // nw — both edges move.
+  const newX = snap(Math.max(0, Math.min(startRight - minDim, startX + dx)));
+  const newY = snap(Math.max(0, Math.min(startBottom - minDim, startY + dy)));
+  return {
+    x: newX,
+    y: newY,
+    w: startRight - newX,
+    h: startBottom - newY,
+  };
 }
 
 // ── Card class ────────────────────────────────────────────────────────────────
@@ -613,7 +674,7 @@ class EinkDashboardCard extends HTMLElement {
    * A ResizeObserver keeps the CSS scale factor in sync
    * with the container's rendered width.
    *
-   * Creates 4 reusable resize handle divs and attaches
+   * Creates 6 reusable resize handle divs and attaches
    * pointer event listeners to the svg-canvas.
    */
   private _buildSvgContainer(): void {
@@ -628,9 +689,9 @@ class EinkDashboardCard extends HTMLElement {
     svgCanvas.style.height = `${height}px`;
     scaleWrapper.appendChild(svgCanvas);
 
-    // Create a fixed pool of 4 handle divs reused across hover states.
+    // Create a fixed pool of 6 handle divs reused across hover states.
     this._handleEls = [];
-    const handleIds = ["nw", "ne", "sw", "se"];
+    const handleIds = ["nw", "ne", "sw", "se", "w", "e"];
     for (const id of handleIds) {
       const h = document.createElement("div");
       h.className = "resize-handle";
@@ -909,10 +970,11 @@ class EinkDashboardCard extends HTMLElement {
   /**
    * Compute resize handle positions for the widget at index.
    *
-   * Returns corner handles (nw/ne/sw/se) for most widget
-   * types, start/end handles for separators, and SE-only for
-   * device_battery in icon mode. Positions are in display
-   * space, derived from the wrapper element's offset geometry.
+   * Returns start/end handles for separators. All other widget
+   * types get 4 corner handles (nw/ne/sw/se) for width+height
+   * resize, plus left/right edge handles (w/e) for width-only
+   * resize. Positions are in display space, derived from the
+   * wrapper element's offset geometry.
    *
    * @param index - Widget index in the layout widget list.
    * @returns Array of Handle objects (id + position).
@@ -941,18 +1003,14 @@ class EinkDashboardCard extends HTMLElement {
         { id: "end",   cx: x + w, cy },
       ];
     }
-    if (widget.type === "device_battery") {
-      const dw = widget as DeviceBatteryWidget;
-      if (dw.layout !== "chip") {
-        // Icon mode: diagonal resize via SE handle only.
-        return [{ id: "se", cx: x + w, cy: y + h }];
-      }
-    }
+    // All other widgets: 4 corners + left/right edge midpoints.
     return [
-      { id: "nw", cx: x,     cy: y },
-      { id: "ne", cx: x + w, cy: y },
-      { id: "sw", cx: x,     cy: y + h },
-      { id: "se", cx: x + w, cy: y + h },
+      { id: "nw", cx: x,         cy: y },
+      { id: "ne", cx: x + w,     cy: y },
+      { id: "sw", cx: x,         cy: y + h },
+      { id: "se", cx: x + w,     cy: y + h },
+      { id: "w",  cx: x,         cy: y + h / 2 },
+      { id: "e",  cx: x + w,     cy: y + h / 2 },
     ];
   }
 
@@ -1011,7 +1069,7 @@ class EinkDashboardCard extends HTMLElement {
   /**
    * Return the CSS cursor name appropriate for a resize handle.
    *
-   * @param handleId - Handle identifier (e.g. "nw", "se", "start").
+   * @param handleId - Handle identifier (e.g. "nw", "se", "w").
    * @param widget - Widget being resized.
    * @returns CSS cursor string.
    */
@@ -1020,18 +1078,10 @@ class EinkDashboardCard extends HTMLElement {
       const dir = (widget as SeparatorWidget).direction ?? "horizontal";
       return dir === "vertical" ? "ns-resize" : "ew-resize";
     }
-    if (
-      widget.type === "device_battery"
-      || widget.type === "weather"
-      || widget.type === "sensor_rows"
-    ) {
-      return handleId === "nw" || handleId === "se"
-        ? "nwse-resize"
-        : "nesw-resize";
-    }
-    // text, status_icons, waste_schedule: horizontal resize only.
-    if (handleId === "nw" || handleId === "sw") return "w-resize";
-    return "e-resize";
+    if (handleId === "w" || handleId === "e") return "ew-resize";
+    return handleId === "nw" || handleId === "se"
+      ? "nwse-resize"
+      : "nesw-resize";
   }
 
   // ── Pointer event handlers ────────────────────────────────────────────────
@@ -1116,7 +1166,7 @@ class EinkDashboardCard extends HTMLElement {
       const dy = Math.round((event.clientY - this._resizeStartY) / scale);
       const w = this._layout.widgets[this._resizeIndex] as MutableWidget;
       const s = this._resizeWidgetStart!;
-      const { width: dw } = this._layout.display;
+      const { width: dw, height: dh } = this._layout.display;
       const handle = this._resizeHandle!;
       const wrapper = this._wrapperAt(this._resizeIndex);
 
@@ -1150,115 +1200,51 @@ class EinkDashboardCard extends HTMLElement {
             wrapper.style.width = `${sw.length}px`;
           }
         }
-      } else if (
-        w.type === "device_battery"
-        && (w as DeviceBatteryWidget).layout === "chip"
-      ) {
-        const startW = s.w ?? 200;
-        const startH = s.h ?? 40;
-        if (handle === "se") {
-          w.w = snap(Math.max(50, startW + dx));
-          w.h = snap(Math.max(28, startH + dy));
-        } else if (handle === "ne") {
-          w.w = snap(Math.max(50, startW + dx));
-          const newY = snap(Math.max(0, (s.y) + dy));
-          w.y = newY;
-          w.h = snap(Math.max(28, startH + (s.y - newY)));
-        } else if (handle === "sw") {
-          const newX = snap(Math.max(0, s.x + dx));
-          w.x = newX;
-          w.w = snap(Math.max(50, startW + (s.x - newX)));
-          w.h = snap(Math.max(28, startH + dy));
-        } else if (handle === "nw") {
-          const newX = snap(Math.max(0, s.x + dx));
-          const newY = snap(Math.max(0, s.y + dy));
-          w.x = newX;
-          w.y = newY;
-          w.w = snap(Math.max(50, startW + (s.x - newX)));
-          w.h = snap(Math.max(28, startH + (s.y - newY)));
-        }
-        if (wrapper) {
-          wrapper.style.left = `${w.x ?? s.x}px`;
-          wrapper.style.top = `${w.y ?? s.y}px`;
-          if (w.w != null) wrapper.style.width = `${w.w}px`;
-          if (w.h != null) wrapper.style.height = `${w.h}px`;
-        }
-      } else if (
-        w.type === "device_battery"
-      ) {
-        // Icon mode: diagonal font_size scaling via SE handle.
-        const renderedW = wrapper?.offsetWidth ?? 100;
-        const renderedH = wrapper?.offsetHeight ?? 100;
-        w.font_size = diagScaleFontSize(
-          handle, dx, dy,
-          s.font_size ?? FONT_SIZE_DEVICE_BATTERY,
-          renderedW, renderedH,
-          MIN_RESIZE_FONT_SIZE, MAX_RESIZE_FONT_SIZE,
+      } else if (handle === "w" || handle === "e") {
+        // Edge handles: width-only resize.
+        const startW = s.w ?? wrapper?.offsetWidth ?? MIN_RESIZE_DIM;
+        const r = applyEdgeResize(
+          handle as "w" | "e", dx, s.x, startW, dw, MIN_RESIZE_DIM,
         );
-        // Approximate feedback: scale the wrapper proportionally.
-        if (wrapper && s.font_size) {
-          const ratio = w.font_size / s.font_size;
-          wrapper.style.transform = `scale(${ratio})`;
-          wrapper.style.transformOrigin = "top left";
-        }
-      } else if (w.type === "weather") {
-        const renderedW = wrapper?.offsetWidth ?? 200;
-        const renderedH = wrapper?.offsetHeight ?? 200;
-        w.font_size = diagScaleFontSize(
-          handle, dx, dy,
-          s.font_size ?? FONT_SIZE_WEATHER,
-          renderedW, renderedH,
-          MIN_RESIZE_FONT_SIZE, MAX_RESIZE_FONT_SIZE,
-        );
-        if (wrapper && s.font_size) {
-          const ratio = w.font_size / s.font_size;
-          wrapper.style.transform = `scale(${ratio})`;
-          wrapper.style.transformOrigin = "top left";
-        }
-      } else if (w.type === "sensor_rows") {
-        const startW = s.w ?? 400;
-        const startH = s.h ?? 112;
-        if (handle === "se") {
-          w.w = snap(Math.max(50, startW + dx));
-          w.h = snap(Math.max(28, startH + dy));
-        } else if (handle === "ne") {
-          w.w = snap(Math.max(50, startW + dx));
-          w.h = snap(Math.max(28, startH - dy));
-          w.y = snap(s.y + (startH - (w.h ?? startH)));
-        } else if (handle === "sw") {
-          const startRight = s.x + startW;
-          const newX = Math.max(0, Math.min(startRight - 50, s.x + dx));
-          w.x = snap(Math.round(newX));
-          w.w = snap(Math.round(startRight - (w.x ?? 0)));
-          w.h = snap(Math.max(28, startH + dy));
-        } else if (handle === "nw") {
-          const startRight = s.x + startW;
-          const newX = Math.max(0, Math.min(startRight - 50, s.x + dx));
-          w.x = snap(Math.round(newX));
-          w.w = snap(Math.round(startRight - (w.x ?? 0)));
-          w.h = snap(Math.max(28, startH - dy));
-          w.y = snap(s.y + (startH - (w.h ?? startH)));
-        }
+        if (r.x !== undefined) w.x = r.x;
+        w.w = r.w;
         if (wrapper) {
+          // "e" handle doesn't write w.x (left edge is fixed);
+          // w.x ?? s.x correctly falls back to the captured start x.
           wrapper.style.left = `${w.x ?? s.x}px`;
-          wrapper.style.top = `${w.y ?? s.y}px`;
           if (w.w != null) wrapper.style.width = `${w.w}px`;
-          if (w.h != null) wrapper.style.height = `${w.h}px`;
         }
       } else {
-        // text, status_icons, waste_schedule: horizontal w resize.
-        const startRight = s.x + (s.w ?? (dw - PADDING - s.x));
-        if (handle === "ne" || handle === "se") {
-          const newRight = Math.max(s.x + 20, Math.min(dw, startRight + dx));
-          w.w = snap(Math.round(newRight - s.x));
-        } else if (handle === "nw" || handle === "sw") {
-          const newX = Math.max(0, Math.min(startRight - 20, s.x + dx));
-          w.x = snap(Math.round(newX));
-          w.w = snap(Math.round(startRight - (w.x ?? 0)));
+        // Corner handles: width + height resize.
+        const startW = s.w ?? wrapper?.offsetWidth ?? MIN_RESIZE_DIM;
+        const startH = s.h ?? wrapper?.offsetHeight ?? MIN_RESIZE_DIM;
+        const r = applyCornerResize(
+          handle as "nw" | "ne" | "sw" | "se",
+          dx, dy, s.x, s.y, startW, startH, MIN_RESIZE_DIM, dw, dh,
+        );
+        if (r.x !== undefined) w.x = r.x;
+        if (r.y !== undefined) w.y = r.y;
+        w.w = r.w;
+        w.h = r.h;
+        // Scale font proportionally for widget types where font_size
+        // controls rendered text size (text, weather). Other widget
+        // types derive font sizes from h directly, so no change needed.
+        if (
+          s.font_size != null
+          && (w.type === "text" || w.type === "weather")
+        ) {
+          const startDiag = Math.sqrt(startW ** 2 + startH ** 2);
+          const newDiag = Math.sqrt(r.w ** 2 + r.h ** 2);
+          if (startDiag > 0) {
+            w.font_size = Math.max(8, Math.min(72,
+              Math.round(s.font_size * newDiag / startDiag)));
+          }
         }
         if (wrapper) {
           wrapper.style.left = `${w.x ?? s.x}px`;
+          wrapper.style.top = `${w.y ?? s.y}px`;
           if (w.w != null) wrapper.style.width = `${w.w}px`;
+          if (w.h != null) wrapper.style.height = `${w.h}px`;
         }
       }
       return;
