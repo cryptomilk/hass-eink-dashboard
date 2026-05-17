@@ -160,6 +160,12 @@ class EinkDashboardImage(ImageEntity):
         """Re-render the dashboard and push to webhooks if the image
         changed.
         """
+        if self.hass.is_stopping:
+            _LOGGER.debug(
+                "_async_refresh: skipping render during HA shutdown for %s",
+                self._entry.entry_id,
+            )
+            return
         _LOGGER.debug("_async_refresh: start for %s", self._entry.entry_id)
         push_targets: list[tuple[Any, str, bytes]] = []
         try:
@@ -260,6 +266,19 @@ class EinkDashboardImage(ImageEntity):
                         )
                 else:
                     _LOGGER.debug("_async_refresh: image unchanged")
+        except RuntimeError as exc:
+            # Executor shut down between the is_stopping check and the
+            # executor call — normal during HA shutdown, not an error.
+            if "Executor shutdown" in str(exc):
+                _LOGGER.debug(
+                    "_async_refresh: executor already shut down for %s",
+                    self._entry.entry_id,
+                )
+                return
+            _LOGGER.exception(
+                "_async_refresh: failed for %s", self._entry.entry_id
+            )
+            return
         except Exception:
             _LOGGER.exception(
                 "_async_refresh: failed for %s", self._entry.entry_id

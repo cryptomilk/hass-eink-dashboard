@@ -36,6 +36,7 @@ def _make_hass() -> MagicMock:
     hass = MagicMock()
     hass.states.async_all.return_value = []
     hass.async_add_executor_job = AsyncMock(side_effect=lambda fn, *a: fn(*a))
+    hass.is_stopping = False
     return hass
 
 
