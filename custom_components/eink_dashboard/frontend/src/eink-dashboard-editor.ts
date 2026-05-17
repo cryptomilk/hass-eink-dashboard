@@ -93,7 +93,6 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       color: 0,
       layout: "icon",
       font_size: FONT_SIZE_DEVICE_BATTERY,
-      w: 200,
       h: 40,
       card_style: DEFAULT_CARD_STYLE,
     },

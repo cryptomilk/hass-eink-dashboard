@@ -1180,6 +1180,9 @@ def _build_device_battery_context(
     x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
 
     if layout == "chip":
+        # svg_w is the available width (explicit w or remaining
+        # canvas); used as upper bound for chip content before
+        # svg_w is narrowed to actual content extent below.
         content_w = svg_w - x_off - r_inset
         # Sizing ratios mirror _CHIP_PAD_RATIO/_CHIP_GAP_RATIO/
         # _CHIP_FONT_RATIO in render.py and the chip macro
@@ -1205,7 +1208,11 @@ def _build_device_battery_context(
 
         # Clip SVG width to chip content plus card insets so the
         # editor resize box matches the rendered content.
-        svg_w = _widget_dim(widget, "w", x_off + chip_w + r_inset)
+        w_override = widget.get("w")
+        if w_override is not None:
+            svg_w = max(1, w_override)
+        else:
+            svg_w = max(1, x_off + chip_w + r_inset)
 
         return {
             "w": svg_w,
@@ -1259,11 +1266,14 @@ def _build_device_battery_context(
 
     # Clip SVG width to icon+text content plus card insets so
     # the editor resize box matches the rendered content.
-    svg_w = _widget_dim(
-        widget,
-        "w",
-        x_off + body_w + nub_gap + nub_w + gap + round(bbox[2]) + r_inset,
-    )
+    w_override = widget.get("w")
+    if w_override is not None:
+        svg_w = max(1, w_override)
+    else:
+        svg_w = max(
+            1,
+            x_off + body_w + nub_gap + nub_w + gap + round(bbox[2]) + r_inset,
+        )
 
     return {
         "w": svg_w,
