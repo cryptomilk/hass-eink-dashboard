@@ -5,12 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-05-16
 
 ### Added
 
 - Media Source platform exposing rendered dashboard PNGs in HA's Media Browser,
-  enabling delivery to screens running OpenDisplay.
+  enabling delivery to screens running [OpenDisplay](https://opendisplay.org/).
 - TRMNL battery level support in the `device_battery` widget.
 - Snap-to-widget-edges in the Lovelace editor: hold Shift while dragging a
   widget to align it to the nearest edge of any other widget.
@@ -83,5 +83,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.3.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/cryptomilk/hass-eink-dashboard/releases/tag/v0.1.0

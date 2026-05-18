@@ -1,6 +1,6 @@
 [project]
 name = "hass-eink-dashboard"
-version = "0.2.0"
+version = "0.3.0"
 description = "Home Assistant custom component that renders e-ink dashboard images from entity state"
 requires-python = ">=3.14.2"
 license = "Apache-2.0"
