@@ -226,6 +226,8 @@ class WidgetMetrics:
         radius: Corner radius for rounded card rectangles.
         icon_dia: Diameter of circular status/category icons.
         icon_inner: Side length of the icon glyph inside a circle.
+        font_letter: Font size for single-letter fallback inside icon
+            circles.
         font_primary: Font size for main labels and values.
         font_secondary: Font size for secondary text (dates, units).
         divider: Thickness of horizontal divider lines between rows.
@@ -238,6 +240,7 @@ class WidgetMetrics:
     radius: int
     icon_dia: int
     icon_inner: int
+    font_letter: int
     font_primary: int
     font_secondary: int
     divider: int
@@ -262,11 +265,10 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
         padding=round(row_h * 0.21),
         radius=round(row_h * 0.21),
         icon_dia=icon_dia,
-        # Floor division (`//`) intentionally matches the formula in
-        # `_macros.svg.j2:164` (`icon_dia * 60 // 100`).  When that
-        # template line is replaced by this field, both sites agree.
-        # Don't switch to round() here before the template is updated.
+        # Floor division matches the Jinja template formula so that
+        # both sides agree when `m_icon_inner` is passed to `card_row`.
         icon_inner=icon_dia * 60 // 100,
+        font_letter=icon_dia * 5 // 10,
         font_primary=max(10, round(row_h * 0.32)),
         font_secondary=max(10, round(row_h * 0.25)),
         divider=max(2, round(row_h * 0.07)),

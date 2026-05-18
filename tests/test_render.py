@@ -3445,6 +3445,7 @@ class TestComputeMetrics:
         assert m.radius == 12
         assert m.icon_dia == 36
         assert m.icon_inner == 21
+        assert m.font_letter == 18
         assert m.font_primary == 18
         assert m.font_secondary == 14
         assert m.divider == 4
@@ -3466,6 +3467,7 @@ class TestComputeMetrics:
         assert m.radius == 2
         assert m.icon_dia == 6
         assert m.icon_inner == 3
+        assert m.font_letter == 3
         assert m.inner_gap == 2
 
     def test_scales_at_large_row_h(self) -> None:
@@ -3476,6 +3478,7 @@ class TestComputeMetrics:
         assert m.radius == 42
         assert m.icon_dia == 128
         assert m.icon_inner == 76
+        assert m.font_letter == 64
         assert m.font_primary == 64
         assert m.font_secondary == 50
         assert m.divider == 14
@@ -3490,6 +3493,7 @@ class TestComputeMetrics:
         assert m.radius == 8
         assert m.icon_dia == 26
         assert m.icon_inner == 15
+        assert m.font_letter == 13
         assert m.font_primary == 13
         assert m.font_secondary == 10
         assert m.divider == 3
@@ -3504,6 +3508,7 @@ class TestComputeMetrics:
         assert m.radius == 15
         assert m.icon_dia == 46
         assert m.icon_inner == 27
+        assert m.font_letter == 23
         assert m.font_primary == 23
         assert m.font_secondary == 18
         assert m.divider == 5

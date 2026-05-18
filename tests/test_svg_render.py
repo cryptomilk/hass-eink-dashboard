@@ -279,6 +279,7 @@ def test_card_row_icon_circle_and_primary(render_macro) -> None:
         " icon_fill='#787878', primary_fill='#000000',"
         " secondary_fill='#787878', value_fill='#787878',"
         " hex_black='#000000', hex_white='#ffffff',"
+        " icon_inner=21,"
         " primary='Temperature', letter='T') }}" + _SVG_CLOSE
     )
     # Icon circle center: x=10+12+18=40, y=10+28=38; r=18
@@ -301,6 +302,7 @@ def test_card_row_secondary_and_value(render_macro) -> None:
         " icon_fill='#787878', primary_fill='#000000',"
         " secondary_fill='#787878', value_fill='#787878',"
         " hex_black='#000000', hex_white='#ffffff',"
+        " icon_inner=21,"
         " primary='Sensor', secondary='23 °C',"
         " value='now', letter='S') }}" + _SVG_CLOSE
     )
@@ -327,6 +329,7 @@ def test_card_row_icon_svg_renders(render_macro) -> None:
         " icon_fill='#787878', primary_fill='#000000',"
         " secondary_fill='#787878', value_fill='#787878',"
         " hex_black='#000000', hex_white='#ffffff',"
+        " icon_inner=21,"
         " primary='Temp', icon_svg=icon_svg) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )

@@ -105,9 +105,9 @@
 
   Icon content priority: icon_svg > letter > empty circle.
   icon_svg is a string produced by the mdi_svg or weather_svg filter;
-  it is rendered at 60 % of icon_dia so the circle shows a visible ring.
-  When icon_svg is empty and letter is set, the letter is drawn centred
-  in the circle instead.
+  it is rendered at icon_inner size (defaults to 60 % of icon_dia) so
+  the circle shows a visible ring.  When icon_svg is empty and letter
+  is set, the letter is drawn centred in the circle instead.
 
   Parameters:
     x, y      -- top-left of the row content area (after container
@@ -125,6 +125,11 @@
     value_fill     -- hex color for value text
     hex_black -- hex black for outlined circle stroke and icon color
     hex_white -- hex white for outlined circle fill
+    icon_inner    -- side length of the icon glyph inside the circle;
+                     -1 (default) falls back to icon_dia * 60 // 100
+    letter_font_sz -- font size for the letter fallback drawn in the
+                     circle when icon_svg is empty; -1 (default) falls
+                     back to icon_dia * 5 // 10
     primary   -- main label text
     secondary -- sub-label text (empty = single-line row)
     value     -- right-aligned value string (empty = omitted)
@@ -140,6 +145,7 @@
     font_primary, font_secondary,
     icon_fill, primary_fill, secondary_fill, value_fill,
     hex_black, hex_white,
+    icon_inner=none, letter_font_sz=none,
     primary="", secondary="", value="",
     icon_svg="",
     icon_outline=false,
@@ -148,6 +154,10 @@
 ) -%}
 {%- set lpad = lpad if lpad >= 0 else padding -%}
 {%- set rpad = rpad if rpad >= 0 else padding -%}
+{%- set icon_inner = icon_inner if icon_inner is not none
+    else icon_dia * 60 // 100 -%}
+{%- set letter_font_sz = letter_font_sz if letter_font_sz is not none
+    else icon_dia * 5 // 10 -%}
 {%- set icon_cx = x + lpad + icon_dia // 2 -%}
 {%- set icon_cy = y + row_h // 2 -%}
 {%- set icon_r = icon_dia // 2 -%}
@@ -165,7 +175,7 @@
 {%- endif -%}
 {# Icon content: inlined SVG or letter fallback #}
 {%- if icon_svg -%}
-{%- set icon_sz = icon_dia * 60 // 100 -%}
+{%- set icon_sz = icon_inner -%}
 {%- set ix = icon_cx - icon_sz // 2 -%}
 {%- set iy = icon_cy - icon_sz // 2 -%}
 {# Outlined circles are white so the icon must be black to stay
@@ -178,7 +188,7 @@
 <text
   x="{{ icon_cx }}" y="{{ icon_cy }}"
   font-family="Roboto"
-  font-size="{{ icon_dia * 5 // 10 }}"
+  font-size="{{ letter_font_sz }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ lc }}">{{ letter }}</text>
