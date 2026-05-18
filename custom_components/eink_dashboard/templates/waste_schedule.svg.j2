@@ -2,14 +2,15 @@
     card_row -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
 {%- if has_rows -%}
-{{ widget_title(title, title_font_sz) }}
+{{ widget_title(title, title_font_sz, fill=hex_gray) }}
 {%- call card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
     radius=m_radius, border=m_border,
-    bar_width=bar_width) -%}
+    bar_width=bar_width,
+    border_color=hex_black, bar_color=hex_gray) -%}
 {%- for row in rows -%}
 {{ card_row(
     x=x_off, y=row.y,
@@ -24,17 +25,19 @@
     icon_svg=row.icon_svg,
     icon_fill=row.icon_fill,
     icon_outline=row.icon_outline,
+    primary_fill=hex_black,
     value_fill=row.value_fill,
     secondary_fill=row.secondary_fill,
     letter=row.letter,
-    lpad=lpad, rpad=rpad) }}
+    lpad=lpad, rpad=rpad,
+    hex_black=hex_black, hex_white=hex_white) }}
 {%- if not loop.last -%}
 <line
   x1="{{ x_off + lpad }}"
   y1="{{ row.y + row_h }}"
   x2="{{ w - r_inset - rpad }}"
   y2="{{ row.y + row_h }}"
-  stroke="#787878"
+  stroke="{{ hex_gray }}"
   stroke-width="{{ m_divider }}"/>
 {%- endif -%}
 {%- endfor -%}

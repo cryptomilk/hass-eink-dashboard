@@ -21,6 +21,7 @@ from custom_components.eink_dashboard.render import (
     _format_relative_date,
     _load_font,
     _parse_days_until,
+    color_to_hex,
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import (
@@ -82,6 +83,24 @@ MOCK_WEATHER_STATE = {
         },
     },
 }
+
+
+class TestColorToHex:
+    def test_black(self) -> None:
+        # 0 is COLOR_BLACK — must convert to #000000.
+        assert color_to_hex(0) == "#000000"
+
+    def test_white(self) -> None:
+        # 255 is COLOR_WHITE — must convert to #ffffff.
+        assert color_to_hex(255) == "#ffffff"
+
+    def test_gray(self) -> None:
+        # 120 is COLOR_GRAY — must convert to #787878.
+        assert color_to_hex(120) == "#787878"
+
+    def test_light_gray(self) -> None:
+        # 180 is COLOR_LIGHT_GRAY — must convert to #b4b4b4.
+        assert color_to_hex(180) == "#b4b4b4"
 
 
 class TestRenderDashboard:

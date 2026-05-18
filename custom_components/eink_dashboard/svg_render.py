@@ -34,6 +34,7 @@ import resvg_py
 from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     FONT_SIZE_TEXT,
@@ -148,7 +149,8 @@ def _compose_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg"'
         f' width="{width}" height="{height}"'
         f' viewBox="0 0 {width} {height}">',
-        f'<rect width="{width}" height="{height}" fill="white"/>',
+        f'<rect width="{width}" height="{height}"'
+        f' fill="{_color_context()["hex_white"]}"/>',
     ]
     for svg, (x, y) in zip(svg_parts, positions, strict=True):
         # Strip leading whitespace then replace '<svg ' prefix so
@@ -350,6 +352,33 @@ def _metrics_context(m: WidgetMetrics) -> dict[str, object]:
     return {f"m_{f.name}": getattr(m, f.name) for f in dc_fields(m)}
 
 
+@functools.cache
+def _color_context() -> dict[str, str]:
+    """Return color hex variables for Jinja2 templates.
+
+    Converts the ``const.py`` grayscale constants to SVG hex
+    strings via ``color_to_hex()``.  Spread into every context
+    builder so templates can reference colors by name (e.g.
+    ``{{ hex_gray }}``) instead of hardcoding hex literals.
+
+    The result is constant and cached; callers spread it via
+    ``**_color_context()`` so the shared dict is never mutated.
+
+    Returns:
+        Dict mapping ``hex_black``, ``hex_white``, and
+        ``hex_gray`` to their SVG hex color strings.
+    """
+    # Lazy import avoids circular dependency (same pattern as
+    # _compute_metrics imports elsewhere in this file).
+    from .render import color_to_hex
+
+    return {
+        "hex_black": color_to_hex(COLOR_BLACK),
+        "hex_white": color_to_hex(COLOR_WHITE),
+        "hex_gray": color_to_hex(COLOR_GRAY),
+    }
+
+
 def _card_insets(
     m: WidgetMetrics,
     card_style: str,
@@ -487,7 +516,7 @@ def _build_text_context(
     # Lazy import avoids circular dependency: render.py imports
     # svg_render.py at module level; importing render.py at
     # module level here would prevent initialisation.
-    from .render import _compute_metrics
+    from .render import _compute_metrics, color_to_hex
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
@@ -510,7 +539,7 @@ def _build_text_context(
     content_w = svg_w - x_off - r_inset
 
     # Convert grayscale integer (0–255) to an SVG fill color.
-    fill = f"rgb({color},{color},{color})"
+    fill = color_to_hex(color)
 
     # Map alignment to SVG text-anchor + anchor x-position.
     # When a card container is active, text is positioned within
@@ -559,6 +588,7 @@ def _build_text_context(
         "card_style": card_style,
         "bar_width": bar_width,
         **_metrics_context(m),
+        **_color_context(),
     }
 
 
@@ -593,6 +623,8 @@ def _build_separator_context(
         Dict consumed by ``separator.svg.j2``: ``w``, ``h``,
         ``bar_w``, ``bar_h``, ``fill``.
     """
+    from .render import color_to_hex
+
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     direction = widget.get("direction", "horizontal")
@@ -621,7 +653,7 @@ def _build_separator_context(
     else:
         length = svg_w - PADDING
 
-    fill = f"rgb({color},{color},{color})"
+    fill = color_to_hex(color)
 
     if direction == "vertical":
         bar_w: int = thickness
@@ -636,6 +668,7 @@ def _build_separator_context(
         "bar_w": bar_w,
         "bar_h": bar_h,
         "fill": fill,
+        **_color_context(),
     }
 
 
@@ -730,7 +763,7 @@ def _build_weather_context(
 
     if state is None:
         svg_h = _widget_dim(widget, "h", config["height"] - widget.get("y", 0))
-        return {"w": svg_w, "h": svg_h, "has_state": False}
+        return {"w": svg_w, "h": svg_h, "has_state": False, **_color_context()}
 
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
@@ -1052,6 +1085,7 @@ def _build_weather_context(
         "sep_y": sep_y,
         "sep_thickness": sep_thickness,
         "forecast_entries": forecast_entries,
+        **_color_context(),
     }
 
 
@@ -1104,6 +1138,7 @@ def _build_sensor_rows_context(
             "w": svg_w,
             "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
             "has_entities": False,
+            **_color_context(),
         }
 
     # Auto-size: default to content height so the widget is no
@@ -1129,13 +1164,12 @@ def _build_sensor_rows_context(
         state_val = state.get("state", "")
         icon_name = _device_class_icon(attrs, state_val, domain)
 
-        # Icon SVG sized to 60 % of icon_dia — the card_row
-        # macro positions it centered in the circle at that
-        # size, matching PIL's 60 % shrink before paste.
+        # Icon SVG sized to icon_inner so the card_row macro
+        # can centre it inside the circle with a visible ring.
         icon_svg: markupsafe.Markup | str = ""
         if icon_name:
             with contextlib.suppress(FileNotFoundError):
-                icon_svg = _mdi_svg_filter(icon_name, m.icon_dia * 6 // 10)
+                icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
 
         # Letter fallback when no MDI icon is available.
         letter = ""
@@ -1167,6 +1201,7 @@ def _build_sensor_rows_context(
         "card_style": card_style,
         "bar_width": bar_width,
         **_metrics_context(m),
+        **_color_context(),
         "row_h": row_h,
         "rows": rows,
         "x_off": x_off,
@@ -1208,7 +1243,7 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from .render import _compute_metrics, _load_font
+    from .render import _compute_metrics, _load_font, color_to_hex
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -1217,7 +1252,7 @@ def _build_device_battery_context(
 
     level = config.get("device_battery_level")
     if level is None:
-        return {"w": svg_w, "h": svg_h, "has_level": False}
+        return {"w": svg_w, "h": svg_h, "has_level": False, **_color_context()}
 
     pct = max(0, min(100, int(level)))
     layout = widget.get("layout", "icon")
@@ -1227,7 +1262,7 @@ def _build_device_battery_context(
     # Force black below 20% for visual emphasis.
     if pct < 20:
         color = COLOR_BLACK
-    color_hex = f"#{color:02x}{color:02x}{color:02x}"
+    color_hex = color_to_hex(color)
 
     label = f"{pct}%"
     m = _compute_metrics(svg_h)
@@ -1277,6 +1312,7 @@ def _build_device_battery_context(
             "card_h": svg_h,
             "card_style": card_style,
             **_metrics_context(m),
+            **_color_context(),
             "bar_width": bar_width,
             "color_hex": color_hex,
             "label": label,
@@ -1338,6 +1374,7 @@ def _build_device_battery_context(
         "card_h": svg_h,
         "card_style": card_style,
         **_metrics_context(m),
+        **_color_context(),
         "bar_width": bar_width,
         "color_hex": color_hex,
         "label": label,
@@ -1426,6 +1463,7 @@ def _build_status_icons_context(
             "total_h": svg_h,
             "has_entities": False,
             "title": title,
+            **_color_context(),
         }
 
     title_font_sz, title_advance, content_h = _title_layout(title, svg_h)
@@ -1510,6 +1548,7 @@ def _build_status_icons_context(
             "total_h": svg_h,
             "has_entities": False,
             "title": title,
+            **_color_context(),
         }
 
     # Horizontal flow layout with row wrapping.
@@ -1550,6 +1589,7 @@ def _build_status_icons_context(
         "card_style": card_style,
         "bar_width": bar_width,
         **_metrics_context(m),
+        **_color_context(),
         "chips": chips,
     }
 
@@ -1605,6 +1645,7 @@ def _build_waste_schedule_context(
         _format_relative_date,
         _get_today,
         _parse_days_until,
+        color_to_hex,
     )
 
     x = widget.get("x", PADDING)
@@ -1623,6 +1664,7 @@ def _build_waste_schedule_context(
         "w": svg_w,
         "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
         "has_rows": False,
+        **_color_context(),
     }
     if not entity_id or not entries:
         return empty_ctx
@@ -1681,7 +1723,7 @@ def _build_waste_schedule_context(
 
     # Build the trash-can icon SVG once; all entries share the
     # same icon, only the circle fill/outline differs.
-    icon_sz = m.icon_dia * 6 // 10
+    icon_sz = m.icon_inner
     icon_svg = _mdi_svg_filter("trash-can", icon_sz)
 
     rows: list[dict[str, object]] = []
@@ -1689,11 +1731,19 @@ def _build_waste_schedule_context(
         date_str = _format_relative_date(days, raw)
         # days == 0 (today): black date text for urgency.
         # days >= 1: gray date text.
-        date_fill = "#000000" if days == 0 else "#787878"
+        date_fill = (
+            color_to_hex(COLOR_BLACK)
+            if days == 0
+            else color_to_hex(COLOR_GRAY)
+        )
         use_outline = days >= 2
         # Outlined circles ignore icon_fill (macro uses white
         # fill + black stroke), but we still pass it correctly.
-        icon_fill = "#000000" if days <= 1 else "#787878"
+        icon_fill = (
+            color_to_hex(COLOR_BLACK)
+            if days <= 1
+            else color_to_hex(COLOR_GRAY)
+        )
         rows.append(
             {
                 "y": content_y + i * row_h,
@@ -1722,6 +1772,7 @@ def _build_waste_schedule_context(
         "card_style": card_style,
         "bar_width": bar_width,
         **_metrics_context(m),
+        **_color_context(),
         "row_h": row_h,
         "rows": rows,
         "x_off": x_off,

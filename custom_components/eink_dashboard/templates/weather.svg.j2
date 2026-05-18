@@ -1,13 +1,14 @@
 {%- from "_macros.svg.j2" import card_container -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
 {%- if has_state -%}
 {%- call card_container(
     x=0, y=0, w=card_w, h=total_h,
     card_style=card_style,
     radius=m_radius, border=m_border,
-    bar_width=bar_width) -%}
+    bar_width=bar_width,
+    border_color=hex_black, bar_color=hex_gray) -%}
 {# Row 1: condition icon, temperature, today hi/lo/precip. #}
 {%- if icon_svg -%}
 <g transform="translate({{ icon_x }}, {{ icon_y }})">{{ icon_svg }}</g>
@@ -18,7 +19,7 @@
   font-size="{{ font_xl }}"
   font-weight="bold"
   dominant-baseline="central"
-  fill="#000000">{{ temp_text }}</text>
+  fill="{{ hex_black }}">{{ temp_text }}</text>
 {%- if hi_text -%}
 <text
   x="{{ hilo_right }}" y="{{ hi_y }}"
@@ -26,7 +27,7 @@
   font-size="{{ font_sm }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="#000000">{{ hi_text }}</text>
+  fill="{{ hex_black }}">{{ hi_text }}</text>
 {%- endif -%}
 {%- if lo_text -%}
 <text
@@ -35,7 +36,7 @@
   font-size="{{ font_sm }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="#787878">{{ lo_text }}</text>
+  fill="{{ hex_gray }}">{{ lo_text }}</text>
 {%- endif -%}
 {%- if precip_text -%}
 <text
@@ -44,7 +45,7 @@
   font-size="{{ font_xs }}"
   text-anchor="end"
   dominant-baseline="hanging"
-  fill="#787878">{{ precip_text }}</text>
+  fill="{{ hex_gray }}">{{ precip_text }}</text>
 {%- endif -%}
 {# Detail row: icon + text pairs for each weather attribute. #}
 {%- for d in detail_items -%}
@@ -56,14 +57,14 @@
   font-family="Roboto"
   font-size="{{ font_sm }}"
   dominant-baseline="central"
-  fill="#000000">{{ d.text }}</text>
+  fill="{{ hex_black }}">{{ d.text }}</text>
 {%- endfor -%}
 {# Separator and forecast grid. #}
 {%- if has_forecast -%}
 <line
   x1="{{ sep_x1 }}" y1="{{ sep_y }}"
   x2="{{ sep_x2 }}" y2="{{ sep_y }}"
-  stroke="#787878"
+  stroke="{{ hex_gray }}"
   stroke-width="{{ sep_thickness }}"/>
 {%- for day in forecast_entries -%}
 <text
@@ -72,7 +73,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="#787878">{{ day.label }}</text>
+  fill="{{ hex_gray }}">{{ day.label }}</text>
 {%- if day.icon_svg -%}
 <g transform="translate({{ day.icon_x }}, {{ day.icon_y }})">{{ day.icon_svg }}</g>
 {%- endif -%}
@@ -83,7 +84,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="#000000">{{ day.hi }}</text>
+  fill="{{ hex_black }}">{{ day.hi }}</text>
 {%- endif -%}
 {%- if day.lo -%}
 <text
@@ -92,7 +93,7 @@
   font-size="{{ font_sm }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="#787878">{{ day.lo }}</text>
+  fill="{{ hex_gray }}">{{ day.lo }}</text>
 {%- endif -%}
 {%- if day.precip -%}
 <text
@@ -101,7 +102,7 @@
   font-size="{{ font_xs }}"
   text-anchor="middle"
   dominant-baseline="hanging"
-  fill="#787878">{{ day.precip }}</text>
+  fill="{{ hex_gray }}">{{ day.precip }}</text>
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}

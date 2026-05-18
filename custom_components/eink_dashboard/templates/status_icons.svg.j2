@@ -2,19 +2,23 @@
     chip -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ total_h }}">
-<rect width="{{ w }}" height="{{ total_h }}" fill="white"/>
+<rect width="{{ w }}" height="{{ total_h }}" fill="{{ hex_white }}"/>
 {%- if has_entities -%}
-{{ widget_title(title, title_font_sz) }}
+{{ widget_title(title, title_font_sz, fill=hex_gray) }}
 {%- call card_container(
     x=0, y=title_advance, w=w, h=total_h - title_advance,
     card_style=card_style,
     radius=m_radius, border=m_border,
-    bar_width=bar_width) -%}
+    bar_width=bar_width,
+    border_color=hex_black, bar_color=hex_gray) -%}
 {%- for c in chips -%}
 {{ chip(
     x=c.x, y=c.y, w=c.w, h=chip_h,
     text=c.text, border=m_border,
-    icon_svg=c.icon_svg, active=c.active) }}
+    icon_svg=c.icon_svg, active=c.active,
+    icon_fill=hex_gray,
+    text_fill=hex_black,
+    hex_black=hex_black, hex_white=hex_white) }}
 {%- endfor -%}
 {%- endcall -%}
 {%- endif -%}

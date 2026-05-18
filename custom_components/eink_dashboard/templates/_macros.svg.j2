@@ -23,14 +23,14 @@
     font_sz   -- font size in pixels
     x         -- horizontal position (default 0)
 #}
-{%- macro widget_title(title, font_sz, x=0) -%}
+{%- macro widget_title(title, font_sz, fill, x=0) -%}
 {%- if title -%}
 <text
   x="{{ x }}" y="0"
   font-family="Roboto"
   font-size="{{ font_sz }}"
   dominant-baseline="hanging"
-  fill="#787878">{{ title }}</text>
+  fill="{{ fill }}">{{ title }}</text>
 {%- endif -%}
 {%- endmacro -%}
 
@@ -52,17 +52,20 @@
     {% endcall %}
 
   Parameters:
-    x, y      -- top-left of the card area
-    w, h      -- card dimensions
-    card_style -- "border", "left_bar", or "none"; unrecognised
-                 values are treated as "none" (no decoration)
-    radius    -- corner radius for "border" style
-    border    -- stroke width for "border" style
-    bar_width -- pre-computed bar width for "left_bar" style
-                 (Python is the single source of truth)
+    x, y         -- top-left of the card area
+    w, h         -- card dimensions
+    border_color -- hex fill for "border" style stroke
+    bar_color    -- hex fill for "left_bar" style rect
+    card_style   -- "border", "left_bar", or "none"; unrecognised
+                    values are treated as "none" (no decoration)
+    radius       -- corner radius for "border" style
+    border       -- stroke width for "border" style
+    bar_width    -- pre-computed bar width for "left_bar" style
+                    (Python is the single source of truth)
 #}
 {%- macro card_container(
     x, y, w, h,
+    border_color, bar_color,
     card_style="none",
     radius=0, border=2,
     bar_width=0
@@ -77,14 +80,14 @@
   width="{{ w - border }}" height="{{ h - border }}"
   rx="{{ radius }}" ry="{{ radius }}"
   fill="none"
-  stroke="#000000"
+  stroke="{{ border_color }}"
   stroke-width="{{ border }}"/>
 {{ caller() }}
 {%- elif card_style == "left_bar" -%}
 <rect
   x="{{ x }}" y="{{ y }}"
   width="{{ bar_width }}" height="{{ h }}"
-  fill="#787878"/>
+  fill="{{ bar_color }}"/>
 {{ caller() }}
 {%- else -%}
 {{ caller() }}
@@ -116,16 +119,18 @@
     border    -- stroke width for outlined icon circle
     font_primary   -- Roboto Medium font size for the main label
     font_secondary -- font size for secondary text and value
+    icon_fill      -- hex fill color for solid icon circle
+    primary_fill   -- hex color for primary text
+    secondary_fill -- hex color for secondary text
+    value_fill     -- hex color for value text
+    hex_black -- hex black for outlined circle stroke and icon color
+    hex_white -- hex white for outlined circle fill
     primary   -- main label text
     secondary -- sub-label text (empty = single-line row)
     value     -- right-aligned value string (empty = omitted)
     icon_svg  -- pre-built icon SVG string (empty = letter fallback)
-    icon_fill -- hex fill color for solid icon circle
     icon_outline -- when true, circle is white with black stroke
     letter    -- fallback letter drawn in circle when icon_svg is empty
-    primary_fill   -- hex color for primary text
-    secondary_fill -- hex color for secondary text
-    value_fill     -- hex color for value text
     lpad      -- left padding override; -1 (default) uses padding
     rpad      -- right padding override; -1 (default) uses padding
 #}
@@ -133,13 +138,12 @@
     x, y, w, row_h,
     padding, icon_dia, inner_gap, border,
     font_primary, font_secondary,
+    icon_fill, primary_fill, secondary_fill, value_fill,
+    hex_black, hex_white,
     primary="", secondary="", value="",
-    icon_svg="", icon_fill="#787878",
+    icon_svg="",
     icon_outline=false,
     letter="",
-    primary_fill="#000000",
-    secondary_fill="#787878",
-    value_fill="#787878",
     lpad=-1, rpad=-1
 ) -%}
 {%- set lpad = lpad if lpad >= 0 else padding -%}
@@ -151,8 +155,8 @@
 {%- if icon_outline -%}
 <circle
   cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
-  fill="#ffffff"
-  stroke="#000000"
+  fill="{{ hex_white }}"
+  stroke="{{ hex_black }}"
   stroke-width="{{ border }}"/>
 {%- else -%}
 <circle
@@ -166,11 +170,11 @@
 {%- set iy = icon_cy - icon_sz // 2 -%}
 {# Outlined circles are white so the icon must be black to stay
    legible; solid-fill circles are dark so the icon is white. #}
-{%- set ic = "#000000" if icon_outline else "#ffffff" -%}
+{%- set ic = hex_black if icon_outline else hex_white -%}
 <g transform="translate({{ ix }}, {{ iy }})"
   style="color: {{ ic }}">{{ icon_svg }}</g>
 {%- elif letter -%}
-{%- set lc = "#000000" if icon_outline else "#ffffff" -%}
+{%- set lc = hex_black if icon_outline else hex_white -%}
 <text
   x="{{ icon_cx }}" y="{{ icon_cy }}"
   font-family="Roboto"
@@ -247,18 +251,22 @@
   unavailable in Jinja2).
 
   Parameters:
-    x, y   -- top-left of the label
-    w      -- pre-computed label width
-    h      -- label height (controls all internal sizing)
-    text   -- label text
+    x, y      -- top-left of the label
+    w         -- pre-computed label width
+    h         -- label height (controls all internal sizing)
+    text      -- label text
     border    -- stroke width for outlined circle
+    icon_fill -- hex fill color for the active (filled) circle
+    text_fill -- hex color for label text
+    hex_black -- hex black for outlined circle stroke and icon color
+    hex_white -- hex white for outlined circle fill
     icon_svg  -- pre-built icon SVG string (empty = text-only)
     active    -- when true, circle is filled; when false, outlined
-    icon_fill -- hex fill color for the active (filled) circle
 #}
 {%- macro chip(
     x, y, w, h, text, border,
-    icon_svg="", active=false, icon_fill="#787878"
+    icon_fill, text_fill, hex_black, hex_white,
+    icon_svg="", active=false
 ) -%}
 {%- set pad = h * 18 // 100 -%}
 {%- set icon_dia = h * 64 // 100 -%}
@@ -276,14 +284,14 @@
 {%- else -%}
 <circle
   cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
-  fill="#ffffff"
-  stroke="#000000"
+  fill="{{ hex_white }}"
+  stroke="{{ hex_black }}"
   stroke-width="{{ border }}"/>
 {%- endif -%}
 {%- set icon_sz = icon_dia * 60 // 100 -%}
 {%- set ix = icon_cx - icon_sz // 2 -%}
 {%- set iy = icon_cy - icon_sz // 2 -%}
-{%- set ic = "#ffffff" if active else "#000000" -%}
+{%- set ic = hex_white if active else hex_black -%}
 <g transform="translate({{ ix }}, {{ iy }})"
   style="color: {{ ic }}">{{ icon_svg }}</g>
 {%- endif -%}
@@ -293,5 +301,5 @@
   font-family="Roboto"
   font-size="{{ font_sz }}"
   dominant-baseline="central"
-  fill="#000000">{{ text }}</text>
+  fill="{{ text_fill }}">{{ text }}</text>
 {%- endmacro -%}

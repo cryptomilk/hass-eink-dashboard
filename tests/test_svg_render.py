@@ -180,6 +180,7 @@ def test_card_container_border_draws_rounded_rect(render_macro) -> None:
         + _SVG_OPEN
         + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
+        " border_color='#000000', bar_color='#787878',"
         " card_style='border',"
         " radius=12, border=3) %}"
         "{% endcall %}" + _SVG_CLOSE
@@ -206,6 +207,7 @@ def test_card_container_left_bar_draws_gray(render_macro) -> None:
         + _SVG_OPEN
         + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
+        " border_color='#000000', bar_color='#787878',"
         " card_style='left_bar',"
         " bar_width=6) %}"
         "{% endcall %}" + _SVG_CLOSE
@@ -227,6 +229,7 @@ def test_card_container_left_bar_precomputed_width(
         + _SVG_OPEN
         + "{% call card_container("
         "x=10, y=10, w=380, h=180,"
+        " border_color='#000000', bar_color='#787878',"
         " card_style='left_bar',"
         " bar_width=12) %}"
         "{% endcall %}" + _SVG_CLOSE
@@ -248,7 +251,9 @@ def test_card_container_none_caller_invoked(render_macro) -> None:
         "{%- from '_macros.svg.j2' import card_container -%}"
         + _SVG_OPEN
         + "{% call card_container("
-        "x=10, y=10, w=380, h=180, card_style='none') %}"
+        "x=10, y=10, w=380, h=180,"
+        " border_color='#000000', bar_color='#787878',"
+        " card_style='none') %}"
         "<rect x='150' y='90' width='30' height='20' fill='black'/>"
         "{% endcall %}" + _SVG_CLOSE
     )
@@ -271,6 +276,9 @@ def test_card_row_icon_circle_and_primary(render_macro) -> None:
         "x=10, y=10, w=380, row_h=56,"
         " padding=12, icon_dia=36, inner_gap=12, border=2,"
         " font_primary=18, font_secondary=14,"
+        " icon_fill='#787878', primary_fill='#000000',"
+        " secondary_fill='#787878', value_fill='#787878',"
+        " hex_black='#000000', hex_white='#ffffff',"
         " primary='Temperature', letter='T') }}" + _SVG_CLOSE
     )
     # Icon circle center: x=10+12+18=40, y=10+28=38; r=18
@@ -290,6 +298,9 @@ def test_card_row_secondary_and_value(render_macro) -> None:
         "x=10, y=10, w=380, row_h=80,"
         " padding=12, icon_dia=36, inner_gap=12, border=2,"
         " font_primary=20, font_secondary=15,"
+        " icon_fill='#787878', primary_fill='#000000',"
+        " secondary_fill='#787878', value_fill='#787878',"
+        " hex_black='#000000', hex_white='#ffffff',"
         " primary='Sensor', secondary='23 °C',"
         " value='now', letter='S') }}" + _SVG_CLOSE
     )
@@ -313,6 +324,9 @@ def test_card_row_icon_svg_renders(render_macro) -> None:
         "x=10, y=10, w=380, row_h=56,"
         " padding=12, icon_dia=36, inner_gap=12, border=2,"
         " font_primary=18, font_secondary=14,"
+        " icon_fill='#787878', primary_fill='#000000',"
+        " secondary_fill='#787878', value_fill='#787878',"
+        " hex_black='#000000', hex_white='#ffffff',"
         " primary='Temp', icon_svg=icon_svg) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
@@ -331,7 +345,9 @@ def test_chip_renders_text(render_macro) -> None:
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=100, h=40,"
-        " text='OK', border=2) }}" + _SVG_CLOSE
+        " text='OK', border=2,"
+        " icon_fill='#787878', text_fill='#000000',"
+        " hex_black='#000000', hex_white='#ffffff') }}" + _SVG_CLOSE
     )
     # No pill border: top-left corner of chip area is white
     assert pixel(img, 20, 80) == 255
@@ -350,7 +366,10 @@ def test_chip_with_icon_draws_circle(render_macro) -> None:
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=120, h=40,"
-        " text='Warm', border=2, icon_svg=icon_svg) }}" + _SVG_CLOSE,
+        " text='Warm', border=2,"
+        " icon_fill='#787878', text_fill='#000000',"
+        " hex_black='#000000', hex_white='#ffffff',"
+        " icon_svg=icon_svg) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
     # Circle stroke is visible at the icon area edges.
@@ -377,8 +396,10 @@ def test_chip_with_active_icon_fills_circle(render_macro) -> None:
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=120, h=40,"
-        " text='Warm', border=2, icon_svg=icon_svg,"
-        " active=true) }}" + _SVG_CLOSE,
+        " text='Warm', border=2,"
+        " icon_fill='#787878', text_fill='#000000',"
+        " hex_black='#000000', hex_white='#ffffff',"
+        " icon_svg=icon_svg, active=true) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
     pad = 40 * 18 // 100
