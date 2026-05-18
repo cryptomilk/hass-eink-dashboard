@@ -22,6 +22,8 @@ import html
 import io
 import json
 import logging
+import re
+import subprocess
 import sys
 import threading
 import time
@@ -53,6 +55,7 @@ from bench_render import (
 
 from custom_components.eink_dashboard.const import (
     DEVICE_PRESETS,
+    PADDING,
     DevicePreset,
     WidgetType,
 )
@@ -76,6 +79,16 @@ _TEMPLATE_DIR = (
     / "templates"
 )
 
+_FRONTEND_DIR = (
+    Path(__file__).parent.parent
+    / "custom_components"
+    / "eink_dashboard"
+    / "frontend"
+)
+
+_RESIZE_MATH_TS = _FRONTEND_DIR / "src" / "resize-math.ts"
+_RESIZE_MATH_JS = _FRONTEND_DIR / "resize-math.js"
+
 _logger = logging.getLogger("design_tool")
 
 # -------------------------------------------------------------------
@@ -97,7 +110,7 @@ def _render_svg(widget: dict, config: dict) -> str:
         SVG document string.
     """
     svg_part = render_widget_svg(widget, config)
-    x = widget.get("x", 24)
+    x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     return _compose_svg(
         [svg_part],
@@ -188,9 +201,39 @@ _HTML_TEMPLATE = """\
     padding: 8px;
     border-radius: 4px;
     min-height: 200px;
+    position: relative;
   }}
   .panel img, .panel object {{
     max-width: 100%; height: auto;
+  }}
+  .resize-handle {{
+    position: absolute;
+    width: 12px; height: 12px;
+    background: rgba(3,169,244,0.9);
+    border: 1.5px solid #fff;
+    border-radius: 2px;
+    z-index: 10;
+    display: none;
+    touch-action: none;
+    box-sizing: border-box;
+  }}
+  .resize-handle::before {{
+    content: "";
+    position: absolute;
+    inset: -8px;
+  }}
+  .resize-handle[data-handle="nw"],
+  .resize-handle[data-handle="se"] {{ cursor: nwse-resize; }}
+  .resize-handle[data-handle="ne"],
+  .resize-handle[data-handle="sw"] {{ cursor: nesw-resize; }}
+  .resize-handle[data-handle="w"],
+  .resize-handle[data-handle="e"]  {{ cursor: ew-resize; }}
+  #resize-outline {{
+    position: absolute;
+    border: 2px dashed rgba(3,169,244,0.6);
+    display: none;
+    pointer-events: none;
+    box-sizing: border-box;
   }}
   #error {{
     display: none;
@@ -273,11 +316,18 @@ _HTML_TEMPLATE = """\
 <div class="panels">
   <div class="panel">
     <h2>Raw SVG</h2>
-    <div class="canvas">
+    <div class="canvas" id="svg-canvas">
       <object id="svg-view" data="/svg"
               type="image/svg+xml"
               width="{width}" height="{height}">
       </object>
+      <div id="resize-outline"></div>
+      <div class="resize-handle" data-handle="nw"></div>
+      <div class="resize-handle" data-handle="ne"></div>
+      <div class="resize-handle" data-handle="sw"></div>
+      <div class="resize-handle" data-handle="se"></div>
+      <div class="resize-handle" data-handle="w"></div>
+      <div class="resize-handle" data-handle="e"></div>
     </div>
   </div>
   <div class="panel">
@@ -335,6 +385,7 @@ _HTML_TEMPLATE = """\
         "/png?t=" + ts;
       document.getElementById("opt-view").src =
         "/optimized.png?t=" + ts;
+      window.dispatchEvent(new CustomEvent("design-reload"));
     }} else if (e.data.startsWith("error:")) {{
       errDiv.textContent = e.data.substring(6);
       errDiv.style.display = "block";
@@ -389,6 +440,142 @@ function downloadData() {{
   a.click();
   URL.revokeObjectURL(a.href);
 }}
+</script>
+<script type="module">
+import {{ applyEdgeResize, applyCornerResize, MIN_RESIZE_DIM }}
+  from "/js/resize-math.js";
+const DISPLAY_W = {width};
+const DISPLAY_H = {height};
+const HANDLE_HALF = 6;
+let geom = null;
+let resizing = null;
+const canvas  = document.getElementById("svg-canvas");
+const svgObj  = document.getElementById("svg-view");
+const outline = document.getElementById("resize-outline");
+const handles = Array.from(
+  document.querySelectorAll(".resize-handle")
+);
+function getScale() {{
+  return svgObj.clientWidth / DISPLAY_W;
+}}
+function objOffset() {{
+  var or_ = svgObj.getBoundingClientRect();
+  var cr  = canvas.getBoundingClientRect();
+  return {{left: or_.left - cr.left, top: or_.top - cr.top}};
+}}
+function positionHandles() {{
+  if (!geom) return;
+  var s   = getScale();
+  var off = objOffset();
+  var gx  = off.left + geom.x * s;
+  var gy  = off.top  + geom.y * s;
+  var gw  = geom.w * s;
+  var gh  = geom.h * s;
+  outline.style.left    = gx + "px";
+  outline.style.top     = gy + "px";
+  outline.style.width   = gw + "px";
+  outline.style.height  = gh + "px";
+  outline.style.display = "block";
+  var pos = {{
+    nw: [gx - HANDLE_HALF,      gy - HANDLE_HALF],
+    ne: [gx + gw - HANDLE_HALF, gy - HANDLE_HALF],
+    sw: [gx - HANDLE_HALF,      gy + gh - HANDLE_HALF],
+    se: [gx + gw - HANDLE_HALF, gy + gh - HANDLE_HALF],
+    w:  [gx - HANDLE_HALF,      gy + gh / 2 - HANDLE_HALF],
+    e:  [gx + gw - HANDLE_HALF, gy + gh / 2 - HANDLE_HALF],
+  }};
+  handles.forEach(function(h) {{
+    var p = pos[h.dataset.handle];
+    if (!p) return;
+    h.style.left = p[0] + "px";
+    h.style.top  = p[1] + "px";
+    h.style.display = "block";
+  }});
+}}
+function fetchGeom() {{
+  fetch("/geometry")
+    .then(function(r) {{ return r.json(); }})
+    .then(function(g) {{ geom = g; positionHandles(); }})
+    .catch(function(err) {{
+      console.error("/geometry fetch failed:", err);
+    }});
+}}
+fetchGeom();
+window.addEventListener("design-reload", fetchGeom);
+const observer = new ResizeObserver(positionHandles);
+observer.observe(canvas);
+handles.forEach(function(hEl) {{
+  hEl.addEventListener("pointerdown", function(e) {{
+    e.preventDefault();
+    hEl.setPointerCapture(e.pointerId);
+    resizing = {{
+      handle: hEl.dataset.handle,
+      sg: {{x: geom.x, y: geom.y, w: geom.w, h: geom.h}},
+      px: e.clientX,
+      py: e.clientY,
+    }};
+  }});
+  hEl.addEventListener("pointermove", function(e) {{
+    if (!resizing) return;
+    var s  = getScale();
+    var dx = Math.round((e.clientX - resizing.px) / s);
+    var dy = Math.round((e.clientY - resizing.py) / s);
+    var sg = resizing.sg;
+    var r;
+    var h = resizing.handle;
+    if (h === "w" || h === "e") {{
+      r = applyEdgeResize(
+        h, dx, sg.x, sg.w, DISPLAY_W, MIN_RESIZE_DIM
+      );
+    }} else {{
+      r = applyCornerResize(
+        h, dx, dy, sg.x, sg.y, sg.w, sg.h,
+        MIN_RESIZE_DIM, DISPLAY_W, DISPLAY_H
+      );
+    }}
+    geom = Object.assign(
+      {{x: sg.x, y: sg.y, w: sg.w, h: sg.h}}, r
+    );
+    positionHandles();
+  }});
+  hEl.addEventListener("pointerup", function() {{
+    if (!resizing) return;
+    var committed = {{
+      x: geom.x, y: geom.y, w: geom.w, h: geom.h,
+    }};
+    resizing = null;
+    fetch("/data")
+      .then(function(r) {{
+        if (!r.ok) throw new Error("GET /data: " + r.status);
+        return r.json();
+      }})
+      .then(function(data) {{
+        data.widget.x = committed.x;
+        data.widget.y = committed.y;
+        data.widget.w = committed.w;
+        data.widget.h = committed.h;
+        fetch("/data", {{
+          method: "POST",
+          headers: {{"Content-Type": "application/json"}},
+          body: JSON.stringify(data),
+        }}).catch(function(err) {{
+          console.error("POST /data failed:", err);
+        }});
+        var ta = document.getElementById("data-editor");
+        ta.value = JSON.stringify(data, null, 2);
+      }})
+      .catch(function(err) {{
+        console.error("GET /data failed:", err);
+      }});
+  }});
+  hEl.addEventListener("pointercancel", function() {{
+    if (!resizing) return;
+    var sg = resizing.sg;
+    geom = {{x: sg.x, y: sg.y, w: sg.w, h: sg.h}};
+    positionHandles();
+    resizing = null;
+  }});
+}});
 </script>
 </body>
 </html>
@@ -613,13 +800,15 @@ class _DesignHandler(BaseHTTPRequestHandler):
     """HTTP handler for the design tool preview server.
 
     Routes:
-        ``GET  /``               -- three-panel HTML preview page
-        ``GET  /svg``            -- raw SVG (``image/svg+xml``)
-        ``GET  /png``            -- resvg-rasterized PNG
-        ``GET  /optimized.png``  -- e-ink optimized PNG
-        ``GET  /data``           -- current widget + states JSON
-        ``GET  /events``         -- SSE endpoint for live reload
-        ``POST /data``           -- update widget + states
+        ``GET  /``                  -- HTML preview page
+        ``GET  /svg``               -- raw SVG (``image/svg+xml``)
+        ``GET  /png``               -- resvg-rasterized PNG
+        ``GET  /optimized.png``     -- e-ink optimized PNG
+        ``GET  /data``              -- widget + states JSON
+        ``GET  /geometry``          -- effective widget bounds
+        ``GET  /js/resize-math.js`` -- compiled resize math
+        ``GET  /events``            -- SSE endpoint for reload
+        ``POST /data``              -- update widget + states
     """
 
     server: _DesignServer
@@ -633,6 +822,8 @@ class _DesignHandler(BaseHTTPRequestHandler):
             "/png": self._serve_png,
             "/optimized.png": self._serve_optimized,
             "/data": self._serve_data,
+            "/geometry": self._serve_geometry,
+            "/js/resize-math.js": self._serve_resize_math,
             "/events": self._serve_sse,
         }
         handler = routes.get(path)
@@ -687,6 +878,62 @@ class _DesignHandler(BaseHTTPRequestHandler):
         body = self._state().data_json().encode()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_geometry(self) -> None:
+        """Serve the effective widget bounds as JSON.
+
+        Renders the widget SVG and reads ``width``/``height`` from
+        the root ``<svg>`` tag.  This gives the actual content
+        dimensions computed by each widget's context builder (e.g.
+        the weather widget's ``total_h``), so the browser positions
+        resize handles around the rendered content rather than the
+        full display canvas.
+
+        When the widget config contains explicit ``w``/``h`` those
+        are already embedded in the SVG by ``render_widget_svg``, so
+        parsing the SVG is correct in all cases.
+        """
+        widget, config = self._state().snapshot()
+        x = widget.get("x", PADDING)
+        y = widget.get("y", 0)
+        # Render the widget to read actual content dimensions from
+        # the SVG root tag rather than falling back to the full
+        # display size.
+        svg = render_widget_svg(widget, config)
+        m = re.search(r'width="(\d+)"', svg)
+        w = int(m.group(1)) if m else config["width"] - x
+        m = re.search(r'height="(\d+)"', svg)
+        h = int(m.group(1)) if m else config["height"] - y
+        body = json.dumps({"x": x, "y": y, "w": w, "h": h}).encode()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_resize_math(self) -> None:
+        """Serve the compiled resize-math.js ESM module.
+
+        Reads the file built by ``pnpm build`` from the frontend
+        directory.  Returns 503 with a human-readable error when the
+        file has not been built yet.
+        """
+        if not _RESIZE_MATH_JS.exists():
+            self._text_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                "resize-math.js not built. Run:\n"
+                "  pnpm --dir custom_components/"
+                "eink_dashboard/frontend build",
+            )
+            return
+        body = _RESIZE_MATH_JS.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/javascript")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
@@ -928,6 +1175,25 @@ def _parse_args() -> argparse.Namespace:
 # -------------------------------------------------------------------
 
 
+def _ensure_resize_math() -> None:
+    """Build resize-math.js if missing or older than its TypeScript source.
+
+    Runs ``pnpm build`` in the frontend directory so the design tool
+    works out of the box without a separate manual build step.
+    """
+    needs_build = not _RESIZE_MATH_JS.exists() or (
+        _RESIZE_MATH_TS.stat().st_mtime > _RESIZE_MATH_JS.stat().st_mtime
+    )
+    if not needs_build:
+        return
+    _logger.info("Building resize-math.js …")
+    subprocess.run(
+        ["pnpm", "build"],
+        cwd=_FRONTEND_DIR,
+        check=True,
+    )
+
+
 def main() -> None:
     """Start the design tool server."""
     logging.basicConfig(
@@ -936,6 +1202,7 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
+    _ensure_resize_math()
     args = _parse_args()
     preset = DEVICE_PRESETS[args.device]
 
