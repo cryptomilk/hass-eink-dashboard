@@ -21,7 +21,7 @@ from typing import Any
 
 from PIL import Image, ImageFont
 
-from .const import PADDING
+from .const import DEFAULT_ROW_H, PADDING
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
@@ -248,6 +248,10 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
         padding=round(row_h * 0.21),
         radius=round(row_h * 0.21),
         icon_dia=icon_dia,
+        # Floor division (`//`) intentionally matches the formula in
+        # `_macros.svg.j2:164` (`icon_dia * 60 // 100`).  When that
+        # template line is replaced by this field, both sites agree.
+        # Don't switch to round() here before the template is updated.
         icon_inner=icon_dia * 60 // 100,
         font_primary=max(10, round(row_h * 0.32)),
         font_secondary=max(10, round(row_h * 0.25)),
@@ -255,6 +259,9 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
         inner_gap=round(row_h * 0.21),
         left_bar=max(2, round(row_h * 0.07)),
     )
+
+
+DEFAULT_METRICS: WidgetMetrics = _compute_metrics(DEFAULT_ROW_H)
 
 
 def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
@@ -279,6 +286,8 @@ def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
 # Proportional sizing constants for icon-and-text labels.
 # Imported by ``_build_status_icons_context()`` in
 # ``svg_render.py`` for layout calculations in the SVG pipeline.
+# ``_CHIP_ICON_INNER_RATIO`` duplicates ``WidgetMetrics.icon_inner``
+# and must stay in sync with it.
 _CHIP_PAD_RATIO: float = 0.18
 _CHIP_ICON_RATIO: float = 0.64
 _CHIP_ICON_INNER_RATIO: float = 0.6

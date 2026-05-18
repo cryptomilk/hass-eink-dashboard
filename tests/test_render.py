@@ -11,9 +11,11 @@ import pytest
 from custom_components.eink_dashboard.const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    DEFAULT_ROW_H,
     PADDING,
 )
 from custom_components.eink_dashboard.render import (
+    DEFAULT_METRICS,
     WidgetMetrics,
     _compute_metrics,
     _format_relative_date,
@@ -22,7 +24,6 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import (
-    _DEFAULT_ROW_H,
     _auto_row_height,
     _card_insets,
     _metrics_context,
@@ -1519,7 +1520,7 @@ class TestRenderSensorRows:
     # ── Auto-sizing tests ─────────────────────────────
 
     def test_sensor_rows_auto_height_single_entity(self) -> None:
-        # Without explicit h, widget height equals _DEFAULT_ROW_H.
+        # Without explicit h, widget height equals DEFAULT_ROW_H.
         w = {
             "type": "sensor_rows",
             "x": 0,
@@ -1531,10 +1532,10 @@ class TestRenderSensorRows:
         # Parse height from the SVG viewport attribute.
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
-        assert int(m.group(1)) == _DEFAULT_ROW_H
+        assert int(m.group(1)) == DEFAULT_ROW_H
 
     def test_sensor_rows_auto_height_two_entities(self) -> None:
-        # Without explicit h, widget height equals 2 * _DEFAULT_ROW_H.
+        # Without explicit h, widget height equals 2 * DEFAULT_ROW_H.
         w = {
             "type": "sensor_rows",
             "x": 0,
@@ -1548,7 +1549,7 @@ class TestRenderSensorRows:
         svg = render_widget_svg(w, self._config())
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
-        assert int(m.group(1)) == 2 * _DEFAULT_ROW_H
+        assert int(m.group(1)) == 2 * DEFAULT_ROW_H
 
     def test_sensor_rows_explicit_h_preserved(self) -> None:
         # An explicit h overrides auto-sizing.
@@ -1571,7 +1572,7 @@ class TestRenderSensorRows:
         # so card_row must not add its own padding again.  The icon
         # circle left arc should appear in the strip m.padding..2*m.padding;
         # double-padding would push the circle entirely past 2*m.padding.
-        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        metrics = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "sensor_rows",
@@ -1588,7 +1589,7 @@ class TestRenderSensorRows:
             metrics.padding,
             0,
             2 * metrics.padding,
-            _DEFAULT_ROW_H,
+            DEFAULT_ROW_H,
             threshold=200,
         )
 
@@ -1597,7 +1598,7 @@ class TestRenderSensorRows:
         # x_off = bar_w + m.padding.  The icon circle left arc should
         # appear in the strip (bar_w+m.padding)..(bar_w+2*m.padding);
         # double-padding would push it entirely past bar_w+2*m.padding.
-        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        metrics = _compute_metrics(DEFAULT_ROW_H)
         # For grayscale_levels=16 (default), bar_w == m.left_bar.
         bar_w = metrics.left_bar
         widgets = [
@@ -1616,7 +1617,7 @@ class TestRenderSensorRows:
             bar_w + metrics.padding,
             0,
             bar_w + 2 * metrics.padding,
-            _DEFAULT_ROW_H,
+            DEFAULT_ROW_H,
             threshold=200,
         )
 
@@ -2847,10 +2848,8 @@ class TestRenderWasteSchedule:
         # circle left arc should appear in the strip m.padding..2*m.padding;
         # double-padding would push it entirely past 2*m.padding.
         entries = [{"attribute": "Restmuell", "label": "Restmuell"}]
-        w = self._widget(
-            entries=entries, h=_DEFAULT_ROW_H, card_style="border"
-        )
-        metrics = _compute_metrics(_DEFAULT_ROW_H)
+        w = self._widget(entries=entries, h=DEFAULT_ROW_H, card_style="border")
+        metrics = _compute_metrics(DEFAULT_ROW_H)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = render_to_image([w], self._config())
@@ -2859,7 +2858,7 @@ class TestRenderWasteSchedule:
             metrics.padding,
             0,
             2 * metrics.padding,
-            _DEFAULT_ROW_H,
+            DEFAULT_ROW_H,
             threshold=200,
         )
 
@@ -3299,7 +3298,7 @@ class TestRenderWasteSchedule:
     # ── Auto-sizing tests ─────────────────────────────
 
     def test_waste_schedule_auto_height_single_entry(self) -> None:
-        # Without explicit h, widget height equals _DEFAULT_ROW_H.
+        # Without explicit h, widget height equals DEFAULT_ROW_H.
         w = {
             "type": "waste_schedule",
             "entity": "sensor.waste_collection",
@@ -3313,10 +3312,10 @@ class TestRenderWasteSchedule:
             svg = render_widget_svg(w, self._config())
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
-        assert int(m.group(1)) == _DEFAULT_ROW_H
+        assert int(m.group(1)) == DEFAULT_ROW_H
 
     def test_waste_schedule_auto_height_three_entries(self) -> None:
-        # Without explicit h, widget height equals 3 * _DEFAULT_ROW_H.
+        # Without explicit h, widget height equals 3 * DEFAULT_ROW_H.
         # Relies on all three _ENTRIES attributes being present and
         # within 0–3 days in MOCK_WASTE_SCHEDULE_STATES on _TODAY.
         w = {
@@ -3332,7 +3331,7 @@ class TestRenderWasteSchedule:
             svg = render_widget_svg(w, self._config())
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
-        assert int(m.group(1)) == 3 * _DEFAULT_ROW_H
+        assert int(m.group(1)) == 3 * DEFAULT_ROW_H
 
     def test_waste_schedule_explicit_h_preserved(self) -> None:
         # An explicit h overrides auto-sizing.
@@ -3501,6 +3500,20 @@ class TestComputeMetrics:
         for f in dataclasses.fields(WidgetMetrics):
             assert isinstance(getattr(m, f.name), int), f"{f.name} is not int"
 
+    def test_default_metrics_matches_default_row_h(
+        self,
+    ) -> None:
+        """Module-level DEFAULT_METRICS matches DEFAULT_ROW_H."""
+        # Verify the module-level constant equals
+        # _compute_metrics(DEFAULT_ROW_H).
+        assert _compute_metrics(DEFAULT_ROW_H) == DEFAULT_METRICS
+
+    def test_default_metrics_is_frozen(self) -> None:
+        """DEFAULT_METRICS is immutable."""
+        # Assignment to a frozen dataclass field must raise AttributeError.
+        with pytest.raises(AttributeError):
+            DEFAULT_METRICS.border = 99  # type: ignore[misc]
+
 
 class TestHelperFunctions:
     """Unit tests for shared helpers in svg_render.py."""
@@ -3545,14 +3558,14 @@ class TestHelperFunctions:
         assert _card_insets(m, "none", 16) == (0, 0, 0)
 
     def test_auto_row_height_no_title(self) -> None:
-        """Without title, height is num_rows * _DEFAULT_ROW_H."""
-        assert _auto_row_height("", 2) == 2 * _DEFAULT_ROW_H
+        """Without title, height is num_rows * DEFAULT_ROW_H."""
+        assert _auto_row_height("", 2) == 2 * DEFAULT_ROW_H
 
     def test_auto_row_height_with_title(self) -> None:
         """With title, content_h matches target within 1 px."""
         h = _auto_row_height("Title", 2)
         _, _, content_h = _title_layout("Title", h)
-        assert abs(content_h - 2 * _DEFAULT_ROW_H) <= 1
+        assert abs(content_h - 2 * DEFAULT_ROW_H) <= 1
 
     def test_auto_row_height_rejects_zero_rows(self) -> None:
         """num_rows < 1 raises ValueError."""

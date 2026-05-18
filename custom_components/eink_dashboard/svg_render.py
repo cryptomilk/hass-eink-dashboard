@@ -35,6 +35,7 @@ from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
+    DEFAULT_ROW_H,
     FONT_SIZE_TEXT,
     FONT_SIZE_WEATHER,
     PADDING,
@@ -404,16 +405,10 @@ def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
     return max(1, widget.get(key, fallback))
 
 
-# Default row height for auto-sizing row-based widgets.  Produces
-# readable metrics via _compute_metrics(56): font_primary=18,
-# icon_dia=36, padding=12, inner_gap=12.
-_DEFAULT_ROW_H = 56
-
-
 def _auto_row_height(
     title: str,
     num_rows: int,
-    row_h: int = _DEFAULT_ROW_H,
+    row_h: int = DEFAULT_ROW_H,
 ) -> int:
     """Compute natural widget height from content row count.
 
@@ -1107,7 +1102,7 @@ def _build_sensor_rows_context(
     if not entity_ids:
         return {
             "w": svg_w,
-            "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
+            "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
             "has_entities": False,
         }
 
@@ -1626,7 +1621,7 @@ def _build_waste_schedule_context(
 
     empty_ctx: dict[str, object] = {
         "w": svg_w,
-        "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
+        "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
         "has_rows": False,
     }
     if not entity_id or not entries:
