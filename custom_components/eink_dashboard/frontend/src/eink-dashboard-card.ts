@@ -24,6 +24,11 @@ const CARD_TAG = "eink-dashboard-card";
 const PADDING = 24;
 const HANDLE_SIZE = 12;
 
+// Extract the version query param from this module's own URL so
+// the dynamically loaded editor URL gets the same cache buster.
+const _CARD_VERSION =
+  new URL(import.meta.url).searchParams.get("v") ?? "";
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function buildHeaderText(device: { name: string }): string {
@@ -392,7 +397,12 @@ class EinkDashboardCard extends HTMLElement {
     if (customElements.get("eink-dashboard-editor")) return;
     const script = document.createElement("script");
     script.type = "module";
-    script.src = "/eink_dashboard/frontend/eink-dashboard-editor.js";
+    const editorUrl =
+      `/eink_dashboard/frontend/`
+      + `eink-dashboard-editor.js`;
+    script.src = _CARD_VERSION
+      ? `${editorUrl}?v=${_CARD_VERSION}`
+      : editorUrl;
     document.head.appendChild(script);
     await customElements.whenDefined("eink-dashboard-editor");
   }

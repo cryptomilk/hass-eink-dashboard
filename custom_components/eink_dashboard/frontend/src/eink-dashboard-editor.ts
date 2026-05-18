@@ -722,6 +722,41 @@ export function getSummary(widget: Widget): string {
   return t;
 }
 
+// ── Icon paths (MDI) ─────────────────────────────────────────────
+
+const MDI_DRAG =
+  "M7,19V17H9V19H7M11,19V17H13V19H11"
+  + "M15,19V17H17V19H15M7,15V13H9V15H7"
+  + "M11,15V13H13V15H11M15,15V13H17V15H15"
+  + "M7,11V9H9V11H7M11,11V9H13V11H11"
+  + "M15,11V9H17V11H15M7,7V5H9V7H7"
+  + "M11,7V5H13V7H11M15,7V5H17V7H15Z";
+
+const MDI_CHEVRON_DOWN =
+  "M7.41,8.58L12,13.17L16.59,8.58"
+  + "L18,10L12,16L6,10L7.41,8.58Z";
+
+const MDI_CLOSE =
+  "M19,6.41L17.59,5L12,10.59L6.41,5"
+  + "L5,6.41L10.59,12L5,17.59L6.41,19"
+  + "L12,13.41L17.59,19L19,17.59"
+  + "L13.41,12L19,6.41Z";
+
+/**
+ * Build an inline SVG string for a Material Design icon path.
+ *
+ * @param path - The SVG `d` attribute value. Must be a
+ *   trusted compile-time constant; user-controlled data
+ *   would create an XSS vector via innerHTML.
+ * @returns An `<svg>` element string with the path filled in.
+ */
+function svgIcon(path: string): string {
+  return (
+    `<svg viewBox="0 0 24 24" width="20" height="20">`
+    + `<path fill="currentColor" d="${path}"/></svg>`
+  );
+}
+
 // ── Editor class ─────────────────────────────────────────────────
 
 class EinkDashboardEditor extends HTMLElement {
@@ -729,6 +764,7 @@ class EinkDashboardEditor extends HTMLElement {
   private _widgets: Widget[] = [];
   private _display: DisplayConfig = { width: 0, height: 0 };
   private _expandedIndex = -1;
+  private _sortSelectedIndex: number | undefined;
   private _built = false;
   private _saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -758,6 +794,7 @@ class EinkDashboardEditor extends HTMLElement {
   setWidgets(widgets: Widget[]): void {
     this._widgets = widgets.map((w) => ({ ...w }));
     this._expandedIndex = -1;
+    this._sortSelectedIndex = undefined;
     this._rebuild();
   }
 
@@ -816,17 +853,28 @@ class EinkDashboardEditor extends HTMLElement {
         .widget-list {
           display: flex;
           flex-direction: column;
+          gap: 8px;
+          padding: 8px 12px;
         }
         .widget-item {
-          border-bottom: 1px solid
-            var(--divider-color, #e8e8e8);
+          border: 1px solid
+            var(--divider-color, #e0e0e0);
+          border-radius:
+            var(--ha-card-border-radius, 12px);
+          background:
+            var(--card-background-color, #fff);
+          overflow: hidden;
         }
         .widget-header {
           display: flex;
           align-items: center;
-          gap: 4px;
-          padding: 6px 8px;
+          gap: 2px;
+          padding: 0 4px 0 12px;
+          min-height: 48px;
           cursor: default;
+        }
+        .widget-header:hover {
+          background: rgba(0, 0, 0, 0.04);
         }
         .widget-label {
           flex: 1;
@@ -837,20 +885,57 @@ class EinkDashboardEditor extends HTMLElement {
           white-space: nowrap;
         }
         .widget-type-badge {
-          font-size: 11px;
+          font-size: 12px;
           color: var(--secondary-text-color, #757575);
-          margin-right: 4px;
-          min-width: 90px;
+          background: var(
+            --secondary-background-color, #f5f5f5
+          );
+          border-radius: 12px;
+          padding: 2px 8px;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .handle {
+          padding: 4px;
+          cursor: grab;
+          border-radius: 50%;
+          color: var(--secondary-text-color, #757575);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+          width: 36px;
+          height: 36px;
+        }
+        .handle:hover {
+          background: var(--divider-color, #e0e0e0);
+        }
+        .handle:focus-visible {
+          outline: 2px solid
+            var(--primary-color, #03a9f4);
+          outline-offset: -2px;
+        }
+        .handle svg { pointer-events: none; }
+        .widget-item.sort-selected {
+          outline: 2px solid
+            var(--primary-color, #03a9f4);
+          outline-offset: -2px;
+          border-color:
+            var(--primary-color, #03a9f4);
         }
         .icon-btn {
           background: none;
           border: none;
           cursor: pointer;
-          padding: 2px 4px;
+          padding: 4px;
           color: var(--secondary-text-color, #757575);
-          font-size: 14px;
-          line-height: 1;
-          border-radius: 3px;
+          border-radius: 50%;
+          width: 36px;
+          height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
         }
         .icon-btn:hover {
           background: var(--divider-color, #e0e0e0);
@@ -858,11 +943,18 @@ class EinkDashboardEditor extends HTMLElement {
         .icon-btn.delete:hover {
           color: var(--error-color, #b00020);
         }
-        .icon-btn.expand {
-          color: var(--primary-color, #03a9f4);
+        .icon-btn.expand svg {
+          transition:
+            transform 150ms
+            cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .icon-btn.expand.expanded svg {
+          transform: rotate(180deg);
         }
         .widget-form {
-          padding: 8px 12px 12px 12px;
+          padding: 12px;
+          border-top: 1px solid
+            var(--divider-color, #e0e0e0);
           background: var(
             --secondary-background-color, #fafafa
           );
@@ -978,7 +1070,10 @@ class EinkDashboardEditor extends HTMLElement {
           <span>Widgets</span>
           <button class="add-btn">+ Add Widget</button>
         </div>
-        <div class="widget-list"></div>
+        <ha-sortable
+          handle-selector=".handle"
+          draggable-selector=".widget-item"
+        ><div class="widget-list"></div></ha-sortable>
         <div class="editor-footer">
           <span class="display-info">${size}</span>
           <button class="save-btn">Save</button>
@@ -992,6 +1087,17 @@ class EinkDashboardEditor extends HTMLElement {
     this.shadowRoot!
       .querySelector<HTMLButtonElement>(".save-btn")!
       .addEventListener("click", () => this._onSave());
+    this.shadowRoot!
+      .querySelector("ha-sortable")!
+      .addEventListener(
+        "item-moved",
+        ((ev: CustomEvent<{
+          oldIndex: number;
+          newIndex: number;
+        }>) => {
+          this._onItemMoved(ev);
+        }) as EventListener,
+      );
     this._built = true;
   }
 
@@ -1022,7 +1128,7 @@ class EinkDashboardEditor extends HTMLElement {
 
   /**
    * Create the DOM element for a single widget row including
-   * its header controls (move, expand, delete).
+   * its header controls (drag handle, expand, delete).
    *
    * @param widget - Widget data to render.
    * @param index  - Position in the widget array.
@@ -1036,26 +1142,13 @@ class EinkDashboardEditor extends HTMLElement {
     const typeLabel = meta ? meta.label : widget.type;
     const summary = getSummary(widget);
     const isExpanded = this._expandedIndex === index;
-    const isFirst = index === 0;
-    const isLast = index === this._widgets.length - 1;
 
     const item = document.createElement("div");
     item.className = "widget-item";
+    item.dataset.index = String(index);
 
     const header = document.createElement("div");
     header.className = "widget-header";
-
-    const upBtn = document.createElement("button");
-    upBtn.className = "icon-btn";
-    upBtn.title = "Move up";
-    upBtn.textContent = "▲";
-    if (isFirst) upBtn.disabled = true;
-
-    const downBtn = document.createElement("button");
-    downBtn.className = "icon-btn";
-    downBtn.title = "Move down";
-    downBtn.textContent = "▼";
-    if (isLast) downBtn.disabled = true;
 
     const badge = document.createElement("span");
     badge.className = "widget-type-badge";
@@ -1066,33 +1159,44 @@ class EinkDashboardEditor extends HTMLElement {
     labelEl.title = summary;
     labelEl.textContent = summary;
 
+    const handle = document.createElement("div");
+    handle.className = "handle";
+    handle.title = "Drag to reorder";
+    handle.tabIndex = 0;
+    handle.setAttribute("role", "button");
+    handle.setAttribute("aria-label", "Drag to reorder");
+    handle.innerHTML = svgIcon(MDI_DRAG);
+    handle.addEventListener(
+      "keydown",
+      (ev) => this._onHandleKeyDown(ev, index),
+    );
+
     const expandBtn = document.createElement("button");
-    expandBtn.className = "icon-btn expand";
+    expandBtn.className =
+      `icon-btn expand${isExpanded ? " expanded" : ""}`;
     expandBtn.title = isExpanded ? "Collapse" : "Edit";
-    expandBtn.textContent = isExpanded ? "▾" : "▸";
+    expandBtn.innerHTML = svgIcon(MDI_CHEVRON_DOWN);
 
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "icon-btn delete";
     deleteBtn.title = "Delete";
-    deleteBtn.textContent = "✕";
+    deleteBtn.innerHTML = svgIcon(MDI_CLOSE);
 
-    header.append(upBtn, downBtn, badge, labelEl, expandBtn, deleteBtn);
+    header.append(badge, labelEl, handle, expandBtn, deleteBtn);
 
-    upBtn.addEventListener("click", () => this._onMoveUp(index));
-    downBtn.addEventListener(
-      "click", () => this._onMoveDown(index)
-    );
     expandBtn.addEventListener(
-      "click", () => this._onToggleExpand(index)
+      "click", () => this._onToggleExpand(index),
     );
     deleteBtn.addEventListener(
-      "click", () => this._onDelete(index)
+      "click", () => this._onDelete(index),
     );
 
     item.appendChild(header);
 
     if (isExpanded && meta) {
-      item.appendChild(this._buildWidgetForm(widget, index));
+      item.appendChild(
+        this._buildWidgetForm(widget, index),
+      );
     }
 
     return item;
@@ -1402,11 +1506,13 @@ class EinkDashboardEditor extends HTMLElement {
    * @param index - Index of the widget to update.
    */
   private _updateSummary(index: number): void {
-    const items = this.shadowRoot!
-      .querySelectorAll<HTMLElement>(".widget-item");
-    if (!items[index]) return;
+    const item = this.shadowRoot!
+      .querySelector<HTMLElement>(
+        `.widget-item[data-index="${index}"]`,
+      );
+    if (!item) return;
     const label =
-      items[index].querySelector<HTMLElement>(".widget-label");
+      item.querySelector<HTMLElement>(".widget-label");
     if (label) {
       const summary = getSummary(this._widgets[index]);
       label.textContent = summary;
@@ -1417,36 +1523,52 @@ class EinkDashboardEditor extends HTMLElement {
   // ── Event handlers ─────────────────────────────────────────────
 
   /**
-   * Swap a widget with its predecessor and re-render the list.
+   * Handle a drag-reorder event from ha-sortable.
    *
-   * @param index - Index of the widget to move up.
+   * Clears keyboard sort mode (pointer drag takes over),
+   * then delegates to _moveWidget.
+   *
+   * @param ev - Custom event with oldIndex and newIndex.
    */
-  private _onMoveUp(index: number): void {
-    if (index === 0) return;
-    [this._widgets[index - 1], this._widgets[index]] =
-      [this._widgets[index], this._widgets[index - 1]];
-    if (this._expandedIndex === index) {
-      this._expandedIndex = index - 1;
-    } else if (this._expandedIndex === index - 1) {
-      this._expandedIndex = index;
-    }
-    this._renderWidgetList();
-    this._fireWidgetChange();
+  private _onItemMoved(
+    ev: CustomEvent<{ oldIndex: number; newIndex: number }>,
+  ): void {
+    const { oldIndex, newIndex } = ev.detail;
+    if (oldIndex === newIndex) return;
+    this._sortSelectedIndex = undefined;
+    this._moveWidget(oldIndex, newIndex);
   }
 
   /**
-   * Swap a widget with its successor and re-render the list.
+   * Move a widget from oldIndex to newIndex, adjusting
+   * _expandedIndex so the expanded widget stays expanded,
+   * then re-renders and fires a widget-change event.
    *
-   * @param index - Index of the widget to move down.
+   * @param oldIndex - Current position of the widget.
+   * @param newIndex - Target position.
    */
-  private _onMoveDown(index: number): void {
-    if (index >= this._widgets.length - 1) return;
-    [this._widgets[index], this._widgets[index + 1]] =
-      [this._widgets[index + 1], this._widgets[index]];
-    if (this._expandedIndex === index) {
-      this._expandedIndex = index + 1;
-    } else if (this._expandedIndex === index + 1) {
-      this._expandedIndex = index;
+  private _moveWidget(
+    oldIndex: number,
+    newIndex: number,
+  ): void {
+    const [moved] = this._widgets.splice(oldIndex, 1);
+    this._widgets.splice(newIndex, 0, moved);
+    // Keep _expandedIndex pointing at the same widget.
+    if (this._expandedIndex === oldIndex) {
+      this._expandedIndex = newIndex;
+    } else if (oldIndex < newIndex) {
+      if (
+        this._expandedIndex > oldIndex
+        && this._expandedIndex <= newIndex
+      ) {
+        this._expandedIndex--;
+      }
+    // oldIndex > newIndex: items shifted right
+    } else if (
+      this._expandedIndex >= newIndex
+      && this._expandedIndex < oldIndex
+    ) {
+      this._expandedIndex++;
     }
     this._renderWidgetList();
     this._fireWidgetChange();
@@ -1459,8 +1581,19 @@ class EinkDashboardEditor extends HTMLElement {
    */
   private _onDelete(index: number): void {
     this._widgets.splice(index, 1);
-    if (this._expandedIndex === index) this._expandedIndex = -1;
-    else if (this._expandedIndex > index) this._expandedIndex -= 1;
+    if (this._expandedIndex === index) {
+      this._expandedIndex = -1;
+    } else if (this._expandedIndex > index) {
+      this._expandedIndex -= 1;
+    }
+    if (this._sortSelectedIndex === index) {
+      this._sortSelectedIndex = undefined;
+    } else if (
+      this._sortSelectedIndex !== undefined
+      && this._sortSelectedIndex > index
+    ) {
+      this._sortSelectedIndex--;
+    }
     this._renderWidgetList();
     this._fireWidgetChange();
   }
@@ -1474,6 +1607,81 @@ class EinkDashboardEditor extends HTMLElement {
     this._expandedIndex =
       this._expandedIndex === index ? -1 : index;
     this._renderWidgetList();
+  }
+
+  /**
+   * Handle keyboard events on the drag handle for
+   * accessible reordering.
+   *
+   * Enter/Space toggles sort-selection mode for the
+   * widget at the given index. While selected,
+   * ArrowUp/ArrowDown moves the widget one position.
+   * Escape cancels sort mode.
+   *
+   * @param ev    - Keyboard event from the handle.
+   * @param index - Widget index in the array.
+   */
+  private _onHandleKeyDown(
+    ev: KeyboardEvent,
+    index: number,
+  ): void {
+    const { key } = ev;
+    if (key === "Enter" || key === " ") {
+      ev.preventDefault();
+      this._sortSelectedIndex =
+        this._sortSelectedIndex === index
+          ? undefined
+          : index;
+      this._applySortSelectedClass();
+      return;
+    }
+    if (key === "Escape") {
+      ev.preventDefault();
+      this._sortSelectedIndex = undefined;
+      this._applySortSelectedClass();
+      return;
+    }
+    if (this._sortSelectedIndex === undefined) return;
+    if (key !== "ArrowUp" && key !== "ArrowDown") return;
+    ev.preventDefault();
+    const newIndex =
+      key === "ArrowUp" ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= this._widgets.length) {
+      return;
+    }
+    this._sortSelectedIndex = newIndex;
+    this._moveWidget(index, newIndex);
+    // Restore focus to the handle at its new position
+    // after _renderWidgetList has rebuilt the DOM.
+    requestAnimationFrame(() => {
+      const item = this.shadowRoot!
+        .querySelector<HTMLElement>(
+          `.widget-item[data-index="${newIndex}"]`,
+        );
+      item
+        ?.querySelector<HTMLElement>(".handle")
+        ?.focus();
+      this._applySortSelectedClass();
+    });
+  }
+
+  /**
+   * Apply or remove `.sort-selected` on each widget item
+   * based on the current value of _sortSelectedIndex.
+   */
+  private _applySortSelectedClass(): void {
+    this.shadowRoot!
+      .querySelectorAll<HTMLElement>(".widget-item")
+      .forEach((el) => {
+        const idx = parseInt(
+          el.dataset.index ?? "",
+          10,
+        );
+        el.classList.toggle(
+          "sort-selected",
+          idx === this._sortSelectedIndex,
+        );
+      });
   }
 
   /**
