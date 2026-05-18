@@ -13,4 +13,5 @@ node_modules/
 custom_components/eink_dashboard/frontend/eink-dashboard-card.js
 custom_components/eink_dashboard/frontend/eink-dashboard-editor.js
 custom_components/eink_dashboard/frontend/eink-widget-picker.js
+custom_components/eink_dashboard/frontend/resize-math.js
 custom_components/eink_dashboard/frontend/*.js.map
