@@ -19,7 +19,6 @@ const EDITOR_TAG = "eink-dashboard-editor";
 
 const FONT_SIZE_TEXT = 32;
 const FONT_SIZE_WEATHER = 32;
-const FONT_SIZE_DEVICE_BATTERY = 24;
 
 /** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
 const DEFAULT_CARD_STYLE: CardStyle = "none";
@@ -92,7 +91,6 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       y: 0,
       color: 0,
       layout: "icon",
-      font_size: FONT_SIZE_DEVICE_BATTERY,
       h: 40,
       card_style: DEFAULT_CARD_STYLE,
     },
@@ -552,17 +550,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [
-        {
-          type: "grid",
-          name: "",
-          schema: [
-            colorSelector(),
-            fontSizeSelector(FONT_SIZE_DEVICE_BATTERY),
-          ],
-        },
-        cardStyleSelector(),
-      ],
+      schema: [colorSelector(), cardStyleSelector()],
     },
   ],
 
