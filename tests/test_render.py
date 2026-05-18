@@ -3420,11 +3420,13 @@ class TestComputeMetrics:
             m.border = 99  # type: ignore[misc]
 
     def test_reference_baseline_h56(self) -> None:
+        """Reference values at the default row height."""
         m = _compute_metrics(56)
         assert m.border == 2
         assert m.padding == 12
         assert m.radius == 12
         assert m.icon_dia == 36
+        assert m.icon_inner == 21
         assert m.font_primary == 18
         assert m.font_secondary == 14
         assert m.divider == 4
@@ -3440,23 +3442,55 @@ class TestComputeMetrics:
         assert m.left_bar == 2
 
     def test_unclamped_fields_small_row_h(self) -> None:
+        """Unclamped fields scale proportionally at small heights."""
         m = _compute_metrics(10)
         assert m.padding == 2
         assert m.radius == 2
         assert m.icon_dia == 6
+        assert m.icon_inner == 3
         assert m.inner_gap == 2
 
     def test_scales_at_large_row_h(self) -> None:
+        """All fields scale proportionally at large heights."""
         m = _compute_metrics(200)
         assert m.border == 8
         assert m.padding == 42
         assert m.radius == 42
         assert m.icon_dia == 128
+        assert m.icon_inner == 76
         assert m.font_primary == 64
         assert m.font_secondary == 50
         assert m.divider == 14
         assert m.inner_gap == 42
         assert m.left_bar == 14
+
+    def test_reference_h40(self) -> None:
+        """All fields at a compact row height."""
+        m = _compute_metrics(40)
+        assert m.border == 2
+        assert m.padding == 8
+        assert m.radius == 8
+        assert m.icon_dia == 26
+        assert m.icon_inner == 15
+        assert m.font_primary == 13
+        assert m.font_secondary == 10
+        assert m.divider == 3
+        assert m.inner_gap == 8
+        assert m.left_bar == 3
+
+    def test_reference_h72(self) -> None:
+        """All fields at a spacious row height."""
+        m = _compute_metrics(72)
+        assert m.border == 3
+        assert m.padding == 15
+        assert m.radius == 15
+        assert m.icon_dia == 46
+        assert m.icon_inner == 27
+        assert m.font_primary == 23
+        assert m.font_secondary == 18
+        assert m.divider == 5
+        assert m.inner_gap == 15
+        assert m.left_bar == 5
 
     def test_clamp_boundary_border(self) -> None:
         assert _compute_metrics(37).border == 2  # clamped: round(1.48) = 1 < 2

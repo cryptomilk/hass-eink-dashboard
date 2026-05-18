@@ -211,6 +211,7 @@ class WidgetMetrics:
         padding: Inner padding between card edge and content.
         radius: Corner radius for rounded card rectangles.
         icon_dia: Diameter of circular status/category icons.
+        icon_inner: Side length of the icon glyph inside a circle.
         font_primary: Font size for main labels and values.
         font_secondary: Font size for secondary text (dates, units).
         divider: Thickness of horizontal divider lines between rows.
@@ -222,6 +223,7 @@ class WidgetMetrics:
     padding: int
     radius: int
     icon_dia: int
+    icon_inner: int
     font_primary: int
     font_secondary: int
     divider: int
@@ -240,11 +242,13 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
         A WidgetMetrics instance with all derived pixel sizes.  See
         WidgetMetrics for field descriptions.
     """
+    icon_dia = round(row_h * 0.64)
     return WidgetMetrics(
         border=max(2, round(row_h * 0.04)),
         padding=round(row_h * 0.21),
         radius=round(row_h * 0.21),
-        icon_dia=round(row_h * 0.64),
+        icon_dia=icon_dia,
+        icon_inner=icon_dia * 60 // 100,
         font_primary=max(10, round(row_h * 0.32)),
         font_secondary=max(10, round(row_h * 0.25)),
         divider=max(2, round(row_h * 0.07)),
