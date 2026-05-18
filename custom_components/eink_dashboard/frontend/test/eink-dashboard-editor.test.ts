@@ -255,7 +255,7 @@ describe("getSummary", () => {
 
   it("returns direction+style summary for separator", () => {
     expect(getSummary({ type: "separator", y: 200 })).toBe(
-      "h line @200"
+      "Horizontal line at Y:200"
     );
   });
 
@@ -267,12 +267,14 @@ describe("getSummary", () => {
         style: "bar",
         y: 50,
       })
-    ).toBe("v bar @50");
+    ).toBe("Vertical bar at Y:50");
   });
 
-  it("defaults to h line @0 for separator with no fields", () => {
-    // direction and style both default to h/line, y defaults to 0
-    expect(getSummary({ type: "separator" })).toBe("h line @0");
+  it("defaults to horizontal line at Y:0 for separator with no fields", () => {
+    // direction and style both default to horizontal/line, y defaults to 0
+    expect(getSummary({ type: "separator" })).toBe(
+      "Horizontal line at Y:0"
+    );
   });
 });
 
@@ -306,25 +308,44 @@ describe("SCHEMAS form grouping", () => {
     }
   });
 
-  it("first expandable section has expanded: true", () => {
-    // The most important section (content or layout) must be open
-    // by default so users see meaningful fields immediately.
+  it("content section is expanded by default", () => {
+    // The content section must be open by default so users see
+    // meaningful fields immediately when they open a widget form.
     for (const type of ALL_TYPES) {
       const schema = SCHEMAS[type](DISPLAY);
       const sections = getExpandableSections(schema);
-      expect(sections[0].expanded).toBe(true);
+      const content = sections.find((s) => s.name === "content");
+      expect(content?.expanded).toBe(true);
     }
   });
 
-  it("non-first expandable sections do not start expanded", () => {
-    // Secondary sections (layout, appearance) are collapsed by default
-    // to reduce visual clutter in the editor.
+  it("identity and secondary sections do not start expanded", () => {
+    // The identity section (label/description) and secondary sections
+    // (layout, appearance) are collapsed by default to reduce visual
+    // clutter — most widgets won't have a label set.
     for (const type of ALL_TYPES) {
       const schema = SCHEMAS[type](DISPLAY);
       const sections = getExpandableSections(schema);
-      for (const section of sections.slice(1)) {
-        expect(section.expanded).toBeFalsy();
+      for (const section of sections) {
+        if (section.name !== "content") {
+          expect(section.expanded).toBeFalsy();
+        }
       }
+    }
+  });
+
+  it("every schema has an identity section with label and description", () => {
+    // All widget types expose the editor-only label and description
+    // fields so users can annotate any widget in the list.
+    for (const type of ALL_TYPES) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const identity = getExpandableSections(schema).find(
+        (s) => s.name === "identity"
+      );
+      expect(identity).toBeDefined();
+      const fields = flattenFields(identity!.schema!);
+      expect(fields).toContain("label");
+      expect(fields).toContain("description");
     }
   });
 

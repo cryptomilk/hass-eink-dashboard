@@ -262,11 +262,38 @@ function colorSelector(defaultColor: number = 0): HaFormSchema {
   };
 }
 
+/**
+ * Common "Identity" section prepended to every widget's
+ * form schema.
+ *
+ * Uses ``flatten: true`` so ``label`` and ``description``
+ * merge into the widget data object at the top level.
+ * Both names are reserved on ``WidgetBase`` in ha.d.ts —
+ * do not reuse them in any widget-specific schema.
+ *
+ * @returns An expandable ha-form section with label and
+ *   description.
+ */
+function identitySection(): HaFormSchema {
+  return {
+    name: "identity",
+    type: "expandable",
+    flatten: true,
+    title: "Identity",
+    icon: "mdi:tag",
+    schema: [
+      { name: "label", selector: { text: {} } },
+      { name: "description", selector: { text: {} } },
+    ],
+  };
+}
+
 export const SCHEMAS: Record<
   string,
   (d: DisplayConfig) => HaFormSchema[]
 > = {
   text: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -316,6 +343,7 @@ export const SCHEMAS: Record<
   ],
 
   separator: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -403,6 +431,7 @@ export const SCHEMAS: Record<
   ],
 
   weather: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -442,6 +471,7 @@ export const SCHEMAS: Record<
   ],
 
   sensor_rows: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -483,6 +513,7 @@ export const SCHEMAS: Record<
   ],
 
   device_battery: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -536,6 +567,7 @@ export const SCHEMAS: Record<
   ],
 
   status_icons: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -589,6 +621,7 @@ export const SCHEMAS: Record<
   ],
 
   waste_schedule: (d) => [
+    identitySection(),
     {
       name: "content",
       type: "expandable",
@@ -651,6 +684,8 @@ export const HELPERS: Record<string, string> = {
 };
 
 export const LABELS: Record<string, string> = {
+  label: "Label",
+  description: "Description",
   text: "Text",
   entity: "Entity",
   entities: "Entities",
@@ -715,9 +750,10 @@ export function getSummary(widget: Widget): string {
     return `${title}${count} entr${count === 1 ? "y" : "ies"}`;
   }
   if (t === "separator") {
-    const dir = widget.direction === "vertical" ? "v" : "h";
+    const dir = widget.direction === "vertical"
+      ? "Vertical" : "Horizontal";
     const sty = widget.style === "bar" ? "bar" : "line";
-    return `${dir} ${sty} @${widget.y ?? 0}`;
+    return `${dir} ${sty} at Y:${widget.y ?? 0}`;
   }
   return t;
 }
@@ -878,8 +914,22 @@ class EinkDashboardEditor extends HTMLElement {
         }
         .widget-label {
           flex: 1;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          overflow: hidden;
+          min-width: 0;
+        }
+        .widget-label-primary {
           font-size: 13px;
           color: var(--primary-text-color, #212121);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .widget-secondary {
+          font-size: 11px;
+          color: var(--secondary-text-color, #757575);
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -1127,6 +1177,53 @@ class EinkDashboardEditor extends HTMLElement {
   }
 
   /**
+   * Populate a widget-label element with primary and secondary
+   * text spans.
+   *
+   * When the widget has a user-set label the primary span shows
+   * it and the secondary span shows the type summary (plus
+   * description if it differs). Otherwise the primary span shows
+   * the summary alone. Clears existing children before building.
+   *
+   * @param el     - The `.widget-label` container element.
+   * @param widget - Widget data to derive text from.
+   */
+  private _populateLabel(
+    el: HTMLElement,
+    widget: Widget,
+  ): void {
+    el.textContent = "";
+    const summary = getSummary(widget);
+
+    if (widget.label) {
+      const primary = document.createElement("span");
+      primary.className = "widget-label-primary";
+      primary.textContent = widget.label;
+      primary.title = widget.label;
+
+      const parts: string[] = [summary];
+      if (
+        widget.description
+        && widget.description !== summary
+      ) {
+        parts.push(widget.description);
+      }
+      const secondary = document.createElement("span");
+      secondary.className = "widget-secondary";
+      secondary.textContent = parts.join(" · ");
+
+      el.title = widget.label;
+      el.append(primary, secondary);
+    } else {
+      const primary = document.createElement("span");
+      primary.className = "widget-label-primary";
+      primary.title = summary;
+      primary.textContent = summary;
+      el.appendChild(primary);
+    }
+  }
+
+  /**
    * Create the DOM element for a single widget row including
    * its header controls (drag handle, expand, delete).
    *
@@ -1140,7 +1237,6 @@ class EinkDashboardEditor extends HTMLElement {
   ): HTMLElement {
     const meta = WIDGET_TYPES[widget.type];
     const typeLabel = meta ? meta.label : widget.type;
-    const summary = getSummary(widget);
     const isExpanded = this._expandedIndex === index;
 
     const item = document.createElement("div");
@@ -1154,10 +1250,9 @@ class EinkDashboardEditor extends HTMLElement {
     badge.className = "widget-type-badge";
     badge.textContent = typeLabel;
 
-    const labelEl = document.createElement("span");
+    const labelEl = document.createElement("div");
     labelEl.className = "widget-label";
-    labelEl.title = summary;
-    labelEl.textContent = summary;
+    this._populateLabel(labelEl, widget);
 
     const handle = document.createElement("div");
     handle.className = "handle";
@@ -1514,9 +1609,7 @@ class EinkDashboardEditor extends HTMLElement {
     const label =
       item.querySelector<HTMLElement>(".widget-label");
     if (label) {
-      const summary = getSummary(this._widgets[index]);
-      label.textContent = summary;
-      label.title = summary;
+      this._populateLabel(label, this._widgets[index]);
     }
   }
 

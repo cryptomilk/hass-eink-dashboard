@@ -122,6 +122,9 @@ export interface LayoutResponse {
 
 interface WidgetBase {
   type: string;
+  // Editor-only metadata — not rendered in the SVG output.
+  label?: string;
+  description?: string;
   x?: number;
   y?: number;
   w?: number;
