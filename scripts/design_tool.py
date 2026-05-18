@@ -442,8 +442,10 @@ function downloadData() {{
 }}
 </script>
 <script type="module">
-import {{ applyEdgeResize, applyCornerResize, MIN_RESIZE_DIM }}
-  from "/js/resize-math.js";
+import {{
+  applyEdgeResize, applyCornerResize, MIN_RESIZE_DIM,
+  scaleSvgPreview, clearSvgScale,
+}} from "/js/resize-math.js";
 const DISPLAY_W = {width};
 const DISPLAY_H = {height};
 const HANDLE_HALF = 6;
@@ -537,12 +539,29 @@ handles.forEach(function(hEl) {{
       {{x: sg.x, y: sg.y, w: sg.w, h: sg.h}}, r
     );
     positionHandles();
+    // contentDocument may reference stale DOM during a
+    // design-reload; null-checks prevent errors but the
+    // scale may target the outgoing document.
+    var doc = svgObj.contentDocument;
+    if (doc) {{
+      var inner = doc.querySelector("svg > svg");
+      if (inner) {{
+        inner.setAttribute("x", String(geom.x));
+        inner.setAttribute("y", String(geom.y));
+        scaleSvgPreview(inner, sg.w, sg.h, geom.w, geom.h);
+      }}
+    }}
   }});
   hEl.addEventListener("pointerup", function() {{
     if (!resizing) return;
     var committed = {{
       x: geom.x, y: geom.y, w: geom.w, h: geom.h,
     }};
+    var doc = svgObj.contentDocument;
+    if (doc) {{
+      var inner = doc.querySelector("svg > svg");
+      if (inner) clearSvgScale(inner);
+    }}
     resizing = null;
     fetch("/data")
       .then(function(r) {{

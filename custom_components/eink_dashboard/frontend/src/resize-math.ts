@@ -224,3 +224,38 @@ export function applyCornerResize(
     h: startBottom - newY,
   };
 }
+
+// ── SVG resize preview helpers ────────────────────────────────────────────────
+
+/**
+ * Apply a CSS scale transform to an SVG element to preview a resize.
+ *
+ * The element is scaled from its top-left corner (transform-origin 0 0)
+ * so the content appears to fill the new dimensions. Callers pass the
+ * original dimensions (from the element's width/height attributes) and
+ * the current drag target dimensions. For single-axis resizes, pass the
+ * unchanged axis's original value for both origN and newN so the scale
+ * on that axis is 1.
+ *
+ * @param svg - SVG element whose visual output should be scaled.
+ * @param origW - Original width of the SVG before the resize started.
+ * @param origH - Original height of the SVG before the resize started.
+ * @param newW - Current target width.
+ * @param newH - Current target height.
+ */
+export function scaleSvgPreview(
+  svg: SVGElement,
+  origW: number,
+  origH: number,
+  newW: number,
+  newH: number,
+): void {
+  svg.style.transformOrigin = "0 0";
+  svg.style.transform = `scale(${newW / origW}, ${newH / origH})`;
+}
+
+/** Clear the CSS scale transform applied by {@link scaleSvgPreview}. */
+export function clearSvgScale(svg: SVGElement): void {
+  svg.style.transform = "";
+  svg.style.transformOrigin = "";
+}

@@ -18,6 +18,8 @@ import {
   snapToEdges,
   applyEdgeResize,
   applyCornerResize,
+  scaleSvgPreview,
+  clearSvgScale,
 } from "./resize-math.js";
 
 const CARD_TAG = "eink-dashboard-card";
@@ -70,6 +72,10 @@ interface ResizeStart {
   length?: number;
   /** Raw widget.length before resize (undefined = default span). */
   rawLength?: number;
+  /** Intrinsic width from the rendered SVG's width attribute. */
+  svgW?: number;
+  /** Intrinsic height from the rendered SVG's height attribute. */
+  svgH?: number;
 }
 
 type MutableWidget = Widget & { x2?: number; y2?: number };
@@ -859,6 +865,29 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   /**
+   * Scale the SVG inside a widget wrapper to preview new dimensions.
+   *
+   * Uses the pre-drag SVG dimensions stored in the active
+   * `_resizeWidgetStart` snapshot as the scale origin. Does nothing
+   * when no resize is in progress or when the SVG has no explicit
+   * width/height attributes (e.g. viewBox-only SVGs).
+   *
+   * @param wrapper - The widget wrapper div containing the SVG.
+   * @param newW - Target width in display-space pixels.
+   * @param newH - Target height in display-space pixels.
+   */
+  private _scaleSvgInWrapper(
+    wrapper: HTMLDivElement,
+    newW: number,
+    newH: number,
+  ): void {
+    const s = this._resizeWidgetStart;
+    if (s?.svgW == null || s.svgH == null) return;
+    const svg = wrapper.querySelector<SVGElement>("svg");
+    if (svg) scaleSvgPreview(svg, s.svgW, s.svgH, newW, newH);
+  }
+
+  /**
    * Collect bounding boxes of all widgets except the one at
    * excludeIndex, using DOM wrapper geometry for accurate
    * rendered dimensions.
@@ -1043,6 +1072,16 @@ class EinkDashboardCard extends HTMLElement {
           ? dh - PADDING - (sw.y ?? 0)
           : dw - PADDING - (sw.x ?? PADDING));
       }
+      // Capture SVG dimensions once at drag-start so pointermove
+      // can compute scale relative to a stable reference.
+      const startWrapper = this._wrapperAt(index);
+      const startSvg = startWrapper?.querySelector<SVGElement>("svg");
+      if (startSvg) {
+        const wa = startSvg.getAttribute("width");
+        const ha = startSvg.getAttribute("height");
+        if (wa != null) s.svgW = parseFloat(wa);
+        if (ha != null) s.svgH = parseFloat(ha);
+      }
       this._resizeIndex = index;
       this._resizeHandle = handleId;
       this._resizeStartX = event.clientX;
@@ -1114,7 +1153,8 @@ class EinkDashboardCard extends HTMLElement {
           const delta = dir === "vertical" ? dy : dx;
           sw.length = snap(Math.max(20, sLen + delta));
         }
-        // CSS feedback for separator: update wrapper dimensions.
+        // CSS feedback for separator: update wrapper dimensions and
+        // scale the SVG preview to match.
         if (wrapper) {
           if (dir === "vertical") {
             wrapper.style.top = `${sw.y}px`;
@@ -1123,6 +1163,11 @@ class EinkDashboardCard extends HTMLElement {
             wrapper.style.left = `${sw.x}px`;
             wrapper.style.width = `${sw.length}px`;
           }
+          this._scaleSvgInWrapper(
+            wrapper,
+            dir === "vertical" ? (s.svgW ?? 0) : (sw.length ?? 0),
+            dir === "vertical" ? (sw.length ?? 0) : (s.svgH ?? 0),
+          );
         }
       } else if (handle === "w" || handle === "e") {
         // Edge handles: width-only resize.
@@ -1136,7 +1181,10 @@ class EinkDashboardCard extends HTMLElement {
           // "e" handle doesn't write w.x (left edge is fixed);
           // w.x ?? s.x correctly falls back to the captured start x.
           wrapper.style.left = `${w.x ?? s.x}px`;
-          if (w.w != null) wrapper.style.width = `${w.w}px`;
+          if (w.w != null) {
+            wrapper.style.width = `${w.w}px`;
+            this._scaleSvgInWrapper(wrapper, w.w, s.svgH ?? 0);
+          }
         }
       } else {
         // Corner handles: width + height resize.
@@ -1169,6 +1217,9 @@ class EinkDashboardCard extends HTMLElement {
           wrapper.style.top = `${w.y ?? s.y}px`;
           if (w.w != null) wrapper.style.width = `${w.w}px`;
           if (w.h != null) wrapper.style.height = `${w.h}px`;
+          if (w.w != null && w.h != null) {
+            this._scaleSvgInWrapper(wrapper, w.w, w.h);
+          }
         }
       }
       return;
@@ -1276,8 +1327,8 @@ class EinkDashboardCard extends HTMLElement {
       if (wrapper) {
         wrapper.style.width = "";
         wrapper.style.height = "";
-        wrapper.style.transform = "";
-        wrapper.style.transformOrigin = "";
+        const svg = wrapper.querySelector<SVGElement>("svg");
+        if (svg) clearSvgScale(svg);
         // Keep position at the committed coordinates to avoid a
         // visible jump while _refetchWidget re-renders the SVG.
         const w = this._layout!.widgets[index];
@@ -1329,8 +1380,8 @@ class EinkDashboardCard extends HTMLElement {
       if (wrapper) {
         wrapper.style.width = "";
         wrapper.style.height = "";
-        wrapper.style.transform = "";
-        wrapper.style.transformOrigin = "";
+        const svg = wrapper.querySelector<SVGElement>("svg");
+        if (svg) clearSvgScale(svg);
         wrapper.style.top = `${s.y}px`;
         wrapper.style.left = `${s.x}px`;
       }
