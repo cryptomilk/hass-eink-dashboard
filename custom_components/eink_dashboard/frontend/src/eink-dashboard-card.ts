@@ -110,6 +110,8 @@ class EinkDashboardCard extends HTMLElement {
   private _resizeStartY = 0;
   private _resizeWidgetStart: ResizeStart | null = null;
   private _handleEls: HTMLDivElement[] = [];
+  private _guideLineX: HTMLDivElement | null = null;
+  private _guideLineY: HTMLDivElement | null = null;
 
   constructor() {
     super();
@@ -152,6 +154,8 @@ class EinkDashboardCard extends HTMLElement {
       this._resizeWidgetStart = null;
       this._hoverIndex = -1;
       this._handleEls = [];
+      this._guideLineX = null;
+      this._guideLineY = null;
     }
   }
 
@@ -268,6 +272,24 @@ class EinkDashboardCard extends HTMLElement {
           right: -8px;
           bottom: -8px;
           left: -8px;
+        }
+        .guide-line {
+          position: absolute;
+          display: none;
+          pointer-events: none;
+          z-index: 5;
+        }
+        .guide-line-x {
+          top: 0;
+          bottom: 0;
+          width: 1px;
+          background: rgba(3, 169, 244, 0.6);
+        }
+        .guide-line-y {
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: rgba(3, 169, 244, 0.6);
         }
         img.server-render {
           display: block;
@@ -540,6 +562,16 @@ class EinkDashboardCard extends HTMLElement {
       this._handleEls.push(h);
     }
 
+    const guideX = document.createElement("div");
+    guideX.className = "guide-line guide-line-x";
+    svgCanvas.appendChild(guideX);
+    this._guideLineX = guideX;
+
+    const guideY = document.createElement("div");
+    guideY.className = "guide-line guide-line-y";
+    svgCanvas.appendChild(guideY);
+    this._guideLineY = guideY;
+
     const img = document.createElement("img");
     img.className = "server-render";
     img.style.display = "none";
@@ -750,6 +782,47 @@ class EinkDashboardCard extends HTMLElement {
   }
 
   // ── Drag / resize interaction ─────────────────────────────────────────────
+
+  /**
+   * Show or hide alignment guide lines at the given display-space
+   * coordinates.
+   *
+   * @param gx - X-coordinate for the vertical guide, or `undefined`
+   *   to hide it.
+   * @param gy - Y-coordinate for the horizontal guide, or `undefined`
+   *   to hide it.
+   */
+  private _showGuides(
+    gx: number | undefined,
+    gy: number | undefined,
+  ): void {
+    if (this._guideLineX) {
+      if (gx !== undefined) {
+        this._guideLineX.style.left = `${gx}px`;
+        this._guideLineX.style.display = "block";
+      } else {
+        this._guideLineX.style.display = "none";
+      }
+    }
+    if (this._guideLineY) {
+      if (gy !== undefined) {
+        this._guideLineY.style.top = `${gy}px`;
+        this._guideLineY.style.display = "block";
+      } else {
+        this._guideLineY.style.display = "none";
+      }
+    }
+  }
+
+  /** Hide both alignment guide lines. */
+  private _hideGuides(): void {
+    if (this._guideLineX) {
+      this._guideLineX.style.display = "none";
+    }
+    if (this._guideLineY) {
+      this._guideLineY.style.display = "none";
+    }
+  }
 
   /**
    * Returns the CSS scale factor mapping display-space pixels
@@ -991,8 +1064,9 @@ class EinkDashboardCard extends HTMLElement {
       y2: w.y2,
     };
     this._svgContainer!.style.cursor = "grabbing";
-    // Hide handles during drag.
+    // Hide handles during drag; keep the blue outline on the dragged widget.
     this._clearHandles();
+    wrapper.classList.add("edit-hover");
   }
 
   private _onPointerMove(event: PointerEvent): void {
@@ -1120,9 +1194,11 @@ class EinkDashboardCard extends HTMLElement {
         // re-clamp after the snap.
         w.x = Math.max(0, Math.min(width - 1, snapped.x));
         w.y = Math.max(0, Math.min(height - 1, snapped.y));
+        this._showGuides(snapped.guideX, snapped.guideY);
       } else {
         w.x = snap(rawX);
         w.y = snap(rawY);
+        this._hideGuides();
       }
 
       // x2/y2 are absolute coordinates, not offsets, so they
@@ -1217,6 +1293,7 @@ class EinkDashboardCard extends HTMLElement {
       this._dragIndex = -1;
       this._dragWidgetStart = null;
       this._svgContainer!.style.cursor = "";
+      this._hideGuides();
 
       if (this._editor) {
         this._editor.setWidgets(this._layout!.widgets);
@@ -1271,6 +1348,7 @@ class EinkDashboardCard extends HTMLElement {
       this._dragIndex = -1;
       this._dragWidgetStart = null;
       this._svgContainer!.style.cursor = "";
+      this._hideGuides();
     }
   }
 

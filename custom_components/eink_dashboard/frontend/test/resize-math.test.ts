@@ -19,74 +19,96 @@ describe("snap", () => {
 
 describe("snapToEdges", () => {
   it("returns grid snap when there are no targets", () => {
-    // With nothing to snap to, each axis falls back to snap().
-    expect(snapToEdges({ x: 13, y: 13, w: 100, h: 50 }, []))
-      .toEqual({ x: 16, y: 16 });
+    // With nothing to snap to, each axis falls back to snap() and
+    // no guide lines are produced.
+    const result = snapToEdges(
+      { x: 13, y: 13, w: 100, h: 50 }, [],
+    );
+    expect(result.x).toBe(16);
+    expect(result.y).toBe(16);
+    expect(result.guideX).toBeUndefined();
+    expect(result.guideY).toBeUndefined();
   });
 
   it("snaps left edge to target left edge (alignment)", () => {
     // Candidate left=105, target left=100 — distance 5 within threshold.
+    // Guide line appears at x=100 (the matched target edge).
     const result = snapToEdges(
       { x: 105, y: 0, w: 80, h: 40 },
       [{ x: 100, y: 200, w: 60, h: 40 }],
     );
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(100);
+    expect(result.guideY).toBeUndefined();
   });
 
   it("snaps left edge to target right edge (abutment)", () => {
     // Candidate left=147, target right=150 — distance 3 within threshold.
+    // Guide line appears at x=150 (the matched target edge).
     const result = snapToEdges(
       { x: 147, y: 0, w: 80, h: 40 },
       [{ x: 50, y: 200, w: 100, h: 40 }],
     );
     expect(result.x).toBe(150);
+    expect(result.guideX).toBe(150);
+    expect(result.guideY).toBeUndefined();
   });
 
   it("snaps right edge to target left edge (abutment)", () => {
     // Candidate right=190, target left=200 — distance 10 within threshold.
     // Candidate shifts right by 10 so right=200, meaning x=100.
+    // Guide line at x=200 (the target left edge both edges align on).
     const result = snapToEdges(
       { x: 90, y: 0, w: 100, h: 40 },
       [{ x: 200, y: 200, w: 60, h: 40 }],
     );
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(200);
+    expect(result.guideY).toBeUndefined();
   });
 
   it("snaps right edge to target right edge (alignment)", () => {
     // Candidate right=195, target right=200 — distance 5 within threshold.
     // Candidate shifts right by 5 so right=200, meaning x=100.
+    // Guide line at x=200.
     const result = snapToEdges(
       { x: 95, y: 0, w: 100, h: 40 },
       [{ x: 50, y: 200, w: 150, h: 40 }],
     );
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(200);
+    expect(result.guideY).toBeUndefined();
   });
 
   it("snaps Y axis independently of X", () => {
     // X: nearest edge is target left=300, distance=250 — beyond
-    // threshold, falls back to grid. Y: top-to-top distance=5,
-    // within threshold — snaps to 200.
+    // threshold, falls back to grid (guideX undefined). Y: top-to-top
+    // distance=5, within threshold — snaps to 200 (guideY=200).
     const result = snapToEdges(
       { x: 50, y: 195, w: 80, h: 60 },
       [{ x: 300, y: 200, w: 80, h: 60 }],
     );
-    expect(result.x).toBe(snap(50)); // grid fallback
-    expect(result.y).toBe(200);      // edge snap
+    expect(result.x).toBe(snap(50));   // grid fallback
+    expect(result.y).toBe(200);        // edge snap
+    expect(result.guideX).toBeUndefined();
+    expect(result.guideY).toBe(200);
   });
 
   it("falls back to grid snap when beyond threshold", () => {
-    // All edges more than 12px away — grid snap applies.
+    // All edges more than 12px away — grid snap applies, no guides.
     const result = snapToEdges(
       { x: 170, y: 80, w: 80, h: 40 },
       [{ x: 100, y: 200, w: 50, h: 40 }],
     );
     expect(result.x).toBe(snap(170));
     expect(result.y).toBe(snap(80));
+    expect(result.guideX).toBeUndefined();
+    expect(result.guideY).toBeUndefined();
   });
 
   it("picks the closest edge when multiple targets overlap", () => {
     // Target A right=100, target B left=103. Candidate left=101.
-    // Distance to A=1, distance to B=2 — snaps to A.
+    // Distance to A=1, distance to B=2 — snaps to A, guide at x=100.
     const result = snapToEdges(
       { x: 101, y: 0, w: 80, h: 40 },
       [
@@ -95,25 +117,28 @@ describe("snapToEdges", () => {
       ],
     );
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(100);
   });
 
   it("respects a custom threshold parameter", () => {
-    // Distance 5; with threshold=4 it should NOT snap.
+    // Distance 5; with threshold=4 it should NOT snap, no guide.
     const result = snapToEdges(
       { x: 105, y: 0, w: 80, h: 40 },
       [{ x: 100, y: 200, w: 60, h: 40 }],
       4,
     );
     expect(result.x).toBe(snap(105));
+    expect(result.guideX).toBeUndefined();
   });
 
   it("snaps when candidate edge exactly matches target edge", () => {
-    // Distance 0 — no shift needed; result equals the raw position.
+    // Distance 0 — no shift needed; guide appears at x=100.
     const result = snapToEdges(
       { x: 100, y: 0, w: 80, h: 40 },
       [{ x: 100, y: 200, w: 60, h: 40 }],
     );
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(100);
   });
 
   it("handles zero-dimension candidate (wrapper absent from DOM)", () => {
@@ -126,6 +151,7 @@ describe("snapToEdges", () => {
     );
     // Left=104 is 4px from target left=100 — within threshold.
     expect(result.x).toBe(100);
+    expect(result.guideX).toBe(100);
   });
 });
 

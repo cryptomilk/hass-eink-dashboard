@@ -15,6 +15,25 @@ export function snap(v: number): number { return Math.round(v / GRID) * GRID; }
 // ── Edge-snap across widget bounds ───────────────────────────────────────────
 
 /**
+ * Return value of {@link snapToEdges}.
+ *
+ * `guideX` and `guideY` are the display-space coordinates of the
+ * matched target edges when an edge snap occurred. They are
+ * `undefined` when the axis fell back to grid snap (no target edge
+ * within threshold).
+ */
+export interface SnapResult {
+  /** Snapped left edge of the candidate widget in display pixels. */
+  x: number;
+  /** Snapped top edge of the candidate widget in display pixels. */
+  y: number;
+  /** X-coordinate of the snapped vertical edge, if edge-snapped. */
+  guideX?: number;
+  /** Y-coordinate of the snapped horizontal edge, if edge-snapped. */
+  guideY?: number;
+}
+
+/**
  * Snap a candidate widget to the nearest edge of any target
  * widget, per axis independently.
  *
@@ -29,13 +48,13 @@ export function snap(v: number): number { return Math.round(v / GRID) * GRID; }
  *   the raw (unsnapped) candidate position.
  * @param targets - Bounding boxes of all other widgets.
  * @param threshold - Maximum pixel distance to trigger a snap.
- * @returns Snapped { x, y } position for the candidate widget.
+ * @returns Snapped position plus optional guide line coordinates.
  */
 export function snapToEdges(
   candidate: WidgetBounds,
   targets: WidgetBounds[],
   threshold: number = EDGE_SNAP_THRESHOLD,
-): { x: number; y: number } {
+): SnapResult {
   const cL = candidate.x;
   const cR = candidate.x + candidate.w;
   const cT = candidate.y;
@@ -44,8 +63,10 @@ export function snapToEdges(
   // Sentinel: anything within threshold beats the initial value.
   let bestDx = threshold + 1;
   let snapX = snap(candidate.x);
+  let guideX: number | undefined;
   let bestDy = threshold + 1;
   let snapY = snap(candidate.y);
+  let guideY: number | undefined;
 
   for (const t of targets) {
     const tL = t.x;
@@ -61,6 +82,7 @@ export function snapToEdges(
       if (dist < bestDx) {
         bestDx = dist;
         snapX = candidate.x + (te - ce);
+        guideX = te;
       }
     }
 
@@ -72,11 +94,12 @@ export function snapToEdges(
       if (dist < bestDy) {
         bestDy = dist;
         snapY = candidate.y + (te - ce);
+        guideY = te;
       }
     }
   }
 
-  return { x: snapX, y: snapY };
+  return { x: snapX, y: snapY, guideX, guideY };
 }
 
 // ── Handle resize math ────────────────────────────────────────────────────────
