@@ -96,7 +96,7 @@ from custom_components.eink_dashboard.svg_render import (
 )
 
 # ---------------------------------------------------------------------------
-# Mock data for all 7 widget types
+# Mock data for all 8 widget types
 # ---------------------------------------------------------------------------
 
 _WEATHER_STATES = {
@@ -219,6 +219,17 @@ _WASTE_STATES = {
     },
 }
 
+_TILE_STATES = {
+    "sensor.temperature": {
+        "state": "22.5",
+        "attributes": {
+            "friendly_name": "Living Room",
+            "device_class": "temperature",
+            "unit_of_measurement": "°C",
+        },
+    },
+}
+
 # _MOCK_DATA maps WidgetType string -> (widget_dict, states_dict).
 # For device_battery the states dict is empty; the level is injected
 # as config["device_battery_level"] by _build_config().
@@ -251,6 +262,18 @@ _MOCK_DATA: dict[str, tuple[dict, dict]] = {
             "forecast_days": 3,
         },
         _WEATHER_STATES,
+    ),
+    WidgetType.TILE: (
+        {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entity": "sensor.temperature",
+            "card_style": "border",
+        },
+        _TILE_STATES,
     ),
     WidgetType.SENSOR_ROWS: (
         {
@@ -516,7 +539,7 @@ def _report(
 def _all_widgets() -> tuple[list[dict], dict, dict]:
     """Assemble all widget types for a full-dashboard benchmark.
 
-    Lays out all seven widget types vertically so every renderer is
+    Lays out all eight widget types vertically so every renderer is
     exercised.  The layout does not need to fit any specific device
     since the renderers clip to their configured x/y/w/h.
 
@@ -530,6 +553,7 @@ def _all_widgets() -> tuple[list[dict], dict, dict]:
         (WidgetType.TEXT, 40),
         (WidgetType.SEPARATOR, 20),
         (WidgetType.WEATHER, 300),
+        (WidgetType.TILE, 56),
         (WidgetType.SENSOR_ROWS, 168),
         (WidgetType.DEVICE_BATTERY, 60),
         (WidgetType.STATUS_ICONS, 40),

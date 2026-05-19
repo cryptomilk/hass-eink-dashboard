@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Design tool: live-preview e-ink widget templates in a browser.
 
-Renders a single widget type and serves a three-panel preview page
-showing the raw SVG, resvg-rasterized PNG, and e-ink-optimized PNG.
-Watches template and data files for changes and pushes reload events
-via Server-Sent Events.
+Renders one or more widget types and serves a three-panel preview
+page showing the raw SVG, resvg-rasterized PNG, and e-ink-optimized
+PNG.  Watches template and data files for changes and pushes reload
+events via Server-Sent Events.
 
 Runs without a Home Assistant installation.
 
@@ -13,6 +13,9 @@ Usage:
     python3 scripts/design_tool.py --widget weather --device trmnl_og
     python3 scripts/design_tool.py --widget sensor_rows --port 9000
     python3 scripts/design_tool.py --widget text --data my_data.json
+
+Omitting ``--widget`` shows a multi-widget dashboard preview
+(weather + tile + waste_schedule).
 """
 
 from __future__ import annotations
@@ -105,25 +108,27 @@ _logger = logging.getLogger("design_tool")
 # -------------------------------------------------------------------
 
 
-def _render_svg(widget: dict, config: dict) -> str:
-    """Render a widget inside a dashboard-sized SVG canvas.
+def _render_svg(widgets: list[dict], config: dict) -> str:
+    """Render one or more widgets inside a dashboard-sized SVG canvas.
 
-    Produces a full SVG document with a white background and
-    the widget positioned at its configured (x, y).
+    Produces a full SVG document with a white background and each
+    widget positioned at its configured (x, y).
 
     Args:
-        widget: Widget configuration dict.
+        widgets: List of widget configuration dicts.
         config: Display config with width, height, and states.
 
     Returns:
         SVG document string.
     """
-    svg_part = render_widget_svg(widget, config)
-    x = widget.get("x", PADDING)
-    y = widget.get("y", 0)
+    svg_parts = []
+    positions = []
+    for widget in widgets:
+        svg_parts.append(render_widget_svg(widget, config))
+        positions.append((widget.get("x", PADDING), widget.get("y", 0)))
     return _compose_svg(
-        [svg_part],
-        [(x, y)],
+        svg_parts,
+        positions,
         config["width"],
         config["height"],
     )
@@ -442,6 +447,7 @@ function downloadData() {{
   try {{
     var d = JSON.parse(ta.value);
     if (d.widget && d.widget.type) wtype = d.widget.type;
+    else if (d.widgets && d.widgets.length) wtype = "dashboard";
   }} catch (e) {{ /* use default filename */ }}
   var blob = new Blob([ta.value], {{type: "application/json"}});
   var a = document.createElement("a");
@@ -507,7 +513,15 @@ function positionHandles() {{
 function fetchGeom() {{
   fetch("/geometry")
     .then(function(r) {{ return r.json(); }})
-    .then(function(g) {{ geom = g; positionHandles(); }})
+    .then(function(g) {{
+      geom = g;
+      if (!geom) {{
+        outline.style.display = "none";
+        handles.forEach(function(h) {{ h.style.display = "none"; }});
+      }} else {{
+        positionHandles();
+      }}
+    }})
     .catch(function(err) {{
       console.error("/geometry fetch failed:", err);
     }});
@@ -579,10 +593,13 @@ handles.forEach(function(hEl) {{
         return r.json();
       }})
       .then(function(data) {{
-        data.widget.x = committed.x;
-        data.widget.y = committed.y;
-        data.widget.w = committed.w;
-        data.widget.h = committed.h;
+        var w = data.widget || (data.widgets && data.widgets[0]);
+        if (w) {{
+          w.x = committed.x;
+          w.y = committed.y;
+          w.w = committed.w;
+          w.h = committed.h;
+        }}
         fetch("/data", {{
           method: "POST",
           headers: {{"Content-Type": "application/json"}},
@@ -619,13 +636,19 @@ handles.forEach(function(hEl) {{
 class _DesignState:
     """Shared mutable state for the design tool server.
 
-    Holds the current widget config, display config, device
+    Holds the current widget list, display config, device
     preset, and the threading event used to signal file changes
     to SSE clients.
 
     Attributes:
-        widget_type: Current widget type string.
-        widget: Widget configuration dict.
+        widget_type: Display label for the current mode (e.g.
+            ``"weather"`` in single-widget mode or
+            ``"weather + tile + waste_schedule"`` in multi-widget
+            mode).
+        widgets: List of widget configuration dicts.  Single-widget
+            mode stores one element; multi-widget mode stores many.
+        multi: True when showing multiple widgets together; False
+            when showing a single widget with resize-handle support.
         states: Entity state dict (separate from config so the
             data editor can reconstruct the JSON).
         config: Display configuration dict.
@@ -633,14 +656,15 @@ class _DesignState:
         port: Server port number.
         data_path: Path to the custom data file, or None.
         change_event: Threading event set by the file watcher.
-        _lock: Protects widget, states, widget_type, and config
+        _lock: Protects widgets, states, widget_type, and config
             against concurrent reads and writes.
     """
 
     def __init__(
         self,
         widget_type: str,
-        widget: dict,
+        widgets: list[dict],
+        multi: bool,
         states: dict,
         config: dict,
         preset: DevicePreset,
@@ -649,7 +673,8 @@ class _DesignState:
     ) -> None:
         """Initialize the design state."""
         self.widget_type = widget_type
-        self.widget = widget
+        self.widgets = widgets
+        self.multi = multi
         self.states = states
         self.config = config
         self.preset = preset
@@ -658,25 +683,27 @@ class _DesignState:
         self.change_event = threading.Event()
         self._lock = threading.Lock()
 
-    def apply_data(self, widget: dict, states: dict) -> None:
-        """Replace the current widget and states from the editor.
+    def apply_data(self, widgets: list[dict], states: dict) -> None:
+        """Replace the current widget list and states from the editor.
 
         Rebuilds the display config from the device preset and
         the new states so the next render uses the updated data.
 
         Args:
-            widget: New widget configuration dict.
+            widgets: New list of widget configuration dicts.
             states: New entity state dict.
         """
         extra: dict = {}
-        wtype = widget.get("type", "")
-        if wtype == WidgetType.DEVICE_BATTERY:
+        # Inject battery level when any widget is device_battery.
+        if any(w.get("type") == WidgetType.DEVICE_BATTERY for w in widgets):
             extra["device_battery_level"] = 72
         config = _build_config(self.preset, states, **extra)
+        label = " + ".join(w.get("type", "?") for w in widgets)
         with self._lock:
-            self.widget = widget
+            self.widgets = widgets
+            self.multi = len(widgets) > 1
             self.states = states
-            self.widget_type = wtype
+            self.widget_type = label
             self.config = config
 
     def reload_data(self) -> None:
@@ -689,34 +716,44 @@ class _DesignState:
         if self.data_path is None:
             return
         try:
-            widget, states = _load_data_file(self.data_path)
-            self.apply_data(widget, states)
+            widgets, states = _load_data_file(self.data_path)
+            self.apply_data(widgets, states)
             _logger.info("Data file reloaded: %s", self.data_path)
         except Exception:
             _logger.exception("Failed to reload data file")
 
-    def snapshot(self) -> tuple[dict, dict]:
-        """Return a consistent (widget, config) pair.
+    def snapshot(self) -> tuple[list[dict], dict, bool]:
+        """Return a consistent (widgets, config, multi) triple.
 
         Returns:
-            Tuple of widget dict and config dict, captured
-            under the internal lock.
+            Tuple of widget list, config dict, and multi flag,
+            all captured under the internal lock.
         """
         with self._lock:
-            return self.widget, self.config
+            return self.widgets, self.config, self.multi
 
     def data_json(self) -> str:
-        """Serialize the current widget and states as JSON.
+        """Serialize the current widget(s) and states as JSON.
+
+        In single-widget mode, uses ``widget`` key for backward
+        compatibility with ``--data`` file round-trips.  In
+        multi-widget mode, uses ``widgets`` (a list).
 
         Returns:
-            Pretty-printed JSON string with ``widget`` and
-            ``states`` keys.
+            Pretty-printed JSON string.
         """
         with self._lock:
-            return json.dumps(
-                {"widget": self.widget, "states": self.states},
-                indent=2,
-            )
+            if self.multi:
+                payload: dict = {
+                    "widgets": self.widgets,
+                    "states": self.states,
+                }
+            else:
+                payload = {
+                    "widget": self.widgets[0],
+                    "states": self.states,
+                }
+            return json.dumps(payload, indent=2)
 
 
 # -------------------------------------------------------------------
@@ -724,25 +761,26 @@ class _DesignState:
 # -------------------------------------------------------------------
 
 
-def _load_data_file(path: Path) -> tuple[dict, dict]:
-    """Load widget and states from a JSON or YAML file.
+def _load_data_file(path: Path) -> tuple[list[dict], dict]:
+    """Load widget(s) and states from a JSON or YAML file.
 
-    Expected format::
+    Accepts two formats::
 
-        {
-          "widget": {"type": "weather", ...},
-          "states": {"weather.home": {...}, ...}
-        }
+        {"widget": {"type": "weather", ...}, "states": {...}}
+        {"widgets": [{"type": "weather", ...}, ...], "states": {...}}
 
     Args:
         path: Path to the data file.
 
     Returns:
-        Tuple of ``(widget_dict, states_dict)``.
+        Tuple of ``(widget_list, states_dict)``.
 
     Raises:
-        ValueError: If the file format is unsupported or the
-            required ``widget`` key is missing.
+        ValueError: If the file format is unsupported or neither
+            ``widget`` nor ``widgets`` key is present.
+
+    Note:
+        The ``states`` key is optional and defaults to an empty dict.
     """
     text = path.read_text()
     if path.suffix in (".yaml", ".yml"):
@@ -759,11 +797,24 @@ def _load_data_file(path: Path) -> tuple[dict, dict]:
 
     if not isinstance(data, dict):
         raise ValueError(f"Data file must contain a JSON/YAML object: {path}")
-    widget = data.get("widget")
     states = data.get("states", {})
+    if "widgets" in data:
+        widgets = data["widgets"]
+        if (
+            not isinstance(widgets, list)
+            or not widgets
+            or not all(isinstance(w, dict) for w in widgets)
+        ):
+            raise ValueError(
+                f"'widgets' must be a non-empty list of objects: {path}"
+            )
+        return widgets, states
+    widget = data.get("widget")
     if not widget:
-        raise ValueError(f"Data file must have a 'widget' key: {path}")
-    return widget, states
+        raise ValueError(
+            f"Data file must have a 'widget' or 'widgets' key: {path}"
+        )
+    return [widget], states
 
 
 # -------------------------------------------------------------------
@@ -916,18 +967,26 @@ class _DesignHandler(BaseHTTPRequestHandler):
     def _serve_geometry(self) -> None:
         """Serve the effective widget bounds as JSON.
 
-        Renders the widget SVG and reads ``width``/``height`` from
-        the root ``<svg>`` tag.  This gives the actual content
-        dimensions computed by each widget's context builder (e.g.
-        the weather widget's ``total_h``), so the browser positions
-        resize handles around the rendered content rather than the
-        full display canvas.
+        In single-widget mode, renders the widget SVG and reads
+        ``width``/``height`` from the root ``<svg>`` tag so the
+        browser can position resize handles around the rendered
+        content.
 
-        When the widget config contains explicit ``w``/``h`` those
-        are already embedded in the SVG by ``render_widget_svg``, so
-        parsing the SVG is correct in all cases.
+        In multi-widget mode, returns ``null`` so the browser hides
+        the resize handles (they only make sense for a single
+        widget).
         """
-        widget, config = self._state().snapshot()
+        widgets, config, multi = self._state().snapshot()
+        if multi:
+            body = b"null"
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        widget = widgets[0]
         x = widget.get("x", PADDING)
         y = widget.get("y", 0)
         # Render the widget to read actual content dimensions from
@@ -979,10 +1038,13 @@ class _DesignHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _handle_data_post(self) -> None:
-        """Accept new widget + states JSON from the editor.
+        """Accept new widget(s) + states JSON from the editor.
 
         Validates the JSON payload, updates the shared state,
         and triggers an SSE reload so all panels re-render.
+        Accepts both ``{"widget": {...}}`` (single, backward-
+        compatible) and ``{"widgets": [...]}`` (multi-widget).
+        The ``states`` key is optional and defaults to an empty dict.
         """
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length)
@@ -994,16 +1056,36 @@ class _DesignHandler(BaseHTTPRequestHandler):
                 f"Invalid JSON: {exc}",
             )
             return
-        widget = data.get("widget")
-        if not isinstance(widget, dict) or not widget:
+        states = data.get("states", {})
+        if "widgets" in data:
+            widgets = data["widgets"]
+            if (
+                not isinstance(widgets, list)
+                or not widgets
+                or not all(isinstance(w, dict) for w in widgets)
+            ):
+                self._text_response(
+                    HTTPStatus.BAD_REQUEST,
+                    "'widgets' must be a non-empty list of objects.",
+                )
+                return
+        elif "widget" in data:
+            widget = data["widget"]
+            if not isinstance(widget, dict) or not widget:
+                self._text_response(
+                    HTTPStatus.BAD_REQUEST,
+                    "Missing or empty 'widget' key.",
+                )
+                return
+            widgets = [widget]
+        else:
             self._text_response(
                 HTTPStatus.BAD_REQUEST,
-                "Missing or empty 'widget' key.",
+                "Payload must have a 'widget' or 'widgets' key.",
             )
             return
-        states = data.get("states", {})
         st = self._state()
-        st.apply_data(widget, states)
+        st.apply_data(widgets, states)
         st.change_event.set()
         self._text_response(HTTPStatus.OK, "OK")
 
@@ -1022,10 +1104,10 @@ class _DesignHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _serve_svg(self) -> None:
-        """Serve the raw SVG for the current widget."""
+        """Serve the raw SVG for the current widget(s)."""
         try:
-            widget, config = self._state().snapshot()
-            svg = _render_svg(widget, config)
+            widgets, config, _ = self._state().snapshot()
+            svg = _render_svg(widgets, config)
             body = svg.encode()
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "image/svg+xml")
@@ -1039,8 +1121,8 @@ class _DesignHandler(BaseHTTPRequestHandler):
     def _serve_png(self) -> None:
         """Serve the resvg-rasterized PNG."""
         try:
-            widget, config = self._state().snapshot()
-            svg = _render_svg(widget, config)
+            widgets, config, _ = self._state().snapshot()
+            svg = _render_svg(widgets, config)
             png = _render_png(svg, config)
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "image/png")
@@ -1054,8 +1136,8 @@ class _DesignHandler(BaseHTTPRequestHandler):
     def _serve_optimized(self) -> None:
         """Serve the e-ink optimized PNG."""
         try:
-            widget, config = self._state().snapshot()
-            svg = _render_svg(widget, config)
+            widgets, config, _ = self._state().snapshot()
+            svg = _render_svg(widgets, config)
             png = _render_png(svg, config)
             opt = _render_optimized(png, config)
             self.send_response(HTTPStatus.OK)
@@ -1179,14 +1261,15 @@ def _parse_args() -> argparse.Namespace:
     known = sorted(_MOCK_DATA.keys())
     parser.add_argument(
         "--widget",
-        default="weather",
+        default=None,
         metavar="TYPE",
         help=(
-            "Widget type to preview (default: weather). "
+            "Widget type to preview in single-widget mode. "
             "Known types with built-in mock data: "
             + ", ".join(known)
-            + ". Any other value starts with an empty "
-            "skeleton."
+            + ". Any other value starts with an empty skeleton. "
+            "Omit to show a multi-widget dashboard preview "
+            "(weather + tile + waste_schedule)."
         ),
     )
     parser.add_argument(
@@ -1238,6 +1321,16 @@ def _ensure_resize_math() -> None:
     )
 
 
+# Default dashboard layout for multi-widget mode.
+# Each entry is (widget_type, y_override).  Weather sits at the top
+# (~300 px tall), tile follows, then waste_schedule at the bottom.
+_DEFAULT_DASHBOARD: list[tuple[str, int]] = [
+    (WidgetType.WEATHER, 10),
+    (WidgetType.TILE, 320),
+    (WidgetType.WASTE_SCHEDULE, 386),
+]
+
+
 def main() -> None:
     """Start the design tool server."""
     logging.basicConfig(
@@ -1250,33 +1343,52 @@ def main() -> None:
     args = _parse_args()
     preset = DEVICE_PRESETS[args.device]
 
+    multi: bool
+    widgets: list[dict]
+    states: dict
+
     if args.data:
         try:
-            widget, states = _load_data_file(args.data)
+            widgets, states = _load_data_file(args.data)
         except ValueError as exc:
             sys.exit(str(exc))
-        widget_type = widget.get("type", "unknown")
+        widget_type = " + ".join(w.get("type", "?") for w in widgets)
+        multi = len(widgets) > 1
+    elif args.widget is None:
+        # Default: compose a multi-widget dashboard preview.
+        widgets = []
+        states = {}
+        for wtype, y in _DEFAULT_DASHBOARD:
+            base, ws = _MOCK_DATA[wtype]
+            widgets.append({**base, "y": y})
+            states.update(ws)
+        widget_type = "dashboard"
+        multi = True
     elif args.widget in _MOCK_DATA:
         widget_type = args.widget
-        widget, states = _MOCK_DATA[args.widget]
+        base_widget, states = _MOCK_DATA[args.widget]
+        widgets = [{**base_widget}]
+        multi = False
     else:
         widget_type = args.widget
-        widget = {"type": widget_type, "x": 24, "y": 10}
+        widgets = [{"type": widget_type, "x": 24, "y": 10}]
         states = {}
+        multi = False
         _logger.info(
             "No mock data for '%s' — starting with empty skeleton",
             widget_type,
         )
 
     extra: dict = {}
-    if widget_type == WidgetType.DEVICE_BATTERY:
+    if any(w.get("type") == WidgetType.DEVICE_BATTERY for w in widgets):
         extra["device_battery_level"] = 72
 
     config = _build_config(preset, states, **extra)
 
     state = _DesignState(
         widget_type=widget_type,
-        widget=widget,
+        widgets=widgets,
+        multi=multi,
         states=states,
         config=config,
         preset=preset,
@@ -1303,7 +1415,7 @@ def main() -> None:
     url = f"http://localhost:{args.port}"
     _logger.info("Design tool running at %s", url)
     _logger.info(
-        "Widget: %s | Device: %s (%dx%d, %d-level)",
+        "Mode: %s | Device: %s (%dx%d, %d-level)",
         widget_type,
         preset.label,
         preset.width,
