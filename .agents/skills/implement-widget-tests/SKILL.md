@@ -297,6 +297,8 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 #   x in [0, m.border] and [w - m.border, w]
 # Icon circle:
 #   x in [x_off + m.padding, x_off + m.padding + m.icon_dia]
+# Icon glyph size (inside the circle):
+#   m.icon_inner  (do NOT compute as m.icon_dia * 6 // 10)
 # Text start:
 #   x = x_off + m.padding + m.icon_dia + m.inner_gap
 # Row divider:

@@ -65,12 +65,19 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     _device_class_icon,
     _load_font,        # chip width measurement only
+    color_to_hex,
 )
 ```
 
 `_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
 `_auto_row_height`, `_row_content_pads`, and `_DEFAULT_ROW_H` are
 already in `svg_render.py` — call them directly, no import needed.
+
+`_color_context()` in `svg_render.py` returns
+`{"hex_black": ..., "hex_white": ..., "hex_gray": ...}` by calling
+`color_to_hex()` on the `const.py` integer constants.  Spread it into
+the context dict with `**_color_context()` so templates can use
+`{{ hex_gray }}` instead of hardcoded hex literals.
 
 ## Macro usage notes
 
@@ -155,7 +162,7 @@ is opaque when composited onto the dashboard canvas:
   y1="{{ row.y + row_h }}"
   x2="{{ w - r_inset - rpad }}"
   y2="{{ row.y + row_h }}"
-  stroke="#787878" stroke-width="{{ m.divider }}"/>
+  stroke="{{ hex_gray }}" stroke-width="{{ m.divider }}"/>
 {%- endif -%}
 {%- endfor -%}
 {%- endcall -%}
@@ -261,7 +268,7 @@ def _build_{widget_type}_context(
         )
         # Call filter in Python; pass result as icon_svg string.
         icon_svg = (
-            _mdi_svg_filter(icon_name, m.icon_dia * 6 // 10)
+            _mdi_svg_filter(icon_name, m.icon_inner)
             if icon_name
             else ""
         )
@@ -315,11 +322,10 @@ def _build_{widget_type}_context(
     states = config.get("states", {})
     m = _compute_metrics(h)
 
-    # Chip sizing ratios — these MUST match the ratios in the
-    # chip macro in _macros.svg.j2.  If the macro changes,
-    # update these values to match.  Verify before using.
+    # pad, icon_gap, and font_sz are chip-specific ratios;
+    # icon_dia and icon_inner come from _compute_metrics() so
+    # they match card_row at the same height.
     pad = round(h * 0.18)
-    icon_sz = round(h * 0.29)
     icon_gap = round(h * 0.14)
     font_size = max(10, round(h * 0.46))
     font = _load_font(font_size)  # PIL, for width measurement only.
@@ -337,18 +343,14 @@ def _build_{widget_type}_context(
             attrs, state["state"], domain
         )
         icon_svg = (
-            _mdi_svg_filter(icon_name, icon_sz)
+            _mdi_svg_filter(icon_name, m.icon_inner)
             if icon_name
             else ""
         )
         label = attrs.get("friendly_name", entity_id)
         text_w = round(font.getlength(label))
-        chip_w = (
-            pad
-            + (icon_sz + icon_gap if icon_svg else 0)
-            + text_w
-            + pad
-        )
+        icon_w = (m.icon_dia + icon_gap) if icon_svg else 0
+        chip_w = pad + icon_w + text_w + pad
         chips.append({
             "text": label,
             "icon_svg": icon_svg,
@@ -401,6 +403,11 @@ behavior.
 
 - **No `font_size` parameter.** All sizes derive from `w` and `h`
   via `_compute_metrics()`. TEXT widget is the only exception.
+- **Chip proportions from `WidgetMetrics`.** `icon_dia` and
+  `icon_inner` come from `_compute_metrics(chip_h)` — do not
+  derive them from inline ratios or `_CHIP_*_RATIO` constants
+  (removed in step 0.5).  `pad`, `icon_gap`, and `font_sz` are
+  chip-specific and have no `WidgetMetrics` field.
 - **Use shared macros.** Do not duplicate card/chip/row SVG markup.
   Use `card_container`, `card_row`, `chip` from `_macros.svg.j2`.
 - **All layout math in Python.** Templates receive final coordinates
