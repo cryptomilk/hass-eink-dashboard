@@ -34,10 +34,10 @@ import resvg_py
 from .const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
-    FONT_SIZE_TEXT,
     FONT_SIZE_WEATHER,
     PADDING,
     Align,
@@ -365,8 +365,9 @@ def _color_context() -> dict[str, str]:
     ``**_color_context()`` so the shared dict is never mutated.
 
     Returns:
-        Dict mapping ``hex_black``, ``hex_white``, and
-        ``hex_gray`` to their SVG hex color strings.
+        Dict mapping ``hex_black``, ``hex_white``,
+        ``hex_gray``, and ``hex_light_gray`` to their
+        SVG hex color strings.
     """
     # Lazy import avoids circular dependency (same pattern as
     # _compute_metrics imports elsewhere in this file).
@@ -376,6 +377,7 @@ def _color_context() -> dict[str, str]:
         "hex_black": color_to_hex(COLOR_BLACK),
         "hex_white": color_to_hex(COLOR_WHITE),
         "hex_gray": color_to_hex(COLOR_GRAY),
+        "hex_light_gray": color_to_hex(COLOR_LIGHT_GRAY),
     }
 
 
@@ -516,12 +518,12 @@ def _build_text_context(
     # Lazy import avoids circular dependency: render.py imports
     # svg_render.py at module level; importing render.py at
     # module level here would prevent initialisation.
-    from .render import _compute_metrics, color_to_hex
+    from .render import DEFAULT_METRICS, _compute_metrics, color_to_hex
 
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     text = widget.get("text", "")
-    font_size = widget.get("font_size", FONT_SIZE_TEXT)
+    font_size = widget.get("font_size", DEFAULT_METRICS.font_primary)
     color = widget.get("color", COLOR_BLACK)
     align = widget.get("align", Align.LEFT)
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -675,10 +677,9 @@ def _build_separator_context(
 # Weather base geometry at scale=1.0
 # (font_size == FONT_SIZE_WEATHER == 32).  Each value is multiplied
 # by `scale` in _build_weather_context() to adapt to the configured
-# font_size.  Most constants are weather-specific and have no
-# equivalent in WidgetMetrics; _WX_PAD and _WX_SEP_THICK are the
-# exceptions — they are derived from _compute_metrics(_WX_ROW_H) so
-# that card-chrome spacing stays consistent with other widgets.
+# font_size.  These constants are weather-specific and have no
+# equivalent in WidgetMetrics; padding and divider thickness are
+# derived from _compute_metrics() directly inside the builder.
 #
 # _WX_ROW_H must be defined first; other derived constants reference it.
 _WX_ROW_H = 48  # 48, not DEFAULT_ROW_H (56): matches original PIL proportions
@@ -687,13 +688,11 @@ _WX_ICON = 80  # condition icon diameter
 _WX_FONT_XL = 64  # temperature font size (bold)
 _WX_FONT_SM = 16  # hi/lo, detail, and forecast font
 _WX_FONT_XS = 14  # precipitation text font
-_WX_PAD = 10  # == _compute_metrics(_WX_ROW_H).padding
 _WX_ICON_R_PAD = 16  # gap: condition icon → temp text
 _WX_DETAIL_GAP = 2  # vertical gap above detail row
 _WX_DETAIL_ICON_H = 20  # detail icon height
 _WX_ICON_GAP = 4  # gap: detail icon → its text
 _WX_SEP_GAP = 8  # gap above/below separator line
-_WX_SEP_THICK = 3  # == _compute_metrics(_WX_ROW_H).divider
 _WX_FC_ZONE_H = 88  # forecast zone height
 _WX_PRECIP_H = _WX_FONT_SM  # line height matches font
 _WX_FC_ICON = 32  # forecast day icon diameter
@@ -836,15 +835,19 @@ def _build_weather_context(
     cloud_coverage = attrs.get("cloud_coverage")
     forecast = attrs.get("forecast", [])
 
+    # Card metrics — 48 at scale=1 gives card-level metrics
+    # (padding~10, radius~10) matching the original PIL layout.
+    m = _compute_metrics(round(_WX_ROW_H * scale))
+
     # Sizing constants, all proportional to scale.
     icon_size = round(_WX_ICON * scale)
-    pad = round(_WX_PAD * scale)
+    pad = m.padding
     icon_right_pad = round(_WX_ICON_R_PAD * scale)
     detail_gap = round(_WX_DETAIL_GAP * scale)
     detail_icon_h = round(_WX_DETAIL_ICON_H * scale)
     icon_gap = round(_WX_ICON_GAP * scale)
     sep_gap = round(_WX_SEP_GAP * scale)
-    sep_thickness = max(2, round(_WX_SEP_THICK * scale))
+    sep_thickness = m.divider
     forecast_zone_h = round(_WX_FC_ZONE_H * scale)
     precip_text_h = round(_WX_PRECIP_H * scale)
 
@@ -853,12 +856,7 @@ def _build_weather_context(
     temp_bbox = font_xl.getbbox(temp_text)
     temp_h = temp_bbox[3] - temp_bbox[1]
 
-    # Card metrics — 48 at scale=1 gives card-level metrics
-    # (padding~10, radius~10) matching the original PIL layout.
-    # Always compute so they can be passed to the card_container
-    # macro even when card_style is "none".
-    m = _compute_metrics(round(_WX_ROW_H * scale))
-    top_pad = m.padding if card_style != "none" else pad
+    top_pad = m.padding
 
     # Total card height, matching PIL's formula exactly.
     row1_h = top_pad + max(icon_size, temp_h)

@@ -94,9 +94,10 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
 
 **Colors**: Integers 0–255. Constants in `const.py`: `COLOR_BLACK=0`,
 `COLOR_WHITE=255`, `COLOR_GRAY=120`, `COLOR_LIGHT_GRAY=180`, `PADDING=24`,
-`DEFAULT_ROW_H=56`, `DEFAULT_CARD_STYLE="none"`. Per-widget font sizes:
-`FONT_SIZE_TEXT=32`, `FONT_SIZE_WEATHER=32`, `FONT_SIZE_SENSOR_ROWS=32`,
-`FONT_SIZE_STATUS_ICONS=28`. Use `color_to_hex(c)` in `render.py` to
+`DEFAULT_ROW_H=56`, `DEFAULT_CARD_STYLE="none"`.
+`FONT_SIZE_WEATHER=32` (scale denominator for weather geometry; all
+other per-widget font-size constants removed in Step 1.7). Use
+`color_to_hex(c)` in `render.py` to
 convert an integer constant to an SVG hex string (e.g. `COLOR_GRAY` →
 `"#787878"`); spread `_color_context()` from `svg_render.py` into context
 dicts so templates receive `hex_black`, `hex_white`, `hex_gray` variables

@@ -27,10 +27,14 @@ COLOR_LIGHT_GRAY = 180
 
 DEFAULT_CARD_STYLE = "none"
 
-FONT_SIZE_TEXT = 32
+# Scale denominator for weather widget geometry: all _WX_* base
+# dimensions are natural values at font_size == FONT_SIZE_WEATHER
+# and are multiplied by (font_size / FONT_SIZE_WEATHER) in
+# _build_weather_context().  Other per-widget font-size constants
+# were removed in Step 1.7 because their widgets now derive sizes
+# from _compute_metrics(); this one remains because the weather
+# widget's scale-factor system depends on it as a ratio reference.
 FONT_SIZE_WEATHER = 32
-FONT_SIZE_SENSOR_ROWS = 32
-FONT_SIZE_STATUS_ICONS = 28
 
 
 @dataclass(frozen=True)

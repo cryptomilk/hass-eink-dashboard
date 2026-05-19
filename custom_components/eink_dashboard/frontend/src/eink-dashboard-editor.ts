@@ -15,9 +15,16 @@ import "./eink-widget-picker.js";
 
 const EDITOR_TAG = "eink-dashboard-editor";
 
-// ── Constants (mirror const.py) ──────────────────────────────────
+// ── Constants (mirror const.py / render.py) ─────────────────────
 
-const FONT_SIZE_TEXT = 32;
+/**
+ * Default font size for text widgets.
+ * Mirrors DEFAULT_METRICS.font_primary from render.py
+ * (= _compute_metrics(DEFAULT_ROW_H).font_primary, DEFAULT_ROW_H=56).
+ * Update this value if DEFAULT_ROW_H or the 0.32 ratio changes.
+ * @see const.py DEFAULT_ROW_H
+ */
+const DEFAULT_FONT_PRIMARY = 18;
 const FONT_SIZE_WEATHER = 32;
 
 /** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
@@ -35,7 +42,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       x: 24,
       y: 0,
       text: "",
-      font_size: FONT_SIZE_TEXT,
+      font_size: DEFAULT_FONT_PRIMARY,
       color: 0,
       align: "left",
     },
@@ -334,7 +341,7 @@ export const SCHEMAS: Record<
         {
           type: "grid",
           name: "",
-          schema: [fontSizeSelector(FONT_SIZE_TEXT), colorSelector()],
+          schema: [fontSizeSelector(DEFAULT_FONT_PRIMARY), colorSelector()],
         },
       ],
     },
