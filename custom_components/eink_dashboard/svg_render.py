@@ -672,6 +672,39 @@ def _build_separator_context(
     }
 
 
+# Weather base geometry at scale=1.0
+# (font_size == FONT_SIZE_WEATHER == 32).  Each value is multiplied
+# by `scale` in _build_weather_context() to adapt to the configured
+# font_size.  Most constants are weather-specific and have no
+# equivalent in WidgetMetrics; _WX_PAD and _WX_SEP_THICK are the
+# exceptions — they are derived from _compute_metrics(_WX_ROW_H) so
+# that card-chrome spacing stays consistent with other widgets.
+#
+# _WX_ROW_H must be defined first; other derived constants reference it.
+_WX_ROW_H = 48  # 48, not DEFAULT_ROW_H (56): matches original PIL proportions
+_WX_NATURAL_W = 380  # natural card width
+_WX_ICON = 80  # condition icon diameter
+_WX_FONT_XL = 64  # temperature font size (bold)
+_WX_FONT_SM = 16  # hi/lo, detail, and forecast font
+_WX_FONT_XS = 14  # precipitation text font
+_WX_PAD = 10  # == _compute_metrics(_WX_ROW_H).padding
+_WX_ICON_R_PAD = 16  # gap: condition icon → temp text
+_WX_DETAIL_GAP = 2  # vertical gap above detail row
+_WX_DETAIL_ICON_H = 20  # detail icon height
+_WX_ICON_GAP = 4  # gap: detail icon → its text
+_WX_SEP_GAP = 8  # gap above/below separator line
+_WX_SEP_THICK = 3  # == _compute_metrics(_WX_ROW_H).divider
+_WX_FC_ZONE_H = 88  # forecast zone height
+_WX_PRECIP_H = _WX_FONT_SM  # line height matches font
+_WX_FC_ICON = 32  # forecast day icon diameter
+_WX_FC_ICON_CY = 34  # forecast icon centre Y offset
+_WX_FC_HI_Y = 52  # forecast hi-temp text Y offset
+_WX_FC_LO_Y = 70  # forecast lo-temp text Y offset
+_WX_FC_PRECIP_Y = _WX_FC_ZONE_H  # precip text at zone bottom
+_WX_MIN_FC_COLS = 5  # minimum forecast column count
+_WX_LO_Y_FRAC = 0.4  # lo temp Y as fraction of temp_h
+_WX_PRECIP_Y_FRAC = 0.72  # precip text Y as fraction of temp_h
+
 _DETAIL_ICON_MAP: dict[str, str] = {
     "humidity": "wi-humidity",
     "barometer": "wi-barometer",
@@ -777,7 +810,7 @@ def _build_weather_context(
     if w_override is not None:
         card_w = w_override
     else:
-        card_w = min(round(380 * scale), svg_w)
+        card_w = min(round(_WX_NATURAL_W * scale), svg_w)
         # Clip SVG to content width so the editor resize box
         # matches the rendered content, not the full canvas.
         svg_w = _widget_dim(widget, "w", card_w)
@@ -787,8 +820,8 @@ def _build_weather_context(
     # text_w_i (getlength) below.
     # Bold is used for font_xl because the temperature text renders
     # with font-weight="bold" in the SVG template.
-    font_xl = _load_font(round(64 * scale), bold=True)
-    font_sm = _load_font(round(16 * scale))
+    font_xl = _load_font(round(_WX_FONT_XL * scale), bold=True)
+    font_sm = _load_font(round(_WX_FONT_SM * scale))
 
     # Entity attributes.
     condition = state.get("state", "")
@@ -804,16 +837,16 @@ def _build_weather_context(
     forecast = attrs.get("forecast", [])
 
     # Sizing constants, all proportional to scale.
-    icon_size = round(80 * scale)
-    pad = round(10 * scale)
-    icon_right_pad = round(16 * scale)
-    detail_gap = round(2 * scale)
-    detail_icon_h = round(20 * scale)
-    icon_gap = round(4 * scale)
-    sep_gap = round(8 * scale)
-    sep_thickness = max(2, round(3 * scale))
-    forecast_zone_h = round(88 * scale)
-    precip_text_h = round(16 * scale)
+    icon_size = round(_WX_ICON * scale)
+    pad = round(_WX_PAD * scale)
+    icon_right_pad = round(_WX_ICON_R_PAD * scale)
+    detail_gap = round(_WX_DETAIL_GAP * scale)
+    detail_icon_h = round(_WX_DETAIL_ICON_H * scale)
+    icon_gap = round(_WX_ICON_GAP * scale)
+    sep_gap = round(_WX_SEP_GAP * scale)
+    sep_thickness = max(2, round(_WX_SEP_THICK * scale))
+    forecast_zone_h = round(_WX_FC_ZONE_H * scale)
+    precip_text_h = round(_WX_PRECIP_H * scale)
 
     # Measure temperature text height (PIL) for height estimation.
     temp_text = f"{_fmt_temp(temp)}{temp_unit}"
@@ -824,7 +857,7 @@ def _build_weather_context(
     # (padding~10, radius~10) matching the original PIL layout.
     # Always compute so they can be passed to the card_container
     # macro even when card_style is "none".
-    m = _compute_metrics(round(48 * scale))
+    m = _compute_metrics(round(_WX_ROW_H * scale))
     top_pad = m.padding if card_style != "none" else pad
 
     # Total card height, matching PIL's formula exactly.
@@ -877,8 +910,8 @@ def _build_weather_context(
     today_hi = ""
     today_lo = ""
     today_precip = ""
-    lo_y = vis_top + round(temp_h * 0.4)
-    precip_y = vis_top + round(temp_h * 0.72)
+    lo_y = vis_top + round(temp_h * _WX_LO_Y_FRAC)
+    precip_y = vis_top + round(temp_h * _WX_PRECIP_Y_FRAC)
     precip_unit_fc = attrs.get("precipitation_unit", "mm")
     if forecast:
         today = forecast[0]
@@ -894,10 +927,10 @@ def _build_weather_context(
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
     font_xl_size = _cap_weather_font_xl(
-        round(64 * scale),
+        round(_WX_FONT_XL * scale),
         font_xl,
         font_sm,
-        _load_font(round(14 * scale)),
+        _load_font(round(_WX_FONT_XS * scale)),
         temp_text,
         hilo_right - temp_x - pad,
         today_hi,
@@ -981,7 +1014,7 @@ def _build_weather_context(
     sep_y = 0
 
     if has_forecast:
-        forecast_cols = max(forecast_days, 5)
+        forecast_cols = max(forecast_days, _WX_MIN_FC_COLS)
         col_width = content_w // forecast_cols
         content_width = forecast_cols * col_width
         separator_y = detail_bottom + sep_gap
@@ -992,7 +1025,7 @@ def _build_weather_context(
         # forecast content starts below the stroke bottom, matching
         # the sep_thickness term in forecast_section_h.
         forecast_y = separator_y + sep_thickness + sep_gap
-        fc_icon_size = round(32 * scale)
+        fc_icon_size = round(_WX_FC_ICON * scale)
 
         if forecast_days >= forecast_cols:
             col_positions = list(range(forecast_days))
@@ -1033,7 +1066,7 @@ def _build_weather_context(
                 if fc_p is not None and fc_p > 0
                 else ""
             )
-            icon_cy_fc = forecast_y + round(34 * scale)
+            icon_cy_fc = forecast_y + round(_WX_FC_ICON_CY * scale)
             forecast_entries.append(
                 {
                     "cx": cx,
@@ -1043,11 +1076,11 @@ def _build_weather_context(
                     "icon_x": cx - fc_icon_size // 2,
                     "icon_y": icon_cy_fc - fc_icon_size // 2,
                     "hi": fc_hi,
-                    "hi_y": forecast_y + round(52 * scale),
+                    "hi_y": forecast_y + round(_WX_FC_HI_Y * scale),
                     "lo": fc_lo,
-                    "lo_y": forecast_y + round(70 * scale),
+                    "lo_y": forecast_y + round(_WX_FC_LO_Y * scale),
                     "precip": fc_precip,
-                    "precip_y": forecast_y + round(88 * scale),
+                    "precip_y": forecast_y + round(_WX_FC_PRECIP_Y * scale),
                 }
             )
 
@@ -1068,9 +1101,9 @@ def _build_weather_context(
         "temp_x": temp_x,
         "temp_y": temp_y,
         "font_xl": font_xl_size,
-        "font_sm": round(16 * scale),
+        "font_sm": round(_WX_FONT_SM * scale),
         # font_xs is template-only; no PIL measurement needed.
-        "font_xs": round(14 * scale),
+        "font_xs": round(_WX_FONT_XS * scale),
         "hilo_right": hilo_right,
         "hi_text": today_hi,
         "hi_y": vis_top,
