@@ -39,11 +39,18 @@ image entity and a public HTTP endpoint.
 - `sensor.py` — `EinkDashboardSensor`, exposes dashboard state as an HA sensor entity
 - `const.py` — enums, shared constants, and defaults
 
-**MDI icons**: SVG files in `icons/svg/mdi/` are inlined into widget
-templates by `_mdi_svg_filter()` in `svg_render.py`.  The upstream
-source is the `@mdi/svg` npm package installed in the frontend:
-`custom_components/eink_dashboard/frontend/node_modules/.pnpm/@mdi+svg@7.4.47/node_modules/@mdi/svg/svg/`.
-When adding new icons, copy the SVG file from that directory.
+**MDI icons**: MDI icons are resolved at runtime by `_mdi_svg_filter()`
+in `svg_render.py` via a two-stage lookup:
+1. **`hass_frontend` (production)** — the `hass-frontend` pip package
+   ships `static/mdi/iconMetadata.json` (a list of chunk descriptors)
+   and per-chunk JSON files mapping icon names to SVG `d` path strings.
+   `_load_hass_mdi_metadata()` reads the metadata and `_resolve_mdi_path()`
+   uses `bisect` to find the right chunk for a given name.
+2. **npm `@mdi/svg` (development / testing fallback)** — individual SVG
+   files in `frontend/node_modules/@mdi/svg/svg/` (pnpm top-level symlink).
+   Used automatically when `hass_frontend` is not installed.
+No curated icon subset is needed; all 7 400+ MDI icons are available
+through these sources without copying files manually.
 
 **Rendering entry point**: `render_dashboard(widget_list, config) -> bytes` in `render.py`
 - `config` is a `DisplayConfig` dict with `width`, `height`, `rotation`, and `states` (HA entity ID → state dict)

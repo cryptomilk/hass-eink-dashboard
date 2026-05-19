@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
 import voluptuous as vol
+
+# Stub hass_frontend before any production code imports it.
+# Tests resolve MDI icons from the fixture directory rather than a
+# real HA installation, so _load_hass_mdi_metadata() finds the
+# iconMetadata.json placed in tests/fixtures/hass_frontend/.
+_HASS_FRONTEND_FIXTURE = Path(__file__).parent / "fixtures" / "hass_frontend"
+_hass_frontend_stub = ModuleType("hass_frontend")
+_hass_frontend_stub.where = lambda: str(_HASS_FRONTEND_FIXTURE)  # type: ignore[attr-defined]
+sys.modules["hass_frontend"] = _hass_frontend_stub
 
 
 def _stub_module(name: str) -> ModuleType:

@@ -1626,6 +1626,50 @@ class TestRenderSensorRows:
             threshold=200,
         )
 
+    def test_sensor_rows_icon_from_entity_attr(self) -> None:
+        # Entity without device_class but with an icon attribute
+        # renders that icon instead of the letter fallback.  The
+        # icon area should produce different output than the plain
+        # letter fallback and contain dark pixels from an MDI glyph.
+        m = _compute_metrics(56)
+        states_with_icon = {
+            **self._config()["states"],
+            "sensor.no_device_class": {
+                "state": "42",
+                "attributes": {
+                    "friendly_name": "Plain Sensor",
+                    "icon": "mdi:thermometer",
+                },
+            },
+        }
+        widgets = [
+            {
+                "type": "sensor_rows",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "entities": ["sensor.no_device_class"],
+            }
+        ]
+        img_with_icon = render_to_image(
+            widgets,
+            self._config(states=states_with_icon),
+        )
+        img_no_icon = render_to_image(widgets, self._config())
+        # Adding an icon attribute must change the rendered output.
+        assert img_with_icon.tobytes() != img_no_icon.tobytes(), (
+            "icon attribute should change rendered icon from letter"
+        )
+        assert_has_dark_pixels(
+            img_with_icon,
+            m.padding,
+            0,
+            m.padding + m.icon_dia,
+            56,
+            threshold=200,
+        )
+
     # ── Auto-sizing tests ─────────────────────────────
 
     def test_sensor_rows_auto_height_single_entity(self) -> None:
@@ -3959,6 +4003,91 @@ class TestRenderTile:
         # Icon circle area should contain content (circle + letter).
         assert_has_dark_pixels(
             img,
+            m.padding,
+            0,
+            m.padding + m.icon_dia,
+            56,
+            threshold=200,
+        )
+
+    def test_tile_icon_from_entity_attr(self) -> None:
+        # Entity with an icon attribute but no device_class shows
+        # that icon instead of the letter fallback.  Compare output
+        # with and without the icon attribute, and confirm the icon
+        # area contains dark pixels consistent with an MDI glyph.
+        m = _compute_metrics(56)
+        base_states = {
+            **MOCK_TILE_STATES,
+            "sensor.no_class": {
+                "state": "99",
+                "attributes": {
+                    "friendly_name": "Plain",
+                    "icon": "mdi:thermometer",
+                },
+            },
+        }
+        widgets = [
+            {
+                "type": "tile",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "entity": "sensor.no_class",
+            }
+        ]
+        img_with_icon = render_to_image(
+            widgets, self._config(states=base_states)
+        )
+        img_no_icon = render_to_image(widgets, self._config())
+        assert img_with_icon.tobytes() != img_no_icon.tobytes(), (
+            "icon attribute should change rendered icon from letter"
+        )
+        assert_has_dark_pixels(
+            img_with_icon,
+            m.padding,
+            0,
+            m.padding + m.icon_dia,
+            56,
+            threshold=200,
+        )
+
+    def test_tile_hanger_icon_via_hass_frontend(self) -> None:
+        # mdi:hanger is not in the device_class tables; it must be
+        # resolved via hass_frontend JSON chunks.  When the entity
+        # carries icon="mdi:hanger", the icon area should differ from
+        # the plain letter fallback and contain an MDI glyph.
+        m = _compute_metrics(56)
+        states_with_hanger = {
+            **MOCK_TILE_STATES,
+            "sensor.no_class": {
+                "state": "99",
+                "attributes": {
+                    "friendly_name": "Laundry",
+                    "icon": "mdi:hanger",
+                },
+            },
+        }
+        widgets = [
+            {
+                "type": "tile",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "entity": "sensor.no_class",
+            }
+        ]
+        img_with_hanger = render_to_image(
+            widgets, self._config(states=states_with_hanger)
+        )
+        img_no_icon = render_to_image(widgets, self._config())
+        assert img_with_hanger.tobytes() != img_no_icon.tobytes(), (
+            "hanger icon should resolve via hass_frontend, "
+            "not fall back to letter"
+        )
+        assert_has_dark_pixels(
+            img_with_hanger,
             m.padding,
             0,
             m.padding + m.icon_dia,

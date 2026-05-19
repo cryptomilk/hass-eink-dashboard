@@ -14,8 +14,10 @@ occurs only once per icon per process lifetime.
 
 from __future__ import annotations
 
+import bisect
 import contextlib
 import functools
+import json
 from collections.abc import Callable
 from dataclasses import fields as dc_fields
 from datetime import datetime
@@ -48,7 +50,15 @@ _FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _ICONS_DIR = Path(__file__).parent / "icons" / "svg"
 _ICONS_DIR_RESOLVED = _ICONS_DIR.resolve()
-_MDI_DIR_RESOLVED = (_ICONS_DIR / "mdi").resolve()
+# npm @mdi/svg fallback: available when pnpm install has been run.
+_NPM_MDI_DIR = (
+    Path(__file__).parent
+    / "frontend"
+    / "node_modules"
+    / "@mdi"
+    / "svg"
+    / "svg"
+)
 
 # SVG XML namespace used by all icon files.
 _SVG_NS = "http://www.w3.org/2000/svg"
@@ -219,15 +229,129 @@ def _build_inline_svg(
     )
 
 
+@functools.cache
+def _load_hass_mdi_metadata() -> (
+    tuple[Path, list[dict[str, str]], list[str]] | None
+):
+    """Load MDI icon metadata from the hass_frontend pip package.
+
+    Reads ``hass_frontend.where() / "static/mdi/iconMetadata.json"``
+    which maps icon name range prefixes to chunk filenames.  The
+    ``hass_frontend`` package is present on every HA installation but
+    not in development environments where the npm fallback is used
+    instead.
+
+    Returns:
+        ``(mdi_dir, parts, starts)`` where ``mdi_dir`` is the path
+        to ``static/mdi/``, ``parts`` is the metadata list sorted by
+        start prefix, and ``starts`` is the corresponding sorted list
+        of chunk-start prefix strings (first entry is ``""`` because
+        the first chunk has no start key).  The tuple is cached;
+        callers must not mutate its contents.  Returns ``None`` if
+        ``hass_frontend`` is not importable or the metadata file is
+        absent.
+    """
+    try:
+        import hass_frontend  # ty: ignore[unresolved-import]
+    except ImportError:
+        return None
+    mdi_dir = Path(hass_frontend.where()) / "static" / "mdi"
+    meta_path = mdi_dir / "iconMetadata.json"
+    if not meta_path.exists():
+        return None
+    with open(meta_path) as f:
+        meta = json.load(f)
+    # Sort parts so that starts is in ascending order for bisect.
+    # The JSON spec does not guarantee array ordering.
+    parts: list[dict[str, str]] = sorted(
+        meta.get("parts", []),
+        key=lambda p: p.get("start") or "",
+    )
+    # The first chunk omits "start" in the JSON (undefined serialised
+    # away); treat it as "" so bisect comparisons work correctly.
+    starts = [p.get("start") or "" for p in parts]
+    return (mdi_dir, parts, starts)
+
+
+@functools.lru_cache(maxsize=32)
+def _load_mdi_chunk(path: Path) -> dict[str, str]:
+    """Load a chunked MDI JSON file and return name→path mapping.
+
+    Cached (LRU, 32 entries) so file I/O occurs only once per chunk.
+    HA ships ~20 MDI chunks, well within the limit.  Callers must not
+    mutate the returned dict; it is shared across all callers via the
+    cache.
+
+    Args:
+        path: Absolute path to the chunk JSON file.
+
+    Returns:
+        Dict mapping MDI icon names to their SVG ``d`` path strings.
+    """
+    with open(path) as f:
+        return json.load(f)
+
+
+@functools.cache
+def _resolve_mdi_path(name: str) -> tuple[str, ...] | None:
+    """Resolve an MDI icon name to its SVG ``<path d>`` data.
+
+    Cached so repeated lookups for the same icon name skip the bisect
+    and dict lookup on subsequent calls.
+
+    Tries two sources in order:
+
+    1. **hass_frontend** — reads chunked JSON from the
+       ``hass_frontend`` pip package (always present on HA, never
+       present in unit tests unless stubbed).
+    2. **npm @mdi/svg** — falls back to individual SVG files in
+       ``frontend/node_modules/@mdi/svg/svg/`` (present after
+       ``pnpm install``, used by tests and development).
+
+    Args:
+        name: MDI icon name without the ``mdi:`` prefix (e.g.
+            ``"thermometer"``).
+
+    Returns:
+        Tuple of ``d`` attribute values (one per ``<path>`` element)
+        or ``None`` when the icon cannot be resolved from either
+        source.
+    """
+    # 1. hass_frontend chunked JSON
+    result = _load_hass_mdi_metadata()
+    if result is not None:
+        mdi_dir, parts, starts = result
+        idx = bisect.bisect_right(starts, name) - 1
+        if idx >= 0:
+            chunk_file = parts[idx].get("file", "")
+            if chunk_file:
+                chunk = _load_mdi_chunk(mdi_dir / f"{chunk_file}.json")
+                d = chunk.get(name)
+                if d is not None:
+                    return (d,)
+
+    # 2. npm @mdi/svg fallback (not found above, or dev/testing)
+    npm_dir = _NPM_MDI_DIR
+    if npm_dir.exists():
+        npm_path = (npm_dir / f"{name}.svg").resolve()
+        # Defence-in-depth: _mdi_svg_filter validates the name, but
+        # guard against path traversal at the filesystem level in
+        # case this helper is called from new code.
+        if npm_path.is_relative_to(npm_dir.resolve()) and npm_path.exists():
+            return _load_svg_paths(npm_path)
+
+    return None
+
+
 def _mdi_svg_filter(name: str, size: int) -> str:
     """Inline an MDI icon as a sized SVG element.
 
-    Reads ``icons/svg/mdi/{name}.svg``, extracts the ``<path>``
-    data, and emits an ``<svg>`` element scaled to ``size`` × ``size``
-    pixels with ``viewBox="0 0 24 24"``.
+    Resolves the icon via ``_resolve_mdi_path()``: first from the
+    ``hass_frontend`` chunked JSON (always present on HA), then from
+    the npm ``@mdi/svg`` package (present after ``pnpm install``).
 
     Args:
-        name: MDI icon filename without extension (e.g.
+        name: MDI icon name without the ``mdi:`` prefix (e.g.
             ``"thermometer"``).
         size: Output width and height in pixels.
 
@@ -235,15 +359,17 @@ def _mdi_svg_filter(name: str, size: int) -> str:
         Inline SVG string ready to embed in a parent SVG document.
 
     Raises:
-        ValueError: If ``name`` contains path traversal components.
-        FileNotFoundError: If the icon file does not exist.
+        ValueError: If ``name`` contains path traversal components
+            (``/`` or a leading ``.``).
+        FileNotFoundError: If the icon cannot be resolved from any
+            available source.
     """
-    icon_path = (_ICONS_DIR / "mdi" / f"{name}.svg").resolve()
-    if not icon_path.is_relative_to(_MDI_DIR_RESOLVED):
+    if "/" in name or name.startswith("."):
         raise ValueError(f"Invalid icon name: {name!r}")
-    return markupsafe.Markup(
-        _build_inline_svg(_load_svg_paths(icon_path), size, "0 0 24 24")
-    )
+    paths = _resolve_mdi_path(name)
+    if paths is None:
+        raise FileNotFoundError(name)
+    return markupsafe.Markup(_build_inline_svg(paths, size, "0 0 24 24"))
 
 
 def _weather_svg_filter(condition: str, size: int) -> str:
@@ -1194,6 +1320,10 @@ def _build_sensor_rows_context(
         domain = entity_id.split(".")[0]
         state_val = state.get("state", "")
         icon_name = _device_class_icon(attrs, state_val, domain)
+        if icon_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                icon_name = raw[4:]
 
         # Icon SVG sized to icon_inner so the card_row macro
         # can centre it inside the circle with a visible ring.
@@ -1943,6 +2073,10 @@ def _build_tile_context(
             icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
     else:
         resolved_name = _device_class_icon(attrs, state_val, domain)
+        if resolved_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                resolved_name = raw[4:]
         if resolved_name:
             with contextlib.suppress(FileNotFoundError):
                 icon_svg = _mdi_svg_filter(resolved_name, m.icon_inner)
