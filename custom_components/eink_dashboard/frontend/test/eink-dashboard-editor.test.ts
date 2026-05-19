@@ -4,6 +4,7 @@ import type {
   EinkEditorElement,
   EinkWidgetPicker,
   Widget,
+  StateCondition,
 } from "../src/types/ha.js";
 import {
   WIDGET_TYPES,
@@ -511,4 +512,32 @@ describe("add-widget integration", () => {
       expect(received![0].type).toBe("text");
     }
   );
+});
+
+// ── Visibility field types ────────────────────────────────────────
+
+describe("Visibility field", () => {
+  it("Widget type accepts a visibility array of conditions", () => {
+    // Compile-time type check: a widget with a visibility field must
+    // satisfy the Widget union type.
+    const condition: StateCondition = {
+      condition: "state",
+      entity: "sensor.test",
+      state: "on",
+    };
+    const widget: Widget = {
+      type: "text",
+      visibility: [condition],
+    };
+    expect(widget.visibility).toHaveLength(1);
+    expect(
+      (widget.visibility![0] as StateCondition).entity
+    ).toBe("sensor.test");
+  });
+
+  it("Widget type accepts visibility: undefined", () => {
+    // Verify that omitting visibility is valid.
+    const widget: Widget = { type: "separator" };
+    expect(widget.visibility).toBeUndefined();
+  });
 });

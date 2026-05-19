@@ -21,6 +21,7 @@ from typing import Any
 
 from PIL import Image, ImageFont
 
+from .conditions import check_conditions
 from .const import DEFAULT_ROW_H, PADDING
 from .optimize import optimize_for_eink
 from .svg_render import (
@@ -433,6 +434,17 @@ def render_dashboard(
                 widget_type,
             )
             continue
+        visibility = widget.get("visibility")
+        # Both None (absent) and [] (empty) mean "always visible".
+        if visibility:
+            states = config.get("states", {})
+            if not check_conditions(visibility, states):
+                _LOGGER.debug(
+                    "render_dashboard: visibility conditions not"
+                    " met for widget type=%s, skipping",
+                    widget_type,
+                )
+                continue
         wx = widget.get("x", PADDING)
         wy = widget.get("y", 0)
         _LOGGER.debug(

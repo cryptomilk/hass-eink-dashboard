@@ -118,6 +118,165 @@ export interface LayoutResponse {
   device: DeviceInfo;
 }
 
+// ── Condition types ───────────────────────────────────────────────────────────
+// Mirrors HA's validate-condition.ts.  Used by the visibility field on every
+// widget type.
+
+/** Discriminant base shared by all structured condition types. */
+interface BaseCondition {
+  /** Identifies the condition type (e.g. "state", "time"). */
+  condition: string;
+}
+
+/**
+ * Passes when the target entity's state matches (or does not match)
+ * the given value(s).  Provide either `state` or `state_not`, not
+ * both.  Values that look like entity IDs are resolved to that
+ * entity's current state before comparison.
+ */
+export interface StateCondition extends BaseCondition {
+  condition: "state";
+  /** Entity ID whose state is tested. */
+  entity?: string;
+  /** State value(s) the entity must be in. */
+  state?: string | string[];
+  /** State value(s) the entity must NOT be in. */
+  state_not?: string | string[];
+}
+
+/**
+ * Passes when the target entity's numeric state falls within the
+ * specified range.  Both bounds are exclusive.  Bound values that
+ * look like entity IDs are resolved to that entity's numeric state.
+ */
+export interface NumericStateCondition extends BaseCondition {
+  condition: "numeric_state";
+  /** Entity ID whose numeric state is tested. */
+  entity?: string;
+  /** Lower exclusive bound — entity state must be strictly above. */
+  above?: string | number;
+  /** Upper exclusive bound — entity state must be strictly below. */
+  below?: string | number;
+}
+
+/**
+ * Passes when the browser viewport matches the CSS media query.
+ * Always passes in server-side rendering (no viewport available).
+ */
+export interface ScreenCondition extends BaseCondition {
+  condition: "screen";
+  /** CSS media query string (e.g. "(min-width: 768px)"). */
+  media_query?: string;
+}
+
+/**
+ * Passes when the current time falls within the given range and/or
+ * on one of the specified weekdays.  Supports midnight-crossing
+ * ranges (e.g. after: "22:00", before: "06:00").
+ */
+export interface TimeCondition extends BaseCondition {
+  condition: "time";
+  /** Inclusive start time in HH:MM or HH:MM:SS format. */
+  after?: string;
+  /** Inclusive end time in HH:MM or HH:MM:SS format. */
+  before?: string;
+  /**
+   * Short weekday names the condition is active on.
+   * Valid values: "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat".
+   */
+  weekdays?: string[];
+}
+
+/**
+ * Passes when the currently logged-in HA user matches one of the
+ * listed user IDs.  Always passes in server-side rendering (no user
+ * context available).
+ */
+export interface UserCondition extends BaseCondition {
+  condition: "user";
+  /** HA user IDs (not usernames) allowed to see this widget. */
+  users?: string[];
+}
+
+/**
+ * Passes when the current user's person entity is in one of the
+ * listed zones.  Always passes in server-side rendering (no person
+ * entity context available).
+ */
+export interface LocationCondition extends BaseCondition {
+  condition: "location";
+  /** Zone names (state values of the person entity). */
+  locations?: string[];
+}
+
+/**
+ * Passes when the view's column count falls within the given range.
+ * Always passes in server-side rendering (no column layout context).
+ */
+export interface ViewColumnsCondition extends BaseCondition {
+  condition: "view_columns";
+  /** Minimum column count (inclusive). */
+  min?: number;
+  /** Maximum column count (inclusive). */
+  max?: number;
+}
+
+/**
+ * Passes when at least one nested condition passes (logical OR).
+ * An empty `conditions` list is treated as passing.
+ */
+export interface OrCondition extends BaseCondition {
+  condition: "or";
+  /** Nested conditions — any one must be met. */
+  conditions?: Condition[];
+}
+
+/**
+ * Passes only when all nested conditions pass (logical AND).
+ * An empty `conditions` list is treated as passing.
+ */
+export interface AndCondition extends BaseCondition {
+  condition: "and";
+  /** Nested conditions — all must be met. */
+  conditions?: Condition[];
+}
+
+/**
+ * Passes when none of the nested conditions pass (logical NOT of AND).
+ * An empty `conditions` list is treated as passing.
+ */
+export interface NotCondition extends BaseCondition {
+  condition: "not";
+  /** Nested conditions — none may be met. */
+  conditions?: Condition[];
+}
+
+/** Union of all structured condition types. */
+export type Condition =
+  | StateCondition
+  | NumericStateCondition
+  | ScreenCondition
+  | TimeCondition
+  | UserCondition
+  | LocationCondition
+  | ViewColumnsCondition
+  | OrCondition
+  | AndCondition
+  | NotCondition;
+
+/**
+ * Legacy condition format used by older HA conditional cards.
+ * Lacks a `condition` discriminant key; treated as a state condition.
+ */
+export interface LegacyCondition {
+  /** Entity ID whose state is tested. */
+  entity?: string;
+  /** State value(s) the entity must be in. */
+  state?: string | string[];
+  /** State value(s) the entity must NOT be in. */
+  state_not?: string | string[];
+}
+
 // ── Widget types ──────────────────────────────────────────────────────────────
 
 interface WidgetBase {
@@ -131,6 +290,7 @@ interface WidgetBase {
   h?: number;
   font_size?: number;
   color?: number;
+  visibility?: (Condition | LegacyCondition)[];
 }
 
 export interface TextWidget extends WidgetBase {

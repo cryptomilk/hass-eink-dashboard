@@ -45,6 +45,7 @@ from watchdog.observers import Observer
 # -------------------------------------------------------------------
 import_module(f"{PKG}.const")
 import_module(f"{PKG}.optimize")
+import_module(f"{PKG}.conditions")
 import_module(f"{PKG}.svg_render")
 import_module(f"{PKG}.render")
 

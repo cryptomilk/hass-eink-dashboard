@@ -23,6 +23,7 @@ from _bootstrap import PKG, import_module
 # against already-loaded siblings rather than falling back to __init__.py.
 import_module(f"{PKG}.const")
 import_module(f"{PKG}.optimize")
+import_module(f"{PKG}.conditions")
 import_module(f"{PKG}.svg_render")
 render_mod = import_module(f"{PKG}.render")
 render_dashboard = render_mod.render_dashboard  # type: ignore[attr-defined]

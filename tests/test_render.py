@@ -136,6 +136,94 @@ class TestRenderDashboard:
         assert img.size == (100, 100)
 
 
+class TestVisibilityConditions:
+    # Verify that widget visibility conditions are evaluated during
+    # render_dashboard() and that hidden widgets leave the canvas
+    # untouched.
+
+    _TEXT: ClassVar[dict[str, object]] = {
+        "type": "text",
+        "x": 10,
+        "y": 10,
+        "w": 180,
+        "h": 30,
+        "text": "hello",
+        "font_size": 20,
+    }
+
+    def _config(self, states: dict | None = None) -> dict:
+        """Build a minimal render config with optional entity states."""
+        return {
+            "width": 200,
+            "height": 100,
+            "states": states or {},
+        }
+
+    def test_widget_without_visibility_always_renders(self) -> None:
+        # No visibility field — widget must appear regardless.
+        img = render_to_image([self._TEXT], self._config())
+        assert_has_dark_pixels(img, 10, 10, 190, 45)
+
+    def test_widget_with_empty_visibility_always_renders(self) -> None:
+        # An empty conditions list is equivalent to no visibility field.
+        widget = {**self._TEXT, "visibility": []}
+        img = render_to_image([widget], self._config())
+        assert_has_dark_pixels(img, 10, 10, 190, 45)
+
+    def test_widget_with_met_state_condition_renders(self) -> None:
+        # When the state condition is satisfied the widget is rendered.
+        widget = {
+            **self._TEXT,
+            "visibility": [
+                {
+                    "condition": "state",
+                    "entity": "input_boolean.show",
+                    "state": "on",
+                }
+            ],
+        }
+        states = {"input_boolean.show": {"state": "on", "attributes": {}}}
+        img = render_to_image([widget], self._config(states))
+        assert_has_dark_pixels(img, 10, 10, 190, 45)
+
+    def test_widget_with_unmet_state_condition_is_skipped(self) -> None:
+        # When the state condition is not satisfied the widget region
+        # remains white (canvas is untouched).
+        widget = {
+            **self._TEXT,
+            "visibility": [
+                {
+                    "condition": "state",
+                    "entity": "input_boolean.show",
+                    "state": "on",
+                }
+            ],
+        }
+        states = {"input_boolean.show": {"state": "off", "attributes": {}}}
+        img = render_to_image([widget], self._config(states))
+        assert_all_white(img, 10, 10, 190, 45)
+
+    def test_two_widgets_one_hidden_renders_correctly(self) -> None:
+        # First widget has an unmet condition (hidden); second widget
+        # has no condition and must render normally.
+        hidden = {
+            **self._TEXT,
+            "y": 10,
+            "visibility": [
+                {
+                    "condition": "state",
+                    "entity": "s.x",
+                    "state": "on",
+                }
+            ],
+        }
+        visible = {**self._TEXT, "y": 60}
+        states = {"s.x": {"state": "off", "attributes": {}}}
+        img = render_to_image([hidden, visible], self._config(states))
+        assert_all_white(img, 10, 10, 190, 44)
+        assert_has_dark_pixels(img, 10, 60, 190, 95)
+
+
 class TestRenderText:
     # Verify rendering of the text widget (SVG pipeline).
     _DEFAULTS: ClassVar[dict[str, object]] = {
