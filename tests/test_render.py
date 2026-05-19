@@ -11,6 +11,8 @@ import pytest
 from custom_components.eink_dashboard.const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
+    COLOR_WHITE,
     DEFAULT_ROW_H,
     PADDING,
 )
@@ -3595,3 +3597,207 @@ class TestHelperFunctions:
         """num_rows < 1 raises ValueError."""
         with pytest.raises(ValueError, match="num_rows"):
             _auto_row_height("", 0)
+
+
+class TestConsistencyContract:
+    """Regression guards for cross-widget layout consistency.
+
+    These tests assert that shared layout primitives (icon position,
+    icon diameter, text position, color palette) remain consistent
+    across widget types as the codebase evolves.
+    """
+
+    _ROW_H = 56
+    _W = 400
+
+    @classmethod
+    def setup_class(cls) -> None:
+        """Render reference images once for all tests in this class."""
+        sr_widget: dict[str, object] = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": cls._W,
+            "h": cls._ROW_H,
+            "entities": ["sensor.living_room_temperature"],
+        }
+        sr_cfg = make_config(
+            {
+                "width": cls._W,
+                "height": cls._ROW_H,
+                "states": MOCK_SENSOR_STATES,
+            }
+        )
+        cls._sr_img = render_to_image([sr_widget], sr_cfg)
+
+        ws_widget: dict[str, object] = {
+            "type": "waste_schedule",
+            "x": 0,
+            "y": 0,
+            "w": cls._W,
+            "h": cls._ROW_H,
+            "entity": "sensor.waste_collection",
+            "entries": [{"attribute": "Restmuell", "label": "Restmuell"}],
+        }
+        ws_cfg = make_config(
+            {
+                "width": cls._W,
+                "height": cls._ROW_H,
+                "states": MOCK_WASTE_SCHEDULE_STATES,
+            }
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            cls._ws_img = render_to_image([ws_widget], ws_cfg)
+
+    def test_card_row_widgets_share_icon_position(self) -> None:
+        # Two card_row widgets at the same row_h place the icon circle
+        # at the same x offset from the widget left edge.
+        m = _compute_metrics(self._ROW_H)
+        # Strip exactly wide enough to contain the icon circle, no wider,
+        # to avoid glyph ink from the text region affecting the bbox.
+        icon_x2 = m.padding + m.icon_dia
+        sr_bbox = content_bbox(self._sr_img, 0, 0, icon_x2, self._ROW_H)
+        ws_bbox = content_bbox(self._ws_img, 0, 0, icon_x2, self._ROW_H)
+
+        assert sr_bbox is not None, "sensor_rows: no icon pixels found"
+        assert ws_bbox is not None, "waste_schedule: no icon pixels found"
+        assert sr_bbox[0] == ws_bbox[0], (
+            f"icon left edge differs: sensor_rows={sr_bbox[0]}, "
+            f"waste_schedule={ws_bbox[0]}"
+        )
+
+    def test_card_row_widgets_share_icon_diameter(self) -> None:
+        # Two card_row widgets at the same row_h produce the same icon
+        # circle width (icon_dia from _compute_metrics).
+        m = _compute_metrics(self._ROW_H)
+        icon_x2 = m.padding + m.icon_dia
+        sr_bbox = content_bbox(self._sr_img, 0, 0, icon_x2, self._ROW_H)
+        ws_bbox = content_bbox(self._ws_img, 0, 0, icon_x2, self._ROW_H)
+
+        assert sr_bbox is not None
+        assert ws_bbox is not None
+        sr_dia = sr_bbox[2] - sr_bbox[0]
+        ws_dia = ws_bbox[2] - ws_bbox[0]
+        assert sr_dia == ws_dia, (
+            f"icon diameter differs: sensor_rows={sr_dia}, "
+            f"waste_schedule={ws_dia}"
+        )
+
+    def test_card_row_widgets_share_text_position(self) -> None:
+        # Two card_row widgets at the same row_h place primary text at
+        # the same x offset.  Tolerance of 1px accounts for glyph-edge
+        # variation between different first characters (e.g. 'L' vs 'R'
+        # have slightly different leftmost ink pixels in Roboto).
+        m = _compute_metrics(self._ROW_H)
+        # Expected text x: lpad + icon_dia + inner_gap with no card frame.
+        tx = m.padding + m.icon_dia + m.inner_gap
+
+        # Crop just the text area (right of icon).
+        sr_bbox = content_bbox(self._sr_img, tx - 2, 0, tx + 200, self._ROW_H)
+        ws_bbox = content_bbox(self._ws_img, tx - 2, 0, tx + 200, self._ROW_H)
+
+        assert sr_bbox is not None, "sensor_rows: no text pixels found"
+        assert ws_bbox is not None, "waste_schedule: no text pixels found"
+        assert abs(sr_bbox[0] - ws_bbox[0]) <= 1, (
+            f"text left edge differs by more than 1px: "
+            f"sensor_rows={sr_bbox[0]}, waste_schedule={ws_bbox[0]}"
+        )
+
+    def test_chip_and_card_row_same_icon_dia(self) -> None:
+        # The status_icons context builder must pass the same icon_dia
+        # that card_row uses at the same height — both must come from
+        # _compute_metrics().  Font size is intentionally different:
+        # chip uses 46% of h while card_row uses font_primary (32%),
+        # so only icon diameter is verified here.
+        for h in (40, 56, 72, 100):
+            m = _compute_metrics(h)
+            widget: dict[str, object] = {
+                "type": "status_icons",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entities": ["binary_sensor.front_door"],
+            }
+            cfg = make_config(
+                {"width": 400, "height": h, "states": MOCK_STATUS_ICON_STATES}
+            )
+            # render_widget_svg returns the rendered SVG; the context is
+            # not directly accessible, so we verify indirectly by
+            # checking that the rendered icon circle diameter matches
+            # what _compute_metrics() prescribes.
+            svg = render_widget_svg(widget, cfg)
+            # Anchor the search to <circle to avoid collisions with
+            # other SVG elements that may carry numeric r-like attributes.
+            expected_r = m.icon_dia // 2
+            assert re.search(
+                r"<circle[^>]*\br=\"" + str(expected_r) + r"\"", svg
+            ), (
+                f"h={h}: chip circle radius {expected_r} not found in SVG; "
+                f"icon_dia should be {m.icon_dia}"
+            )
+
+    def test_svg_colors_match_palette_sensor_rows(self) -> None:
+        # All hex colors in a rendered sensor_rows SVG come from
+        # color_to_hex() applied to known const.py color constants.
+        widget: dict[str, object] = {
+            "type": "sensor_rows",
+            "x": 0,
+            "y": 0,
+            "w": self._W,
+            "h": self._ROW_H,
+            "entities": ["sensor.living_room_temperature"],
+        }
+        cfg = make_config(
+            {
+                "width": self._W,
+                "height": self._ROW_H,
+                "states": MOCK_SENSOR_STATES,
+            }
+        )
+        svg = render_widget_svg(widget, cfg)
+        palette = {
+            color_to_hex(COLOR_BLACK),
+            color_to_hex(COLOR_WHITE),
+            color_to_hex(COLOR_GRAY),
+            color_to_hex(COLOR_LIGHT_GRAY),
+        }
+        colors = set(re.findall(r"#[0-9a-f]{6}", svg.lower()))
+        assert colors <= palette, (
+            f"Unexpected hex colors in sensor_rows SVG: {colors - palette}"
+        )
+
+    def test_svg_colors_match_palette_waste_schedule(self) -> None:
+        # All hex colors in a rendered waste_schedule SVG come from
+        # color_to_hex() — including per-row dynamic fills for urgency
+        # styling (date_fill, icon_fill).
+        widget: dict[str, object] = {
+            "type": "waste_schedule",
+            "x": 0,
+            "y": 0,
+            "w": self._W,
+            "h": self._ROW_H,
+            "entity": "sensor.waste_collection",
+            "entries": [{"attribute": "Restmuell", "label": "Restmuell"}],
+        }
+        cfg = make_config(
+            {
+                "width": self._W,
+                "height": self._ROW_H,
+                "states": MOCK_WASTE_SCHEDULE_STATES,
+            }
+        )
+        palette = {
+            color_to_hex(COLOR_BLACK),
+            color_to_hex(COLOR_WHITE),
+            color_to_hex(COLOR_GRAY),
+            color_to_hex(COLOR_LIGHT_GRAY),
+        }
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(widget, cfg)
+        colors = set(re.findall(r"#[0-9a-f]{6}", svg.lower()))
+        assert colors <= palette, (
+            f"Unexpected hex colors in waste_schedule SVG: {colors - palette}"
+        )
