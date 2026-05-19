@@ -1,20 +1,31 @@
 // Minimal type stubs for Home Assistant frontend APIs.
 // Covers only the surface area used by eink-dashboard-card and editor.
 
+/** Minimal state snapshot for a single HA entity. */
 export interface HassEntity {
+  /** Current state value (e.g. "on", "22.5"). */
   state: string;
+  /** Entity attribute bag (friendly_name, unit_of_measurement, …). */
   attributes: Record<string, unknown>;
 }
 
+/** HA config entry descriptor passed to card elements. */
 export interface ConfigEntry {
+  /** Unique config entry ID used as the namespace for WebSocket commands. */
   entry_id: string;
 }
 
+/** Subset of the HA frontend `hass` object injected into custom cards. */
 export interface HomeAssistant {
+  /** Live entity-state map keyed by entity ID. */
   states: Record<string, HassEntity>;
+  /** Area registry keyed by area ID. */
   areas: Record<string, { name: string }>;
+  /** Make an authenticated REST API call to HA core. */
   callApi<T = unknown>(method: string, path: string, data?: unknown): Promise<T>;
+  /** Make an authenticated WebSocket command call to HA core. */
   callWS<T = unknown>(msg: Record<string, unknown>): Promise<T>;
+  /** Call a HA service. */
   callService<T = unknown>(
     domain: string,
     service: string,
@@ -50,51 +61,87 @@ export interface HaFormElement extends HTMLElement {
   computeHelper: (schema: HaFormSchema) => string;
 }
 
+/** A single option in an `ha-select` dropdown. */
 export interface HaSelectOption {
+  /** The internal value stored in the config. */
   value: string;
+  /** Human-readable label shown in the dropdown. */
   label: string;
 }
 
+/** Subset of the `ha-select` custom element API. */
 export interface HaSelectElement extends HTMLElement {
+  /** The full option list. */
   options: HaSelectOption[];
+  /** Currently selected value. */
   value: string;
 }
 
+/** Descriptor used when registering a custom Lovelace card. */
 export interface CustomCardInfo {
+  /** Lovelace card type tag (e.g. "eink-dashboard-card"). */
   type: string;
+  /** Human-readable card name shown in the card picker. */
   name: string;
+  /** One-line description shown below the name in the card picker. */
   description: string;
 }
 
+/** Display dimensions passed to schema builders and the SVG renderer. */
 export interface DisplayConfig {
+  /** Canvas width in pixels. */
   width: number;
+  /** Canvas height in pixels. */
   height: number;
+  /**
+   * Number of discrete gray levels the display supports.
+   * 2 = black-and-white only; 16 = full grayscale.
+   * Used to widen dividers and borders for low-depth displays.
+   */
   grayscale_levels?: number;
 }
 
+/** Static device metadata returned by the `eink_dashboard/layout` WebSocket command. */
 export interface DeviceInfo {
+  /** Friendly device name from the HA device registry. */
   name: string;
+  /** Device model identifier. */
   model: string;
+  /** Human-readable model label for display. */
   model_label: string;
+  /** Current orientation: "portrait" or "landscape". */
   orientation: string;
+  /** HA area ID the device is assigned to, or null. */
   area_id: string | null;
+  /** True when at least one TRMNL webhook target is configured. */
   has_webhooks: boolean;
+  /** Battery percentage (0–100) from HA device registry, or null. */
   device_battery_level: number | null;
 }
 
+/** Pixel bounding box for a widget on the canvas. */
 export interface WidgetBounds {
+  /** Left edge in pixels. */
   x: number;
+  /** Top edge in pixels. */
   y: number;
+  /** Width in pixels. */
   w: number;
+  /** Height in pixels. */
   h: number;
 }
 
+/** Widget bounding box with its list position. */
 export interface IndexedBounds extends WidgetBounds {
+  /** Zero-based index into the widget list. */
   index: number;
 }
 
 /** Card decoration style for card-style widgets. */
 export type CardStyle = "border" | "left_bar" | "none";
+
+/** Icon circle rendering mode for card-style widgets. */
+export type IconStyle = "filled" | "outlined" | "none";
 
 /** Response from the eink_dashboard/render_widgets WebSocket command. */
 export interface RenderWidgetsResponse {
@@ -106,15 +153,23 @@ export interface RenderWidgetResponse {
   svg: string;
 }
 
+/** Drag handle for a widget resize corner or edge. */
 export interface Handle {
+  /** Handle identifier used to map mouse events to resize direction. */
   id: string;
+  /** Centre X position in pixels (relative to the widget). */
   cx: number;
+  /** Centre Y position in pixels (relative to the widget). */
   cy: number;
 }
 
+/** Response from the `eink_dashboard/layout` WebSocket command. */
 export interface LayoutResponse {
+  /** Current display dimensions and capabilities. */
   display: DisplayConfig;
+  /** Ordered widget list stored in HA's persistent store. */
   widgets: Widget[];
+  /** Static device descriptor for the display hardware. */
   device: DeviceInfo;
 }
 
@@ -279,76 +334,168 @@ export interface LegacyCondition {
 
 // ── Widget types ──────────────────────────────────────────────────────────────
 
+/**
+ * Common fields shared by every widget type.
+ *
+ * All positional and sizing fields are optional because some widget
+ * types auto-compute their dimensions from content.  The editor
+ * always writes explicit values when saving.
+ */
 interface WidgetBase {
+  /** Widget type discriminant (matches the WidgetType Python enum). */
   type: string;
-  // Editor-only metadata — not rendered in the SVG output.
+  /** Editor-only display name; not rendered in the SVG output. */
   label?: string;
+  /** Editor-only note; not rendered in the SVG output. */
   description?: string;
+  /** Left edge of the widget in canvas pixels. */
   x?: number;
+  /** Top edge of the widget in canvas pixels. */
   y?: number;
+  /** Widget width in canvas pixels. */
   w?: number;
+  /** Widget height in canvas pixels. */
   h?: number;
+  /** Font size override (TEXT widget only). */
   font_size?: number;
+  /** Foreground color as a grayscale integer (0 = black, 255 = white). */
   color?: number;
+  /**
+   * HA conditions that control widget visibility.
+   * The widget is hidden when any condition evaluates to false.
+   */
   visibility?: (Condition | LegacyCondition)[];
 }
 
+/** Free-form text label rendered at an arbitrary position. */
 export interface TextWidget extends WidgetBase {
   type: "text";
+  /** The text string to render. */
   text?: string;
+  /** Horizontal text alignment relative to the widget's x position. */
   align?: "left" | "center" | "right";
 }
 
+/** Horizontal or vertical divider line or filled bar. */
 export interface SeparatorWidget extends WidgetBase {
   type: "separator";
+  /** Orientation of the separator. */
   direction?: "horizontal" | "vertical";
+  /** Visual style — thin rule or filled rectangle. */
   style?: "line" | "bar";
+  /** Length in pixels; omit to span the full canvas dimension. */
   length?: number;
 }
 
+/** Weather forecast widget with conditions and temperature. */
 export interface WeatherWidget extends WidgetBase {
   type: "weather";
+  /** HA weather entity ID. */
   entity?: string;
+  /** Number of forecast days to display (0–14). */
   forecast_days?: number;
+  /** Decorative frame style. */
   card_style?: CardStyle;
 }
 
+/**
+ * Multi-entity sensor list displayed as icon rows.
+ *
+ * @deprecated Use TileWidget for new layouts; this type remains
+ * supported for existing configs but is hidden from the widget picker.
+ */
 export interface SensorRowsWidget extends WidgetBase {
   type: "sensor_rows";
+  /** Optional card header text. */
   title?: string;
+  /** Ordered list of entity IDs to display. */
   entities?: string[];
+  /** Decorative frame style. */
   card_style?: CardStyle;
 }
 
+/** Device battery level indicator in icon or chip layout. */
 export interface DeviceBatteryWidget extends WidgetBase {
   type: "device_battery";
+  /** Visual layout mode for the indicator. */
   layout?: "icon" | "chip";
-  h?: number;
+  /** Decorative frame style. */
   card_style?: CardStyle;
 }
 
+/**
+ * Row of entity status chips with icon and optional state text.
+ *
+ * @deprecated Use TileWidget for new layouts; this type remains
+ * supported for existing configs but is hidden from the widget picker.
+ */
 export interface StatusIconsWidget extends WidgetBase {
   type: "status_icons";
+  /** Optional card header text. */
   title?: string;
+  /** Ordered list of entity IDs to display. */
   entities?: string[];
+  /** When true, renders an icon circle for each entity. */
   show_icon?: boolean;
+  /** When true, renders the entity state text alongside the icon. */
   show_state?: boolean;
+  /** Decorative frame style. */
   card_style?: CardStyle;
 }
 
+/** A single waste-collection type entry in the schedule widget. */
 export interface WasteScheduleEntry {
+  /** State attribute key on the sensor entity that holds the next date. */
   attribute: string;
+  /** Human-readable label shown next to the date (e.g. "Recycling"). */
   label: string;
 }
 
+/** Waste-collection schedule widget with relative dates. */
 export interface WasteScheduleWidget extends WidgetBase {
   type: "waste_schedule";
+  /** Optional card header text. */
   title?: string;
+  /** HA sensor entity from waste_collection_schedule integration. */
   entity?: string;
+  /** Ordered list of waste types to show. */
   entries?: WasteScheduleEntry[];
+  /** Visual layout mode for the schedule entries. */
   layout?: "list" | "card";
+  /**
+   * When false (default), the widget is blank unless a collection
+   * falls within the next 3 days.  When true, always shows all entries.
+   */
   show_all?: boolean;
+  /** Decorative frame style. */
   card_style?: CardStyle;
+}
+
+/** Single-entity tile card modelled after the HA Tile card. */
+export interface TileWidget extends WidgetBase {
+  type: "tile";
+  /** HA entity ID to display (required at runtime). */
+  entity?: string;
+  /** Override the entity's friendly name shown as the primary label. */
+  name?: string;
+  /** Override the icon (MDI name, e.g. "mdi:thermometer"). */
+  icon?: string;
+  /** When true, suppresses the secondary state/attribute line. */
+  hide_state?: boolean;
+  /**
+   * Attribute key (or priority-ordered list of keys) to show as the
+   * secondary text.  When absent, falls back to state + unit.
+   */
+  state_content?: string | string[];
+  /**
+   * Reserved — entity picture URLs require HTTP fetching which resvg
+   * does not support.  Accepted in config but ignored in rendering.
+   */
+  show_entity_picture?: boolean;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /** Icon circle rendering mode (auto-selected when absent). */
+  icon_style?: IconStyle;
 }
 
 export type Widget =
@@ -358,27 +505,38 @@ export type Widget =
   | SensorRowsWidget
   | DeviceBatteryWidget
   | StatusIconsWidget
-  | WasteScheduleWidget;
+  | WasteScheduleWidget
+  | TileWidget;
 
+/** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {
+  /** Human-readable type name (e.g. "Tile"). */
   label: string;
   /** One-line description shown in the widget picker grid. */
   description: string;
   /** MDI icon name (e.g. "mdi:thermometer") shown in the widget picker. */
   icon: string;
+  /** Default config written to the widget list when the type is picked. */
   defaults: Widget;
 }
 
+/** Custom element interface for the widget-type picker dialog. */
 export interface EinkWidgetPicker extends HTMLElement {
+  /** Show the picker modal populated with the given widget types. */
   open(types: Record<string, WidgetTypeMeta>): void;
 }
 
 // ── Editor element interface ──────────────────────────────────────────────────
 
+/** Custom element interface for the widget list editor panel. */
 export interface EinkEditorElement extends HTMLElement {
+  /** Live hass object injected by the Lovelace runtime. */
   hass: HomeAssistant | null;
+  /** Replace the editor's widget list (called after a store reload). */
   setWidgets(widgets: Widget[]): void;
+  /** Update the display dimensions used by schema builders. */
   setDisplay(display: DisplayConfig): void;
+  /** Drive the save-state indicator in the editor toolbar. */
   setSaveState(state: "idle" | "saving" | "saved"): void;
 }
 

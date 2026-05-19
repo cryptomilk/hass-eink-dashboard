@@ -1,0 +1,35 @@
+{%- from "_macros.svg.j2" import card_container, card_row -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
+{%- if has_entity -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black, bar_color=hex_gray) -%}
+{{ card_row(
+    x=x_off, y=0,
+    w=w - x_off - r_inset, row_h=row_h,
+    padding=m_padding, icon_dia=m_icon_dia,
+    inner_gap=m_inner_gap, border=m_border,
+    font_primary=m_font_primary,
+    font_secondary=m_font_secondary,
+    icon_inner=m_icon_inner,
+    letter_font_sz=m_font_letter,
+    primary=primary,
+    secondary=secondary,
+    icon_svg=icon_svg,
+    icon_fill=icon_fill,
+    icon_outline=icon_outline,
+    icon_no_circle=icon_no_circle,
+    primary_fill=hex_black,
+    secondary_fill=hex_gray,
+    value_fill=hex_gray,
+    letter=letter,
+    lpad=lpad, rpad=rpad,
+    hex_black=hex_black, hex_white=hex_white) }}
+{%- endcall -%}
+{%- endif -%}
+</svg>

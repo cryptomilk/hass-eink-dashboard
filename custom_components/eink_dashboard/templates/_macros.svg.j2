@@ -134,7 +134,9 @@
     secondary -- sub-label text (empty = single-line row)
     value     -- right-aligned value string (empty = omitted)
     icon_svg  -- pre-built icon SVG string (empty = letter fallback)
-    icon_outline -- when true, circle is white with black stroke
+    icon_outline   -- when true, circle is white with black stroke
+    icon_no_circle -- when true, circle is hidden; icon is rendered
+                     in hex_black (like outlined mode)
     letter    -- fallback letter drawn in circle when icon_svg is empty
     lpad      -- left padding override; -1 (default) uses padding
     rpad      -- right padding override; -1 (default) uses padding
@@ -149,6 +151,7 @@
     primary="", secondary="", value="",
     icon_svg="",
     icon_outline=false,
+    icon_no_circle=false,
     letter="",
     lpad=-1, rpad=-1
 ) -%}
@@ -161,7 +164,9 @@
 {%- set icon_cx = x + lpad + icon_dia // 2 -%}
 {%- set icon_cy = y + row_h // 2 -%}
 {%- set icon_r = icon_dia // 2 -%}
-{# Icon circle -- outline or solid fill #}
+{# Icon circle -- outline or solid fill.  Suppressed entirely
+   when icon_no_circle is true. #}
+{%- if not icon_no_circle -%}
 {%- if icon_outline -%}
 <circle
   cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
@@ -173,18 +178,20 @@
   cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
   fill="{{ icon_fill }}"/>
 {%- endif -%}
+{%- endif -%}
 {# Icon content: inlined SVG or letter fallback #}
 {%- if icon_svg -%}
 {%- set icon_sz = icon_inner -%}
 {%- set ix = icon_cx - icon_sz // 2 -%}
 {%- set iy = icon_cy - icon_sz // 2 -%}
-{# Outlined circles are white so the icon must be black to stay
-   legible; solid-fill circles are dark so the icon is white. #}
-{%- set ic = hex_black if icon_outline else hex_white -%}
+{# Outlined and no-circle icons use black; solid-fill uses white. #}
+{%- set ic = hex_black if (icon_outline or icon_no_circle)
+    else hex_white -%}
 <g transform="translate({{ ix }}, {{ iy }})"
   style="color: {{ ic }}">{{ icon_svg }}</g>
 {%- elif letter -%}
-{%- set lc = hex_black if icon_outline else hex_white -%}
+{%- set lc = hex_black if (icon_outline or icon_no_circle)
+    else hex_white -%}
 <text
   x="{{ icon_cx }}" y="{{ icon_cy }}"
   font-family="Roboto"

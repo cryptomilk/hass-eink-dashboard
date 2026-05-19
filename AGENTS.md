@@ -52,7 +52,10 @@ When adding new icons, copy the SVG file from that directory.
   `svg_render.py`, composes one root SVG, rasterises with `resvg_py`, then
   applies rotation and e-ink optimisation, and returns PNG bytes
 
-**Widget types** (`WidgetType` in `const.py`): `TEXT`, `SEPARATOR`, `WEATHER`, `SENSOR_ROWS`, `DEVICE_BATTERY`, `STATUS_ICONS`, `WASTE_SCHEDULE`
+**Widget types** (`WidgetType` in `const.py`): `TEXT`, `SEPARATOR`,
+`TILE`, `WEATHER`, `SENSOR_ROWS`, `DEVICE_BATTERY`, `STATUS_ICONS`,
+`WASTE_SCHEDULE`.  `SENSOR_ROWS` and `STATUS_ICONS` are deprecated —
+hidden from the widget picker but kept for existing configs.
 
 **Adding a widget type**:
 1. Add the new value to `WidgetType` in `const.py`
@@ -81,6 +84,13 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
   a return value gets a full docstring: summary line, description paragraph,
   and all parameters and return values documented. Python uses Google-style
   (`Args:`, `Returns:`); TypeScript uses JSDoc (`@param`, `@returns`).
+- All TypeScript interfaces, classes, and their members must be documented
+  with JSDoc `/** … */` block comments. Interface-level comment: one-line
+  summary of what the type represents. Member-level comment: explain the
+  purpose and valid values, not just the type. Deprecated members get a
+  `@deprecated` note explaining what to use instead.
+- Python dataclasses, enums, and their fields get docstrings or inline
+  comments with the same level of detail.
 - Add an inline comment when the WHY is non-obvious: a hidden constraint, a
   loop's non-obvious exit condition, a state-machine transition, a workaround
   for a specific quirk, or geometry/centering math where the formula is not
@@ -106,10 +116,10 @@ DEFAULT_ROW_H)` in `render.py` is the frozen `WidgetMetrics` instance for
 the standard row height; use its fields (`icon_dia`, `icon_inner`,
 `font_primary`, etc.) rather than deriving sizes inline.
 
-**Fonts**: `_load_font(size, medium=False)` (LRU-cached) loads
-`fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
-`medium=True`),
-falling back to PIL's built-in default.
+**Fonts**: `_load_font(size, medium=False, bold=False)` (LRU-cached)
+loads `fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
+`medium=True`, or `Roboto-Bold.ttf` when `bold=True`; `bold` takes
+precedence over `medium`), falling back to PIL's built-in default.
 
 **Rendering**: Widget SVGs are rendered server-side by `svg_render.py`
 and fetched by the Lovelace card via the `eink_dashboard/render_widgets`

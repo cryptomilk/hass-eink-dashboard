@@ -8,6 +8,7 @@ import type {
   EinkWidgetPicker,
   Widget,
   CardStyle,
+  IconStyle,
   DisplayConfig,
   WidgetTypeMeta,
   Condition,
@@ -31,6 +32,9 @@ const FONT_SIZE_WEATHER = 32;
 
 /** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
 const DEFAULT_CARD_STYLE: CardStyle = "none";
+
+/** Default icon circle style for tile-style widgets. */
+const DEFAULT_ICON_STYLE: IconStyle = "filled";
 
 // ── Widget type registry ─────────────────────────────────────────
 
@@ -75,19 +79,18 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
-  sensor_rows: {
-    label: "Sensor Rows",
-    description: "Entity states in a card with icon rows",
-    icon: "mdi:thermometer",
+  tile: {
+    label: "Tile",
+    description: "Single entity state with icon and label",
+    icon: "mdi:card-text",
     defaults: {
-      type: "sensor_rows",
-      title: "",
+      type: "tile",
       x: 24,
       y: 0,
       w: 400,
-      h: 112,
-      entities: [],
+      h: 56,
       card_style: DEFAULT_CARD_STYLE,
+      icon_style: DEFAULT_ICON_STYLE,
     },
   },
   device_battery: {
@@ -101,23 +104,6 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       color: 0,
       layout: "icon",
       h: 40,
-      card_style: DEFAULT_CARD_STYLE,
-    },
-  },
-  status_icons: {
-    label: "Status Icons",
-    description: "Entity states as icon-and-text labels",
-    icon: "mdi:checkbox-marked-circle",
-    defaults: {
-      type: "status_icons",
-      title: "",
-      x: 24,
-      y: 0,
-      w: 400,
-      h: 40,
-      entities: [],
-      show_icon: true,
-      show_state: false,
       card_style: DEFAULT_CARD_STYLE,
     },
   },
@@ -227,6 +213,28 @@ function cardStyleSelector(): HaFormSchema {
         options: [
           { value: "border", label: "Border" },
           { value: "left_bar", label: "Left bar" },
+          { value: "none", label: "None" },
+        ],
+        mode: "dropdown",
+      },
+    },
+  };
+}
+
+/**
+ * Icon style dropdown selector.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function iconStyleSelector(): HaFormSchema {
+  return {
+    name: "icon_style",
+    default: DEFAULT_ICON_STYLE,
+    selector: {
+      select: {
+        options: [
+          { value: "filled", label: "Filled" },
+          { value: "outlined", label: "Outlined" },
           { value: "none", label: "None" },
         ],
         mode: "dropdown",
@@ -477,6 +485,51 @@ export const SCHEMAS: Record<
     },
   ],
 
+  tile: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:card-text",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: {} },
+        },
+        { name: "name", selector: { text: {} } },
+        { name: "icon", selector: { icon: {} } },
+        {
+          name: "hide_state",
+          default: false,
+          selector: { boolean: {} },
+        },
+        { name: "state_content", selector: { text: {} } },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+      ],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector(), iconStyleSelector()],
+    },
+  ],
+
   sensor_rows: (d) => [
     identitySection(),
     {
@@ -686,6 +739,10 @@ export const LABELS: Record<string, string> = {
   text: "Text",
   entity: "Entity",
   entities: "Entities",
+  name: "Name",
+  icon: "Icon",
+  hide_state: "Hide state",
+  state_content: "State attribute",
   title: "Title",
   x: "X", y: "Y", w: "Width", h: "Height",
   direction: "Direction", style: "Style", length: "Length",
@@ -693,6 +750,7 @@ export const LABELS: Record<string, string> = {
   color: "Color",
   align: "Align",
   card_style: "Card style",
+  icon_style: "Icon style",
   layout: "Layout",
   show_icon: "Show icon",
   show_state: "Show state",
@@ -737,7 +795,7 @@ export function getSummary(widget: Widget): string {
     const s = String(widget.text || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
-  if (t === "weather") {
+  if (t === "weather" || t === "tile") {
     return widget.entity || "(no entity)";
   }
   if (t === "device_battery") {
