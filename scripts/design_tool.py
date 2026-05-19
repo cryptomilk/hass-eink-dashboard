@@ -1099,6 +1099,11 @@ class _DesignHandler(BaseHTTPRequestHandler):
         # single-tab dev tool).
         change_event = self._state().change_event
         try:
+            # Flush an initial comment so Firefox's EventSource sees a
+            # live connection immediately rather than timing out before
+            # the first keepalive tick (15 s).
+            self.wfile.write(b": connected\n\n")
+            self.wfile.flush()
             while True:
                 triggered = change_event.wait(timeout=15.0)
                 if triggered:
