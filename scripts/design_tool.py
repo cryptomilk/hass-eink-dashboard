@@ -86,6 +86,14 @@ _FRONTEND_DIR = (
     / "frontend"
 )
 
+_BRAND_ICON = (
+    Path(__file__).parent.parent
+    / "custom_components"
+    / "eink_dashboard"
+    / "brand"
+    / "icon.png"
+)
+
 _RESIZE_MATH_TS = _FRONTEND_DIR / "src" / "resize-math.ts"
 _RESIZE_MATH_JS = _FRONTEND_DIR / "resize-math.js"
 
@@ -165,6 +173,7 @@ _HTML_TEMPLATE = """\
 <head>
 <meta charset="utf-8">
 <title>E-Ink Dashboard Design Tool</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{
@@ -837,6 +846,7 @@ class _DesignHandler(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         routes = {
             "/": self._serve_html,
+            "/favicon.png": self._serve_favicon,
             "/svg": self._serve_svg,
             "/png": self._serve_png,
             "/optimized.png": self._serve_optimized,
@@ -932,6 +942,15 @@ class _DesignHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_favicon(self) -> None:
+        """Serve the brand icon as a PNG favicon."""
+        body = _BRAND_ICON.read_bytes()
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
