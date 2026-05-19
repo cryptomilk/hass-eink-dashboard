@@ -60,13 +60,15 @@ import re
 
 from custom_components.eink_dashboard.const import (
     COLOR_BLACK, COLOR_GRAY, PADDING, DEFAULT_CARD_STYLE,
+    DEFAULT_ROW_H,
 )
 from custom_components.eink_dashboard.render import (
-    WidgetMetrics, _compute_metrics,
+    WidgetMetrics, _compute_metrics, DEFAULT_METRICS,
     _device_class_icon, render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import (
-    _DEFAULT_ROW_H, render_widget_svg,
+    render_widget_svg, _card_insets, _metrics_context,
+    _auto_row_height,
 )
 from tests.helpers import (
     assert_all_white, assert_card_border, assert_has_dark_pixels,
@@ -143,14 +145,14 @@ auto-sizing fallback.  Use `render_widget_svg` directly — a
 full-canvas PNG from `render_dashboard` cannot reveal the widget's
 own height attribute.
 
-- **No `h`, one row**: `SVG height == _DEFAULT_ROW_H`
-- **No `h`, N rows**: `SVG height == N * _DEFAULT_ROW_H`
+- **No `h`, one row**: `SVG height == DEFAULT_ROW_H`
+- **No `h`, N rows**: `SVG height == N * DEFAULT_ROW_H`
 - **Explicit `h` preserved**: widget with explicit `h` produces that
   exact height regardless of row count
 
 ```python
 def test_{widget}_auto_height_single_row(self) -> None:
-    # Without explicit h, one row produces height _DEFAULT_ROW_H.
+    # Without explicit h, one row produces height DEFAULT_ROW_H.
     w = {
         "type": "$widget-type",
         "x": 0, "y": 0, "w": 400,
@@ -159,7 +161,7 @@ def test_{widget}_auto_height_single_row(self) -> None:
     svg = render_widget_svg(w, self._config())
     m = re.search(r'height="(\d+)"', svg)
     assert m is not None
-    assert int(m.group(1)) == _DEFAULT_ROW_H
+    assert int(m.group(1)) == DEFAULT_ROW_H
 
 def test_{widget}_explicit_h_preserved(self) -> None:
     # An explicit h overrides auto-sizing.
@@ -213,9 +215,9 @@ parameter defines the card/chip boundary width, and `h` defines the
 total widget height. All internal dimensions derive from `h`.
 
 ```python
-# Card-style widget (sensor_rows, waste_schedule, person, alarm)
+# Card-style widget (tile, waste_schedule, person, alarm)
 # "h" is optional: omit it for auto-sizing (height =
-# num_rows * _DEFAULT_ROW_H).  Include it to test explicit override.
+# num_rows * DEFAULT_ROW_H).  Include it to test explicit override.
 widget = {
     "type": "$widget-type",
     "x": PADDING, "y": 0, "w": 350, "h": 112,
@@ -223,7 +225,7 @@ widget = {
     "card_style": "border",  # or "left_bar" or "none"
 }
 
-# Chip-style widget (status_icons, lock)
+# Chip-style widget (lock)
 widget = {
     "type": "$widget-type",
     "x": PADDING, "y": 0, "w": 350, "h": 28,
@@ -309,13 +311,13 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 #   "none"     -> (0, 0)
 # Content width (cw):
 #   cw = w - x_off - right_inset
-# _row_content_pads(m, card_style, grayscale_levels) returns
-# (lpad, rpad): padding card_row applies inside the container.
-#   "border"   -> (0, 0)         container already provides both
-#   "left_bar" -> (0, m.padding) container covers left; row covers right
-#   "none"     -> (m.padding, m.padding)  row provides all padding
+# _card_insets(m, card_style, grayscale_levels) returns
+# (x_off, r_inset, bar_width). Derive lpad/rpad from the result:
+#   x_off, r_inset, _ = _card_insets(m, card_style, grayscale_levels)
+#   lpad = m.padding if x_off == 0 else 0
+#   rpad = m.padding if r_inset == 0 else 0
 # Icon circle left arc lands at x_off + lpad, NOT x_off + m.padding.
-# Divider lines span x_off + lpad .. w - right_inset - rpad.
+# Divider lines span x_off + lpad .. w - r_inset - rpad.
 ```
 
 ## Lessons from completed TDD cycles

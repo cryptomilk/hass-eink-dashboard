@@ -70,8 +70,9 @@ from custom_components.eink_dashboard.render import (
 ```
 
 `_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
-`_auto_row_height`, `_row_content_pads`, and `_DEFAULT_ROW_H` are
-already in `svg_render.py` — call them directly, no import needed.
+`_auto_row_height`, `_card_insets`, `_metrics_context`,
+and `DEFAULT_ROW_H` (imported from `const`) are already in
+`svg_render.py` — call them directly, no import needed.
 
 `_color_context()` in `svg_render.py` returns
 `{"hex_black": ..., "hex_white": ..., "hex_gray": ...}` by calling
@@ -92,9 +93,11 @@ the context dict with `**_color_context()` so templates can use
   `icon_svg` (pre-built SVG string, empty string for letter fallback)
   and `letter` (single uppercase char, empty string when icon_svg is
   set). `primary` is the entity label; `secondary` is the state +
-  unit. Pass `lpad`/`rpad` from `_row_content_pads()` to prevent
+  unit. Pass `lpad`/`rpad` derived from `_card_insets()` to prevent
   double-padding when a card style already provides insets; use the
   same values for `x1`/`x2` of any divider `<line>` between rows.
+  Pass `icon_no_circle=True` when `icon_style == "none"` — the macro
+  hides the circle but still renders the icon glyph.
 - **`chip`** requires pre-computed `w` because text width depends on
   font metrics unavailable in Jinja2. The context builder must compute
   chip widths using `_load_font(size).getlength(text)` from PIL — the
@@ -129,7 +132,7 @@ is opaque when composited onto the dashboard canvas:
 <rect width="{{ w }}" height="{{ h }}" fill="white"/>
 ```
 
-**Card-style template pattern** (sensor_rows, waste_schedule):
+**Card-style template pattern** (tile, waste_schedule):
 
 ```jinja
 {%- from "_macros.svg.j2" import card_container, card_row -%}
@@ -169,7 +172,7 @@ is opaque when composited onto the dashboard canvas:
 </svg>
 ```
 
-**Chip-style template pattern** (status_icons):
+**Chip-style template pattern** (device_battery):
 
 ```jinja
 {%- from "_macros.svg.j2" import chip -%}
@@ -243,18 +246,19 @@ def _build_{widget_type}_context(
     if n == 0:
         return {
             "w": w,
-            "h": _widget_dim(widget, "h", _DEFAULT_ROW_H),
+            "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
             "rows": [],
-            "m": None,
         }
     # Row-based: auto-size height to fit n rows at
-    # _DEFAULT_ROW_H px each.  An explicit "h" overrides this.
+    # DEFAULT_ROW_H px each.  An explicit "h" overrides this.
     h = _widget_dim(widget, "h", _auto_row_height(title, n))
     row_h = h // n
     m = _compute_metrics(row_h)
-    lpad, rpad = _row_content_pads(
+    x_off, r_inset, bar_width = _card_insets(
         m, card_style, grayscale_levels
     )
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
 
     rows: list[dict[str, object]] = []
     for i, entity_id in enumerate(entities):
@@ -263,22 +267,25 @@ def _build_{widget_type}_context(
             continue
         attrs = state.get("attributes", {})
         domain = entity_id.split(".")[0]
+        # Resolve icon: device_class → attrs["icon"] → letter.
         icon_name = _device_class_icon(
             attrs, state["state"], domain
         )
-        # Call filter in Python; pass result as icon_svg string.
-        icon_svg = (
-            _mdi_svg_filter(icon_name, m.icon_inner)
-            if icon_name
-            else ""
-        )
-        letter = (
-            ""
-            if icon_name
-            else attrs.get(
-                "friendly_name", entity_id
-            )[:1].upper()
-        )
+        if icon_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                icon_name = raw[4:]
+        # Call filter in Python; suppress missing-icon errors.
+        icon_svg: markupsafe.Markup | str = ""
+        if icon_name:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(
+                    icon_name, m.icon_inner
+                )
+        letter = ""
+        if not icon_svg:
+            friendly = attrs.get("friendly_name", entity_id)
+            letter = friendly[:1].upper() if friendly else ""
         unit = attrs.get("unit_of_measurement", "")
         rows.append({
             "y": i * row_h,
@@ -293,13 +300,14 @@ def _build_{widget_type}_context(
     return {
         "w": w,
         "h": h,
-        "m": m,
         "card_style": card_style,
         "grayscale_levels": grayscale_levels,
         "rows": rows,
         "row_h": row_h,
         "lpad": lpad,
         "rpad": rpad,
+        **_metrics_context(m),
+        **_color_context(),
     }
 ```
 
@@ -317,7 +325,7 @@ def _build_{widget_type}_context(
     """Build template context for $widget-type widget."""
     x = widget.get("x", PADDING)
     w = _widget_dim(widget, "w", config["width"] - x)
-    h = _widget_dim(widget, "h", _DEFAULT_ROW_H)
+    h = _widget_dim(widget, "h", DEFAULT_ROW_H)
     entities = widget.get("entities", [])
     states = config.get("states", {})
     m = _compute_metrics(h)
@@ -342,11 +350,16 @@ def _build_{widget_type}_context(
         icon_name = _device_class_icon(
             attrs, state["state"], domain
         )
-        icon_svg = (
-            _mdi_svg_filter(icon_name, m.icon_inner)
-            if icon_name
-            else ""
-        )
+        if icon_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                icon_name = raw[4:]
+        icon_svg: markupsafe.Markup | str = ""
+        if icon_name:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(
+                    icon_name, m.icon_inner
+                )
         label = attrs.get("friendly_name", entity_id)
         text_w = round(font.getlength(label))
         icon_w = (m.icon_dia + icon_gap) if icon_svg else 0
@@ -440,4 +453,10 @@ behavior.
 - Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120`,
   `COLOR_LIGHT_GRAY=180` in `const.py`
 - Auto-sizing helpers: `_widget_dim`, `_auto_row_height`,
-  `_DEFAULT_ROW_H` in `svg_render.py` (no import needed)
+  `_card_insets`, `_metrics_context` in `svg_render.py` (no
+  import needed); `DEFAULT_ROW_H` in `const.py` (imported via
+  `svg_render.py`'s module-level `from const import ...`)
+- Icon style pattern: `_ACTIVE_STATES` frozenset (in
+  `svg_render.py`) determines active vs inactive state; use
+  `contextlib.suppress(FileNotFoundError)` around every
+  `_mdi_svg_filter()` call

@@ -260,10 +260,18 @@ Layout and Appearance collapsed):
 
 **Entity domain filtering:** Use the correct domain filter for each
 widget type:
-- `sensor_rows` → `{ domain: "sensor" }`
-- `status_icons` → `{ domain: "binary_sensor" }`
+- `tile` → no domain filter (accepts any entity)
 - `waste_schedule` → `{ domain: "sensor" }` (single entity from
   waste_collection_schedule)
+- `device_battery` → `{ domain: "sensor" }` or no filter
+
+**Visibility conditions:** Every widget form automatically gets a
+collapsible Visibility section appended by `_buildVisibilityEditor()`
+in `eink-dashboard-editor.ts`. Do NOT add a `visibility` field to the
+widget's `SCHEMAS` entry — it would duplicate the auto-appended
+section. The `visibility` field is typed as
+`(Condition | LegacyCondition)[]` (both types exported from
+`ha.d.ts`) on `WidgetBase`, so all widget interfaces inherit it.
 
 ### 3. Verify
 
