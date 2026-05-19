@@ -24,10 +24,12 @@ image entity and a public HTTP endpoint.
 **Key files**:
 - `render.py` — rendering orchestrator and shared helpers (delegates to
   `svg_render.py`; also holds `WidgetMetrics`, `_compute_metrics`,
-  `_load_font`, and other utilities imported lazily by `svg_render.py`)
+  `color_to_hex`, `DEFAULT_METRICS`, `_load_font`, and other utilities
+  imported lazily by `svg_render.py`)
 - `svg_render.py` — SVG rendering pipeline: Jinja2 templates, icon-inlining
   filters, `render_widget_svg()`, `_compose_svg()`, `_svg_to_png()` via
-  `resvg_py`, and per-widget context builders (`_build_*_context()`)
+  `resvg_py`, `_color_context()`, and per-widget context builders
+  (`_build_*_context()`)
 - `image.py` — `EinkDashboardImage` (`ImageEntity`), scheduled refresh, ETag tracking
 - `http.py` — unauthenticated HTTP view at `/api/eink_dashboard/{entry_id}/image.png` with ETag/304 support
 - `store.py` — `EinkDashboardStore`, persists widget list via HA's `Store` (`eink_dashboard.{entry_id}`)
@@ -91,10 +93,17 @@ under the limit. Do not abbreviate words or remove meaning to fit on one line.
   body explaining what the test is verifying.
 
 **Colors**: Integers 0–255. Constants in `const.py`: `COLOR_BLACK=0`,
-`COLOR_WHITE=255`, `COLOR_GRAY=120`, `COLOR_LIGHT_GRAY=180`, `PADDING=24`.
-`DEFAULT_CARD_STYLE="none"`. Per-widget font sizes: `FONT_SIZE_TEXT=32`,
-`FONT_SIZE_WEATHER=32`, `FONT_SIZE_SENSOR_ROWS=32`,
-`FONT_SIZE_STATUS_ICONS=28`.
+`COLOR_WHITE=255`, `COLOR_GRAY=120`, `COLOR_LIGHT_GRAY=180`, `PADDING=24`,
+`DEFAULT_ROW_H=56`, `DEFAULT_CARD_STYLE="none"`. Per-widget font sizes:
+`FONT_SIZE_TEXT=32`, `FONT_SIZE_WEATHER=32`, `FONT_SIZE_SENSOR_ROWS=32`,
+`FONT_SIZE_STATUS_ICONS=28`. Use `color_to_hex(c)` in `render.py` to
+convert an integer constant to an SVG hex string (e.g. `COLOR_GRAY` →
+`"#787878"`); spread `_color_context()` from `svg_render.py` into context
+dicts so templates receive `hex_black`, `hex_white`, `hex_gray` variables
+instead of hardcoded literals. `DEFAULT_METRICS = _compute_metrics(
+DEFAULT_ROW_H)` in `render.py` is the frozen `WidgetMetrics` instance for
+the standard row height; use its fields (`icon_dia`, `icon_inner`,
+`font_primary`, etc.) rather than deriving sizes inline.
 
 **Fonts**: `_load_font(size, medium=False)` (LRU-cached) loads
 `fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
