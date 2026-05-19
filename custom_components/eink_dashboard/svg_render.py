@@ -1472,11 +1472,12 @@ def _build_status_icons_context(
     show_icon: bool = widget.get("show_icon", True)
     show_state: bool = widget.get("show_state", False)
 
-    # Chip sizing — integer floor division matches the fallback
-    # formulas in the chip macro.
+    # Chip sizing — icon_dia and icon_inner come from
+    # _compute_metrics() so they match card_row at the same
+    # height.
     pad = chip_h * 18 // 100
-    icon_dia = chip_h * 64 // 100
-    chip_icon_inner = icon_dia * 60 // 100
+    icon_dia = m.icon_dia
+    chip_icon_inner = m.icon_inner
     icon_gap = chip_h * 14 // 100
     font_sz = max(10, chip_h * 46 // 100)
     # PIL font for text measurement only — resvg does not
