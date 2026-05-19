@@ -2372,8 +2372,8 @@ class TestRenderStatusIcons:
         # Entity with state "on" has a filled gray circle —
         # the circle centre is dark.
         h = 40
-        pad = int(h * 0.18)
-        icon_dia = int(h * 0.64)
+        pad = h * 18 // 100
+        icon_dia = h * 64 // 100
         cx = pad + icon_dia // 2
         cy = h // 2
         states = {
@@ -2407,8 +2407,8 @@ class TestRenderStatusIcons:
         # Entity with state "off" has an outlined circle —
         # the circle interior is white with a dark stroke.
         h = 80
-        pad = int(h * 0.18)
-        icon_dia = int(h * 0.64)
+        pad = h * 18 // 100
+        icon_dia = h * 64 // 100
         icon_r = icon_dia // 2
         cx = pad + icon_r
         cy = h // 2

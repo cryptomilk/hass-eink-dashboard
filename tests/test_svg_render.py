@@ -7,9 +7,6 @@ import pytest
 import resvg_py
 from PIL import Image
 
-from custom_components.eink_dashboard.render import (
-    _CHIP_ICON_INNER_RATIO,
-)
 from custom_components.eink_dashboard.svg_render import (
     _TEMPLATE_DIR,
     _jinja_env,
@@ -344,13 +341,13 @@ def test_card_row_icon_svg_renders(render_macro) -> None:
 def test_chip_renders_text(render_macro) -> None:
     """Verify chip emits text without any pill border."""
     # chip at x=20, y=80, w=100, h=40
+    # h=40: chip_pad=7, chip_font_sz=18
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=100, h=40,"
         " text='OK', border=2,"
-        " icon_fill='#787878', text_fill='#000000',"
-        " hex_black='#000000', hex_white='#ffffff') }}" + _SVG_CLOSE
+        " chip_pad=7, chip_font_sz=18) }}" + _SVG_CLOSE
     )
     # No pill border: top-left corner of chip area is white
     assert pixel(img, 20, 80) == 255
@@ -360,23 +357,21 @@ def test_chip_renders_text(render_macro) -> None:
 
 def test_chip_with_icon_draws_circle(render_macro) -> None:
     """Verify chip with icon draws an outlined state circle."""
-    # h=40: icon_dia = 40*64//100 = 25; pad = 40*18//100 = 7
-    # circle centre at x=20+7+12=39, y=80+20=100
+    # h=40: chip_icon_dia=25, chip_pad=7, chip_icon_inner=15
     icon_dia = 40 * 64 // 100
-    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
+    icon_sz = icon_dia * 60 // 100
     icon_svg = _mdi_svg_filter("thermometer", icon_sz)
+    pad = 40 * 18 // 100
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=120, h=40,"
-        " text='Warm', border=2,"
-        " icon_fill='#787878', text_fill='#000000',"
-        " hex_black='#000000', hex_white='#ffffff',"
-        " icon_svg=icon_svg) }}" + _SVG_CLOSE,
+        " text='Warm', border=2, icon_svg=icon_svg,"
+        " chip_pad=7, chip_icon_dia=25, chip_icon_inner=15,"
+        " chip_icon_gap=5, chip_font_sz=18) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
     # Circle stroke is visible at the icon area edges.
-    pad = 40 * 18 // 100
     assert_has_dark_pixels(
         img,
         20 + pad,
@@ -388,21 +383,20 @@ def test_chip_with_icon_draws_circle(render_macro) -> None:
 
 def test_chip_with_active_icon_fills_circle(render_macro) -> None:
     """Verify chip with active=true draws a filled gray circle."""
-    # h=40: icon_dia = 25; pad = 7; cx = 20+7+12 = 39, cy = 100.
-    # Probe 2px inside the left edge of the circle — this region
-    # is inside the fill but outside the 60% icon area, so it must
-    # be gray (not white).
+    # h=40: chip_icon_dia=25, chip_pad=7, chip_icon_inner=15.
+    # Probe 2px inside the left arc — inside fill, outside 60% icon
+    # area — must be gray.
     icon_dia = 40 * 64 // 100
-    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
+    icon_sz = icon_dia * 60 // 100
     icon_svg = _mdi_svg_filter("thermometer", icon_sz)
     img = render_macro(
         "{%- from '_macros.svg.j2' import chip -%}"
         + _SVG_OPEN
         + "{{ chip(x=20, y=80, w=120, h=40,"
-        " text='Warm', border=2,"
-        " icon_fill='#787878', text_fill='#000000',"
-        " hex_black='#000000', hex_white='#ffffff',"
-        " icon_svg=icon_svg, active=true) }}" + _SVG_CLOSE,
+        " text='Warm', border=2, icon_svg=icon_svg,"
+        " chip_pad=7, chip_icon_dia=25, chip_icon_inner=15,"
+        " chip_icon_gap=5, chip_font_sz=18,"
+        " active=true) }}" + _SVG_CLOSE,
         icon_svg=icon_svg,
     )
     pad = 40 * 18 // 100

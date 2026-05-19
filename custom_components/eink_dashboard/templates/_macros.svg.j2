@@ -248,24 +248,31 @@
     active=false → outlined circle (white fill, black stroke),
                    black icon
 
-  All internal proportional sizing is driven by h:
-    pad      = h * 0.18  (horizontal padding)
-    icon_dia = h * 0.64  (circle diameter)
-    icon_svg   at 60 % of icon_dia  (_CHIP_ICON_INNER_RATIO in
-               render.py; rendered by the Python context builder)
-    gap      = h * 0.14  (circle-to-text gap)
-    font     = h * 0.46  (font size)
+  Proportional sizing defaults (all overridable via parameters):
+    chip_pad      = h * 0.18  (horizontal padding)
+    chip_icon_dia = h * 0.64  (circle diameter)
+    chip_icon_inner = 60 % of chip_icon_dia
+    chip_icon_gap = h * 0.14  (circle-to-text gap)
+    chip_font_sz  = h * 0.46  (font size)
 
   w must be pre-computed by the Python context builder because it
   depends on the rendered text width (which requires font metrics
   unavailable in Jinja2).
 
   Parameters:
-    x, y      -- top-left of the label
-    w         -- pre-computed label width
-    h         -- label height (controls all internal sizing)
-    text      -- label text
+    x, y   -- top-left of the label
+    w      -- pre-computed label width
+    h      -- label height (controls fallback sizing)
+    text   -- label text
     border    -- stroke width for outlined circle
+    chip_pad      -- horizontal inset; -1 (default) → h * 18 // 100
+    chip_icon_dia -- circle diameter; -1 (default) → h * 64 // 100
+    chip_icon_inner -- icon glyph side length; -1 (default) →
+                       chip_icon_dia * 60 // 100
+    chip_icon_gap -- circle-to-text gap; -1 (default) →
+                     h * 14 // 100
+    chip_font_sz  -- label font size; -1 (default) →
+                     max(10, h * 46 // 100)
     icon_fill -- hex fill color for the active (filled) circle
     text_fill -- hex color for label text
     hex_black -- hex black for outlined circle stroke and icon color
@@ -275,17 +282,27 @@
 #}
 {%- macro chip(
     x, y, w, h, text, border,
-    icon_fill, text_fill, hex_black, hex_white,
-    icon_svg="", active=false
+    chip_pad=-1, chip_icon_dia=-1, chip_icon_inner=-1,
+    chip_icon_gap=-1, chip_font_sz=-1,
+    icon_svg="", active=false, icon_fill="#787878",
+    text_fill="#000000",
+    hex_black="#000000", hex_white="#ffffff"
 ) -%}
-{%- set pad = h * 18 // 100 -%}
-{%- set icon_dia = h * 64 // 100 -%}
-{%- set icon_gap = h * 14 // 100 -%}
-{%- set font_sz = [10, h * 46 // 100]|max -%}
+{%- set chip_pad = chip_pad if chip_pad >= 0
+    else h * 18 // 100 -%}
+{%- set chip_icon_dia = chip_icon_dia if chip_icon_dia >= 0
+    else h * 64 // 100 -%}
+{%- set chip_icon_gap = chip_icon_gap if chip_icon_gap >= 0
+    else h * 14 // 100 -%}
+{%- set chip_font_sz = chip_font_sz if chip_font_sz >= 0
+    else [10, h * 46 // 100]|max -%}
+{%- set chip_icon_inner = chip_icon_inner
+    if chip_icon_inner >= 0
+    else chip_icon_dia * 60 // 100 -%}
 {%- if icon_svg -%}
-{%- set icon_cx = x + pad + icon_dia // 2 -%}
+{%- set icon_cx = x + chip_pad + chip_icon_dia // 2 -%}
 {%- set icon_cy = y + h // 2 -%}
-{%- set icon_r = icon_dia // 2 -%}
+{%- set icon_r = chip_icon_dia // 2 -%}
 {# State circle -- filled when active, outlined when inactive #}
 {%- if active -%}
 <circle
@@ -298,18 +315,18 @@
   stroke="{{ hex_black }}"
   stroke-width="{{ border }}"/>
 {%- endif -%}
-{%- set icon_sz = icon_dia * 60 // 100 -%}
-{%- set ix = icon_cx - icon_sz // 2 -%}
-{%- set iy = icon_cy - icon_sz // 2 -%}
+{%- set ix = icon_cx - chip_icon_inner // 2 -%}
+{%- set iy = icon_cy - chip_icon_inner // 2 -%}
 {%- set ic = hex_white if active else hex_black -%}
 <g transform="translate({{ ix }}, {{ iy }})"
   style="color: {{ ic }}">{{ icon_svg }}</g>
 {%- endif -%}
-{%- set tx = x + pad + (icon_dia + icon_gap if icon_svg else 0) -%}
+{%- set tx = x + chip_pad
+    + (chip_icon_dia + chip_icon_gap if icon_svg else 0) -%}
 <text
   x="{{ tx }}" y="{{ y + h // 2 }}"
   font-family="Roboto"
-  font-size="{{ font_sz }}"
+  font-size="{{ chip_font_sz }}"
   dominant-baseline="central"
   fill="{{ text_fill }}">{{ text }}</text>
 {%- endmacro -%}

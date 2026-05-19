@@ -1274,15 +1274,14 @@ def _build_device_battery_context(
         # canvas); used as upper bound for chip content before
         # svg_w is narrowed to actual content extent below.
         content_w = svg_w - x_off - r_inset
-        # Sizing ratios mirror _CHIP_PAD_RATIO/_CHIP_GAP_RATIO/
-        # _CHIP_FONT_RATIO in render.py and the chip macro
-        # parameters in _macros.svg.j2.
-        pad = round(h * 0.18)
-        gap = round(h * 0.14)
-        bar_w_nat = round(h * 1.2)
-        bar_h = round(h * 0.36)
+        # pad, gap, and font_sz match the chip macro ratios;
+        # bar_w_nat and bar_h are battery-specific geometry.
+        pad = h * 18 // 100
+        gap = h * 14 // 100
+        bar_w_nat = h * 120 // 100
+        bar_h = h * 36 // 100
         bar_border = max(1, m.border // 2)
-        font_sz = max(10, round(h * 0.46))
+        font_sz = max(10, h * 46 // 100)
         # PIL font for text measurement only — resvg does not
         # expose text metrics, so widths are pre-computed here.
         font = _load_font(font_sz)
@@ -1435,11 +1434,6 @@ def _build_status_icons_context(
         absent from ``states``.
     """
     from .render import (
-        _CHIP_FONT_RATIO,
-        _CHIP_GAP_RATIO,
-        _CHIP_ICON_INNER_RATIO,
-        _CHIP_ICON_RATIO,
-        _CHIP_PAD_RATIO,
         _compute_metrics,
         _device_class_icon,
         _load_font,
@@ -1478,18 +1472,18 @@ def _build_status_icons_context(
     show_icon: bool = widget.get("show_icon", True)
     show_state: bool = widget.get("show_state", False)
 
-    # Chip sizing ratios — must match the chip macro in
-    # _macros.svg.j2.
-    pad = int(chip_h * _CHIP_PAD_RATIO)
-    icon_dia = int(chip_h * _CHIP_ICON_RATIO)
-    icon_sz = int(icon_dia * _CHIP_ICON_INNER_RATIO)
-    icon_gap = int(chip_h * _CHIP_GAP_RATIO)
-    font_sz = max(10, int(chip_h * _CHIP_FONT_RATIO))
+    # Chip sizing — integer floor division matches the fallback
+    # formulas in the chip macro.
+    pad = chip_h * 18 // 100
+    icon_dia = chip_h * 64 // 100
+    chip_icon_inner = icon_dia * 60 // 100
+    icon_gap = chip_h * 14 // 100
+    font_sz = max(10, chip_h * 46 // 100)
     # PIL font for text measurement only — resvg does not
     # expose text metrics, so widths are pre-computed here.
     font = _load_font(font_sz)
     # Vertical gap between wrapped label rows.
-    inter_gap = int(chip_h * _CHIP_PAD_RATIO)
+    inter_gap = chip_h * 18 // 100
 
     # Build chip descriptors with pre-computed widths.
     chips: list[dict[str, Any]] = []
@@ -1519,7 +1513,7 @@ def _build_status_icons_context(
                 with contextlib.suppress(FileNotFoundError):
                     icon_svg = _mdi_svg_filter(
                         icon_name,
-                        icon_sz,
+                        chip_icon_inner,
                     )
 
         has_icon = bool(icon_svg)
@@ -1586,6 +1580,11 @@ def _build_status_icons_context(
         "title_font_sz": title_font_sz,
         "title_advance": title_advance,
         "chip_h": chip_h,
+        "chip_pad": pad,
+        "chip_icon_dia": icon_dia,
+        "chip_icon_inner": chip_icon_inner,
+        "chip_icon_gap": icon_gap,
+        "chip_font_sz": font_sz,
         "card_style": card_style,
         "bar_width": bar_width,
         **_metrics_context(m),
