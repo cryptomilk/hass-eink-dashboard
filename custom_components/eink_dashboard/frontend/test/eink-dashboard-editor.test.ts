@@ -52,9 +52,10 @@ describe("WIDGET_TYPES", () => {
     "entity",
     "device_battery",
     "waste_schedule",
+    "sensor",
   ];
 
-  it("has all 8 widget types", () => {
+  it("has all 9 widget types", () => {
     // text is deprecated and removed from the picker; heading replaces it.
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
@@ -102,9 +103,10 @@ describe("SCHEMAS", () => {
     "device_battery",
     "status_icons",
     "waste_schedule",
+    "sensor",
   ];
 
-  it("has a schema builder for all 11 widget types", () => {
+  it("has a schema builder for all 12 widget types", () => {
     // text schema kept for backward-compat editing of existing configs.
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
@@ -317,6 +319,16 @@ describe("getSummary", () => {
         entities: ["sensor.temperature"],
       })
     ).toBe("Climate — 1 entity");
+  });
+
+  it("returns entity for sensor widget", () => {
+    expect(
+      getSummary({ type: "sensor", entity: "sensor.temperature" })
+    ).toBe("sensor.temperature");
+  });
+
+  it("returns '(no entity)' for sensor widget with no entity", () => {
+    expect(getSummary({ type: "sensor", entity: "" })).toBe("(no entity)");
   });
 });
 

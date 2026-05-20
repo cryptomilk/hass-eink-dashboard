@@ -157,6 +157,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  sensor: {
+    label: "Sensor",
+    description: "Single sensor with optional history sparkline graph",
+    icon: "mdi:chart-line",
+    defaults: {
+      type: "sensor",
+      x: 24,
+      y: 0,
+      w: 400,
+      h: 112,
+      entity: "",
+      card_style: DEFAULT_CARD_STYLE,
+      icon_style: DEFAULT_ICON_STYLE,
+    },
+  },
 };
 
 // ── ha-form schema builders ──────────────────────────────────────
@@ -830,6 +845,95 @@ export const SCHEMAS: Record<
     },
   ],
 
+  sensor: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:chart-line",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: {
+            entity: {
+              domain: ["sensor", "counter", "input_number", "number"],
+            },
+          },
+        },
+        { name: "name", selector: { text: {} } },
+        { name: "icon", selector: { icon: {} } },
+        { name: "unit", selector: { text: {} } },
+        {
+          name: "graph",
+          selector: {
+            select: {
+              options: [
+                { value: "", label: "None" },
+                { value: "line", label: "Line" },
+              ],
+              mode: "dropdown",
+            },
+          },
+        },
+        {
+          name: "detail",
+          default: "1",
+          selector: {
+            select: {
+              options: [
+                { value: "1", label: "Standard (~24 pts)" },
+                { value: "2", label: "Full resolution" },
+              ],
+            },
+          },
+        },
+        // Graph-related; shown unconditionally because ha-form
+        // has no field-level conditional visibility.
+        {
+          name: "hours_to_show",
+          default: 24,
+          selector: {
+            number: { min: 1, max: 720, mode: "box" },
+          },
+        },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "limits_min",
+              selector: { number: { mode: "box" } },
+            },
+            {
+              name: "limits_max",
+              selector: { number: { mode: "box" } },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector(), iconStyleSelector()],
+    },
+  ],
+
   waste_schedule: (d) => [
     identitySection(),
     {
@@ -922,6 +1026,11 @@ export const LABELS: Record<string, string> = {
   show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
+  graph: "Graph",
+  hours_to_show: "Hours to show",
+  detail: "Detail",
+  limits_min: "Y-axis minimum",
+  limits_max: "Y-axis maximum",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -964,7 +1073,7 @@ export function getSummary(widget: Widget): string {
     const s = String(widget.heading || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
-  if (t === "weather" || t === "tile" || t === "entity") {
+  if (t === "weather" || t === "tile" || t === "entity" || t === "sensor") {
     return widget.entity || "(no entity)";
   }
   if (t === "device_battery") {

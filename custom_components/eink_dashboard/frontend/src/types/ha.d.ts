@@ -650,6 +650,65 @@ export interface EntityWidget extends WidgetBase {
   icon_style?: IconStyle;
 }
 
+/** Y-axis range limits for the sensor sparkline graph. */
+export interface SensorLimits {
+  /** Minimum Y-axis value; auto-computed from data when omitted. */
+  min?: number;
+  /** Maximum Y-axis value; auto-computed from data when omitted. */
+  max?: number;
+}
+
+/**
+ * Single-entity sensor with optional history sparkline graph,
+ * modelled after HA's Sensor card (``hui-sensor-card.ts``).
+ */
+export interface SensorWidget extends WidgetBase {
+  type: "sensor";
+  /** HA entity ID (sensor, counter, input_number, number). */
+  entity: string;
+  /** Override display name; falls back to the entity's friendly_name. */
+  name?: string;
+  /** MDI icon name override (e.g. ``"mdi:thermometer"``). */
+  icon?: string;
+  /**
+   * Enable a history sparkline below the entity info.
+   * ``"line"`` renders a polyline graph; ``""`` or absent means no graph.
+   */
+  graph?: "line" | "";
+  /** History window in hours for the graph data. Default: 24. */
+  hours_to_show?: number;
+  /**
+   * Graph detail level.
+   * - ``"1"`` — downsampled to ~24 points (default, faster rendering).
+   * - ``"2"`` — full recorder resolution.
+   */
+  detail?: "1" | "2";
+  /** Unit string override shown next to the state value. */
+  unit?: string;
+  /** Fixed Y-axis range; auto-computed from data when omitted. */
+  limits?: SensorLimits;
+  /**
+   * Y-axis minimum for the graph (flat key equivalent of
+   * ``limits.min``).  Auto-computed from data when omitted.
+   */
+  limits_min?: number;
+  /**
+   * Y-axis maximum for the graph (flat key equivalent of
+   * ``limits.max``).  Auto-computed from data when omitted.
+   */
+  limits_max?: number;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /**
+   * Icon circle rendering mode.
+   * - ``"filled"`` — gray-filled circle (default for active states).
+   * - ``"outlined"`` — white circle with black border (inactive and
+   *   2-level displays).
+   * - ``"none"`` — no circle; icon glyph rendered without decoration.
+   */
+  icon_style?: IconStyle;
+}
+
 export type Widget =
   | TextWidget
   | SeparatorWidget
@@ -661,7 +720,8 @@ export type Widget =
   | TileWidget
   | HeadingWidget
   | EntitiesWidget
-  | EntityWidget;
+  | EntityWidget
+  | SensorWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {

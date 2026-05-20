@@ -3047,7 +3047,8 @@ def _build_sensor_context(
             ``detail`` (``1`` for downsampled ~24 pts, ``2`` for
             full resolution; default 1),
             ``limits`` (dict with optional ``"min"``/``"max"``
-            keys to fix the Y-axis range),
+            keys to fix the Y-axis range; editor uses flat
+            ``limits_min``/``limits_max`` keys instead),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.
@@ -3068,6 +3069,17 @@ def _build_sensor_context(
     detail: int = int(float(widget.get("detail", 1)))
     hours_to_show: int = int(float(widget.get("hours_to_show", 24)))
     limits: dict[str, float] | None = widget.get("limits")
+    if limits is None:
+        # The frontend stores Y-axis bounds as flat keys rather than a
+        # nested dict (ha-form does not support nested objects).
+        lmin = widget.get("limits_min")
+        lmax = widget.get("limits_max")
+        if lmin is not None or lmax is not None:
+            limits = {}
+            if lmin is not None:
+                limits["min"] = lmin
+            if lmax is not None:
+                limits["max"] = lmax
     grayscale_levels = config.get("grayscale_levels", 16)
 
     has_graph = graph == "line"
