@@ -231,6 +231,7 @@ class WidgetType(StrEnum):
     ENTITIES = "entities"
     ENTITY = "entity"
     HEADING = "heading"
+    SENSOR = "sensor"
     TILE = "tile"
     WEATHER = "weather"
     SENSOR_ROWS = "sensor_rows"

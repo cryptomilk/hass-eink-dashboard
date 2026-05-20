@@ -28,6 +28,8 @@ _HA_MODULES = [
     "homeassistant.components",
     "homeassistant.components.frontend",
     "homeassistant.components.frontend.storage",
+    "homeassistant.components.recorder",
+    "homeassistant.components.recorder.history",
     "homeassistant.components.http",
     "homeassistant.components.image",
     "homeassistant.components.media_player",
@@ -55,6 +57,12 @@ _HA_MODULES = [
 for _mod_name in _HA_MODULES:
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = _stub_module(_mod_name)
+
+sys.modules[
+    "homeassistant.components.recorder.history"
+].get_significant_states = MagicMock(  # type: ignore[attr-defined]
+    return_value={}
+)
 
 frontend_mod = sys.modules["homeassistant.components.frontend"]
 frontend_mod.add_extra_js_url = MagicMock()  # type: ignore[attr-defined]

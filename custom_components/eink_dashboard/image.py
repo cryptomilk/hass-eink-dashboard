@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-from . import _async_get_locale, _fetch_forecasts
+from . import _async_get_locale, _fetch_forecasts, _fetch_history
 from .battery import resolve_battery_level
 from .const import (
     DEFAULT_CONTRAST,
@@ -215,6 +215,7 @@ class EinkDashboardImage(ImageEntity):
             async with self._refresh_lock:
                 states = self._build_states()
                 await self._async_fetch_forecasts(states)
+                await self._async_fetch_history(states)
                 config = {
                     "width": self._entry.options.get("width", DEFAULT_WIDTH),
                     "height": self._entry.options.get(
@@ -342,6 +343,18 @@ class EinkDashboardImage(ImageEntity):
         logic is shared with the WebSocket preview handlers.
         """
         await _fetch_forecasts(self.hass, self._widgets, states)
+
+    async def _async_fetch_history(self, states: dict[str, Any]) -> None:
+        """Fetch state history for sensor widgets and inject into states.
+
+        Delegates to the module-level ``_fetch_history`` so the logic
+        is shared with the WebSocket preview handlers.
+
+        Args:
+            states: Mutable states dict; history data is injected
+                in-place for sensor entities.
+        """
+        await _fetch_history(self.hass, self._widgets, states)
 
     def _build_states(self) -> dict[str, Any]:
         """Snapshot all HA states as a plain dict for the renderer."""

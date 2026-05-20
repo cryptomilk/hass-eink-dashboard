@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import logging
+from datetime import timedelta
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
@@ -317,6 +320,92 @@ async def _fetch_forecasts(
             _LOGGER.debug("Could not fetch forecast for %s", entity_id)
 
 
+async def _fetch_history(
+    hass: HomeAssistant,
+    widgets: list[dict[str, Any]],
+    states: dict[str, Any],
+) -> None:
+    """Fetch state history for sensor widgets and inject into states.
+
+    Scans ``widgets`` for sensor widgets with ``graph == "line"``,
+    then fetches compressed state history from the recorder component
+    for each referenced entity and writes it into
+    ``states[entity_id]["history"]`` as a list of
+    ``{"s": state_str, "lu": unix_timestamp_float}`` dicts so
+    ``_build_sensor_context`` can compute sparkline coordinates
+    without real-time HA access.
+
+    Silently skips if the recorder is not loaded or if fetching fails
+    for any individual entity.  Tests inject history data directly
+    into the states dict and never call this function.
+
+    Args:
+        hass: Home Assistant instance.
+        widgets: Widget dicts to scan for sensor widgets needing
+            history data.
+        states: Mutable states dict built by ``_build_display_config``.
+    """
+    # Build a map of entity_id → maximum hours_to_show across all
+    # sensor widgets referencing that entity.
+    sensor_entities: dict[str, int] = {}
+    for w in widgets:
+        if w.get("type") == WidgetType.SENSOR and w.get("graph") == "line":
+            eid = w.get("entity", "")
+            if eid and eid in states:
+                try:
+                    hours = max(1, int(w.get("hours_to_show", 24)))
+                except (ValueError, TypeError):
+                    hours = 24
+                if hours > sensor_entities.get(eid, 0):
+                    sensor_entities[eid] = hours
+
+    if not sensor_entities:
+        return
+
+    if "recorder" not in hass.config.components:
+        _LOGGER.debug("_fetch_history: recorder not loaded, skipping history")
+        return
+
+    from homeassistant.components.recorder.history import (
+        get_significant_states,
+    )
+
+    now = dt.datetime.now(dt.UTC)
+    for entity_id, hours in sensor_entities.items():
+        start_time = now - timedelta(hours=hours)
+        try:
+            result = await hass.async_add_executor_job(
+                partial(
+                    get_significant_states,
+                    hass,
+                    start_time,
+                    end_time=None,
+                    entity_ids=[entity_id],
+                    filters=None,
+                    include_start_time_state=True,
+                    significant_changes_only=True,
+                    minimal_response=False,
+                    no_attributes=True,
+                    compressed_state_format=True,
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug(
+                "_fetch_history: could not fetch history for %s",
+                entity_id,
+            )
+            continue
+
+        raw = cast("list[dict[str, Any]]", result.get(entity_id, []))
+        entries: list[dict[str, object]] = [
+            {"s": str(e.get("s", "")), "lu": float(e.get("lu", 0.0))}
+            for e in raw
+        ]
+
+        if entries:
+            states[entity_id]["history"] = entries
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "eink_dashboard/render_widget",
@@ -368,6 +457,7 @@ async def ws_render_widget(
         widget = widgets[idx]
     config = await _build_display_config(hass, entry_id)
     await _fetch_forecasts(hass, [widget], config["states"])
+    await _fetch_history(hass, [widget], config["states"])
     try:
         svg = await hass.async_add_executor_job(
             render_widget_svg, widget, config
@@ -432,6 +522,7 @@ async def ws_render_widgets(
     widgets = msg.get("widgets") or list(entry_data["widgets"])
     config = await _build_display_config(hass, entry_id)
     await _fetch_forecasts(hass, widgets, config["states"])
+    await _fetch_history(hass, widgets, config["states"])
 
     # Render all widgets in a single executor job: render_widget_svg
     # is CPU-bound (Jinja2 + resvg), and one thread per widget would
