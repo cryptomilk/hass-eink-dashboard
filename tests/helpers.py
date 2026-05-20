@@ -7,8 +7,10 @@ from PIL import Image, ImageChops
 
 from custom_components.eink_dashboard.render import (
     WidgetMetrics,
+    _compute_metrics,
     render_dashboard,
 )
+from custom_components.eink_dashboard.svg_render import _card_insets
 
 
 def make_config(defaults: dict[str, Any], **overrides: Any) -> dict[str, Any]:
@@ -251,6 +253,83 @@ def assert_vertically_centered(
     assert abs(icon_cy - text_cy) <= tolerance, (
         f"vertical center mismatch: icon={icon_cy:.1f}, text={text_cy:.1f}"
     )
+
+
+def _icon_ring_region(
+    row_h: int,
+    m: WidgetMetrics,
+    *,
+    stroke_inset: int = 0,
+) -> tuple[int, int, int, int]:
+    """Return the top-arc bounding box of the icon circle.
+
+    The returned region sits above the icon glyph area, between the
+    top of the circle and the top of the inner icon bounding box.
+    Used in icon-style tests to check for gray fill (filled) or white
+    fill (outlined / none).
+
+    Args:
+        row_h: Height of the row that contains the icon.
+        m: WidgetMetrics computed for that row height.
+        stroke_inset: Additional inward offset on the top edge to
+            account for thickened strokes (e.g. ``m.border * 3 // 2``
+            on 2-level displays).  Defaults to 0.
+
+    Returns:
+        ``(x1, y1, x2, y2)`` bounding box of the ring region.
+    """
+    cy = row_h // 2
+    r = m.icon_dia // 2
+    cx = m.padding + r
+    ring_y1 = cy - r + stroke_inset + 3
+    ring_y2 = cy - m.icon_inner // 2 - 1
+    ring_x1 = cx - r // 2 + 3
+    ring_x2 = cx + r // 2 - 3
+    return ring_x1, ring_y1, ring_x2, ring_y2
+
+
+def _right_icon_ring_region(
+    w: int,
+    h: int,
+    card_style: str = "none",
+    grayscale_levels: int = 16,
+) -> tuple[int, int, int, int, int, int]:
+    """Return the icon ring region for right-aligned icon style tests.
+
+    Used by widgets where the icon sits on the right side of a header
+    row — Entity and Sensor.  The header height is computed as 40% of
+    the total widget height ``h``.
+
+    Returns ``(icon_cx, icon_cy, ring_x1, ring_y1, ring_x2, ring_y2)``
+    — the centre of the icon circle and the bounding box of the top arc
+    above the icon glyph area.
+
+    Args:
+        w: Canvas width in pixels.
+        h: Total widget height in pixels; header_h (40%) is computed
+            internally.
+        card_style: Card decoration style string.
+        grayscale_levels: Display grayscale depth.
+
+    Returns:
+        Six-tuple (icon_cx, icon_cy, ring_x1, ring_y1, ring_x2,
+        ring_y2).
+    """
+    header_h = round(h * 0.40)
+    m = _compute_metrics(header_h)
+    _, r_inset, _ = _card_insets(m, card_style, grayscale_levels)
+    rpad = m.padding if r_inset == 0 else 0
+    icon_r = m.icon_dia // 2
+    icon_cx = w - r_inset - rpad - icon_r
+    icon_cy = header_h // 2
+    # Mirror the context builder's icon_stroke_w so the ring region
+    # starts past the inner edge of a widened stroke on 2-level.
+    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    ring_y1 = icon_cy - icon_r + icon_stroke_w // 2 + 3
+    ring_y2 = icon_cy - m.icon_inner // 2 - 1
+    ring_x1 = icon_cx - icon_r // 2 + 3
+    ring_x2 = icon_cx + icon_r // 2 - 3
+    return icon_cx, icon_cy, ring_x1, ring_y1, ring_x2, ring_y2
 
 
 def assert_scales_proportionally(
