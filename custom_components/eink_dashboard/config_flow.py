@@ -52,12 +52,17 @@ from .const import (
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
 
+# Sentinel value used as the first option in each locale selector.
+# HA translation keys must match [a-z0-9-_]+, so an empty string is
+# not valid; "ha_default" is treated as "no override" at submit time.
+_LOCALE_DEFAULT = "ha_default"
+
 # Static option lists for the locale settings form.  Defined at module
 # level so they are not reconstructed on every call to
-# async_step_locale_settings.  Each list starts with "" meaning
-# "no override / use the owner's preference".
+# async_step_locale_settings.  Each list starts with _LOCALE_DEFAULT
+# meaning "no override / use the owner's preference".
 _NF_OPTIONS = [
-    "",
+    _LOCALE_DEFAULT,
     NumberFormat.LANGUAGE,
     NumberFormat.COMMA_DECIMAL,
     NumberFormat.DECIMAL_COMMA,
@@ -66,7 +71,7 @@ _NF_OPTIONS = [
     NumberFormat.NONE,
 ]
 _FW_OPTIONS = [
-    "",
+    _LOCALE_DEFAULT,
     "language",
     "monday",
     "tuesday",
@@ -77,14 +82,14 @@ _FW_OPTIONS = [
     "sunday",
 ]
 _DF_OPTIONS = [
-    "",
+    _LOCALE_DEFAULT,
     DateFormat.LANGUAGE,
     DateFormat.DMY,
     DateFormat.MDY,
     DateFormat.YMD,
 ]
 _TF_OPTIONS = [
-    "",
+    _LOCALE_DEFAULT,
     TimeFormat.LANGUAGE,
     TimeFormat.AM_PM,
     TimeFormat.TWENTY_FOUR,
@@ -855,7 +860,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 ): LanguageSelector(LanguageSelectorConfig(native_name=True)),
                 vol.Optional(
                     "locale_number_format",
-                    default=opts.get("locale_number_format", ""),
+                    default=opts.get("locale_number_format", _LOCALE_DEFAULT),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=_NF_OPTIONS,
@@ -864,7 +869,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional(
                     "locale_first_weekday",
-                    default=opts.get("locale_first_weekday", ""),
+                    default=opts.get("locale_first_weekday", _LOCALE_DEFAULT),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=_FW_OPTIONS,
@@ -873,7 +878,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional(
                     "locale_date_format",
-                    default=opts.get("locale_date_format", ""),
+                    default=opts.get("locale_date_format", _LOCALE_DEFAULT),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=_DF_OPTIONS,
@@ -882,7 +887,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 ),
                 vol.Optional(
                     "locale_time_format",
-                    default=opts.get("locale_time_format", ""),
+                    default=opts.get("locale_time_format", _LOCALE_DEFAULT),
                 ): SelectSelector(
                     SelectSelectorConfig(
                         options=_TF_OPTIONS,
@@ -903,8 +908,8 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 "locale_date_format",
                 "locale_time_format",
             ):
-                value = validated.get(key, "")
-                if value:
+                value = validated.get(key, _LOCALE_DEFAULT)
+                if value and value != _LOCALE_DEFAULT:
                     new_opts[key] = value
                 else:
                     new_opts.pop(key, None)

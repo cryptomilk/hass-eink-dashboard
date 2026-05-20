@@ -200,7 +200,7 @@
     },
     "locale_number_format": {
       "options": {
-        "": "Default (HA owner preference)",
+        "ha_default": "Default (HA owner preference)",
         "language": "Automatic (from language)",
         "comma_decimal": "1,234.56 (US/UK)",
         "decimal_comma": "1.234,56 (DE/ES/IT)",
@@ -211,7 +211,7 @@
     },
     "locale_first_weekday": {
       "options": {
-        "": "Default (HA owner preference)",
+        "ha_default": "Default (HA owner preference)",
         "language": "Automatic (from language)",
         "monday": "Monday",
         "tuesday": "Tuesday",
@@ -224,7 +224,7 @@
     },
     "locale_date_format": {
       "options": {
-        "": "Default (HA owner preference)",
+        "ha_default": "Default (HA owner preference)",
         "language": "Automatic (from language)",
         "DMY": "Day-Month-Year (31/12/2026)",
         "MDY": "Month-Day-Year (12/31/2026)",
@@ -233,7 +233,7 @@
     },
     "locale_time_format": {
       "options": {
-        "": "Default (HA owner preference)",
+        "ha_default": "Default (HA owner preference)",
         "language": "Automatic (from language)",
         "12": "12-hour (1:30 PM)",
         "24": "24-hour (13:30)"
