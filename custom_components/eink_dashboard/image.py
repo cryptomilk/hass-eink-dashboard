@@ -49,6 +49,13 @@ _LOGGER = logging.getLogger(__name__)
 PUSH_MIN_INTERVAL = 300
 PUSH_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
+# Maps widget type to the field name that supports Jinja2 templates.
+# Add new entries here when a new widget type gains a templatable field.
+_TEMPLATE_FIELDS: dict[str, str] = {
+    WidgetType.TEXT: "text",
+    WidgetType.HEADING: "heading",
+}
+
 
 def _is_image_blank(image_bytes: bytes) -> bool:
     """Return True if the image has no dark pixels (appears all-white)."""
@@ -138,25 +145,48 @@ class EinkDashboardImage(ImageEntity):
             self._widgets = widgets
         await self._async_refresh(None)
 
+    def _render_field(self, raw: str) -> str:
+        """Render a single Jinja2 template string, returning raw on error.
+
+        Must be called from the HA event loop (same as
+        ``_resolve_templates``).
+
+        Args:
+            raw: Template source string.
+
+        Returns:
+            Rendered string, or ``raw`` unchanged if the template is
+            static or rendering fails.
+        """
+        tpl = Template(raw, self.hass)
+        if not tpl.is_static:
+            try:
+                return str(tpl.async_render(parse_result=False))
+            except TemplateError as err:
+                _LOGGER.warning("Failed to render template %r: %s", raw, err)
+        return raw
+
     def _resolve_templates(  # must be called from the event loop
         self, widgets: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Render Jinja2 templates in TEXT widget text fields."""
+        """Render Jinja2 templates in widget text fields.
+
+        Processes every widget type registered in ``_TEMPLATE_FIELDS``.
+        Static strings pass through unchanged.  Template errors are
+        logged as warnings and fall back to the original string.
+
+        Args:
+            widgets: Widget config list from the dashboard store.
+
+        Returns:
+            New list with template fields replaced by rendered values.
+        """
         resolved = []
         for widget in widgets:
-            if widget.get("type") == WidgetType.TEXT and "text" in widget:
-                tpl = Template(widget["text"], self.hass)
-                if not tpl.is_static:
-                    try:
-                        rendered = tpl.async_render(parse_result=False)
-                    except TemplateError as err:
-                        _LOGGER.warning(
-                            "Failed to render template %r: %s",
-                            widget["text"],
-                            err,
-                        )
-                        rendered = widget["text"]
-                    widget = {**widget, "text": str(rendered)}
+            wtype = widget.get("type")
+            field = _TEMPLATE_FIELDS.get(wtype) if wtype else None
+            if field and field in widget:
+                widget = {**widget, field: self._render_field(widget[field])}
             resolved.append(widget)
         return resolved
 

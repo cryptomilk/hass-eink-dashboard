@@ -166,6 +166,7 @@ class WidgetType(StrEnum):
 
     TEXT = "text"
     SEPARATOR = "separator"
+    HEADING = "heading"
     TILE = "tile"
     WEATHER = "weather"
     SENSOR_ROWS = "sensor_rows"

@@ -59,10 +59,10 @@ through these sources without copying files manually.
   `svg_render.py`, composes one root SVG, rasterises with `resvg_py`, then
   applies rotation and e-ink optimisation, and returns PNG bytes
 
-**Widget types** (`WidgetType` in `const.py`): `TEXT`, `SEPARATOR`,
-`TILE`, `WEATHER`, `SENSOR_ROWS`, `DEVICE_BATTERY`, `STATUS_ICONS`,
-`WASTE_SCHEDULE`.  `SENSOR_ROWS` and `STATUS_ICONS` are deprecated —
-hidden from the widget picker but kept for existing configs.
+**Widget types** (`WidgetType` in `const.py`): `HEADING`, `SEPARATOR`,
+`TILE`, `WEATHER`, `DEVICE_BATTERY`, `WASTE_SCHEDULE`.  Deprecated
+types (hidden from the widget picker but kept for existing configs):
+`TEXT` (superseded by `HEADING`), `SENSOR_ROWS`, `STATUS_ICONS`.
 
 **Adding a widget type**:
 1. Add the new value to `WidgetType` in `const.py`

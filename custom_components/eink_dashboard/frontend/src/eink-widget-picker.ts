@@ -9,6 +9,7 @@ const PICKER_TAG = "eink-widget-picker";
 // Unicode fallbacks for MDI icon names that the browser can't load.
 const ICON_FALLBACK: Record<string, string> = {
   "mdi:format-text": "T",
+  "mdi:format-header-1": "#",
   "mdi:minus": "—",
   "mdi:weather-partly-cloudy": "⛅",
   "mdi:thermometer": "🌡",

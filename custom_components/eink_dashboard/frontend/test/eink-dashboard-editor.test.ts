@@ -44,7 +44,7 @@ function findField(
 
 describe("WIDGET_TYPES", () => {
   const ALL_TYPES = [
-    "text",
+    "heading",
     "separator",
     "weather",
     "tile",
@@ -53,6 +53,7 @@ describe("WIDGET_TYPES", () => {
   ];
 
   it("has all 6 widget types", () => {
+    // text is deprecated and removed from the picker; heading replaces it.
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -89,6 +90,7 @@ describe("WIDGET_TYPES", () => {
 describe("SCHEMAS", () => {
   const ALL_TYPES = [
     "text",
+    "heading",
     "separator",
     "weather",
     "tile",
@@ -98,7 +100,8 @@ describe("SCHEMAS", () => {
     "waste_schedule",
   ];
 
-  it("has a schema builder for all 8 widget types", () => {
+  it("has a schema builder for all 9 widget types", () => {
+    // text schema kept for backward-compat editing of existing configs.
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -499,17 +502,18 @@ describe("add-widget integration", () => {
         }) as EventListener
       );
 
-      // Click the "text" type card in the picker's shadow DOM.
+      // Click the "heading" type card in the picker's shadow DOM.
+      // (text is deprecated and removed from the picker.)
       const card = picker!.shadowRoot!
         .querySelector<HTMLElement>(
-          '.type-card[data-type="text"]'
+          '.type-card[data-type="heading"]'
         );
       expect(card).toBeTruthy();
       card!.click();
 
       expect(received).toBeDefined();
       expect(received!.length).toBe(1);
-      expect(received![0].type).toBe("text");
+      expect(received![0].type).toBe("heading");
     }
   );
 });

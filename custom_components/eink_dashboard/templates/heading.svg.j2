@@ -1,0 +1,56 @@
+{%- from "_macros.svg.j2" import card_container -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
+{%- if has_content -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black, bar_color=hex_gray) -%}
+{%- if icon_svg -%}
+{%- if not icon_no_circle -%}
+{%- if icon_outline -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="{{ hex_white }}"
+  stroke="{{ hex_black }}"
+  stroke-width="{{ m_border }}"/>
+{%- else -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="{{ icon_fill }}"/>
+{%- endif -%}
+{%- endif -%}
+<g transform="translate({{ icon_glyph_x }}, {{ icon_glyph_y }})"
+  style="color: {{ icon_color }}">{{ icon_svg }}</g>
+{%- endif -%}
+{%- if heading -%}
+<text
+  x="{{ text_x }}" y="{{ text_y }}"
+  font-family="Roboto"
+  font-weight="{{ font_weight }}"
+  font-size="{{ font_sz }}"
+  dominant-baseline="central"
+  fill="{{ text_fill }}">{{ heading }}</text>
+{%- endif -%}
+{%- for badge in badges -%}
+{%- if badge.show_icon and badge.icon_svg -%}
+<g
+  transform="translate({{ badge.icon_x }}, {{ badge.icon_y }})"
+  style="color: {{ hex_gray }}">{{ badge.icon_svg }}</g>
+{%- endif -%}
+{%- if badge.text -%}
+<text
+  x="{{ badge.text_x }}"
+  y="{{ badge.text_y }}"
+  font-family="Roboto"
+  font-size="{{ badge_font_sz }}"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ badge.text }}</text>
+{%- endif -%}
+{%- endfor -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

@@ -367,7 +367,13 @@ interface WidgetBase {
   visibility?: (Condition | LegacyCondition)[];
 }
 
-/** Free-form text label rendered at an arbitrary position. */
+/**
+ * Free-form text label rendered at an arbitrary position.
+ *
+ * @deprecated Use HeadingWidget for section headers.  TextWidget
+ * remains supported for existing configs but is hidden from the
+ * widget picker in new installations.
+ */
 export interface TextWidget extends WidgetBase {
   type: "text";
   /** The text string to render. */
@@ -498,6 +504,73 @@ export interface TileWidget extends WidgetBase {
   icon_style?: IconStyle;
 }
 
+/**
+ * A single entity badge displayed to the right of the heading text.
+ *
+ * Accepts either a plain entity ID string (shorthand for
+ * ``{ entity: "...", show_icon: false }``) or a full config object.
+ * When the entity is missing from HA states, the badge is silently
+ * omitted at render time.
+ */
+export interface HeadingBadge {
+  /** HA entity ID to display as a badge. */
+  entity: string;
+  /** Override label; unused in current renderer but reserved. */
+  name?: string;
+  /** MDI icon name override for the badge (e.g. "mdi:thermometer"). */
+  icon?: string;
+  /**
+   * When true, the entity state value is shown next to the badge icon.
+   * Default: true.
+   */
+  show_state?: boolean;
+  /**
+   * When true, an icon is rendered alongside the badge text.
+   * Default: false.
+   */
+  show_icon?: boolean;
+}
+
+/**
+ * Section heading modelled after the HA Heading card.
+ *
+ * Renders an optional MDI icon on the left, a heading text string in
+ * the centre, and optional entity badges flowing from the right edge.
+ * Use this widget instead of the deprecated TextWidget for section
+ * headers.
+ */
+export interface HeadingWidget extends WidgetBase {
+  type: "heading";
+  /**
+   * Heading text to display.  Supports Jinja2 templates (rendered
+   * server-side before SVG generation).
+   */
+  heading?: string;
+  /**
+   * Visual style for the heading text.
+   * - ``"title"`` — large Roboto Medium in black (default).
+   * - ``"subtitle"`` — smaller Roboto Regular in gray.
+   */
+  heading_style?: "title" | "subtitle";
+  /** MDI icon name rendered to the left of the text (e.g. "mdi:home"). */
+  icon?: string;
+  /**
+   * List of entity IDs or badge config objects.  Each resolves to a
+   * small text chip displayed to the right of the heading.
+   */
+  badges?: (string | HeadingBadge)[];
+  /**
+   * Icon circle rendering mode.
+   * - ``"none"`` — no circle; icon sized to match the heading font
+   *   (default).
+   * - ``"filled"`` — gray-filled circle.
+   * - ``"outlined"`` — white circle with black border.
+   */
+  icon_style?: IconStyle;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+}
+
 export type Widget =
   | TextWidget
   | SeparatorWidget
@@ -506,7 +579,8 @@ export type Widget =
   | DeviceBatteryWidget
   | StatusIconsWidget
   | WasteScheduleWidget
-  | TileWidget;
+  | TileWidget
+  | HeadingWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {

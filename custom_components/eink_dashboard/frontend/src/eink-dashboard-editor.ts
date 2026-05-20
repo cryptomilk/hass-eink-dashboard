@@ -39,18 +39,20 @@ const DEFAULT_ICON_STYLE: IconStyle = "filled";
 // ── Widget type registry ─────────────────────────────────────────
 
 export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
-  text: {
-    label: "Text",
-    description: "Custom text or label at any position",
-    icon: "mdi:format-text",
+  heading: {
+    label: "Heading",
+    description: "Section heading with optional icon and badges",
+    icon: "mdi:format-header-1",
     defaults: {
-      type: "text",
-      x: 24,
+      type: "heading",
+      x: 0,
       y: 0,
-      text: "",
-      font_size: DEFAULT_FONT_PRIMARY,
-      color: 0,
-      align: "left",
+      w: 400,
+      h: 56,
+      heading: "",
+      heading_style: "title",
+      icon_style: "none",
+      card_style: DEFAULT_CARD_STYLE,
     },
   },
   separator: {
@@ -224,12 +226,17 @@ function cardStyleSelector(): HaFormSchema {
 /**
  * Icon style dropdown selector.
  *
+ * @param defaultStyle - Default icon style value. Defaults to
+ *   {@link DEFAULT_ICON_STYLE} ("filled") for most widgets; pass
+ *   `"none"` for Heading, which shows no circle by default.
  * @returns A single ha-form schema entry.
  */
-function iconStyleSelector(): HaFormSchema {
+function iconStyleSelector(
+  defaultStyle: IconStyle = DEFAULT_ICON_STYLE
+): HaFormSchema {
   return {
     name: "icon_style",
-    default: DEFAULT_ICON_STYLE,
+    default: defaultStyle,
     selector: {
       select: {
         options: [
@@ -530,6 +537,55 @@ export const SCHEMAS: Record<
     },
   ],
 
+  heading: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:format-header-1",
+      schema: [
+        { name: "heading", selector: { text: {} } },
+        {
+          name: "heading_style",
+          default: "title",
+          selector: {
+            select: {
+              options: [
+                { value: "title", label: "Title" },
+                { value: "subtitle", label: "Subtitle" },
+              ],
+              mode: "dropdown",
+            },
+          },
+        },
+        { name: "icon", selector: { icon: {} } },
+        {
+          name: "badges",
+          selector: { entity: { multiple: true } },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector(), iconStyleSelector("none")],
+    },
+  ],
+
   sensor_rows: (d) => [
     identitySection(),
     {
@@ -749,6 +805,9 @@ export const LABELS: Record<string, string> = {
   font_size: "Font size",
   color: "Color",
   align: "Align",
+  heading: "Heading",
+  heading_style: "Heading style",
+  badges: "Badges",
   card_style: "Card style",
   icon_style: "Icon style",
   layout: "Layout",
@@ -793,6 +852,10 @@ export function getSummary(widget: Widget): string {
   const t = widget.type;
   if (t === "text") {
     const s = String(widget.text || "");
+    return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
+  }
+  if (t === "heading") {
+    const s = String(widget.heading || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
   if (t === "weather" || t === "tile") {
