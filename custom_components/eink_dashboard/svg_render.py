@@ -1491,6 +1491,8 @@ def _build_waste_schedule_context(
     row_h = content_h // num_display_rows
 
     m = _compute_metrics(row_h)
+    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    divider_stroke_w = m.divider * 3 if grayscale_levels <= 2 else m.divider
     x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
@@ -1553,6 +1555,8 @@ def _build_waste_schedule_context(
         "r_inset": r_inset,
         "lpad": lpad,
         "rpad": rpad,
+        "icon_stroke_w": icon_stroke_w,
+        "divider_stroke_w": divider_stroke_w,
     }
 
 

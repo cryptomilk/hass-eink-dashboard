@@ -1562,6 +1562,37 @@ class TestRenderWasteSchedule:
             threshold=200,
         )
 
+    def test_waste_schedule_2level_icon_stroke_widened(self) -> None:
+        # On a 2-level display icon circle stroke-width must be
+        # 3× m.border to avoid dithering into dot patterns.
+        # Use an entry with days >= 2 (Biotonne, 2 days) so the
+        # icon renders as an outlined circle with a stroke-width.
+        entries = [{"attribute": "Biotonne", "label": "Bio"}]
+        m = _compute_metrics(DEFAULT_ROW_H)
+        w = self._widget(entries=entries, h=DEFAULT_ROW_H)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+        expected_sw = m.border * 3
+        assert f'stroke-width="{expected_sw}"' in svg, (
+            f"2-level icon stroke-width should be {expected_sw}"
+            f" (3 × m.border={m.border})"
+        )
+
+    def test_waste_schedule_2level_divider_stroke_widened(self) -> None:
+        # On a 2-level display divider stroke-width must be
+        # 3× m.divider to avoid dithering into dot patterns.
+        m = _compute_metrics(DEFAULT_ROW_H)
+        w = self._widget(h=3 * DEFAULT_ROW_H)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+        expected_sw = m.divider * 3
+        assert f'stroke-width="{expected_sw}"' in svg, (
+            f"2-level divider stroke-width should be {expected_sw}"
+            f" (3 × m.divider={m.divider})"
+        )
+
     # ── Alignment tests ───────────────────────────────
 
     def test_icon_centered_with_text(self) -> None:
