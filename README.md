@@ -20,7 +20,7 @@ required running.
 - **E-ink optimization** - optional post-processing pipeline: autocontrast,
   sharpness, contrast adjustment, and grayscale quantization (2/4/16/256
   levels with Floyd-Steinberg dithering)
-- **Jinja2 templates** - text widgets support Home Assistant templates
+- **Jinja2 templates** - heading widgets support Home Assistant templates
   (e.g. `{{ now().strftime('%H:%M') }}`)
 - **ETag support** - conditional HTTP responses so devices skip the download
   and e-ink refresh when the image has not changed
@@ -148,21 +148,22 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 4. Click **Show rendered image** to fetch the actual server-rendered PNG for
    a preview of what the device will display.
 
-### Available widgets (Work in progress)
+### Available widgets
 
 | Type | What it renders |
 |---|---|
-| Text | Static or Jinja2 template text (e.g. `{{ now().strftime('%H:%M') }}`) |
-| Line | Horizontal or diagonal line |
-| Separator | Full-width horizontal rule |
+| Heading | Static or Jinja2 template text (e.g. `{{ now().strftime('%H:%M') }}`) |
+| Separator | Full-width horizontal or vertical rule |
+| Entity | Label / state row for a single entity |
+| Entities | Label / state rows for a list of entities, with optional title |
+| Tile | Card-style tile with icon and entity state |
+| Sensor | Entity state with sparkline history graph |
 | Weather | Current conditions + N-day forecast with icons |
-| Sensor Rows | Label / value rows for a list of sensors |
-| Battery Bar | Horizontal battery level bar with percentage |
-| Status Icons | Row of filled/outline squares for binary sensors |
+| Device Battery | Battery level indicator for a device |
 | [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |
 
-All widgets support `x`, `y` positioning and `font_size`. Most support a `w`
-(width) override to constrain rendering to a sub-region of the display.
+All widgets support `x`, `y` positioning. Most support a `w` (width) override
+to constrain rendering to a sub-region of the display.
 
 ## Device setup
 

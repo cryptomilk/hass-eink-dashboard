@@ -52,7 +52,6 @@ PUSH_MAX_IMAGE_BYTES = 5 * 1024 * 1024
 # Maps widget type to the field name that supports Jinja2 templates.
 # Add new entries here when a new widget type gains a templatable field.
 _TEMPLATE_FIELDS: dict[str, str] = {
-    WidgetType.TEXT: "text",
     WidgetType.HEADING: "heading",
 }
 

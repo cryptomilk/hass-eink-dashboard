@@ -11,8 +11,8 @@ Runs without a Home Assistant installation.
 Usage:
     python3 scripts/design_tool.py
     python3 scripts/design_tool.py --widget weather --device trmnl_og
-    python3 scripts/design_tool.py --widget sensor_rows --port 9000
-    python3 scripts/design_tool.py --widget text --data my_data.json
+    python3 scripts/design_tool.py --widget heading --port 9000
+    python3 scripts/design_tool.py --widget entity --data my_data.json
 
 Omitting ``--widget`` shows a multi-widget dashboard preview
 (weather + tile + waste_schedule).

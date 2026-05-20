@@ -222,14 +222,13 @@ class TestVisibilityConditions:
     # render_dashboard() and that hidden widgets leave the canvas
     # untouched.
 
-    _TEXT: ClassVar[dict[str, object]] = {
-        "type": "text",
+    _HEADING: ClassVar[dict[str, object]] = {
+        "type": "heading",
         "x": 10,
         "y": 10,
         "w": 180,
         "h": 30,
-        "text": "hello",
-        "font_size": 20,
+        "heading": "hello",
     }
 
     def _config(self, states: dict | None = None) -> dict:
@@ -242,19 +241,19 @@ class TestVisibilityConditions:
 
     def test_widget_without_visibility_always_renders(self) -> None:
         # No visibility field — widget must appear regardless.
-        img = render_to_image([self._TEXT], self._config())
+        img = render_to_image([self._HEADING], self._config())
         assert_has_dark_pixels(img, 10, 10, 190, 45)
 
     def test_widget_with_empty_visibility_always_renders(self) -> None:
         # An empty conditions list is equivalent to no visibility field.
-        widget = {**self._TEXT, "visibility": []}
+        widget = {**self._HEADING, "visibility": []}
         img = render_to_image([widget], self._config())
         assert_has_dark_pixels(img, 10, 10, 190, 45)
 
     def test_widget_with_met_state_condition_renders(self) -> None:
         # When the state condition is satisfied the widget is rendered.
         widget = {
-            **self._TEXT,
+            **self._HEADING,
             "visibility": [
                 {
                     "condition": "state",
@@ -271,7 +270,7 @@ class TestVisibilityConditions:
         # When the state condition is not satisfied the widget region
         # remains white (canvas is untouched).
         widget = {
-            **self._TEXT,
+            **self._HEADING,
             "visibility": [
                 {
                     "condition": "state",
@@ -288,7 +287,7 @@ class TestVisibilityConditions:
         # First widget has an unmet condition (hidden); second widget
         # has no condition and must render normally.
         hidden = {
-            **self._TEXT,
+            **self._HEADING,
             "y": 10,
             "visibility": [
                 {
@@ -298,353 +297,11 @@ class TestVisibilityConditions:
                 }
             ],
         }
-        visible = {**self._TEXT, "y": 60}
+        visible = {**self._HEADING, "y": 60}
         states = {"s.x": {"state": "off", "attributes": {}}}
         img = render_to_image([hidden, visible], self._config(states))
         assert_all_white(img, 10, 10, 190, 44)
         assert_has_dark_pixels(img, 10, 60, 190, 95)
-
-
-class TestRenderText:
-    # Verify rendering of the text widget (SVG pipeline).
-    _DEFAULTS: ClassVar[dict[str, object]] = {
-        "width": 200,
-        "height": 100,
-    }
-
-    def _config(self, **overrides: object) -> dict[str, object]:
-        return make_config(self._DEFAULTS, **overrides)
-
-    def test_text_draws_pixels(self) -> None:
-        # Left-aligned text renders dark pixels in the expected region.
-        widgets = [
-            {
-                "type": "text",
-                "x": 10,
-                "y": 10,
-                "text": "Hello",
-                "font_size": 20,
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # x=10 start; right bound 100 = left half of 200px canvas
-        assert_has_dark_pixels(img, 10, 10, 100, 40)
-
-    def test_text_right_align(self) -> None:
-        # Right-aligned text appears near the right edge of the canvas.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 10,
-                "text": "Hi",
-                "font_size": 20,
-                "align": "right",
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Right 60px of 200px canvas — where short right-aligned text
-        # lands when anchored to the right edge.
-        assert_has_dark_pixels(img, 140, 10, 200, 40)
-
-    def test_text_right_align_left_is_white(self) -> None:
-        # Right-aligned text leaves the far-left region blank.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 10,
-                "text": "Hi",
-                "font_size": 20,
-                "align": "right",
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Left 40% of 200px canvas — comfortably clear of
-        # right-aligned "Hi" which lands near the right edge.
-        assert_all_white(img, 0, 10, 80, 40)
-
-    def test_text_center_align(self) -> None:
-        # Center-aligned text appears in the middle of the available width.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 10,
-                "text": "Hi",
-                "font_size": 20,
-                "align": "center",
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Middle 40px band (80–120) of 200px canvas — centered
-        # "Hi" at font_size 20 should fall in this range.
-        assert_has_dark_pixels(img, 80, 10, 120, 40)
-
-    def test_text_custom_color(self) -> None:
-        # A non-black color value renders as gray rather than black.
-        widgets = [
-            {
-                "type": "text",
-                "x": 10,
-                "y": 10,
-                "text": "Gray",
-                "font_size": 20,
-                "color": 160,
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_has_gray_pixels(img, 10, 10, 80, 40, low=100, high=200)
-
-    def test_text_empty_string_is_white(self) -> None:
-        # An empty text string produces no visible content.
-        widgets = [{"type": "text", "x": 0, "y": 0, "text": ""}]
-        img = render_to_image(widgets, self._config())
-        assert_all_white(img, 0, 0, 200, 100)
-
-    def test_text_explicit_w_constrains_right_align(self) -> None:
-        # With explicit w, right-aligned text stays within the widget
-        # boundary, not spread across the full canvas width.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "text": "Hi",
-                "font_size": 20,
-                "align": "right",
-                "w": 100,
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Right half of w=100 — right-aligned "Hi" anchors to x=100.
-        assert_has_dark_pixels(img, 50, 0, 100, 30)
-        # Left 40px of w=100 — clear of right-aligned "Hi".
-        assert_all_white(img, 0, 0, 40, 30)
-
-    def test_text_scales_with_font_size(self) -> None:
-        # Doubling font_size approximately doubles rendered glyph height.
-        config = self._config(width=400, height=200)
-        small = render_to_image(
-            [
-                {
-                    "type": "text",
-                    "x": 0,
-                    "y": 0,
-                    "text": "X",
-                    "font_size": 20,
-                }
-            ],
-            config,
-        )
-        large = render_to_image(
-            [
-                {
-                    "type": "text",
-                    "x": 0,
-                    "y": 0,
-                    "text": "X",
-                    "font_size": 40,
-                }
-            ],
-            config,
-        )
-        assert_scales_proportionally(
-            small,
-            large,
-            # 40×35 covers a 20px glyph; 70×60 covers a 40px glyph.
-            region_small=(0, 0, 40, 35),
-            region_large=(0, 0, 70, 60),
-            expected_ratio=2.0,
-            tolerance=0.35,
-        )
-
-    def test_text_card_border(self) -> None:
-        # card_style="border" draws dark pixels along all four edges.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 60,
-                "text": "Hello",
-                "font_size": 20,
-                "card_style": "border",
-            }
-        ]
-        img = render_to_image(widgets, self._config(width=400, height=60))
-        m = _compute_metrics(60)
-        assert_card_border(img, 400, 60, m, bottom_margin=0)
-
-    def test_text_card_left_bar(self) -> None:
-        # card_style="left_bar" draws a solid gray bar on the left
-        # edge; the center of that bar must be exactly COLOR_GRAY.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 60,
-                "text": "Hello",
-                "font_size": 20,
-                "card_style": "left_bar",
-            }
-        ]
-        img = render_to_image(widgets, self._config(width=400, height=60))
-        m = _compute_metrics(60)
-        # The midpoint of the bar must be solid gray (not text
-        # anti-aliasing): the bar fill color is #787878 = 120.
-        bar_mid_x = m.left_bar // 2
-        assert pixel(img, bar_mid_x, 30) == COLOR_GRAY
-        # Right edge — white (no right-side decoration)
-        assert_all_white(img, 395, 0, 400, 60)
-
-    def test_text_card_none_explicit(self) -> None:
-        # Explicit card_style="none" renders no card decoration
-        # but the text content is still visible.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 60,
-                "text": "Hello",
-                "font_size": 20,
-                "card_style": "none",
-            }
-        ]
-        img = render_to_image(widgets, self._config(width=400, height=60))
-        # No border — corners must be white
-        assert pixel(img, 0, 0) == 255
-        assert pixel(img, 399, 0) == 255
-        assert pixel(img, 0, 59) == 255
-        assert pixel(img, 399, 59) == 255
-        # Text is still visible somewhere in the widget area
-        assert_has_dark_pixels(img, 0, 0, 400, 60)
-
-    def test_text_card_style_none_is_default(self) -> None:
-        # Omitting card_style must produce byte-identical output to
-        # card_style="none".
-        config = self._config(width=400, height=60)
-        base = {
-            "type": "text",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 60,
-            "text": "Hello",
-            "font_size": 20,
-        }
-        with_none = render_dashboard([{**base, "card_style": "none"}], config)
-        without = render_dashboard([base], config)
-        assert with_none == without
-
-    def test_text_card_border_text_offset(self) -> None:
-        # With card_style="border" the text is inset by the card padding
-        # and must not appear between the border and the padding gap.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 60,
-                "text": "Hello",
-                "font_size": 20,
-                "card_style": "border",
-            }
-        ]
-        img = render_to_image(widgets, self._config(width=400, height=60))
-        m = _compute_metrics(60)
-        # Gap between border and content padding — should be white
-        # in the straight section of the border (past the corner radius).
-        if m.padding > m.border + 1 and m.radius < 30:
-            assert_all_white(
-                img,
-                m.border + 1,
-                m.radius + 1,
-                m.padding,
-                60 - m.radius - 1,
-            )
-        # Text content exists to the right of the padding inset
-        assert_has_dark_pixels(img, m.padding, 0, 400 - m.padding, 60)
-
-    def test_text_with_title(self) -> None:
-        # An optional title renders as gray text above the card area;
-        # the main text must be pushed below the title band, so the
-        # area immediately below the title band must be white when no
-        # card_style decoration fills it.
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 80,
-                "text": "Hello",
-                "font_size": 20,
-                "title": "Section",
-            }
-        ]
-        img_with = render_to_image(widgets, self._config(width=400, height=80))
-        # Without a title the canvas top should be darker (main text).
-        img_without = render_to_image(
-            [
-                {
-                    "type": "text",
-                    "x": 0,
-                    "y": 0,
-                    "w": 400,
-                    "h": 80,
-                    "text": "Hello",
-                    "font_size": 20,
-                }
-            ],
-            self._config(width=400, height=80),
-        )
-        # The two renders must differ (title moves the main text down)
-        assert img_with.tobytes() != img_without.tobytes()
-        # Title band must contain gray pixels (title text color).
-        title_font_sz = max(10, round(80 * 0.14))
-        title_advance = round(title_font_sz * 1.4)
-        assert_has_gray_pixels(
-            img_with, 0, 0, 400, title_advance, low=100, high=200
-        )
-
-    def test_text_card_border_vertically_centered(self) -> None:
-        # With card_style="border" the text is vertically centered
-        # inside the card, not pinned to the top.
-        h = 80
-        widgets = [
-            {
-                "type": "text",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "text": "Hello",
-                "font_size": 20,
-                "card_style": "border",
-            }
-        ]
-        img = render_to_image(widgets, self._config(width=400, height=h))
-        m = _compute_metrics(h)
-        # Text must appear in the middle vertical band — at least some
-        # dark pixels between 25 % and 75 % of the card height.
-        quarter = h // 4
-        assert_has_dark_pixels(
-            img, m.padding, quarter, 400 - m.padding, h - quarter
-        )
-        # The top strip (just inside the border, before centre band)
-        # must be white — text should not be pinned to the top.
-        top_strip_end = h // 4 - 2
-        if top_strip_end > m.border + 2:
-            assert_all_white(
-                img, m.padding + 2, m.border + 2, 300, top_strip_end
-            )
 
 
 class TestRenderSeparator:
@@ -1248,614 +905,6 @@ MOCK_SENSOR_STATES = {
 }
 
 
-class TestRenderSensorRows:
-    # Verify rendering of redesigned sensor_rows widgets
-    # using card container + icon circles + two-line text.
-    _DEFAULTS: ClassVar[dict[str, object]] = {
-        "width": 400,
-        "height": 300,
-        "states": MOCK_SENSOR_STATES,
-    }
-
-    def _config(self, **overrides: object) -> dict[str, object]:
-        return make_config(self._DEFAULTS, **overrides)
-
-    # ── Structural tests ──────────────────────────────
-
-    def test_sensor_rows_card_border(self) -> None:
-        # Border style draws dark pixels on all four edges.
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "card_style": "border",
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_card_border(img, 400, 56, m)
-
-    def test_sensor_rows_card_left_bar(self) -> None:
-        # Left_bar style draws gray pixels on the left edge;
-        # the right edge should be white.
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-                "card_style": "left_bar",
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # The bar fills the full height [0, 56]; 2px inset
-        # avoids sub-pixel edge effects.
-        assert_has_gray_pixels(
-            img,
-            0,
-            2,
-            m.left_bar,
-            54,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
-        # Right edge: no decoration
-        assert_all_white(img, 395, 0, 400, 1)
-
-    def test_sensor_rows_card_none(self) -> None:
-        # No-decoration style has white edges — only content
-        # (icon + text) draws pixels inside the card area.
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-                "card_style": "none",
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Top-left corner should be white (no border, no bar)
-        assert_all_white(img, 0, 0, 3, 3)
-        # Far right edge should be white
-        assert_all_white(img, 397, 0, 400, 3)
-
-    def test_sensor_rows_card_style_none_is_default(self) -> None:
-        # Omitting card_style must produce byte-identical output to
-        # card_style="none" (no card decoration drawn).
-        base = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 56,
-            "entities": ["sensor.living_room_temperature"],
-        }
-        with_none = render_dashboard(
-            [{**base, "card_style": "none"}], self._config()
-        )
-        without = render_dashboard([base], self._config())
-        assert with_none == without
-
-    def test_sensor_rows_row_divider(self) -> None:
-        # A gray divider exists at the boundary between two
-        # rows (at y = h/2).
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 112,
-                "entities": [
-                    "sensor.living_room_temperature",
-                    "sensor.humidity",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Divider sits at row boundary y=56, gray colored
-        assert_has_gray_pixels(
-            img,
-            m.padding + 20,
-            56 - m.divider,
-            380,
-            56 + m.divider,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
-
-    def test_sensor_rows_no_divider_single_entity(
-        self,
-    ) -> None:
-        # A single entity should not produce a divider; the
-        # area below the card should be white.
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # With only one entity there is no row boundary, so the
-        # area just below the card (y=56..60) must be white —
-        # no divider line bleeds out.
-        assert_all_white(img, 0, 57, 400, 60)
-
-    # ── Alignment tests ───────────────────────────────
-
-    def test_sensor_rows_icon_centered_with_text(
-        self,
-    ) -> None:
-        # Icon circle is vertically centered with the text
-        # block in a single-entity row.
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "card_style": "border",
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Icon region: inside the card padding, spanning the
-        # icon diameter area.
-        icon_left = m.padding
-        icon_right = icon_left + m.icon_dia
-        text_left = icon_right + m.inner_gap
-        assert_vertically_centered(
-            img,
-            icon_region=(icon_left, 0, icon_right, 56),
-            text_region=(text_left, 0, 380, 56),
-        )
-
-    # ── Scaling tests ─────────────────────────────────
-
-    def test_sensor_rows_scales_with_h(self) -> None:
-        # Doubling h roughly doubles the content height in
-        # the icon area (scaling is proportional).
-        m_small = _compute_metrics(56)
-        m_large = _compute_metrics(112)
-        widget_small = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 56,
-            "entities": [
-                "sensor.living_room_temperature",
-            ],
-        }
-        widget_large = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 112,
-            "entities": [
-                "sensor.living_room_temperature",
-            ],
-        }
-        img_s = render_to_image([widget_small], self._config())
-        img_l = render_to_image([widget_large], self._config())
-        assert_scales_proportionally(
-            img_s,
-            img_l,
-            region_small=(
-                m_small.padding,
-                0,
-                m_small.padding + m_small.icon_dia,
-                56,
-            ),
-            region_large=(
-                m_large.padding,
-                0,
-                m_large.padding + m_large.icon_dia,
-                112,
-            ),
-            expected_ratio=2.0,
-        )
-
-    # ── Content tests ─────────────────────────────────
-
-    def test_sensor_rows_draws_content(self) -> None:
-        # Both icon area and text area contain dark pixels.
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Icon circle area
-        assert_has_dark_pixels(
-            img,
-            m.padding,
-            0,
-            m.padding + m.icon_dia,
-            56,
-            threshold=200,
-        )
-        # Text area right of icon
-        text_left = m.padding + m.icon_dia + m.inner_gap
-        assert_has_dark_pixels(
-            img,
-            text_left,
-            0,
-            380,
-            56,
-        )
-
-    def test_sensor_rows_with_title(self) -> None:
-        # Title is drawn above the card area as gray text.
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 80,
-                "title": "Sensors",
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Title is rendered in COLOR_GRAY, so assert gray pixels
-        # (not just any dark pixels) in the title region.
-        assert_has_gray_pixels(img, 0, 0, 200, 20)
-
-    def test_sensor_rows_secondary_text(self) -> None:
-        # Secondary text (state + unit) is drawn in gray below
-        # the primary text.
-        m = _compute_metrics(80)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 80,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # The lower half of the text area (below midpoint)
-        # should contain gray pixels from secondary text.
-        text_left = m.padding + m.icon_dia + m.inner_gap
-        assert_has_gray_pixels(
-            img,
-            text_left,
-            40,
-            300,
-            75,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
-
-    def test_sensor_rows_missing_entity_skipped(
-        self,
-    ) -> None:
-        # A nonexistent entity is filtered out before row_h is
-        # computed, so the present entity fills the full height
-        # with no blank gap above it.
-        m = _compute_metrics(112)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 112,
-                "entities": [
-                    "sensor.nonexistent",
-                    "sensor.humidity",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # sensor.humidity is the only resolved entity and
-        # occupies the full 112 px height.
-        assert_has_dark_pixels(
-            img,
-            m.padding,
-            2,
-            380,
-            110,
-            threshold=200,
-        )
-
-    def test_sensor_rows_empty_entities(self) -> None:
-        # Empty entity list produces a white canvas.
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 112,
-                "entities": [],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_all_white(img, 0, 0, 400, 300)
-
-    def test_sensor_rows_binary_sensor(self) -> None:
-        # Binary sensor entities render with icon content in
-        # the icon circle area.
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": [
-                    "binary_sensor.front_door",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Icon area should have content (gray circle + icon)
-        assert_has_dark_pixels(
-            img,
-            m.padding,
-            0,
-            m.padding + m.icon_dia,
-            56,
-            threshold=200,
-        )
-        # Text area should have content (friendly name + state)
-        text_left = m.padding + m.icon_dia + m.inner_gap
-        assert_has_dark_pixels(img, text_left, 0, 380, 56)
-
-    # ── Icon tests ────────────────────────────────────
-
-    def test_sensor_rows_icon_circle_gray_fill(
-        self,
-    ) -> None:
-        # The icon circle background should contain gray
-        # pixels (fill = COLOR_GRAY).
-        m = _compute_metrics(80)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 80,
-                "entities": [
-                    "sensor.living_room_temperature",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_has_gray_pixels(
-            img,
-            m.padding,
-            (80 - m.icon_dia) // 2,
-            m.padding + m.icon_dia,
-            (80 + m.icon_dia) // 2,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
-
-    def test_sensor_rows_no_device_class_letter_fallback(
-        self,
-    ) -> None:
-        # An entity without device_class still renders content
-        # in the icon circle area (letter fallback).
-        m = _compute_metrics(56)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": ["sensor.no_device_class"],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Icon circle area should have content (gray circle
-        # with white letter)
-        assert_has_dark_pixels(
-            img,
-            m.padding,
-            0,
-            m.padding + m.icon_dia,
-            56,
-            threshold=200,
-        )
-
-    def test_sensor_rows_icon_from_entity_attr(self) -> None:
-        # Entity without device_class but with an icon attribute
-        # renders that icon instead of the letter fallback.  The
-        # icon area should produce different output than the plain
-        # letter fallback and contain dark pixels from an MDI glyph.
-        m = _compute_metrics(56)
-        states_with_icon = {
-            **self._config()["states"],
-            "sensor.no_device_class": {
-                "state": "42",
-                "attributes": {
-                    "friendly_name": "Plain Sensor",
-                    "icon": "mdi:thermometer",
-                },
-            },
-        }
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 56,
-                "entities": ["sensor.no_device_class"],
-            }
-        ]
-        img_with_icon = render_to_image(
-            widgets,
-            self._config(states=states_with_icon),
-        )
-        img_no_icon = render_to_image(widgets, self._config())
-        # Adding an icon attribute must change the rendered output.
-        assert img_with_icon.tobytes() != img_no_icon.tobytes(), (
-            "icon attribute should change rendered icon from letter"
-        )
-        assert_has_dark_pixels(
-            img_with_icon,
-            m.padding,
-            0,
-            m.padding + m.icon_dia,
-            56,
-            threshold=200,
-        )
-
-    # ── Auto-sizing tests ─────────────────────────────
-
-    def test_sensor_rows_auto_height_single_entity(self) -> None:
-        # Without explicit h, widget height equals DEFAULT_ROW_H.
-        w = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "entities": ["sensor.living_room_temperature"],
-        }
-        svg = render_widget_svg(w, self._config())
-        # Parse height from the SVG viewport attribute.
-        m = re.search(r'height="(\d+)"', svg)
-        assert m is not None
-        assert int(m.group(1)) == DEFAULT_ROW_H
-
-    def test_sensor_rows_auto_height_two_entities(self) -> None:
-        # Without explicit h, widget height equals 2 * DEFAULT_ROW_H.
-        w = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "entities": [
-                "sensor.living_room_temperature",
-                "sensor.living_room_temperature",
-            ],
-        }
-        svg = render_widget_svg(w, self._config())
-        m = re.search(r'height="(\d+)"', svg)
-        assert m is not None
-        assert int(m.group(1)) == 2 * DEFAULT_ROW_H
-
-    def test_sensor_rows_explicit_h_preserved(self) -> None:
-        # An explicit h overrides auto-sizing.
-        explicit_h = 200
-        w = {
-            "type": "sensor_rows",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": explicit_h,
-            "entities": ["sensor.living_room_temperature"],
-        }
-        svg = render_widget_svg(w, self._config())
-        m = re.search(r'height="(\d+)"', svg)
-        assert m is not None
-        assert int(m.group(1)) == explicit_h
-
-    def test_sensor_rows_border_single_padding(self) -> None:
-        # With card_style="border", card_container yields x_off=padding
-        # so card_row must not add its own padding again.  The icon
-        # circle left arc should appear in the strip m.padding..2*m.padding;
-        # double-padding would push the circle entirely past 2*m.padding.
-        metrics = _compute_metrics(DEFAULT_ROW_H)
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "card_style": "border",
-                "entities": ["sensor.living_room_temperature"],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_has_dark_pixels(
-            img,
-            metrics.padding,
-            0,
-            2 * metrics.padding,
-            DEFAULT_ROW_H,
-            threshold=200,
-        )
-
-    def test_sensor_rows_left_bar_single_padding(self) -> None:
-        # With card_style="left_bar", card_container yields
-        # x_off = bar_w + m.padding.  The icon circle left arc should
-        # appear in the strip (bar_w+m.padding)..(bar_w+2*m.padding);
-        # double-padding would push it entirely past bar_w+2*m.padding.
-        metrics = _compute_metrics(DEFAULT_ROW_H)
-        # For grayscale_levels=16 (default), bar_w == m.left_bar.
-        bar_w = metrics.left_bar
-        widgets = [
-            {
-                "type": "sensor_rows",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "card_style": "left_bar",
-                "entities": ["sensor.living_room_temperature"],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_has_dark_pixels(
-            img,
-            bar_w + metrics.padding,
-            0,
-            bar_w + 2 * metrics.padding,
-            DEFAULT_ROW_H,
-            threshold=200,
-        )
-
-
 class TestRenderDeviceBattery:
     # Verify rendering of device battery widgets in both icon and chip
     # layouts.  Icon layout renders a compact battery outline with fill
@@ -2314,589 +1363,6 @@ class TestRenderDeviceBattery:
         assert_all_white(img, 0, 0, 3, 3)
         # Right edge: white (no border)
         assert_all_white(img, 197, 0, 200, 3)
-
-
-MOCK_STATUS_ICON_STATES = {
-    "binary_sensor.front_door": {
-        "state": "on",
-        "attributes": {
-            "friendly_name": "Front Door",
-            "device_class": "door",
-        },
-    },
-    "binary_sensor.kitchen_window": {
-        "state": "off",
-        "attributes": {
-            "friendly_name": "Kitchen Window",
-            "device_class": "window",
-        },
-    },
-    "binary_sensor.water_alarm": {
-        "state": "on",
-        "attributes": {
-            "friendly_name": "Water Alarm",
-            "device_class": "moisture",
-        },
-    },
-    "binary_sensor.motion": {
-        "state": "off",
-        "attributes": {
-            "friendly_name": "Motion",
-            "device_class": "motion",
-        },
-    },
-}
-
-
-class TestRenderStatusIcons:
-    # Verify rendering of status_icons widgets as icon-and-text
-    # labels with MDI icons and card containers.
-    _DEFAULTS: ClassVar[dict[str, object]] = {
-        "width": 500,
-        "height": 200,
-        "states": MOCK_STATUS_ICON_STATES,
-    }
-
-    def _config(self, **overrides: object) -> dict[str, object]:
-        return make_config(self._DEFAULTS, **overrides)
-
-    # ── Structural tests ──────────────────────────────
-
-    def test_no_label_rect(self) -> None:
-        # Labels have no enclosing rectangle — the top-left
-        # corner is white (no border stroke).
-        h = 40
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert pixel(img, 0, 0) == 255
-        assert pixel(img, 0, h - 1) == 255
-
-    def test_auto_width(self) -> None:
-        # When no explicit w is set, the card border shrinks
-        # to fit the content instead of spanning the display.
-        h = 40
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "h": h,
-                "card_style": "border",
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Right quarter of the 500px canvas is white — the
-        # card border does not extend to the display edge.
-        assert_all_white(img, 375, 0, 500, h)
-
-    def test_wrapping(self) -> None:
-        # Narrow w forces labels to wrap to the next row.
-        h = 40
-        gap = int(h * 0.18)
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 200,
-                "h": h,
-                "entities": [
-                    "binary_sensor.front_door",
-                    "binary_sensor.kitchen_window",
-                    "binary_sensor.water_alarm",
-                    "binary_sensor.motion",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Dark pixels must exist below the first label row
-        # (second row starts at y = h + gap).
-        second_row_y = h + gap
-        assert_has_dark_pixels(
-            img,
-            0,
-            second_row_y,
-            200,
-            second_row_y + h,
-        )
-
-    # ── Content tests ─────────────────────────────────
-
-    def test_icon_presence(self) -> None:
-        # Entity with a mapped device_class renders an MDI icon
-        # inside a state circle.
-        h = 40
-        pad = int(h * 0.18)
-        icon_dia = int(h * 0.64)
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Circle area has dark pixels (outlined circle stroke
-        # or icon content).
-        assert_has_dark_pixels(
-            img,
-            pad,
-            0,
-            pad + icon_dia,
-            h,
-        )
-
-    def test_title(self) -> None:
-        # Title text is rendered above the chip area in gray.
-        h = 40
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "title": "Doors",
-                "entities": [
-                    "binary_sensor.front_door",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        title_font_sz = max(10, round(h * 0.14))
-        title_advance = round(title_font_sz * 1.4)
-        # Title area has content (threshold=200 catches gray text).
-        assert_has_dark_pixels(img, 0, 0, 200, title_advance, threshold=200)
-        # Label content starts below the title.
-        assert_has_dark_pixels(img, 0, title_advance, 400, title_advance + h)
-
-    # ── Edge case tests ───────────────────────────────
-
-    def test_empty_entities_noop(self) -> None:
-        # Empty entity list → canvas is entirely white.
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 40,
-                "entities": [],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_all_white(img, 0, 0, 500, 200)
-
-    def test_all_entities_missing_noop(self) -> None:
-        # All listed entities absent from states → canvas is
-        # entirely white (same outcome as empty entity list).
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 40,
-                "entities": [
-                    "binary_sensor.nonexistent_a",
-                    "binary_sensor.nonexistent_b",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_all_white(img, 0, 0, 500, 200)
-
-    def test_missing_entity_skipped(self) -> None:
-        # Nonexistent entity is silently skipped; the valid
-        # entity still renders.
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 40,
-                "entities": [
-                    "binary_sensor.nonexistent",
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_has_dark_pixels(img, 0, 0, 400, 40)
-
-    def test_icon_fallback_from_entity_attr(self) -> None:
-        # Entity without a device_class mapping but with an
-        # icon attribute renders the icon via the mdi: fallback.
-        h = 40
-        pad = int(h * 0.18)
-        icon_dia = int(h * 0.64)
-        states = {
-            "sensor.custom": {
-                "state": "on",
-                "attributes": {
-                    "friendly_name": "Custom",
-                    "icon": "mdi:washing-machine",
-                },
-            },
-        }
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": ["sensor.custom"],
-            }
-        ]
-        cfg = self._config(states=states)
-        img = render_to_image(widgets, cfg)
-        # Circle area has dark pixels confirming the fallback
-        # icon was rendered inside the state circle.
-        assert_has_dark_pixels(
-            img,
-            pad,
-            0,
-            pad + icon_dia,
-            h,
-        )
-
-    # ── State indicator tests ────────────────────────
-
-    def test_circle_filled_when_on(self) -> None:
-        # Entity with state "on" has a filled gray circle —
-        # the circle centre is dark.
-        h = 40
-        pad = h * 18 // 100
-        icon_dia = h * 64 // 100
-        cx = pad + icon_dia // 2
-        cy = h // 2
-        states = {
-            "binary_sensor.front_door": {
-                "state": "on",
-                "attributes": {
-                    "friendly_name": "Front Door",
-                    "device_class": "door",
-                },
-            },
-        }
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": [
-                    "binary_sensor.front_door",
-                ],
-            }
-        ]
-        cfg = self._config(states=states)
-        img = render_to_image(widgets, cfg)
-        # Circle interior near the edge (away from icon
-        # content) should be gray-filled.
-        assert pixel(img, cx - icon_dia // 2 + 2, cy) < 160
-
-    def test_circle_outlined_when_off(self) -> None:
-        # Entity with state "off" has an outlined circle —
-        # the circle interior is white with a dark stroke.
-        h = 80
-        pad = h * 18 // 100
-        icon_dia = h * 64 // 100
-        icon_r = icon_dia // 2
-        cx = pad + icon_r
-        cy = h // 2
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Outlined circle has dark stroke at the top.
-        circle_top = cy - icon_r
-        assert_has_dark_pixels(
-            img,
-            cx - 2,
-            circle_top,
-            cx + 2,
-            circle_top + 4,
-        )
-        # Gap between stroke and icon is white.  Probe 3 px
-        # inside the left edge of the circle, where the icon
-        # SVG (60 % of circle dia) hasn't started yet.
-        probe_x = pad + 3
-        assert pixel(img, probe_x, cy) >= 200
-
-    def test_show_state_text(self) -> None:
-        # show_state appends the entity state to the label text,
-        # making the rendered content wider.
-        h = 40
-        entity = ["binary_sensor.kitchen_window"]
-        base_widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": entity,
-            }
-        ]
-        state_widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "show_state": True,
-                "entities": entity,
-            }
-        ]
-        img_base = render_to_image(base_widgets, self._config())
-        img_state = render_to_image(
-            state_widgets,
-            self._config(),
-        )
-        # The state-text variant has wider content.
-        bbox_base = content_bbox(img_base, 0, 0, 400, h)
-        bbox_state = content_bbox(img_state, 0, 0, 400, h)
-        assert bbox_state[2] > bbox_base[2]
-
-    def test_show_icon_false_no_circle(self) -> None:
-        # show_icon=False suppresses the icon circle — the
-        # label starts near the left edge without a circle gap.
-        h = 40
-        entity = ["binary_sensor.kitchen_window"]
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "show_icon": False,
-                "entities": entity,
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Circle area (pad..pad+icon_dia) is white — no circle
-        # drawn.  Text starts at pad, so check only the circle
-        # area past where text ink could appear by verifying
-        # content is narrower than the icon variant.
-        icon_widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": entity,
-            }
-        ]
-        img_icon = render_to_image(icon_widgets, self._config())
-        bbox_no = content_bbox(img, 0, 0, 400, h)
-        bbox_yes = content_bbox(img_icon, 0, 0, 400, h)
-        # Without icon circle, content is narrower.
-        assert bbox_no[2] < bbox_yes[2]
-
-    # ── Scaling tests ─────────────────────────────────
-
-    def test_scales_with_h(self) -> None:
-        # Doubling h roughly doubles label content height.
-        h_small = 40
-        h_large = 80
-        entity = ["binary_sensor.kitchen_window"]
-        img_s = render_to_image(
-            [
-                {
-                    "type": "status_icons",
-                    "x": 0,
-                    "y": 0,
-                    "w": 400,
-                    "h": h_small,
-                    "entities": entity,
-                }
-            ],
-            self._config(),
-        )
-        img_l = render_to_image(
-            [
-                {
-                    "type": "status_icons",
-                    "x": 0,
-                    "y": 0,
-                    "w": 400,
-                    "h": h_large,
-                    "entities": entity,
-                }
-            ],
-            self._config(),
-        )
-        assert_scales_proportionally(
-            img_s,
-            img_l,
-            region_small=(0, 0, 400, h_small),
-            region_large=(0, 0, 400, h_large),
-            expected_ratio=2.0,
-        )
-
-    # ── Alignment tests ───────────────────────────────
-
-    def test_icon_vertically_centered(self) -> None:
-        # Icon circle and text share the same vertical centre
-        # within the label.
-        h = 40
-        pad = int(h * 0.18)
-        icon_dia = int(h * 0.64)
-        icon_gap = int(h * 0.14)
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        text_start = pad + icon_dia + icon_gap
-        # tolerance=3.0: resvg dominant-baseline="central"
-        # differs slightly from PIL's ascender-based centering.
-        assert_vertically_centered(
-            img,
-            icon_region=(pad, 0, pad + icon_dia, h),
-            text_region=(text_start, 0, 300, h),
-            tolerance=3.0,
-        )
-
-    # ── Card container tests ──────────────────────────
-
-    def test_card_border(self) -> None:
-        # Border style draws dark pixels on all four edges
-        # of the label container.
-        h = 40
-        W = 400
-        m = _compute_metrics(h)
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": W,
-                "h": h,
-                "card_style": "border",
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        assert_card_border(img, W, h, m)
-
-    def test_card_left_bar(self) -> None:
-        # Left_bar style draws gray pixels on the left edge;
-        # the right edge is white.
-        h = 40
-        m = _compute_metrics(h)
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "card_style": "left_bar",
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # The bar fills the full height; 2px inset avoids
-        # sub-pixel edge effects at top/bottom.
-        assert_has_gray_pixels(
-            img,
-            0,
-            2,
-            m.left_bar,
-            h - 2,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
-        # Right edge: no decoration.
-        assert_all_white(img, 395, 0, 400, 1)
-
-    def test_card_none(self) -> None:
-        # No-decoration style has white corners — only label
-        # content draws pixels.
-        h = 40
-        widgets = [
-            {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "card_style": "none",
-                "entities": [
-                    "binary_sensor.kitchen_window",
-                ],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        # Top-left corner: no border, no bar.
-        assert_all_white(img, 0, 0, 3, 3)
-        # Far right edge: no decoration.
-        assert_all_white(img, 397, 0, 400, 3)
-
-    def test_card_style_none_is_default(self) -> None:
-        # Omitting card_style must produce byte-identical output
-        # to card_style="none" (no card decoration drawn).
-        base = {
-            "type": "status_icons",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 40,
-            "entities": ["binary_sensor.kitchen_window"],
-        }
-        with_none = render_dashboard(
-            [{**base, "card_style": "none"}], self._config()
-        )
-        without = render_dashboard([base], self._config())
-        assert with_none == without
 
 
 MOCK_WASTE_SCHEDULE_STATES = {
@@ -7569,22 +6035,22 @@ class TestConsistencyContract:
     @classmethod
     def setup_class(cls) -> None:
         """Render reference images once for all tests in this class."""
-        sr_widget: dict[str, object] = {
-            "type": "sensor_rows",
+        tile_widget: dict[str, object] = {
+            "type": "tile",
             "x": 0,
             "y": 0,
             "w": cls._W,
             "h": cls._ROW_H,
-            "entities": ["sensor.living_room_temperature"],
+            "entity": "sensor.living_room_temperature",
         }
-        sr_cfg = make_config(
+        tile_cfg = make_config(
             {
                 "width": cls._W,
                 "height": cls._ROW_H,
                 "states": MOCK_SENSOR_STATES,
             }
         )
-        cls._sr_img = render_to_image([sr_widget], sr_cfg)
+        cls._tile_img = render_to_image([tile_widget], tile_cfg)
 
         ws_widget: dict[str, object] = {
             "type": "waste_schedule",
@@ -7613,13 +6079,13 @@ class TestConsistencyContract:
         # Strip exactly wide enough to contain the icon circle, no wider,
         # to avoid glyph ink from the text region affecting the bbox.
         icon_x2 = m.padding + m.icon_dia
-        sr_bbox = content_bbox(self._sr_img, 0, 0, icon_x2, self._ROW_H)
+        tile_bbox = content_bbox(self._tile_img, 0, 0, icon_x2, self._ROW_H)
         ws_bbox = content_bbox(self._ws_img, 0, 0, icon_x2, self._ROW_H)
 
-        assert sr_bbox is not None, "sensor_rows: no icon pixels found"
+        assert tile_bbox is not None, "tile: no icon pixels found"
         assert ws_bbox is not None, "waste_schedule: no icon pixels found"
-        assert sr_bbox[0] == ws_bbox[0], (
-            f"icon left edge differs: sensor_rows={sr_bbox[0]}, "
+        assert abs(tile_bbox[0] - ws_bbox[0]) <= 1, (
+            f"icon left edge differs: tile={tile_bbox[0]}, "
             f"waste_schedule={ws_bbox[0]}"
         )
 
@@ -7628,16 +6094,15 @@ class TestConsistencyContract:
         # circle width (icon_dia from _compute_metrics).
         m = _compute_metrics(self._ROW_H)
         icon_x2 = m.padding + m.icon_dia
-        sr_bbox = content_bbox(self._sr_img, 0, 0, icon_x2, self._ROW_H)
+        tile_bbox = content_bbox(self._tile_img, 0, 0, icon_x2, self._ROW_H)
         ws_bbox = content_bbox(self._ws_img, 0, 0, icon_x2, self._ROW_H)
 
-        assert sr_bbox is not None
+        assert tile_bbox is not None
         assert ws_bbox is not None
-        sr_dia = sr_bbox[2] - sr_bbox[0]
+        tile_dia = tile_bbox[2] - tile_bbox[0]
         ws_dia = ws_bbox[2] - ws_bbox[0]
-        assert sr_dia == ws_dia, (
-            f"icon diameter differs: sensor_rows={sr_dia}, "
-            f"waste_schedule={ws_dia}"
+        assert abs(tile_dia - ws_dia) <= 1, (
+            f"icon diameter differs: tile={tile_dia}, waste_schedule={ws_dia}"
         )
 
     def test_card_row_widgets_share_text_position(self) -> None:
@@ -7650,60 +6115,28 @@ class TestConsistencyContract:
         tx = m.padding + m.icon_dia + m.inner_gap
 
         # Crop just the text area (right of icon).
-        sr_bbox = content_bbox(self._sr_img, tx - 2, 0, tx + 200, self._ROW_H)
+        tile_bbox = content_bbox(
+            self._tile_img, tx - 2, 0, tx + 200, self._ROW_H
+        )
         ws_bbox = content_bbox(self._ws_img, tx - 2, 0, tx + 200, self._ROW_H)
 
-        assert sr_bbox is not None, "sensor_rows: no text pixels found"
+        assert tile_bbox is not None, "tile: no text pixels found"
         assert ws_bbox is not None, "waste_schedule: no text pixels found"
-        assert abs(sr_bbox[0] - ws_bbox[0]) <= 1, (
+        assert abs(tile_bbox[0] - ws_bbox[0]) <= 1, (
             f"text left edge differs by more than 1px: "
-            f"sensor_rows={sr_bbox[0]}, waste_schedule={ws_bbox[0]}"
+            f"tile={tile_bbox[0]}, waste_schedule={ws_bbox[0]}"
         )
 
-    def test_chip_and_card_row_same_icon_dia(self) -> None:
-        # The status_icons context builder must pass the same icon_dia
-        # that card_row uses at the same height — both must come from
-        # _compute_metrics().  Font size is intentionally different:
-        # chip uses 46% of h while card_row uses font_primary (32%),
-        # so only icon diameter is verified here.
-        for h in (40, 56, 72, 100):
-            m = _compute_metrics(h)
-            widget: dict[str, object] = {
-                "type": "status_icons",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": h,
-                "entities": ["binary_sensor.front_door"],
-            }
-            cfg = make_config(
-                {"width": 400, "height": h, "states": MOCK_STATUS_ICON_STATES}
-            )
-            # render_widget_svg returns the rendered SVG; the context is
-            # not directly accessible, so we verify indirectly by
-            # checking that the rendered icon circle diameter matches
-            # what _compute_metrics() prescribes.
-            svg = render_widget_svg(widget, cfg)
-            # Anchor the search to <circle to avoid collisions with
-            # other SVG elements that may carry numeric r-like attributes.
-            expected_r = m.icon_dia // 2
-            assert re.search(
-                r"<circle[^>]*\br=\"" + str(expected_r) + r"\"", svg
-            ), (
-                f"h={h}: chip circle radius {expected_r} not found in SVG; "
-                f"icon_dia should be {m.icon_dia}"
-            )
-
-    def test_svg_colors_match_palette_sensor_rows(self) -> None:
-        # All hex colors in a rendered sensor_rows SVG come from
+    def test_svg_colors_match_palette_tile(self) -> None:
+        # All hex colors in a rendered tile SVG come from
         # color_to_hex() applied to known const.py color constants.
         widget: dict[str, object] = {
-            "type": "sensor_rows",
+            "type": "tile",
             "x": 0,
             "y": 0,
             "w": self._W,
             "h": self._ROW_H,
-            "entities": ["sensor.living_room_temperature"],
+            "entity": "sensor.living_room_temperature",
         }
         cfg = make_config(
             {
@@ -7721,7 +6154,7 @@ class TestConsistencyContract:
         }
         colors = set(re.findall(r"#[0-9a-f]{6}", svg.lower()))
         assert colors <= palette, (
-            f"Unexpected hex colors in sensor_rows SVG: {colors - palette}"
+            f"Unexpected hex colors in tile SVG: {colors - palette}"
         )
 
     def test_svg_colors_match_palette_waste_schedule(self) -> None:
@@ -7928,10 +6361,10 @@ class TestLocaleFormattingInWidgets:
         assert "8.4" in svg
 
     def test_sensor_row_decimal_comma(self) -> None:
-        # Sensor row secondary text must be formatted for German locale.
+        # Entity widget secondary text must be formatted for German locale.
         widget = {
-            "type": "sensor_rows",
-            "entities": ["sensor.humidity"],
+            "type": "entity",
+            "entity": "sensor.humidity",
         }
         config = self._config(
             states={
@@ -8010,7 +6443,6 @@ class TestLocaleFormattingInWidgets:
         svg = render_widget_svg(widget, config)
         assert "8,4" in svg
         assert "8.41" not in svg
-
 
     def test_entities_decimal_comma(self) -> None:
         # Entities state value must use comma decimal for German locale.

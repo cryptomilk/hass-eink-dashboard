@@ -169,9 +169,7 @@ class TestOptimizeIntegration:
             "optimize": True,
             "grayscale_levels": 4,
         }
-        widgets = [
-            {"type": "text", "x": 10, "y": 10, "text": "Hi", "font_size": 20}
-        ]
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
         img = Image.open(io.BytesIO(png))
         assert img.mode == "L"
@@ -188,9 +186,7 @@ class TestOptimizeIntegration:
             "optimize": True,
             "grayscale_levels": 2,
         }
-        widgets = [
-            {"type": "text", "x": 10, "y": 10, "text": "Hi", "font_size": 20}
-        ]
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
         img = Image.open(io.BytesIO(png))
         assert img.mode == "1"
@@ -201,9 +197,7 @@ class TestOptimizeIntegration:
         )
 
         config = {"width": 200, "height": 100, "optimize": False}
-        widgets = [
-            {"type": "text", "x": 10, "y": 10, "text": "Hi", "font_size": 20}
-        ]
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
         img = Image.open(io.BytesIO(png))
         assert img.mode == "L"

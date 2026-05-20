@@ -1198,13 +1198,10 @@ class EinkDashboardCard extends HTMLElement {
         if (r.y !== undefined) w.y = r.y;
         w.w = r.w;
         w.h = r.h;
-        // Scale font proportionally for widget types where font_size
-        // controls rendered text size (text, weather). Other widget
-        // types derive font sizes from h directly, so no change needed.
-        if (
-          s.font_size != null
-          && (w.type === "text" || w.type === "weather")
-        ) {
+        // Scale font proportionally for the weather widget, where
+        // font_size controls rendered text size.  Other widget types
+        // derive font sizes from h directly, so no change needed.
+        if (s.font_size != null && w.type === "weather") {
           const startDiag = Math.sqrt(startW ** 2 + startH ** 2);
           const newDiag = Math.sqrt(r.w ** 2 + r.h ** 2);
           if (startDiag > 0) {

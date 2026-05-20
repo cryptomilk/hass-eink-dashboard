@@ -510,7 +510,7 @@ class TestEinkLayoutViewPost:
         entity.async_request_refresh.assert_called_once_with(widgets)
 
     async def test_post_updates_in_memory_widgets(self) -> None:
-        new_widgets = [{"type": "text", "text": "hi"}]
+        new_widgets = [{"type": "heading", "heading": "hi"}]
         store = _make_store()
         entity = _make_post_entity()
         view = EinkLayoutView()
@@ -547,7 +547,7 @@ class TestEinkLayoutViewPost:
     async def test_post_non_list_raises_400(self) -> None:
         view = EinkLayoutView()
         request = _make_layout_request(
-            body={"type": "text"},
+            body={"type": "heading"},
             store=_make_store(),
             entity=_make_post_entity(),
         )
@@ -624,7 +624,7 @@ class TestEinkLayoutViewPost:
             await view.post(request, "test_entry")
 
     async def test_post_nested_dict_field_raises_400(self) -> None:
-        widgets = [{"type": "text", "text": {"nested": "bad"}}]
+        widgets = [{"type": "heading", "heading": {"nested": "bad"}}]
         view = EinkLayoutView()
         request = _make_layout_request(
             body=widgets, store=_make_store(), entity=_make_post_entity()

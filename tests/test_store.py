@@ -32,7 +32,7 @@ class TestEinkDashboardStore:
         self,
     ) -> None:
         hass = _make_hass()
-        widgets = [{"type": "text", "x": 10, "y": 10, "text": "Hi"}]
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         mock_store = MagicMock()
         mock_store.async_load = AsyncMock(return_value=widgets)
 
@@ -49,7 +49,7 @@ class TestEinkDashboardStore:
         self,
     ) -> None:
         hass = _make_hass()
-        widgets = [{"type": "text", "x": 0, "y": 0}]
+        widgets = [{"type": "heading", "x": 0, "y": 0}]
         mock_store = MagicMock()
         mock_store.async_save = AsyncMock()
 

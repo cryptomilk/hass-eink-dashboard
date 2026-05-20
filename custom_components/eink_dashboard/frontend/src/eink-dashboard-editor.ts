@@ -20,14 +20,6 @@ const EDITOR_TAG = "eink-dashboard-editor";
 
 // ── Constants (mirror const.py / render.py) ─────────────────────
 
-/**
- * Default font size for text widgets.
- * Mirrors DEFAULT_METRICS.font_primary from render.py
- * (= _compute_metrics(DEFAULT_ROW_H).font_primary, DEFAULT_ROW_H=56).
- * Update this value if DEFAULT_ROW_H or the 0.32 ratio changes.
- * @see const.py DEFAULT_ROW_H
- */
-const DEFAULT_FONT_PRIMARY = 18;
 const FONT_SIZE_WEATHER = 32;
 
 /** Default card decoration style. Mirrors DEFAULT_CARD_STYLE in const.py. */
@@ -359,56 +351,6 @@ export const SCHEMAS: Record<
   string,
   (d: DisplayConfig) => HaFormSchema[]
 > = {
-  text: (d) => [
-    identitySection(),
-    {
-      name: "content",
-      type: "expandable",
-      flatten: true,
-      expanded: true,
-      title: "Content",
-      icon: "mdi:format-text",
-      schema: [
-        { name: "text", required: true, selector: { text: {} } },
-        {
-          name: "align",
-          default: "left",
-          selector: {
-            select: {
-              options: [
-                { value: "left", label: "Left" },
-                { value: "center", label: "Center" },
-                { value: "right", label: "Right" },
-              ],
-            },
-          },
-        },
-      ],
-    },
-    {
-      name: "layout",
-      type: "expandable",
-      flatten: true,
-      title: "Layout",
-      icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYW(d) }],
-    },
-    {
-      name: "appearance",
-      type: "expandable",
-      flatten: true,
-      title: "Appearance",
-      icon: "mdi:palette",
-      schema: [
-        {
-          type: "grid",
-          name: "",
-          schema: [fontSizeSelector(DEFAULT_FONT_PRIMARY), colorSelector()],
-        },
-      ],
-    },
-  ],
-
   separator: (d) => [
     identitySection(),
     {
@@ -705,48 +647,6 @@ export const SCHEMAS: Record<
     },
   ],
 
-  sensor_rows: (d) => [
-    identitySection(),
-    {
-      name: "content",
-      type: "expandable",
-      flatten: true,
-      expanded: true,
-      title: "Content",
-      icon: "mdi:thermometer",
-      schema: [
-        { name: "title", selector: { text: {} } },
-        {
-          name: "entities",
-          selector: {
-            entity: {
-              multiple: true,
-              domain: ["sensor", "binary_sensor"],
-            },
-          },
-        },
-      ],
-    },
-    {
-      name: "layout",
-      type: "expandable",
-      flatten: true,
-      title: "Layout",
-      icon: "mdi:move-resize",
-      schema: [
-        { type: "grid", name: "", schema: posXYWH(d) },
-      ],
-    },
-    {
-      name: "appearance",
-      type: "expandable",
-      flatten: true,
-      title: "Appearance",
-      icon: "mdi:palette",
-      schema: [cardStyleSelector()],
-    },
-  ],
-
   device_battery: (d) => [
     identitySection(),
     {
@@ -788,60 +688,6 @@ export const SCHEMAS: Record<
       title: "Appearance",
       icon: "mdi:palette",
       schema: [colorSelector(), cardStyleSelector()],
-    },
-  ],
-
-  status_icons: (d) => [
-    identitySection(),
-    {
-      name: "content",
-      type: "expandable",
-      flatten: true,
-      expanded: true,
-      title: "Content",
-      icon: "mdi:checkbox-marked-circle",
-      schema: [
-        { name: "title", selector: { text: {} } },
-        {
-          name: "entities",
-          selector: {
-            entity: {
-              multiple: true,
-              domain: "binary_sensor",
-            },
-          },
-        },
-      ],
-    },
-    {
-      name: "layout",
-      type: "expandable",
-      flatten: true,
-      title: "Layout",
-      icon: "mdi:move-resize",
-      schema: [
-        { type: "grid", name: "", schema: posXYWH(d) },
-      ],
-    },
-    {
-      name: "appearance",
-      type: "expandable",
-      flatten: true,
-      title: "Appearance",
-      icon: "mdi:palette-outline",
-      schema: [
-        {
-          name: "show_icon",
-          default: true,
-          selector: { boolean: {} },
-        },
-        {
-          name: "show_state",
-          default: false,
-          selector: { boolean: {} },
-        },
-        cardStyleSelector(),
-      ],
     },
   ],
 
@@ -1000,7 +846,6 @@ export const HELPERS: Record<string, string> = {
 export const LABELS: Record<string, string> = {
   label: "Label",
   description: "Description",
-  text: "Text",
   entity: "Entity",
   entities: "Entities",
   name: "Name",
@@ -1012,7 +857,6 @@ export const LABELS: Record<string, string> = {
   direction: "Direction", style: "Style", length: "Length",
   font_size: "Font size",
   color: "Color",
-  align: "Align",
   attribute: "Attribute",
   unit: "Unit",
   heading: "Heading",
@@ -1021,8 +865,6 @@ export const LABELS: Record<string, string> = {
   card_style: "Card style",
   icon_style: "Icon style",
   layout: "Layout",
-  show_icon: "Show icon",
-  show_state: "Show state",
   show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
@@ -1065,10 +907,6 @@ export async function loadHaComponents(): Promise<void> {
 
 export function getSummary(widget: Widget): string {
   const t = widget.type;
-  if (t === "text") {
-    const s = String(widget.text || "");
-    return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
-  }
   if (t === "heading") {
     const s = String(widget.heading || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
@@ -1084,11 +922,6 @@ export function getSummary(widget: Widget): string {
     const count = (widget.entities || []).filter(
       (r) => typeof r === "string" || ("entity" in r && !("type" in r))
     ).length;
-    return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
-  }
-  if (t === "sensor_rows" || t === "status_icons") {
-    const title = widget.title ? `${widget.title} — ` : "";
-    const count = (widget.entities || []).length;
     return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
   }
   if (t === "waste_schedule") {

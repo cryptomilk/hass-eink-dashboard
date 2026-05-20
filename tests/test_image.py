@@ -159,11 +159,10 @@ class TestEinkDashboardImage:
         entity.set_widgets(
             [
                 {
-                    "type": "text",
+                    "type": "heading",
                     "x": 10,
                     "y": 10,
-                    "text": "Hello",
-                    "font_size": 20,
+                    "heading": "Hello",
                 }
             ]
         )
@@ -298,11 +297,10 @@ class TestEinkDashboardImage:
         entity.set_widgets(
             [
                 {
-                    "type": "text",
+                    "type": "heading",
                     "x": 10,
                     "y": 10,
-                    "text": "{{ states('sensor.temp') }}",
-                    "font_size": 20,
+                    "heading": "{{ states('sensor.temp') }}",
                 }
             ]
         )
@@ -337,11 +335,10 @@ class TestEinkDashboardImage:
         entity.set_widgets(
             [
                 {
-                    "type": "text",
+                    "type": "heading",
                     "x": 10,
                     "y": 10,
-                    "text": "Hello",
-                    "font_size": 20,
+                    "heading": "Hello",
                 }
             ]
         )
@@ -363,11 +360,10 @@ class TestEinkDashboardImage:
         entity.set_widgets(
             [
                 {
-                    "type": "text",
+                    "type": "heading",
                     "x": 10,
                     "y": 10,
-                    "text": "{{ bad }}",
-                    "font_size": 20,
+                    "heading": "{{ bad }}",
                 }
             ]
         )

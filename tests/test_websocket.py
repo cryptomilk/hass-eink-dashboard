@@ -234,7 +234,7 @@ class TestWsRenderWidget:
         # The renderer receives the widget at the requested index.
         widgets = [
             {"type": "separator"},
-            {"type": "text", "text": "hello"},
+            {"type": "heading", "heading": "hello"},
         ]
         hass = _make_hass(widgets=widgets)
         conn = _make_connection()
@@ -293,7 +293,7 @@ class TestWsRenderWidget:
         # When msg["widget"] is provided the renderer receives it
         # instead of the stored widget at widget_index.
         stored = {"type": "separator"}
-        override = {"type": "text", "text": "override"}
+        override = {"type": "heading", "heading": "override"}
         hass = _make_hass(widgets=[stored])
         conn = _make_connection()
         msg = {
@@ -319,7 +319,7 @@ class TestWsRenderWidget:
         # widget_index because the stored list is never consulted.
         hass = _make_hass(widgets=[])
         conn = _make_connection()
-        override = {"type": "text", "text": "hi"}
+        override = {"type": "heading", "heading": "hi"}
         msg = {
             "id": 14,
             "entry_id": "entry1",
@@ -458,7 +458,7 @@ class TestWsRenderWidgets:
         # Happy path: all widgets are rendered and returned in order.
         widgets = [
             {"type": "separator"},
-            {"type": "text", "text": "hello"},
+            {"type": "heading", "heading": "hello"},
         ]
         hass = _make_hass(widgets=widgets)
         conn = _make_connection()
@@ -569,8 +569,8 @@ class TestWsRenderWidgets:
         # widgets instead of the stored list.
         stored = [{"type": "separator"}]
         override = [
-            {"type": "text", "text": "a"},
-            {"type": "text", "text": "b"},
+            {"type": "heading", "heading": "a"},
+            {"type": "heading", "heading": "b"},
         ]
         hass = _make_hass(widgets=stored)
         conn = _make_connection()

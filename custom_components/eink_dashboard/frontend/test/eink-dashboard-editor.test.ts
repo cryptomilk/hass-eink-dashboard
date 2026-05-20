@@ -56,7 +56,6 @@ describe("WIDGET_TYPES", () => {
   ];
 
   it("has all 9 widget types", () => {
-    // text is deprecated and removed from the picker; heading replaces it.
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -92,33 +91,19 @@ describe("WIDGET_TYPES", () => {
 
 describe("SCHEMAS", () => {
   const ALL_TYPES = [
-    "text",
     "heading",
     "separator",
     "weather",
     "tile",
     "entities",
     "entity",
-    "sensor_rows",
     "device_battery",
-    "status_icons",
     "waste_schedule",
     "sensor",
   ];
 
-  it("has a schema builder for all 12 widget types", () => {
-    // text schema kept for backward-compat editing of existing configs.
+  it("has a schema builder for all 9 widget types", () => {
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
-  });
-
-  it("text schema has text, x, y, font_size, color, align fields", () => {
-    const fields = flattenFields(SCHEMAS.text(DISPLAY));
-    expect(fields).toContain("text");
-    expect(fields).toContain("x");
-    expect(fields).toContain("y");
-    expect(fields).toContain("font_size");
-    expect(fields).toContain("color");
-    expect(fields).toContain("align");
   });
 
   it("weather entity field uses domain filter 'weather'", () => {
@@ -130,38 +115,11 @@ describe("SCHEMAS", () => {
   });
 
   it("position fields respect display dimensions as max", () => {
-    const schema = SCHEMAS.text(DISPLAY);
+    const schema = SCHEMAS.separator(DISPLAY);
     const xField = findField(schema, "x");
     const yField = findField(schema, "y");
     expect(xField?.selector?.number?.max).toBe(DISPLAY.width);
     expect(yField?.selector?.number?.max).toBe(DISPLAY.height);
-  });
-
-  it("sensor_rows entities field has multiple: true", () => {
-    const schema = SCHEMAS.sensor_rows(DISPLAY);
-    const entitiesField = findField(schema, "entities");
-    expect(entitiesField?.selector?.entity?.multiple).toBe(true);
-  });
-
-  it("sensor_rows entities field accepts sensor and binary_sensor domains", () => {
-    const entitiesField = findField(SCHEMAS.sensor_rows(DISPLAY), "entities");
-    expect(entitiesField?.selector?.entity).toMatchObject({
-      domain: ["sensor", "binary_sensor"],
-    });
-  });
-
-  it("status_icons entities field has multiple: true", () => {
-    const entitiesField = findField(
-      SCHEMAS.status_icons(DISPLAY), "entities"
-    );
-    expect(entitiesField?.selector?.entity?.multiple).toBe(true);
-  });
-
-  it("status_icons entities field is restricted to binary_sensor domain", () => {
-    const entitiesField = findField(SCHEMAS.status_icons(DISPLAY), "entities");
-    expect(entitiesField?.selector?.entity).toMatchObject({
-      domain: "binary_sensor",
-    });
   });
 
   it("waste_schedule entity field uses domain filter 'sensor'", () => {
@@ -180,8 +138,8 @@ describe("SCHEMAS", () => {
 describe("LABELS", () => {
   it("covers common field names", () => {
     for (const name of [
-      "text", "entity", "entities", "title",
-      "x", "y", "w", "font_size", "color", "align",
+      "entity", "entities", "title",
+      "x", "y", "w", "font_size", "color",
     ]) {
       expect(LABELS).toHaveProperty(name);
     }
@@ -209,22 +167,6 @@ describe("loadHaComponents", () => {
 // ── getSummary ───────────────────────────────────────────────────
 
 describe("getSummary", () => {
-  it("returns text content for text widget", () => {
-    expect(getSummary({ type: "text", text: "Hello" })).toBe(
-      "Hello"
-    );
-  });
-
-  it("truncates long text at 30 chars with ellipsis", () => {
-    const long = "A".repeat(35);
-    const result = getSummary({ type: "text", text: long });
-    expect(result).toBe("A".repeat(30) + "…");
-  });
-
-  it("returns '(empty)' for text widget with empty string", () => {
-    expect(getSummary({ type: "text", text: "" })).toBe("(empty)");
-  });
-
   it("returns entity for weather widget", () => {
     expect(
       getSummary({ type: "weather", entity: "weather.home" })
@@ -239,28 +181,6 @@ describe("getSummary", () => {
     expect(getSummary({ type: "device_battery" })).toBe(
       "Device battery"
     );
-  });
-
-  it("returns entity count for sensor_rows", () => {
-    expect(
-      getSummary({ type: "sensor_rows", entities: ["a", "b"] })
-    ).toBe("2 entities");
-  });
-
-  it("includes title in sensor_rows summary when present", () => {
-    expect(
-      getSummary({
-        type: "sensor_rows",
-        title: "Temps",
-        entities: ["a"],
-      })
-    ).toBe("Temps — 1 entity");
-  });
-
-  it("uses singular 'entity' for count of 1", () => {
-    expect(
-      getSummary({ type: "status_icons", entities: ["x"] })
-    ).toBe("1 entity");
   });
 
   it("returns direction+style summary for separator", () => {
@@ -417,21 +337,20 @@ describe("SCHEMAS form grouping", () => {
     }
   });
 
-  it("text content section contains text and align", () => {
-    // Content is the primary group for text widgets: the message and
-    // its alignment belong together separate from position/size.
-    const schema = SCHEMAS.text(DISPLAY);
+  it("heading content section contains heading field", () => {
+    // Content is the primary group for heading widgets: the heading
+    // text belongs in content so it is visible by default.
+    const schema = SCHEMAS.heading(DISPLAY);
     const content = getExpandableSections(schema).find(
       (s) => s.name === "content"
     )!;
     const fields = flattenFields(content.schema!);
-    expect(fields).toContain("text");
-    expect(fields).toContain("align");
+    expect(fields).toContain("heading");
   });
 
-  it("text layout section contains x, y, w", () => {
+  it("heading layout section contains x, y, w", () => {
     // Layout is the position group: x, y, and optional width override.
-    const schema = SCHEMAS.text(DISPLAY);
+    const schema = SCHEMAS.heading(DISPLAY);
     const layout = getExpandableSections(schema).find(
       (s) => s.name === "layout"
     )!;
@@ -441,14 +360,25 @@ describe("SCHEMAS form grouping", () => {
     expect(fields).toContain("w");
   });
 
-  it("text appearance section contains font_size and color", () => {
-    // Appearance is the visual styling group: font size and color.
-    const schema = SCHEMAS.text(DISPLAY);
+  it("weather appearance section contains font_size", () => {
+    // Appearance is the visual styling group: weather uses font_size
+    // to control rendered text size.
+    const schema = SCHEMAS.weather(DISPLAY);
     const appearance = getExpandableSections(schema).find(
       (s) => s.name === "appearance"
     )!;
     const fields = flattenFields(appearance.schema!);
     expect(fields).toContain("font_size");
+  });
+
+  it("device_battery appearance section contains color", () => {
+    // Appearance is the visual styling group: device_battery uses
+    // color to control the text colour rendered on the dashboard.
+    const schema = SCHEMAS.device_battery(DISPLAY);
+    const appearance = getExpandableSections(schema).find(
+      (s) => s.name === "appearance"
+    )!;
+    const fields = flattenFields(appearance.schema!);
     expect(fields).toContain("color");
   });
 
@@ -473,18 +403,15 @@ describe("SCHEMAS form grouping", () => {
     expect(appearance).toBeUndefined();
   });
 
-  it("widget schemas with entities put them inside content", () => {
-    // Entities are content, not layout or appearance. Verify for
-    // widgets that use a multi-entity selector.
-    for (const type of ["sensor_rows", "status_icons"]) {
-      const schema = SCHEMAS[type](DISPLAY);
-      const content = getExpandableSections(schema).find(
-        (s) => s.name === "content"
-      )!;
-      expect(content).toBeDefined();
-      const fields = flattenFields(content.schema!);
-      expect(fields).toContain("entities");
-    }
+  it("entities schema puts entities field inside content", () => {
+    // Entities are content, not layout or appearance.
+    const schema = SCHEMAS.entities(DISPLAY);
+    const content = getExpandableSections(schema).find(
+      (s) => s.name === "content"
+    )!;
+    expect(content).toBeDefined();
+    const fields = flattenFields(content.schema!);
+    expect(fields).toContain("entities");
   });
 
   it("waste_schedule entity field is inside content section", () => {
@@ -553,7 +480,6 @@ describe("add-widget integration", () => {
       );
 
       // Click the "heading" type card in the picker's shadow DOM.
-      // (text is deprecated and removed from the picker.)
       const card = picker!.shadowRoot!
         .querySelector<HTMLElement>(
           '.type-card[data-type="heading"]'
@@ -580,7 +506,7 @@ describe("Visibility field", () => {
       state: "on",
     };
     const widget: Widget = {
-      type: "text",
+      type: "separator",
       visibility: [condition],
     };
     expect(widget.visibility).toHaveLength(1);

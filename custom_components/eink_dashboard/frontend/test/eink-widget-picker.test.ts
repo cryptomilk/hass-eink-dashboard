@@ -8,11 +8,11 @@ import "../src/eink-widget-picker.js";
 // ── Test fixture ─────────────────────────────────────────────────
 
 const MOCK_TYPES: Record<string, WidgetTypeMeta> = {
-  text: {
-    label: "Text",
-    description: "Custom text or label",
-    icon: "mdi:format-text",
-    defaults: { type: "text" } as Widget,
+  heading: {
+    label: "Heading",
+    description: "Section header or title",
+    icon: "mdi:format-header-1",
+    defaults: { type: "heading" } as Widget,
   },
   separator: {
     label: "Separator",
@@ -166,7 +166,7 @@ describe("eink-widget-picker selection", () => {
       open: (t: typeof MOCK_TYPES) => void;
     }).open(MOCK_TYPES);
     picker.shadowRoot!
-      .querySelector<HTMLElement>('.type-card[data-type="text"]')!
+      .querySelector<HTMLElement>('.type-card[data-type="heading"]')!
       .click();
     const overlay =
       picker.shadowRoot!.querySelector<HTMLElement>(".overlay")!;

@@ -356,7 +356,7 @@ interface WidgetBase {
   w?: number;
   /** Widget height in canvas pixels. */
   h?: number;
-  /** Font size override (TEXT widget only). */
+  /** Font size override (weather widget only). */
   font_size?: number;
   /** Foreground color as a grayscale integer (0 = black, 255 = white). */
   color?: number;
@@ -365,21 +365,6 @@ interface WidgetBase {
    * The widget is hidden when any condition evaluates to false.
    */
   visibility?: (Condition | LegacyCondition)[];
-}
-
-/**
- * Free-form text label rendered at an arbitrary position.
- *
- * @deprecated Use HeadingWidget for section headers.  TextWidget
- * remains supported for existing configs but is hidden from the
- * widget picker in new installations.
- */
-export interface TextWidget extends WidgetBase {
-  type: "text";
-  /** The text string to render. */
-  text?: string;
-  /** Horizontal text alignment relative to the widget's x position. */
-  align?: "left" | "center" | "right";
 }
 
 /** Horizontal or vertical divider line or filled bar. */
@@ -404,47 +389,11 @@ export interface WeatherWidget extends WidgetBase {
   card_style?: CardStyle;
 }
 
-/**
- * Multi-entity sensor list displayed as icon rows.
- *
- * @deprecated Use TileWidget for new layouts; this type remains
- * supported for existing configs but is hidden from the widget picker.
- */
-export interface SensorRowsWidget extends WidgetBase {
-  type: "sensor_rows";
-  /** Optional card header text. */
-  title?: string;
-  /** Ordered list of entity IDs to display. */
-  entities?: string[];
-  /** Decorative frame style. */
-  card_style?: CardStyle;
-}
-
 /** Device battery level indicator in icon or chip layout. */
 export interface DeviceBatteryWidget extends WidgetBase {
   type: "device_battery";
   /** Visual layout mode for the indicator. */
   layout?: "icon" | "chip";
-  /** Decorative frame style. */
-  card_style?: CardStyle;
-}
-
-/**
- * Row of entity status chips with icon and optional state text.
- *
- * @deprecated Use TileWidget for new layouts; this type remains
- * supported for existing configs but is hidden from the widget picker.
- */
-export interface StatusIconsWidget extends WidgetBase {
-  type: "status_icons";
-  /** Optional card header text. */
-  title?: string;
-  /** Ordered list of entity IDs to display. */
-  entities?: string[];
-  /** When true, renders an icon circle for each entity. */
-  show_icon?: boolean;
-  /** When true, renders the entity state text alongside the icon. */
-  show_state?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }
@@ -710,12 +659,9 @@ export interface SensorWidget extends WidgetBase {
 }
 
 export type Widget =
-  | TextWidget
   | SeparatorWidget
   | WeatherWidget
-  | SensorRowsWidget
   | DeviceBatteryWidget
-  | StatusIconsWidget
   | WasteScheduleWidget
   | TileWidget
   | HeadingWidget

@@ -153,14 +153,6 @@ def apply_screen_portion(
     raise ValueError(f"Unknown screen portion: {portion!r}")
 
 
-class Align(StrEnum):
-    """Horizontal text alignment options for widget rendering."""
-
-    LEFT = "left"
-    RIGHT = "right"
-    CENTER = "center"
-
-
 class NumberFormat(StrEnum):
     """Number formatting styles, mirroring HA's frontend NumberFormat enum.
 
@@ -226,7 +218,6 @@ class TimeFormat(StrEnum):
 class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 
-    TEXT = "text"
     SEPARATOR = "separator"
     ENTITIES = "entities"
     ENTITY = "entity"
@@ -234,7 +225,5 @@ class WidgetType(StrEnum):
     SENSOR = "sensor"
     TILE = "tile"
     WEATHER = "weather"
-    SENSOR_ROWS = "sensor_rows"
     DEVICE_BATTERY = "device_battery"
-    STATUS_ICONS = "status_icons"
     WASTE_SCHEDULE = "waste_schedule"

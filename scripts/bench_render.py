@@ -96,7 +96,7 @@ from custom_components.eink_dashboard.svg_render import (
 )
 
 # ---------------------------------------------------------------------------
-# Mock data for all 8 widget types
+# Mock data for all 9 widget types
 # ---------------------------------------------------------------------------
 
 _WEATHER_STATES = {
@@ -173,37 +173,6 @@ _SENSOR_STATES = {
     },
 }
 
-_STATUS_ICON_STATES = {
-    "binary_sensor.front_door": {
-        "state": "on",
-        "attributes": {
-            "friendly_name": "Front Door",
-            "device_class": "door",
-        },
-    },
-    "binary_sensor.kitchen_window": {
-        "state": "off",
-        "attributes": {
-            "friendly_name": "Kitchen Window",
-            "device_class": "window",
-        },
-    },
-    "binary_sensor.water_alarm": {
-        "state": "on",
-        "attributes": {
-            "friendly_name": "Water Alarm",
-            "device_class": "moisture",
-        },
-    },
-    "binary_sensor.motion": {
-        "state": "off",
-        "attributes": {
-            "friendly_name": "Motion",
-            "device_class": "motion",
-        },
-    },
-}
-
 # Waste dates are relative to today so entries always fall within the
 # 0-3 day visibility window checked by _parse_days_until() in render.py.
 _today = date.today()
@@ -234,13 +203,15 @@ _TILE_STATES = {
 # For device_battery the states dict is empty; the level is injected
 # as config["device_battery_level"] by _build_config().
 _MOCK_DATA: dict[str, tuple[dict, dict]] = {
-    WidgetType.TEXT: (
+    WidgetType.HEADING: (
         {
-            "type": "text",
-            "x": 24,
-            "y": 10,
-            "text": "Dashboard",
-            "font_size": 32,
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "Living Room",
+            "icon": "mdi:home",
         },
         {},
     ),
@@ -275,20 +246,45 @@ _MOCK_DATA: dict[str, tuple[dict, dict]] = {
         },
         _TILE_STATES,
     ),
-    WidgetType.SENSOR_ROWS: (
+    WidgetType.ENTITY: (
         {
-            "type": "sensor_rows",
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.living_room_temperature",
+            "card_style": "border",
+        },
+        _SENSOR_STATES,
+    ),
+    WidgetType.ENTITIES: (
+        {
+            "type": "entities",
             "x": 0,
             "y": 0,
             "w": 400,
             "h": 168,
             "card_style": "border",
+            "title": "Sensors",
             "entities": [
                 "sensor.living_room_temperature",
                 "sensor.bedroom_temperature",
-                "sensor.humidity",
+                {"type": "divider"},
                 "binary_sensor.front_door",
             ],
+        },
+        _SENSOR_STATES,
+    ),
+    WidgetType.SENSOR: (
+        {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.living_room_temperature",
+            "card_style": "border",
         },
         _SENSOR_STATES,
     ),
@@ -299,22 +295,6 @@ _MOCK_DATA: dict[str, tuple[dict, dict]] = {
             "y": 20,
         },
         {},
-    ),
-    WidgetType.STATUS_ICONS: (
-        {
-            "type": "status_icons",
-            "x": 0,
-            "y": 0,
-            "w": 500,
-            "h": 40,
-            "entities": [
-                "binary_sensor.front_door",
-                "binary_sensor.kitchen_window",
-                "binary_sensor.water_alarm",
-                "binary_sensor.motion",
-            ],
-        },
-        _STATUS_ICON_STATES,
     ),
     WidgetType.WASTE_SCHEDULE: (
         {
@@ -539,7 +519,7 @@ def _report(
 def _all_widgets() -> tuple[list[dict], dict, dict]:
     """Assemble all widget types for a full-dashboard benchmark.
 
-    Lays out all eight widget types vertically so every renderer is
+    Lays out all nine widget types vertically so every renderer is
     exercised.  The layout does not need to fit any specific device
     since the renderers clip to their configured x/y/w/h.
 
@@ -550,13 +530,14 @@ def _all_widgets() -> tuple[list[dict], dict, dict]:
     """
     # Vertical layout: 10px gap between widgets
     layout: list[tuple[str, int]] = [
-        (WidgetType.TEXT, 40),
+        (WidgetType.HEADING, 56),
         (WidgetType.SEPARATOR, 20),
         (WidgetType.WEATHER, 300),
         (WidgetType.TILE, 56),
-        (WidgetType.SENSOR_ROWS, 168),
+        (WidgetType.ENTITY, 112),
+        (WidgetType.ENTITIES, 168),
+        (WidgetType.SENSOR, 112),
         (WidgetType.DEVICE_BATTERY, 60),
-        (WidgetType.STATUS_ICONS, 40),
         (WidgetType.WASTE_SCHEDULE, 168),
     ]
 
