@@ -147,8 +147,9 @@ to a PIL Image. Weather forecast entries must include a `"datetime"` ISO
 
 **Test infrastructure**: Tests run without a real Home Assistant installation.
 `tests/conftest.py` injects stub modules into `sys.modules` before any import.
-All HA selectors (`SelectSelector`, `AreaSelector`, `TextSelector` and their
-config/enum companions) are stubbed as pass-through identity functions —
+All HA selectors (`SelectSelector`, `AreaSelector`, `TextSelector`,
+`EntitySelector`, `LanguageSelector` and their config/enum companions) are
+stubbed as pass-through identity functions —
 `__call__` returns its argument unchanged. Other key stubs: config/options flow
 base classes (return plain dicts), `ImageEntity`, `HomeAssistantView`,
 `HomeAssistant` (MagicMock), and `cv.url` (real urlparse-based validation).

@@ -4,7 +4,7 @@ description: "Implement a widget's SVG template and Python context builder. Crea
 when_to_use: "When implementing the SVG template and context builder for a new widget type. Always run AFTER tests are written (TDD green phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
-allowed-tools: Bash(uv *)
+allowed-tools: Read, Edit, Write, Bash(uv *)
 ---
 
 # Implement Widget Renderer: $widget-type
@@ -70,9 +70,15 @@ from custom_components.eink_dashboard.render import (
 ```
 
 `_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
-`_auto_row_height`, `_card_insets`, `_metrics_context`,
+`_auto_row_height`, `_card_insets`, `_metrics_context`, `_fmt`,
 and `DEFAULT_ROW_H` (imported from `const`) are already in
 `svg_render.py` — call them directly, no import needed.
+
+Use `_fmt(state_val, config)` whenever a context builder formats a
+numeric entity state for display.  This applies locale-aware decimal
+and thousands separators matching the owner's HA preference.  Pass
+the raw state string — non-numeric strings (``"on"``, ``"unavailable"``)
+are returned unchanged.
 
 `_color_context()` in `svg_render.py` returns
 `{"hex_black": ..., "hex_white": ..., "hex_gray": ...}` by calling
@@ -287,12 +293,13 @@ def _build_{widget_type}_context(
             friendly = attrs.get("friendly_name", entity_id)
             letter = friendly[:1].upper() if friendly else ""
         unit = attrs.get("unit_of_measurement", "")
+        state_val = state["state"]
         rows.append({
             "y": i * row_h,
             "primary": attrs.get(
                 "friendly_name", entity_id
             ),
-            "secondary": f"{state['state']}{unit}",
+            "secondary": f"{_fmt(state_val, config)}{unit}",
             "value": "",
             "icon_svg": icon_svg,
             "letter": letter,
@@ -460,3 +467,20 @@ behavior.
   `svg_render.py`) determines active vs inactive state; use
   `contextlib.suppress(FileNotFoundError)` around every
   `_mdi_svg_filter()` call
+- **Custom icon circle stroke widening**: When a widget renders its
+  own icon circle (not via the `card_row` macro), the outline stroke
+  must be widened on 2-level displays to avoid dithering.  Compute
+  a separate variable in the context builder and pass it to the
+  template:
+
+  ```python
+  # Widen the outline stroke on 2-level displays.
+  icon_stroke_w = (
+      m.border * 3 if grayscale_levels <= 2 else m.border
+  )
+  ```
+
+  In the template use `{{ icon_stroke_w }}` as `stroke-width` on
+  the outlined circle, **not** `{{ m_border }}`.  The `card_row`
+  macro does not apply this widening — it only applies to
+  widget-specific circles drawn outside the macro.

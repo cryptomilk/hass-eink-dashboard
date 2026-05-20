@@ -4,7 +4,7 @@ description: "Write TDD tests for a widget type: structural tests (borders, divi
 when_to_use: "When writing tests for a new widget type. Always run BEFORE implementing the renderer (TDD red phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
-allowed-tools: Bash(uv *)
+allowed-tools: Read, Edit, Write, Bash(uv *)
 ---
 
 # Write Widget Tests: $widget-type
@@ -138,7 +138,39 @@ coordinates.
 - Missing attributes: handles absent `device_class`, `friendly_name`
 - Edge cases: empty entity list, single entity
 
-### 5. Auto-sizing tests — row-based widgets only
+### 5. Locale formatting test — numeric-state widgets only
+
+If the widget displays numeric entity states (via `_fmt()`), add a
+test to the existing `TestLocaleFormattingInWidgets` class in
+`tests/test_render.py`.  Do NOT create a separate class.
+
+```python
+def test_{widget_type}_decimal_comma(self) -> None:
+    # {WidgetName} secondary text must use comma decimal for
+    # German locale.
+    widget = {
+        "type": "$widget-type",
+        "entity": "sensor.humidity",
+    }
+    config = self._config(
+        states={
+            "sensor.humidity": {
+                "state": "8.41",
+                "attributes": {"unit_of_measurement": "g/m³"},
+            }
+        },
+        number_format="decimal_comma",
+        language="de",
+    )
+    svg = render_widget_svg(widget, config)
+    assert "8,41" in svg
+    assert "8.41" not in svg
+```
+
+Widgets that display only non-numeric states (on/off, binary sensors,
+labels) do not need this test.
+
+### 7. Auto-sizing tests — row-based widgets only
 
 For row-based widgets (height derived from content rows), verify the
 auto-sizing fallback.  Use `render_widget_svg` directly — a
@@ -343,6 +375,24 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 5. **Test each `card_style` variant**: For card-style widgets, test
    all three styles (`"border"`, `"left_bar"`, `"none"`) in separate
    test methods. The SEPARATOR tests show this pattern well.
+
+6. **2-level icon ring bounds**: When a helper computes the ring
+   check area inside an icon circle (the region above the glyph),
+   it must account for the wider stroke on 2-level displays.
+   Mirror the context builder's `icon_stroke_w` formula so the
+   check region stays inside the stroke inner edge:
+
+   ```python
+   icon_stroke_w = (
+       m.border * 3 if grayscale_levels <= 2 else m.border
+   )
+   ring_y1 = icon_cy - icon_r + icon_stroke_w // 2 + 3
+   ring_y2 = icon_cy - m.icon_inner // 2 - 1
+   ```
+
+   Without this adjustment, the wider stroke's antialiased inner
+   edge bleeds into the ring region, producing false gray-pixel
+   hits in the 2-level test path.
 
 6. **Missing entity = no crash**: Always include a test that passes a
    nonexistent entity ID and verifies the widget doesn't crash.

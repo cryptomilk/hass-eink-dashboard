@@ -1,10 +1,10 @@
 ---
 name: implement-widget-frontend
-description: "Add TypeScript types in ha.d.ts and editor schema in eink-dashboard-editor.ts for a new widget type. Canvas preview was replaced by server-rendered SVGs in step 4.1; no frontend renderer is needed."
-when_to_use: "When adding or updating a widget's TypeScript types or editor form. Run AFTER the Python renderer (implement-widget) is complete."
+description: "Add TypeScript types in ha.d.ts and editor schema in eink-dashboard-editor.ts for a new or updated widget type; also handles deprecating an old type (remove from picker, keep schema, add @deprecated JSDoc). Canvas preview was replaced by server-rendered SVGs in step 4.1; no frontend renderer is needed."
+when_to_use: "When adding a new widget type, deprecating an existing one, or updating a widget's TypeScript types or editor form. Run AFTER the Python renderer (implement-widget) is complete. Must also update getSummary(), LABELS, and the ALL_TYPES arrays in the frontend test file."
 argument-hint: "[widget-type]"
 arguments: widget-type
-allowed-tools: Bash(pnpm *)
+allowed-tools: Read, Edit, Write, Bash(pnpm *)
 ---
 
 # Implement Widget Frontend: $widget-type
@@ -69,6 +69,7 @@ Config fields:
 - `icon` — MDI icon name (e.g. `"mdi:fridge"`)
 - `badges` — list of entity badge configs
 - `icon_style` — project-specific (default: `"none"`)
+- `card_style` — project-specific (see above)
 
 Fields intentionally omitted: `tap_action`.
 
@@ -152,27 +153,54 @@ Keep existing frontend definitions unchanged.
 
 In `frontend/src/types/ha.d.ts`:
 
-**Add the widget interface:**
+**Add supporting interfaces** (if the widget has structured sub-items):
 
 ```typescript
-export interface {WidgetName}Widget extends WidgetBase {
-  type: "$widget-type";
-  h?: number;
-  entities?: string[];
-  card_style?: CardStyle;
-  title?: string;
+/** One badge entry displayed beside the heading. */
+export interface {WidgetName}Badge {
+  /** HA entity ID. */
+  entity: string;
+  /** Override label; unused in current renderer but reserved. */
+  name?: string;
+  /** MDI icon name override (e.g. "mdi:thermometer"). */
+  icon?: string;
+  /** Show the entity state value next to the icon. Default: true. */
+  show_state?: boolean;
+  /** Render an icon alongside the badge text. Default: false. */
+  show_icon?: boolean;
 }
 ```
 
+**Add the widget interface:**
+
+```typescript
+/** One-line summary of what this widget does. */
+export interface {WidgetName}Widget extends WidgetBase {
+  type: "$widget-type";
+  /** Description of primary content field. */
+  $main_field?: string;
+  /** Ordered list of entity IDs or structured badge configs. */
+  badges?: (string | {WidgetName}Badge)[];
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /** Icon circle rendering mode. */
+  icon_style?: IconStyle;
+}
+```
+
+Fields prefixed with `$` are placeholders — substitute the real field
+name from the widget spec (e.g. `heading` for Heading, `entity` for
+Tile).
+
 Include only the fields the Python renderer actually reads. Omit fields
 that belong to `WidgetBase` (`x`, `y`, `w`, `font_size`, `color`) since
-those are inherited.
+those are inherited.  Document every member with a JSDoc comment.
 
 **Add to the `Widget` union type:**
 
 ```typescript
 export type Widget =
-  | TextWidget
+  | TextWidget      // @deprecated — kept for existing configs
   | SeparatorWidget
   | ...
   | {WidgetName}Widget;
@@ -182,7 +210,9 @@ export type Widget =
 
 In `frontend/src/eink-dashboard-editor.ts`:
 
-**Add to `WIDGET_TYPES`:**
+**Add to `WIDGET_TYPES`** (only widgets shown in the picker — deprecated
+widgets are removed from here but their `SCHEMAS` entry is kept so
+existing configs remain editable):
 
 ```typescript
 "$widget-type": {
@@ -191,76 +221,95 @@ In `frontend/src/eink-dashboard-editor.ts`:
   icon: "mdi:some-icon",
   defaults: {
     type: "$widget-type",
-    x: 24, y: 0, w: 400, h: 112,
-    entities: [],
-    card_style: "none",
+    x: 24, y: 0, w: 400, h: 56,  // x: 24 = PADDING for content widgets
+    $main_field: "",               // content-field default
+    card_style: DEFAULT_CARD_STYLE,
+    icon_style: DEFAULT_ICON_STYLE, // override per widget spec
   },
 },
 ```
 
-**Add to `SCHEMAS`** — use grouped sections (Content expanded,
-Layout and Appearance collapsed):
+Use `x: 24` (= `PADDING`) for content widgets (entity, tile — anything
+with internal text and icons) so newly created widgets land at the
+standard canvas inset.  Use `x: 0` only for structural widgets that
+span full width (separator, heading).
+
+Include defaults for content fields so the form is pre-populated on
+first open (e.g. `heading: ""`, `heading_style: "title"`).  Override
+`icon_style` when the widget spec defines a different default (e.g.
+Heading uses `"none"` instead of `DEFAULT_ICON_STYLE`).
+
+**Add to `SCHEMAS`** — use `identitySection()` plus grouped sections
+(`identitySection` first, Content expanded by default, Layout and
+Appearance collapsed).  The `flatten: true` flag on each expandable
+section merges the contained fields directly into the widget data
+object rather than nesting them under a key:
 
 ```typescript
 "$widget-type": (d: DisplayConfig) => [
-  // Content group (expanded)
+  identitySection(),
   {
-    type: "expandable", title: "Content",
-    icon: "mdi:text", expanded: true,
+    name: "content",
+    type: "expandable",
+    flatten: true,
+    expanded: true,
+    title: "Content",
+    icon: "mdi:text",
     schema: [
-      { name: "entities", required: true,
-        selector: { entity: {
-          multiple: true,
-          filter: { domain: "sensor" },
-        } } },
-      { name: "title", required: false,
-        selector: { text: {} } },
+      { name: "$main_field", selector: { text: {} } },
+      {
+        name: "badges",
+        selector: { entity: { multiple: true } },
+      },
     ],
   },
-  // Appearance group (collapsed)
   {
-    type: "expandable", title: "Appearance",
-    icon: "mdi:palette", expanded: false,
-    schema: [
-      { name: "card_style", required: false,
-        selector: { select: { options: [
-          { value: "border", label: "Border" },
-          { value: "left_bar", label: "Left Bar" },
-          { value: "none", label: "None" },
-        ] } } },
-    ],
+    name: "layout",
+    type: "expandable",
+    flatten: true,
+    title: "Layout",
+    icon: "mdi:move-resize",
+    schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
   },
-  // Layout group (collapsed)
   {
-    type: "expandable", title: "Layout",
-    icon: "mdi:ruler", expanded: false,
-    schema: [
-      { type: "grid", name: "", flatten: true, schema: [
-        { name: "x", default: 24,
-          selector: { number: {
-            min: 0, max: d.width, step: 8, mode: "box",
-          } } },
-        { name: "y", default: 0,
-          selector: { number: {
-            min: 0, max: d.height, step: 8, mode: "box",
-          } } },
-        { name: "w", default: 400,
-          selector: { number: {
-            min: 50, max: d.width, step: 8, mode: "box",
-          } } },
-        { name: "h", default: 112,
-          selector: { number: {
-            min: 28, max: d.height, step: 8, mode: "box",
-          } } },
-      ] },
-    ],
+    name: "appearance",
+    type: "expandable",
+    flatten: true,
+    title: "Appearance",
+    icon: "mdi:palette",
+    // Pass a default when the widget overrides DEFAULT_ICON_STYLE:
+    //   iconStyleSelector("none")   — for Heading
+    schema: [cardStyleSelector(), iconStyleSelector()],
   },
 ],
 ```
 
+**Add to `getSummary()`** — return a short human-readable summary for
+the widget list row.  Two common patterns:
+
+```typescript
+// Text-primary widgets (heading, text):
+if (t === "$widget-type") {
+  const s = String(widget.$main_field || "");
+  return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
+}
+
+// Entity-primary widgets (tile, weather):
+if (t === "$widget-type") {
+  return widget.entity || "(no entity)";
+}
+```
+
+**Add to `LABELS`** — every field name used in the schema that does not
+already have a label entry needs one:
+
+```typescript
+$main_field: "Editor label for primary field",
+```
+
 **Entity domain filtering:** Use the correct domain filter for each
 widget type:
-- `tile` → no domain filter (accepts any entity)
+- `tile`, `heading` → no domain filter (accepts any entity)
 - `waste_schedule` → `{ domain: "sensor" }` (single entity from
   waste_collection_schedule)
 - `device_battery` → `{ domain: "sensor" }` or no filter
@@ -273,12 +322,40 @@ section. The `visibility` field is typed as
 `(Condition | LegacyCondition)[]` (both types exported from
 `ha.d.ts`) on `WidgetBase`, so all widget interfaces inherit it.
 
-### 3. Verify
+### 3. Update frontend tests
+
+In `frontend/test/eink-dashboard-editor.test.ts` there are two
+`ALL_TYPES` constant arrays that must be kept in sync manually:
+
+- `WIDGET_TYPES > ALL_TYPES` — lists only picker-visible types
+  (i.e. what is in `WIDGET_TYPES`).  Update the count in the test
+  description too (e.g. "has all N widget types").
+- `SCHEMAS > ALL_TYPES` — lists every type with a schema builder
+  (picker-visible + deprecated types kept for editing).  Update the
+  count in the test description too.
+
+The integration test `add-widget integration > appends a widget when a
+type is selected from the picker` clicks a `data-type="…"` card.  If
+you removed or renamed a widget type in the picker, update the
+`data-type` attribute value in this test to an existing picker type.
+
+### 4. Verify
 
 ```bash
 pnpm --dir custom_components/eink_dashboard/frontend typecheck && \
 pnpm --dir custom_components/eink_dashboard/frontend test
 ```
+
+## Deprecating a widget type
+
+When a widget type is superseded (e.g. `text` → `heading`):
+
+1. **Remove from `WIDGET_TYPES`** so it no longer appears in the picker.
+2. **Keep in `SCHEMAS`** so existing configs remain editable.
+3. **Add `@deprecated` JSDoc** to the TypeScript interface in `ha.d.ts`.
+4. **Update `AGENTS.md`** widget type list.
+5. **Keep in the `Widget` union type** — removing it would break type
+   narrowing for existing config objects.
 
 ## Default values
 
@@ -299,3 +376,4 @@ renderer's own sizing baseline.
 - Sizing baseline: `DEFAULT_ROW_H = 56` in `const.py`
 - Types: `frontend/src/types/ha.d.ts`
 - Editor: `frontend/src/eink-dashboard-editor.ts`
+- Tests: `frontend/test/eink-dashboard-editor.test.ts`
