@@ -43,6 +43,17 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: custom_components/eink_dashboard/frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: custom_components/eink_dashboard/frontend
       - run: uv run --group test pytest
       - uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
@@ -64,7 +75,7 @@ jobs:
           package_json_file: custom_components/eink_dashboard/frontend/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
           cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -86,7 +97,7 @@ jobs:
           package_json_file: custom_components/eink_dashboard/frontend/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: pnpm
           cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
