@@ -22,7 +22,7 @@ from typing import Any
 from PIL import Image, ImageFont
 
 from .conditions import check_conditions
-from .const import DEFAULT_ROW_H, PADDING
+from .const import DEFAULT_ROW_H, PADDING, NumberFormat
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
@@ -92,17 +92,207 @@ def color_to_hex(c: int) -> str:
     return f"#{c:02x}{c:02x}{c:02x}"
 
 
-def _fmt_temp(value: str | float | int) -> str:
+def _fmt_temp(
+    value: str | float | int,
+    number_format: str,
+    language: str,
+) -> str:
     """Format a temperature value, omitting the decimal when it is zero.
 
     Returns '--' for non-numeric values such as the HA unavailable
     sentinel '--'.
+
+    Args:
+        value: Numeric temperature as string, float, or int.
+        number_format: NumberFormat value controlling the decimal
+            separator.
+        language: BCP 47 language code used when ``number_format``
+            is ``"language"`` to infer the correct separator.
+
+    Returns:
+        Locale-formatted temperature string, or ``"--"`` for
+        non-numeric input.
     """
     try:
         n = float(value)
     except (ValueError, TypeError):
         return "--"
-    return str(int(n)) if n == int(n) else str(n)
+    raw = str(int(n)) if n == int(n) else format(n, "f")
+    return format_number(raw, number_format, language)
+
+
+# Languages that use a comma as the decimal separator and a dot as
+# the thousands separator (German/Spanish/Italian style: 1.234,56).
+_DECIMAL_COMMA_LANGUAGES: frozenset[str] = frozenset(
+    {
+        "af",
+        "bg",
+        "da",
+        "de",
+        "el",
+        "et",
+        "eu",
+        "hr",
+        "hu",
+        "id",
+        "it",
+        "ka",
+        "lt",
+        "lv",
+        "mk",
+        "ms",
+        "nl",
+        "pl",
+        "pt",
+        "ro",
+        "sk",
+        "sl",
+        "sq",
+        "sr",
+        "tr",
+        "uk",
+    }
+)
+
+# Languages that use a comma as the decimal separator and a narrow
+# non-breaking space (or regular space) as the thousands separator
+# (French/Swedish/Czech style: 1 234,56).
+_SPACE_COMMA_LANGUAGES: frozenset[str] = frozenset(
+    {
+        "ar",
+        "az",
+        "be",
+        "bs",
+        "cs",
+        "fi",
+        "fr",
+        "hy",
+        "kk",
+        "ky",
+        "mn",
+        "nb",
+        "nn",
+        "ru",
+        "sv",
+        "tg",
+        "tk",
+        "uz",
+    }
+)
+
+
+def resolve_number_format(number_format: str, language: str) -> str:
+    """Resolve ``"language"`` to a concrete NumberFormat value.
+
+    When ``number_format`` is anything other than ``"language"`` or
+    ``"system"``, it is returned unchanged.  ``"system"`` is treated
+    as ``"comma_decimal"`` (dot decimal, comma thousands) because the
+    server has no browser locale.
+
+    Args:
+        number_format: A :class:`~const.NumberFormat` string value.
+        language: BCP 47 language code (e.g. ``"de"``, ``"fr"``).
+            Only the primary subtag is used for lookup.
+
+    Returns:
+        A concrete :class:`~const.NumberFormat` value, never
+        ``"language"`` or ``"system"``.
+    """
+    if number_format in (NumberFormat.SYSTEM, NumberFormat.COMMA_DECIMAL):
+        return NumberFormat.COMMA_DECIMAL
+    if number_format != NumberFormat.LANGUAGE:
+        return number_format
+    # Resolve "language" using the primary language subtag.
+    lang = language.split("-")[0].lower()
+    if lang in _SPACE_COMMA_LANGUAGES:
+        return NumberFormat.SPACE_COMMA
+    if lang in _DECIMAL_COMMA_LANGUAGES:
+        return NumberFormat.DECIMAL_COMMA
+    return NumberFormat.COMMA_DECIMAL
+
+
+def format_number(value: str, number_format: str, language: str) -> str:
+    """Format a numeric string according to the given locale settings.
+
+    Non-numeric strings (e.g. ``"on"``, ``"off"``, ``"unavailable"``,
+    ``"--"``) are returned unchanged.  The number of decimal places
+    present in ``value`` is preserved so that ``"8.41"`` stays two
+    decimal places and ``"22"`` stays an integer.
+
+    Thousands grouping is applied for values ≥ 1000, matching HA's
+    ``Intl.NumberFormat`` behaviour.
+
+    Args:
+        value: Numeric string from HA state or a formatted number.
+        number_format: A :class:`~const.NumberFormat` string value.
+        language: BCP 47 language code used when ``number_format``
+            is ``"language"``.
+
+    Returns:
+        Locale-formatted string, or ``value`` unchanged if not
+        numeric.
+    """
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        return value
+
+    # Cap at 1 decimal place — e-ink displays are small and extra
+    # precision is noise.  Raw HA state strings can have many trailing
+    # digits (e.g. "15.600000") that should not be shown.
+    decimal_places = min(
+        len(value.split(".")[1]) if "." in value else 0,
+        1,
+    )
+
+    # Round via Python's float formatter so carry (e.g. 9.9995 → 10)
+    # is handled correctly, then split on "." for grouping.
+    formatted = f"{num:.{decimal_places}f}"
+    if "." in formatted:
+        int_str_raw, frac_digits = formatted.split(".")
+    else:
+        int_str_raw, frac_digits = formatted, ""
+
+    resolved = resolve_number_format(number_format, language)
+
+    # Thousands grouping separator per resolved format.
+    if resolved == NumberFormat.DECIMAL_COMMA:
+        thousands_sep = "."
+    elif resolved == NumberFormat.SPACE_COMMA:
+        # Narrow non-breaking space (U+202F) as HA frontend uses.
+        thousands_sep = " "
+    elif resolved == NumberFormat.QUOTE_DECIMAL:
+        thousands_sep = "'"
+    else:
+        # COMMA_DECIMAL, NONE
+        thousands_sep = "," if resolved != NumberFormat.NONE else ""
+
+    # Apply thousands grouping to the integer part.
+    neg = num < 0
+    abs_int = abs(int(int_str_raw))
+    if thousands_sep and abs_int >= 1000:
+        groups: list[str] = []
+        while abs_int >= 1000:
+            groups.append(f"{abs_int % 1000:03d}")
+            abs_int //= 1000
+        groups.append(str(abs_int))
+        int_str = thousands_sep.join(reversed(groups))
+    else:
+        int_str = str(abs_int)
+
+    if neg:
+        int_str = "-" + int_str
+
+    # Decimal separator.
+    if resolved in (
+        NumberFormat.DECIMAL_COMMA,
+        NumberFormat.SPACE_COMMA,
+    ):
+        decimal_sep = ","
+    else:
+        decimal_sep = "."
+
+    return (int_str + decimal_sep + frac_digits) if frac_digits else int_str
 
 
 _SENSOR_DEVICE_CLASS_ICONS: dict[str, str] = {

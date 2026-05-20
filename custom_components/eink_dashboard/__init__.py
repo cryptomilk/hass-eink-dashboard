@@ -26,6 +26,7 @@ from .const import (
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    NumberFormat,
     WidgetType,
 )
 from .http import EinkLayoutView, EinkPublicImageView
@@ -71,14 +72,59 @@ async def _async_update_listener(
     _register_device(hass, entry)
 
 
-def _build_display_config(
+async def _async_get_number_format(
+    hass: HomeAssistant,
+) -> tuple[str, str]:
+    """Return ``(number_format, language)`` for server-side rendering.
+
+    Reads the owner's frontend locale preferences (the ``language``
+    key stored via ``frontend/set_user_data``) and falls back to
+    ``hass.config.language`` when the owner cannot be determined or
+    when the frontend component is not available.
+
+    Args:
+        hass: Home Assistant instance.
+
+    Returns:
+        A ``(number_format, language)`` tuple suitable for passing
+        into a :class:`~render.DisplayConfig` dict.
+        ``number_format`` is a :class:`~const.NumberFormat` value;
+        ``language`` is a BCP 47 language tag.
+    """
+    fallback_language = hass.config.language
+    try:
+        from homeassistant.components.frontend.storage import (
+            async_user_store,
+        )
+    except ImportError:
+        return NumberFormat.LANGUAGE, fallback_language
+    try:
+        owner = await hass.auth.async_get_owner()
+        if owner is not None:
+            store = await async_user_store(hass, owner.id)
+            locale_data = store.data.get("language")
+            if isinstance(locale_data, dict):
+                nf = locale_data.get("number_format", NumberFormat.LANGUAGE)
+                lang = locale_data.get("language", fallback_language)
+                return str(nf), str(lang)
+    except (AttributeError, KeyError, TypeError) as exc:
+        # Owner lookup or store access failed — log and fall back.
+        _LOGGER.debug(
+            "Could not read owner locale from frontend storage: %s",
+            exc,
+        )
+    return NumberFormat.LANGUAGE, fallback_language
+
+
+async def _build_display_config(
     hass: HomeAssistant, entry_id: str
 ) -> dict[str, Any]:
     """Build a DisplayConfig for rendering a widget preview.
 
-    Snapshots current HA entity states and reads display dimensions
-    from the config entry options.  Caller must ensure ``entry_id``
-    exists in ``hass.data[DOMAIN]``.
+    Snapshots current HA entity states, reads display dimensions from
+    the config entry options, and reads the owner's locale preferences
+    via :func:`_async_get_number_format`.  Caller must ensure
+    ``entry_id`` exists in ``hass.data[DOMAIN]``.
 
     Args:
         hass: Home Assistant instance.
@@ -86,9 +132,10 @@ def _build_display_config(
 
     Returns:
         Dict with ``width``, ``height``, ``grayscale_levels``,
-        ``states``, and (when battery data is available)
-        ``device_battery_level`` and ``device_battery_charging``
-        keys suitable for ``render_widget_svg()``.
+        ``number_format``, ``language``, ``states``, and (when
+        battery data is available) ``device_battery_level`` and
+        ``device_battery_charging`` keys suitable for
+        ``render_widget_svg()``.
     """
     entry_data = hass.data[DOMAIN][entry_id]
     entry = entry_data["entry"]
@@ -102,12 +149,15 @@ def _build_display_config(
             # existing nested values.
             "attributes": dict(state.attributes),
         }
+    number_format, language = await _async_get_number_format(hass)
     config: dict[str, Any] = {
         "width": entry.options.get("width", DEFAULT_WIDTH),
         "height": entry.options.get("height", DEFAULT_HEIGHT),
         "grayscale_levels": entry.options.get(
             "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
         ),
+        "number_format": number_format,
+        "language": language,
         "states": states,
     }
     level, is_charging = resolve_battery_level(
@@ -218,7 +268,7 @@ async def ws_render_widget(
             )
             return
         widget = widgets[idx]
-    config = _build_display_config(hass, entry_id)
+    config = await _build_display_config(hass, entry_id)
     await _fetch_forecasts(hass, [widget], config["states"])
     try:
         svg = await hass.async_add_executor_job(
@@ -282,7 +332,7 @@ async def ws_render_widgets(
         return
 
     widgets = msg.get("widgets") or list(entry_data["widgets"])
-    config = _build_display_config(hass, entry_id)
+    config = await _build_display_config(hass, entry_id)
     await _fetch_forecasts(hass, widgets, config["states"])
 
     # Render all widgets in a single executor job: render_widget_svg

@@ -27,6 +27,7 @@ _HA_MODULES = [
     "homeassistant",
     "homeassistant.components",
     "homeassistant.components.frontend",
+    "homeassistant.components.frontend.storage",
     "homeassistant.components.http",
     "homeassistant.components.image",
     "homeassistant.components.media_player",
@@ -57,6 +58,9 @@ for _mod_name in _HA_MODULES:
 
 frontend_mod = sys.modules["homeassistant.components.frontend"]
 frontend_mod.add_extra_js_url = MagicMock()  # type: ignore[attr-defined]
+
+frontend_storage_mod = sys.modules["homeassistant.components.frontend.storage"]
+frontend_storage_mod.async_user_store = MagicMock()  # type: ignore[attr-defined]
 
 http_mod = sys.modules["homeassistant.components.http"]
 

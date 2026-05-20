@@ -161,6 +161,30 @@ class Align(StrEnum):
     CENTER = "center"
 
 
+class NumberFormat(StrEnum):
+    """Number formatting styles, mirroring HA's frontend NumberFormat enum.
+
+    Used to control how numeric entity state values are formatted in
+    widget renderers.  ``LANGUAGE`` (the default) derives the format
+    from the system or owner language setting.
+    """
+
+    LANGUAGE = "language"
+    """Derive format from the language setting (default)."""
+    SYSTEM = "system"
+    """System locale (no browser on the server; treated as comma_decimal)."""
+    COMMA_DECIMAL = "comma_decimal"
+    """1,234.56 — US/UK style."""
+    DECIMAL_COMMA = "decimal_comma"
+    """1.234,56 — German/Spanish/Italian style."""
+    SPACE_COMMA = "space_comma"
+    """1 234,56 — French/Swedish/Czech style."""
+    QUOTE_DECIMAL = "quote_decimal"
+    """1'234.56 — Swiss German style."""
+    NONE = "none"
+    """No grouping, dot decimal: 1234.56."""
+
+
 class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 

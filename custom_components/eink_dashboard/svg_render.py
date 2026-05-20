@@ -507,6 +507,31 @@ def _color_context() -> dict[str, str]:
     }
 
 
+def _fmt(value: str, config: DisplayConfig) -> str:
+    """Format a numeric string using the locale settings in ``config``.
+
+    Non-numeric strings pass through unchanged.  Extracts
+    ``number_format`` and ``language`` from the config dict and
+    delegates to :func:`~render.format_number`.
+
+    Args:
+        value: Numeric string (e.g. ``"8.41"``).
+        config: Display config dict containing ``number_format`` and
+            ``language`` keys.
+
+    Returns:
+        Locale-formatted string, or ``value`` unchanged if not
+        numeric.
+    """
+    from .render import format_number  # lazy; avoids circular import
+
+    return format_number(
+        value,
+        config.get("number_format", "language"),
+        config.get("language", "en"),
+    )
+
+
 def _card_insets(
     m: WidgetMetrics,
     card_style: str,
@@ -978,7 +1003,9 @@ def _build_weather_context(
     precip_text_h = round(_WX_PRECIP_H * scale)
 
     # Measure temperature text height (PIL) for height estimation.
-    temp_text = f"{_fmt_temp(temp)}{temp_unit}"
+    nf = config.get("number_format", "language")
+    lang = config.get("language", "en")
+    temp_text = f"{_fmt_temp(temp, nf, lang)}{temp_unit}"
     temp_bbox = font_xl.getbbox(temp_text)
     temp_h = temp_bbox[3] - temp_bbox[1]
 
@@ -1043,11 +1070,11 @@ def _build_weather_context(
         lo_val = today.get("templow")
         p_val = today.get("precipitation")
         if hi_val is not None:
-            today_hi = f"{_fmt_temp(hi_val)}°"
+            today_hi = f"{_fmt_temp(hi_val, nf, lang)}°"
         if lo_val is not None:
-            today_lo = f"{_fmt_temp(lo_val)}°"
+            today_lo = f"{_fmt_temp(lo_val, nf, lang)}°"
         if p_val is not None:
-            today_precip = f"{p_val}{precip_unit_fc}"
+            today_precip = f"{_fmt(str(p_val), config)}{precip_unit_fc}"
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
     font_xl_size = _cap_weather_font_xl(
@@ -1082,13 +1109,28 @@ def _build_weather_context(
     detail_y = row1_bottom + detail_gap
     raw_details: list[tuple[str, str]] = []
     if humidity is not None:
-        raw_details.append(("humidity", f"{humidity}%"))
+        raw_details.append(("humidity", f"{_fmt(str(humidity), config)}%"))
     if pressure is not None:
-        raw_details.append(("barometer", f"{round(pressure)}{pressure_unit}"))
+        raw_details.append(
+            (
+                "barometer",
+                f"{_fmt(str(round(pressure)), config)}{pressure_unit}",
+            )
+        )
     if wind is not None:
-        raw_details.append(("wind", f"{round(wind)}{wind_unit}"))
+        raw_details.append(
+            (
+                "wind",
+                f"{_fmt(str(round(wind)), config)}{wind_unit}",
+            )
+        )
     if cloud_coverage is not None:
-        raw_details.append(("cloud", f"{cloud_coverage}%"))
+        raw_details.append(
+            (
+                "cloud",
+                f"{_fmt(str(cloud_coverage), config)}%",
+            )
+        )
 
     detail_cols = max(len(raw_details), 1)
     col_w_detail = content_w // detail_cols
@@ -1182,11 +1224,15 @@ def _build_weather_context(
 
             fc_hi_val = day.get("temperature", "")
             fc_lo_val = day.get("templow", "")
-            fc_hi = f"{_fmt_temp(fc_hi_val)}°" if fc_hi_val != "" else ""
-            fc_lo = f"{_fmt_temp(fc_lo_val)}°" if fc_lo_val != "" else ""
+            fc_hi = (
+                f"{_fmt_temp(fc_hi_val, nf, lang)}°" if fc_hi_val != "" else ""
+            )
+            fc_lo = (
+                f"{_fmt_temp(fc_lo_val, nf, lang)}°" if fc_lo_val != "" else ""
+            )
             fc_p = day.get("precipitation")
             fc_precip = (
-                f"{fc_p}{precip_unit_fc}"
+                f"{_fmt(str(fc_p), config)}{precip_unit_fc}"
                 if fc_p is not None and fc_p > 0
                 else ""
             )
@@ -1339,7 +1385,8 @@ def _build_sensor_rows_context(
             letter = friendly[:1].upper() if friendly else ""
 
         unit = attrs.get("unit_of_measurement", "")
-        secondary = f"{state_val}{unit}" if unit else state_val
+        fmtd = _fmt(state_val, config)
+        secondary = f"{fmtd}{unit}" if unit else fmtd
 
         rows.append(
             {
@@ -1683,7 +1730,10 @@ def _build_status_icons_context(
         has_icon = bool(icon_svg)
         icon_w = (icon_dia + icon_gap) if has_icon else 0
         # Label width: 2*pad + icon area + text ink width.
-        text = f"{label} · {state_val.capitalize()}" if show_state else label
+        state_display = _fmt(state_val, config)
+        text = (
+            f"{label} · {state_display.capitalize()}" if show_state else label
+        )
         label_bbox = font.getbbox(text)
         text_w = int(label_bbox[2] - label_bbox[0])
         chip_w = pad * 2 + icon_w + text_w
@@ -2055,10 +2105,11 @@ def _build_tile_context(
             if isinstance(state_content, list) and state_content
             else (state_content if not isinstance(state_content, list) else "")
         )
-        secondary = str(attrs.get(sc, "")) if sc else ""
+        secondary = _fmt(str(attrs.get(sc, "")), config) if sc else ""
     else:
         unit = attrs.get("unit_of_measurement", "")
-        secondary = f"{state_val}{unit}" if unit else state_val
+        fmtd = _fmt(state_val, config)
+        secondary = f"{fmtd}{unit}" if unit else fmtd
 
     # Icon: explicit override → letter fallback when not found.
     # No override → device_class → letter fallback.
@@ -2284,7 +2335,8 @@ def _build_heading_context(
         attrs = state.get("attributes", {})
         state_val = state.get("state", "")
         unit = attrs.get("unit_of_measurement", "")
-        badge_text = f"{state_val}{unit}" if show_state else ""
+        fmtd = _fmt(state_val, config) if show_state else ""
+        badge_text = f"{fmtd}{unit}" if show_state else ""
 
         badge_icon_svg: markupsafe.Markup | str = ""
         if show_icon:
@@ -2480,13 +2532,13 @@ def _build_entity_context(
     if attribute is not None:
         raw_val = attrs.get(attribute)
         value_text = (
-            str(raw_val)
+            _fmt(str(raw_val), config)
             if raw_val is not None and raw_val != ""
             else "unknown"
         )
         auto_unit = ""
     else:
-        value_text = state_val
+        value_text = _fmt(state_val, config)
         auto_unit = attrs.get("unit_of_measurement", "")
     unit_text: str = (
         str(unit_override) if unit_override is not None else auto_unit

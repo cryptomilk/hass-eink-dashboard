@@ -15,6 +15,7 @@ from custom_components.eink_dashboard.const import (
     COLOR_WHITE,
     DEFAULT_ROW_H,
     PADDING,
+    NumberFormat,
 )
 from custom_components.eink_dashboard.render import (
     DEFAULT_METRICS,
@@ -24,7 +25,9 @@ from custom_components.eink_dashboard.render import (
     _load_font,
     _parse_days_until,
     color_to_hex,
+    format_number,
     render_dashboard,
+    resolve_number_format,
 )
 from custom_components.eink_dashboard.svg_render import (
     _auto_row_height,
@@ -5988,3 +5991,274 @@ class TestConsistencyContract:
         assert colors <= palette, (
             f"Unexpected hex colors in waste_schedule SVG: {colors - palette}"
         )
+
+
+class TestResolveNumberFormat:
+    def test_language_en_returns_comma_decimal(self) -> None:
+        # English defaults to dot decimal (comma thousands).
+        result = resolve_number_format("language", "en")
+        assert result == NumberFormat.COMMA_DECIMAL
+
+    def test_language_de_returns_decimal_comma(self) -> None:
+        # German defaults to comma decimal (dot thousands).
+        result = resolve_number_format("language", "de")
+        assert result == NumberFormat.DECIMAL_COMMA
+
+    def test_language_fr_returns_space_comma(self) -> None:
+        # French defaults to space thousands + comma decimal.
+        result = resolve_number_format("language", "fr")
+        assert result == NumberFormat.SPACE_COMMA
+
+    def test_language_de_ch_uses_primary_subtag(self) -> None:
+        # "de-CH" primary subtag is "de" → decimal_comma.
+        result = resolve_number_format("language", "de-CH")
+        assert result == NumberFormat.DECIMAL_COMMA
+
+    def test_language_ja_returns_comma_decimal(self) -> None:
+        # Japanese: not in comma/space sets → defaults to comma_decimal.
+        result = resolve_number_format("language", "ja")
+        assert result == NumberFormat.COMMA_DECIMAL
+
+    def test_explicit_decimal_comma_returned_as_is(self) -> None:
+        # Explicit formats bypass language lookup.
+        assert (
+            resolve_number_format("decimal_comma", "en")
+            == NumberFormat.DECIMAL_COMMA
+        )
+
+    def test_system_treated_as_comma_decimal(self) -> None:
+        # Server-side has no browser locale; "system" falls back to
+        # dot decimal.
+        result = resolve_number_format("system", "en")
+        assert result == NumberFormat.COMMA_DECIMAL
+
+    def test_none_returned_as_is(self) -> None:
+        assert resolve_number_format("none", "en") == NumberFormat.NONE
+
+
+class TestFormatNumber:
+    def test_non_numeric_string_passes_through(self) -> None:
+        # "on", "off", and HA sentinels must not be modified.
+        assert format_number("on", "decimal_comma", "de") == "on"
+
+    def test_unavailable_passes_through(self) -> None:
+        result = format_number("unavailable", "decimal_comma", "de")
+        assert result == "unavailable"
+
+    def test_double_dash_passes_through(self) -> None:
+        assert format_number("--", "decimal_comma", "de") == "--"
+
+    def test_integer_no_decimal_unchanged(self) -> None:
+        # Integers have no decimal separator to swap.
+        assert format_number("22", "decimal_comma", "de") == "22"
+
+    def test_comma_decimal_preserves_dot(self) -> None:
+        # US/UK style: decimal separator stays as ".".
+        assert format_number("8.41", "comma_decimal", "en") == "8.4"
+
+    def test_decimal_comma_swaps_to_comma(self) -> None:
+        # German style: "8.41" → "8,4".
+        assert format_number("8.41", "decimal_comma", "de") == "8,4"
+
+    def test_space_comma_swaps_to_comma(self) -> None:
+        # French style: decimal separator is ",".
+        assert format_number("8.41", "space_comma", "fr") == "8,4"
+
+    def test_quote_decimal_preserves_dot(self) -> None:
+        # Swiss German style: decimal separator is ".".
+        assert format_number("8.41", "quote_decimal", "de-CH") == "8.4"
+
+    def test_none_format_no_grouping(self) -> None:
+        # No formatting: keep dot decimal, no grouping.
+        assert format_number("1234.56", "none", "en") == "1234.6"
+
+    def test_thousands_grouping_comma_decimal(self) -> None:
+        # 1,234.56 for US style.
+        assert format_number("1234.56", "comma_decimal", "en") == "1,234.6"
+
+    def test_thousands_grouping_decimal_comma(self) -> None:
+        # 1.234,56 for German style.
+        assert format_number("1234.56", "decimal_comma", "de") == "1.234,6"
+
+    def test_thousands_grouping_space_comma(self) -> None:
+        # French: narrow non-breaking space + comma decimal.
+        result = format_number("1234.56", "space_comma", "fr")
+        assert result == "1 234,6"
+
+    def test_thousands_grouping_quote_decimal(self) -> None:
+        # Swiss: apostrophe thousands + dot decimal.
+        assert format_number("1234.56", "quote_decimal", "de-CH") == "1'234.6"
+
+    def test_decimal_places_capped_at_one(self) -> None:
+        # Values with more than 1 decimal place are capped at 1 —
+        # e-ink displays are small and extra precision is noise.
+        assert format_number("8.410", "decimal_comma", "de") == "8,4"
+        assert format_number("15.600000", "decimal_comma", "de") == "15,6"
+
+    def test_language_de_inferred(self) -> None:
+        # "language" + "de" → decimal_comma.
+        assert format_number("8.41", "language", "de") == "8,4"
+
+    def test_language_en_inferred(self) -> None:
+        # "language" + "en" → comma_decimal (dot decimal, no change for small
+        # values without thousands).
+        assert format_number("8.41", "language", "en") == "8.4"
+
+    def test_negative_value(self) -> None:
+        # Negative numbers should preserve the minus sign.
+        assert format_number("-8.41", "decimal_comma", "de") == "-8,4"
+
+
+class TestLocaleFormattingInWidgets:
+    """Verify that locale number format is applied in SVG output."""
+
+    _DEFAULTS: ClassVar[dict[str, object]] = {
+        "width": 400,
+        "height": 100,
+        "number_format": "comma_decimal",
+        "language": "en",
+    }
+
+    def _config(self, **overrides: object) -> dict[str, object]:
+        return make_config(self._DEFAULTS, **overrides)
+
+    def test_entity_widget_decimal_comma(self) -> None:
+        # Entity widget with German locale must render comma decimal.
+        widget = {
+            "type": "entity",
+            "entity": "sensor.humidity",
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {"unit_of_measurement": "g/m³"},
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8,4" in svg
+        assert "8.41" not in svg
+
+    def test_entity_widget_comma_decimal(self) -> None:
+        # Entity widget with US locale must keep dot decimal.
+        widget = {
+            "type": "entity",
+            "entity": "sensor.humidity",
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {"unit_of_measurement": "g/m³"},
+                }
+            },
+            number_format="comma_decimal",
+            language="en",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8.4" in svg
+
+    def test_sensor_row_decimal_comma(self) -> None:
+        # Sensor row secondary text must be formatted for German locale.
+        widget = {
+            "type": "sensor_rows",
+            "entities": ["sensor.humidity"],
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {
+                        "unit_of_measurement": "g/m³",
+                        "friendly_name": "Humidity",
+                    },
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8,4" in svg
+
+    def test_non_numeric_state_unchanged(self) -> None:
+        # "unavailable" should not be mangled by format_number.
+        widget = {
+            "type": "entity",
+            "entity": "sensor.humidity",
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "unavailable",
+                    "attributes": {},
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "unavailable" in svg
+
+    def test_tile_widget_decimal_comma(self) -> None:
+        # Tile secondary text must use comma decimal for German locale.
+        widget = {
+            "type": "tile",
+            "entity": "sensor.humidity",
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {"unit_of_measurement": "g/m³"},
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8,4" in svg
+        assert "8.41" not in svg
+
+    def test_heading_badge_decimal_comma(self) -> None:
+        # Heading badge state must use comma decimal for German locale.
+        widget = {
+            "type": "heading",
+            "heading": "Room",
+            "badges": ["sensor.humidity"],
+            "w": 400,
+            "h": 56,
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {"unit_of_measurement": "g/m³"},
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8,4" in svg
+        assert "8.41" not in svg
+
+
+    def test_weather_decimal_comma(self) -> None:
+        # Weather detail values must use dot-thousands for German locale.
+        # Pressure 1013 → "1.013" with decimal_comma thousands separator.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+        }
+        config = self._config(
+            width=600,
+            height=400,
+            states=MOCK_WEATHER_STATE,
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "1.013" in svg

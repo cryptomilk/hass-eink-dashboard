@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-from . import _fetch_forecasts
+from . import _async_get_number_format, _fetch_forecasts
 from .battery import resolve_battery_level
 from .const import (
     DEFAULT_CONTRAST,
@@ -206,6 +206,9 @@ class EinkDashboardImage(ImageEntity):
             async with self._refresh_lock:
                 states = self._build_states()
                 await self._async_fetch_forecasts(states)
+                number_format, language = await _async_get_number_format(
+                    self.hass
+                )
                 config = {
                     "width": self._entry.options.get("width", DEFAULT_WIDTH),
                     "height": self._entry.options.get(
@@ -224,6 +227,8 @@ class EinkDashboardImage(ImageEntity):
                     "contrast": self._entry.options.get(
                         "contrast", DEFAULT_CONTRAST
                     ),
+                    "number_format": number_format,
+                    "language": language,
                     "states": states,
                 }
                 level, is_charging = resolve_battery_level(
