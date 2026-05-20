@@ -6942,6 +6942,8 @@ class TestRenderSensor:
         }
         svg = render_widget_svg(widget, self._config(states=states))
         assert "<svg" in svg
+        # Two numeric entries survive filtering → polyline is rendered.
+        assert "<polyline" in svg
 
     def test_sensor_graph_all_non_numeric_no_crash(self) -> None:
         # When every history entry is non-numeric the renderer must not
@@ -7019,9 +7021,9 @@ class TestRenderSensor:
         fill_hex = color_to_hex(COLOR_LIGHT_GRAY)
         assert fill_hex in svg
 
-    def test_sensor_graph_2level_no_fill(self) -> None:
-        # At grayscale_levels=2, the light-gray fill area is suppressed
-        # for maximum contrast on 2-level e-ink displays.
+    def test_sensor_graph_2level_fill_present(self) -> None:
+        # At grayscale_levels=2 the fill polygon is rendered; Floyd-Steinberg
+        # dithering in the optimize pipeline converts it to a dot pattern.
         widget = {
             "type": "sensor",
             "x": 0,
@@ -7039,13 +7041,16 @@ class TestRenderSensor:
             ),
         )
         fill_hex = color_to_hex(COLOR_LIGHT_GRAY)
-        assert fill_hex not in svg
+        assert fill_hex in svg
 
     def test_sensor_graph_2level_stroke_widened(self) -> None:
         # On a 2-level display the graph polyline stroke-width must be
-        # 3× m.border to prevent dithering into dot patterns.
+        # 2× m.border to keep the line readable without being too thick.
+        # With graph="line" the graph occupies the bottom DEFAULT_ROW_H,
+        # so entity_h = h - DEFAULT_ROW_H, and header_h = 40% of that.
         h = 3 * DEFAULT_ROW_H
-        header_h = round(h * 0.40)
+        entity_h = h - DEFAULT_ROW_H
+        header_h = round(entity_h * 0.40)
         m = _compute_metrics(header_h)
         widget = {
             "type": "sensor",
@@ -7063,10 +7068,10 @@ class TestRenderSensor:
                 grayscale_levels=2,
             ),
         )
-        expected_sw = m.border * 3
+        expected_sw = m.border * 2
         assert f'stroke-width="{expected_sw}"' in svg, (
             f"2-level graph stroke-width should be {expected_sw}"
-            f" (3 × m.border={m.border})"
+            f" (2 × m.border={m.border})"
         )
 
     def test_sensor_graph_limits(self) -> None:

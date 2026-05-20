@@ -22,7 +22,7 @@ from collections.abc import Callable
 from dataclasses import fields as dc_fields
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     from .render import WidgetMetrics
@@ -2443,47 +2443,42 @@ def _build_heading_context(
     }
 
 
-def _build_entity_context(
+def _entity_info_context(
     widget: Widget,
     config: DisplayConfig,
-) -> dict[str, object]:
-    """Build Jinja2 template context for the entity widget.
+    section_h: int,
+    svg_w: int,
+    svg_h: int,
+    *,
+    attribute: str | None = None,
+) -> dict[str, object] | None:
+    """Build shared icon/name/value/unit context for entity-like widgets.
 
-    Renders a two-section card: a header row (entity name on the
-    left, optional icon on the right) and an info section below
-    (large state value with optional unit).  Mirrors HA's Entity
-    card (``hui-entity-card.ts``).
-
-    Icon style controls circle rendering, with automatic resolution
-    based on entity state when ``icon_style`` is omitted:
-
-    - ``"filled"`` — gray-filled circle (default for active states
-      when ``grayscale_levels > 2``).
-    - ``"outlined"`` — white circle with black stroke (default for
-      inactive states and all 2-level displays).
-    - ``"none"`` — no circle; icon glyph rendered without decoration.
+    Handles the common header + info section layout shared by the
+    Entity and Sensor widget builders.  Returns ``None`` when the
+    entity is missing from the state dict; callers emit a white-canvas
+    fallback in that case.
 
     Args:
-        widget: Widget config dict.  Recognised keys:
-            ``entity`` (HA entity ID, required),
-            ``name`` (display name override),
-            ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
-            ``attribute`` (attribute key to show as value instead of
-            state),
-            ``unit`` (unit string override),
-            ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``),
-            ``card_style``, ``x``, ``w``, ``h``.
-        config: Display config with ``width``, ``states``, and
+        widget: Widget config dict.  Recognised keys: ``entity``,
+            ``name``, ``icon``, ``unit``, ``icon_style``,
+            ``card_style``.
+        config: Display config with ``states`` and
             ``grayscale_levels``.
+        section_h: Height of the entity info section in pixels.
+            Entity widget passes ``svg_h``; Sensor widget passes
+            ``entity_h`` (svg_h minus graph_h).
+        svg_w: Full widget width in pixels.
+        svg_h: Full widget height in pixels.
+        attribute: Optional HA attribute key.  When set, the
+            attribute value is shown instead of the entity state,
+            and automatic ``unit_of_measurement`` is suppressed.
+            Only the Entity widget passes a non-None value here.
 
     Returns:
-        Template context dict consumed by ``entity.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False,
-        **_color_context()}`` when the entity is missing.
-        Full context includes widget dimensions, card style,
-        metrics, colors, icon geometry, header text, and info
-        section value/unit.
+        Template context dict with icon geometry, header text, info
+        section value/unit, card style, metrics, and colors.
+        Returns ``None`` when the entity is missing from states.
     """
     from .render import (
         _compute_metrics,
@@ -2492,12 +2487,9 @@ def _build_entity_context(
         color_to_hex,
     )
 
-    x = widget.get("x", PADDING)
-    svg_w = _widget_dim(widget, "w", config["width"] - x)
     entity_id: str = widget.get("entity", "")
     name_override = widget.get("name")
     icon_override = widget.get("icon")
-    attribute: str | None = widget.get("attribute")
     unit_override = widget.get("unit")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -2505,19 +2497,13 @@ def _build_entity_context(
     grayscale_levels = config.get("grayscale_levels", 16)
 
     state = states.get(entity_id) if entity_id else None
-    colors = _color_context()
     if state is None:
-        return {
-            "w": svg_w,
-            "h": _widget_dim(widget, "h", 2 * DEFAULT_ROW_H),
-            "has_entity": False,
-            **colors,
-        }
+        return None
 
-    svg_h = _widget_dim(widget, "h", 2 * DEFAULT_ROW_H)
-    # Header takes 40% of height; info section takes the rest.
-    header_h = round(svg_h * 0.40)
-    info_h = svg_h - header_h
+    colors = _color_context()
+    # Header takes 40% of section_h; info section takes the rest.
+    header_h = round(section_h * 0.40)
+    info_h = section_h - header_h
     # Metrics derived from header height — icon and name live in
     # the header row, so proportions (icon size, padding, font)
     # should scale with that section, not the full widget.
@@ -2589,7 +2575,7 @@ def _build_entity_context(
 
     icon_outline = resolved_style == "outlined"
     icon_no_circle = resolved_style == "none"
-    # Widen the outline stroke on 2-level displays to avoid dithering.
+    # Widen outline stroke on 2-level displays to avoid dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
     icon_fill = color_to_hex(COLOR_GRAY)
     icon_color = (
@@ -2614,7 +2600,7 @@ def _build_entity_context(
 
     # Value: left-aligned, baseline at ~65% of the info section so
     # the value and unit share an alphabetic baseline (HA style).
-    value_font_sz = max(10, round(svg_h * 0.28))
+    value_font_sz = max(10, round(section_h * 0.28))
     value_x = x_off + lpad
     value_y = header_h + round(info_h * 0.65)
 
@@ -2663,6 +2649,65 @@ def _build_entity_context(
         "unit_y": value_y,
         "unit_font_sz": unit_font_sz,
     }
+
+
+def _build_entity_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the entity widget.
+
+    Renders a two-section card: a header row (entity name on the
+    left, optional icon on the right) and an info section below
+    (large state value with optional unit).  Mirrors HA's Entity
+    card (``hui-entity-card.ts``).
+
+    Icon style controls circle rendering, with automatic resolution
+    based on entity state when ``icon_style`` is omitted:
+
+    - ``"filled"`` — gray-filled circle (default for active states
+      when ``grayscale_levels > 2``).
+    - ``"outlined"`` — white circle with black stroke (default for
+      inactive states and all 2-level displays).
+    - ``"none"`` — no circle; icon glyph rendered without decoration.
+
+    Args:
+        widget: Widget config dict.  Recognised keys:
+            ``entity`` (HA entity ID, required),
+            ``name`` (display name override),
+            ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
+            ``attribute`` (attribute key to show as value instead of
+            state),
+            ``unit`` (unit string override),
+            ``icon_style`` (``"filled"`` / ``"outlined"`` /
+            ``"none"``),
+            ``card_style``, ``x``, ``w``, ``h``.
+        config: Display config with ``width``, ``states``, and
+            ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by ``entity.svg.j2``.
+        Returns ``{"w": …, "h": …, "has_entity": False,
+        **_color_context()}`` when the entity is missing.
+        Full context includes widget dimensions, card style,
+        metrics, colors, icon geometry, header text, and info
+        section value/unit.
+    """
+    x = widget.get("x", PADDING)
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    svg_h = _widget_dim(widget, "h", 2 * DEFAULT_ROW_H)
+    attribute: str | None = widget.get("attribute")
+    ctx = _entity_info_context(
+        widget, config, svg_h, svg_w, svg_h, attribute=attribute
+    )
+    if ctx is None:
+        return {
+            "w": svg_w,
+            "h": svg_h,
+            "has_entity": False,
+            **_color_context(),
+        }
+    return ctx
 
 
 def _build_entities_context(
@@ -2968,11 +3013,202 @@ def _build_entities_context(
     }
 
 
+def _build_sensor_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the sensor widget.
+
+    Renders a header row (entity name on the left, optional icon on
+    the right), an info section (large state value with unit), and an
+    optional history sparkline graph below.  Mirrors HA's Sensor card.
+
+    Icon style follows the same auto-resolution logic as the Entity
+    widget: active states → filled circle; inactive or 2-level
+    displays → outlined circle; ``icon_style="none"`` hides the
+    circle entirely.
+
+    Without ``graph="line"``, the default height is
+    ``2 * DEFAULT_ROW_H``.  With ``graph="line"``, the default is
+    ``3 * DEFAULT_ROW_H`` (entity section + graph row).  History
+    data is read from ``states[entity_id]["history"]``, injected by
+    ``_fetch_history()`` in ``__init__.py``.
+
+    Args:
+        widget: Widget config dict.  Recognised keys:
+            ``entity`` (HA entity ID, required),
+            ``name`` (display name override),
+            ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
+            ``unit`` (unit string override),
+            ``icon_style`` (``"filled"`` / ``"outlined"`` /
+            ``"none"``),
+            ``graph`` (``"line"`` to enable history sparkline),
+            ``hours_to_show`` (history window in hours; default 24),
+            ``detail`` (``1`` for downsampled ~24 pts, ``2`` for
+            full resolution; default 1),
+            ``limits`` (dict with optional ``"min"``/``"max"``
+            keys to fix the Y-axis range),
+            ``card_style``, ``x``, ``w``, ``h``.
+        config: Display config with ``width``, ``states``, and
+            ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by ``sensor.svg.j2``.
+        Returns ``{"w": …, "h": …, "has_entity": False,
+        **_color_context()}`` when the entity is missing.
+        Full context includes widget dimensions, card style,
+        metrics, colors, icon geometry, header text, info section
+        value/unit, and graph polyline/fill data.
+    """
+    from .render import DEFAULT_METRICS
+
+    x = widget.get("x", PADDING)
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    graph: str | None = widget.get("graph")
+    detail: int = int(float(widget.get("detail", 1)))
+    hours_to_show: int = int(float(widget.get("hours_to_show", 24)))
+    limits: dict[str, float] | None = widget.get("limits")
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    has_graph = graph == "line"
+    # Default height: 3 rows with graph section, 2 rows without.
+    default_h = 3 * DEFAULT_ROW_H if has_graph else 2 * DEFAULT_ROW_H
+    svg_h = _widget_dim(widget, "h", default_h)
+    # Graph occupies the bottom DEFAULT_ROW_H pixels; entity section
+    # fills the rest.
+    graph_h = DEFAULT_ROW_H if has_graph else 0
+    entity_h = max(1, svg_h - graph_h)
+
+    ctx = _entity_info_context(widget, config, entity_h, svg_w, svg_h)
+    if ctx is None:
+        return {
+            "w": svg_w,
+            "h": svg_h,
+            "has_entity": False,
+            **_color_context(),
+        }
+
+    # name_x = x_off + lpad (left content edge); icon_cx + icon_r =
+    # svg_w - r_inset - rpad (right content edge without icon overlap).
+    gx1: int = cast("int", ctx["name_x"])
+    gx2: int = cast("int", ctx["icon_cx"]) + cast("int", ctx["icon_r"])
+
+    # --- Graph section ---
+    polyline_points = ""
+    fill_points = ""
+    # Graph stroke uses DEFAULT_METRICS (fixed at DEFAULT_ROW_H) because
+    # the graph zone is always DEFAULT_ROW_H pixels tall regardless of
+    # entity section height.  Widened 2× on 2-level displays.
+    graph_stroke_w = (
+        DEFAULT_METRICS.border * 2
+        if grayscale_levels <= 2
+        else DEFAULT_METRICS.border
+    )
+
+    if has_graph:
+        entity_id: str = widget.get("entity", "")
+        state = config.get("states", {}).get(entity_id, {})
+        history: list[dict[str, object]] = state.get("history", [])
+        # Apply hours_to_show window: keep only entries whose timestamp
+        # falls within the most recent hours_to_show hours.
+        if history:
+            t_latest = max(float(str(e.get("lu", 0))) for e in history)
+            cutoff = t_latest - hours_to_show * 3600
+            history = [
+                e for e in history if float(str(e.get("lu", 0))) > cutoff
+            ]
+        # Filter entries to numeric values only; skip unavailable /
+        # unknown / on/off states so only plottable data remains.
+        numeric: list[tuple[float, float]] = []
+        for entry in history:
+            s = entry.get("s", "")
+            lu = entry.get("lu", 0.0)
+            try:
+                val = float(str(s))
+                numeric.append((float(str(lu)), val))
+            except (ValueError, TypeError):
+                continue
+
+        if len(numeric) >= 2:
+            # Downsample to ~24 points for detail=1 to avoid
+            # pixel-level noise on small sparklines.
+            if detail <= 1 and len(numeric) > 24:
+                step = len(numeric) / 24
+                indices = {round(i * step) for i in range(24)}
+                indices.add(len(numeric) - 1)
+                numeric = [
+                    numeric[i] for i in sorted(indices) if i < len(numeric)
+                ]
+
+            # Y range: explicit limits override auto min/max.
+            # isinstance guard rejects null or string values gracefully.
+            values = [v for _, v in numeric]
+            y_min = (
+                float(limits["min"])
+                if limits
+                and "min" in limits
+                and isinstance(limits["min"], (int, float))
+                else min(values)
+            )
+            y_max = (
+                float(limits["max"])
+                if limits
+                and "max" in limits
+                and isinstance(limits["max"], (int, float))
+                else max(values)
+            )
+            if y_max == y_min:
+                # Flat line: add a unit pad so the polyline is
+                # centred rather than collapsed to the bottom edge.
+                y_max += 1.0
+
+            # Inset by 2× stroke width so the polyline stays
+            # inside the widget bounds (wider on 2-level displays).
+            margin = graph_stroke_w * 2
+            gy1 = entity_h + margin
+            gy2 = svg_h - margin
+
+            timestamps = [t for t, _ in numeric]
+            t_min = min(timestamps)
+            t_range = max(max(timestamps) - t_min, 1.0)
+            y_range = y_max - y_min
+
+            # Map (timestamp, value) → (x, y) pixel; Y is inverted.
+            pts = [
+                (
+                    round(gx1 + (t - t_min) / t_range * (gx2 - gx1)),
+                    round(gy2 - (v - y_min) / y_range * (gy2 - gy1)),
+                )
+                for t, v in numeric
+            ]
+            polyline_points = " ".join(f"{px},{py}" for px, py in pts)
+            # Fill polygon rendered on all display types; on 2-level
+            # displays Floyd-Steinberg dithering in optimize.py
+            # converts the light-gray fill to a dot pattern.
+            bottom = gy2
+            fill_pts = [
+                *pts,
+                (pts[-1][0], bottom),
+                (pts[0][0], bottom),
+            ]
+            fill_points = " ".join(f"{px},{py}" for px, py in fill_pts)
+
+    return {
+        **ctx,
+        # Graph.
+        "has_graph": has_graph,
+        "polyline_points": polyline_points,
+        "fill_points": fill_points,
+        "graph_stroke_w": graph_stroke_w,
+    }
+
+
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
     WidgetType.DEVICE_BATTERY: _build_device_battery_context,
     WidgetType.ENTITIES: _build_entities_context,
     WidgetType.ENTITY: _build_entity_context,
     WidgetType.HEADING: _build_heading_context,
+    WidgetType.SENSOR: _build_sensor_context,
     WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
     WidgetType.SEPARATOR: _build_separator_context,
     WidgetType.STATUS_ICONS: _build_status_icons_context,
