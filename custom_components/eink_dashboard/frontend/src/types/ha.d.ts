@@ -572,6 +572,54 @@ export interface HeadingWidget extends WidgetBase {
 }
 
 /**
+ * One row entry in an Entities widget.
+ *
+ * Accepts three shapes:
+ * - A plain entity ID string (shorthand for an entity row).
+ * - ``{ entity, name?, icon? }`` — entity row with overrides.
+ * - ``{ type: "divider" }`` — horizontal separator line.
+ * - ``{ type: "section", label? }`` — sub-heading text row.
+ */
+export type EntitiesRowConfig =
+  | string
+  | { entity: string; name?: string; icon?: string }
+  | { type: "divider" }
+  | { type: "section"; label?: string };
+
+/**
+ * Multi-entity list card modelled after HA's Entities card
+ * (``hui-entities-card.ts``).
+ *
+ * Renders each entry in the ``entities`` list as a row: entity
+ * rows show an icon circle, primary name, and right-aligned state
+ * value; divider rows show a gray horizontal line; section rows
+ * show a gray sub-heading label.
+ */
+export interface EntitiesWidget extends WidgetBase {
+  type: "entities";
+  /**
+   * Ordered list of row configs (entity, divider, or section).
+   *
+   * @remarks The editor UI uses a flat entity-ID picker that only
+   * supports plain entity rows.  Divider and section rows must be
+   * configured via YAML.
+   */
+  entities?: EntitiesRowConfig[];
+  /** Optional label rendered above the card area. */
+  title?: string;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /**
+   * Icon circle rendering mode applied to all entity rows.
+   * - ``"filled"`` — gray-filled circle (default for active states).
+   * - ``"outlined"`` — white circle with black border (default for
+   *   inactive states and 2-level displays).
+   * - ``"none"`` — no circle; icon glyph rendered without decoration.
+   */
+  icon_style?: IconStyle;
+}
+
+/**
  * Single-entity display with large state value, modelled after
  * HA's Entity card (``hui-entity-card.ts``).
  */
@@ -612,6 +660,7 @@ export type Widget =
   | WasteScheduleWidget
   | TileWidget
   | HeadingWidget
+  | EntitiesWidget
   | EntityWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */

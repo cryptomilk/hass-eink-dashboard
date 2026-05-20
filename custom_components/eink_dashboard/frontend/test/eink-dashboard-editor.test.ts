@@ -48,12 +48,13 @@ describe("WIDGET_TYPES", () => {
     "separator",
     "weather",
     "tile",
+    "entities",
     "entity",
     "device_battery",
     "waste_schedule",
   ];
 
-  it("has all 7 widget types", () => {
+  it("has all 8 widget types", () => {
     // text is deprecated and removed from the picker; heading replaces it.
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
@@ -95,6 +96,7 @@ describe("SCHEMAS", () => {
     "separator",
     "weather",
     "tile",
+    "entities",
     "entity",
     "sensor_rows",
     "device_battery",
@@ -102,7 +104,7 @@ describe("SCHEMAS", () => {
     "waste_schedule",
   ];
 
-  it("has a schema builder for all 10 widget types", () => {
+  it("has a schema builder for all 11 widget types", () => {
     // text schema kept for backward-compat editing of existing configs.
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
@@ -291,6 +293,30 @@ describe("getSummary", () => {
 
   it("returns '(no entity)' for entity widget with no entity", () => {
     expect(getSummary({ type: "entity" })).toBe("(no entity)");
+  });
+
+  it("returns entity count for entities widget", () => {
+    // Entity rows (strings) are counted; dividers and sections are not.
+    expect(
+      getSummary({
+        type: "entities",
+        entities: [
+          "sensor.temperature",
+          "sensor.humidity",
+          { type: "divider" },
+        ],
+      })
+    ).toBe("2 entities");
+  });
+
+  it("includes title in entities summary when present", () => {
+    expect(
+      getSummary({
+        type: "entities",
+        title: "Climate",
+        entities: ["sensor.temperature"],
+      })
+    ).toBe("Climate — 1 entity");
   });
 });
 

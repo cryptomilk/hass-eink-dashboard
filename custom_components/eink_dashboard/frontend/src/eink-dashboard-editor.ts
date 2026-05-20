@@ -81,6 +81,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  entities: {
+    label: "Entities",
+    description: "Multi-entity list with icons and state values",
+    icon: "mdi:format-list-bulleted",
+    defaults: {
+      type: "entities",
+      x: 24,
+      y: 0,
+      w: 400,
+      h: 168,
+      entities: [],
+      card_style: DEFAULT_CARD_STYLE,
+      icon_style: DEFAULT_ICON_STYLE,
+    },
+  },
   entity: {
     label: "Entity",
     description: "Single entity with large value display",
@@ -591,6 +606,41 @@ export const SCHEMAS: Record<
     },
   ],
 
+  entities: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:format-list-bulleted",
+      schema: [
+        { name: "title", selector: { text: {} } },
+        {
+          name: "entities",
+          selector: { entity: { multiple: true } },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector(), iconStyleSelector()],
+    },
+  ],
+
   heading: (d) => [
     identitySection(),
     {
@@ -919,6 +969,13 @@ export function getSummary(widget: Widget): string {
   }
   if (t === "device_battery") {
     return "Device battery";
+  }
+  if (t === "entities") {
+    const title = widget.title ? `${widget.title} — ` : "";
+    const count = (widget.entities || []).filter(
+      (r) => typeof r === "string" || ("entity" in r && !("type" in r))
+    ).length;
+    return `${title}${count} entit${count === 1 ? "y" : "ies"}`;
   }
   if (t === "sensor_rows" || t === "status_icons") {
     const title = widget.title ? `${widget.title} — ` : "";
