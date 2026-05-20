@@ -185,6 +185,44 @@ class NumberFormat(StrEnum):
     """No grouping, dot decimal: 1234.56."""
 
 
+class DateFormat(StrEnum):
+    """Date formatting styles, mirroring HA's frontend DateFormat enum.
+
+    Used to control how date values are formatted in widget renderers.
+    ``LANGUAGE`` (the default) derives the format from the language
+    setting.
+    """
+
+    LANGUAGE = "language"
+    """Derive format from the language setting (default)."""
+    SYSTEM = "system"
+    """System locale."""
+    DMY = "DMY"
+    """Day-Month-Year (31/12/2026) — European style."""
+    MDY = "MDY"
+    """Month-Day-Year (12/31/2026) — US style."""
+    YMD = "YMD"
+    """Year-Month-Day (2026-12-31) — ISO/Asian style."""
+
+
+class TimeFormat(StrEnum):
+    """Time formatting styles, mirroring HA's frontend TimeFormat enum.
+
+    Used to control how time values are formatted in widget renderers.
+    ``LANGUAGE`` (the default) derives the format from the language
+    setting.
+    """
+
+    LANGUAGE = "language"
+    """Derive format from the language setting (default)."""
+    SYSTEM = "system"
+    """System locale."""
+    AM_PM = "12"
+    """12-hour clock with AM/PM (1:30 PM)."""
+    TWENTY_FOUR = "24"
+    """24-hour clock (13:30)."""
+
+
 class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 

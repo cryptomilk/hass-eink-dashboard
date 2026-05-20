@@ -1178,6 +1178,182 @@ class TestEinkDashboardOptionsFlow:
         assert result["step_id"] == "init"
 
 
+class TestLocaleSettingsOptionsFlow:
+    async def test_locale_settings_in_menu_no_webhooks(self) -> None:
+        # locale_settings must appear in the init menu.
+        flow = _make_options_flow({"webhook_urls": []})
+        result = await flow.async_step_init(None)
+
+        assert "locale_settings" in result["menu_options"]
+
+    async def test_locale_settings_in_menu_with_webhooks(self) -> None:
+        # locale_settings must appear in the menu when webhooks are set.
+        flow = _make_options_flow(
+            {"webhook_urls": [{"name": "T", "url": "https://x.com"}]}
+        )
+        result = await flow.async_step_init(None)
+
+        assert "locale_settings" in result["menu_options"]
+
+    async def test_locale_settings_shows_form(self) -> None:
+        # Step returns a form with the correct step_id.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(None)
+
+        assert result["type"] == "form"
+        assert result["step_id"] == "locale_settings"
+
+    async def test_locale_settings_stores_language_override(self) -> None:
+        # Submitting a language stores it; empty number_format is stripped.
+        flow = _make_options_flow({"width": 800, "height": 480})
+        result = await flow.async_step_locale_settings(
+            {"locale_language": "de", "locale_number_format": ""}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_language"] == "de"
+        assert "locale_number_format" not in result["data"]
+
+    async def test_locale_settings_stores_number_format_override(
+        self,
+    ) -> None:
+        # Submitting a number_format stores it; empty language is stripped.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "",
+                "locale_number_format": "decimal_comma",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_number_format"] == "decimal_comma"
+        assert "locale_language" not in result["data"]
+
+    async def test_locale_settings_stores_first_weekday_override(
+        self,
+    ) -> None:
+        # Submitting first_weekday stores it; other empty fields are stripped.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "",
+                "locale_number_format": "",
+                "locale_first_weekday": "sunday",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_first_weekday"] == "sunday"
+        assert "locale_language" not in result["data"]
+        assert "locale_number_format" not in result["data"]
+
+    async def test_locale_settings_stores_date_format_override(self) -> None:
+        # Submitting date_format stores it; empty time_format and other
+        # empty fields are stripped from the result data.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "",
+                "locale_number_format": "",
+                "locale_first_weekday": "",
+                "locale_date_format": "DMY",
+                "locale_time_format": "",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_date_format"] == "DMY"
+        assert "locale_time_format" not in result["data"]
+
+    async def test_locale_settings_stores_time_format_override(self) -> None:
+        # Submitting time_format stores it; empty date_format and other
+        # empty fields are stripped from the result data.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "",
+                "locale_number_format": "",
+                "locale_first_weekday": "",
+                "locale_date_format": "",
+                "locale_time_format": "24",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_time_format"] == "24"
+        assert "locale_date_format" not in result["data"]
+
+    async def test_locale_settings_stores_all_overrides(self) -> None:
+        # All five non-empty fields are stored when submitted together.
+        flow = _make_options_flow({})
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "fr",
+                "locale_number_format": "space_comma",
+                "locale_first_weekday": "monday",
+                "locale_date_format": "DMY",
+                "locale_time_format": "24",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["locale_language"] == "fr"
+        assert result["data"]["locale_number_format"] == "space_comma"
+        assert result["data"]["locale_first_weekday"] == "monday"
+        assert result["data"]["locale_date_format"] == "DMY"
+        assert result["data"]["locale_time_format"] == "24"
+
+    async def test_locale_settings_clears_existing_overrides(self) -> None:
+        # Submitting empty values removes previously stored override keys.
+        flow = _make_options_flow(
+            {
+                "locale_language": "de",
+                "locale_number_format": "decimal_comma",
+                "locale_first_weekday": "monday",
+                "locale_date_format": "DMY",
+                "locale_time_format": "24",
+            }
+        )
+        result = await flow.async_step_locale_settings(
+            {
+                "locale_language": "",
+                "locale_number_format": "",
+                "locale_first_weekday": "",
+                "locale_date_format": "",
+                "locale_time_format": "",
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert "locale_language" not in result["data"]
+        assert "locale_number_format" not in result["data"]
+        assert "locale_first_weekday" not in result["data"]
+        assert "locale_date_format" not in result["data"]
+        assert "locale_time_format" not in result["data"]
+
+    async def test_locale_settings_preserves_other_options(self) -> None:
+        # Saving locale settings must not drop device/display options.
+        flow = _make_options_flow(
+            {
+                "width": 758,
+                "height": 1024,
+                "update_interval": 60,
+                "webhook_urls": [],
+            }
+        )
+        result = await flow.async_step_locale_settings(
+            {"locale_language": "de"}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["width"] == 758
+        assert result["data"]["height"] == 1024
+        assert result["data"]["update_interval"] == 60
+        assert result["data"]["webhook_urls"] == []
+        assert result["data"]["locale_language"] == "de"
+
+
 class TestApplyScreenPortion:
     def test_full_returns_original_dimensions(self) -> None:
         # "full" leaves width and height unchanged.

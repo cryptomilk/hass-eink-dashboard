@@ -22,6 +22,8 @@ from homeassistant.helpers.selector import (
     AreaSelector,
     EntitySelector,
     EntitySelectorConfig,
+    LanguageSelector,
+    LanguageSelectorConfig,
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
@@ -41,11 +43,52 @@ from .const import (
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    DateFormat,
+    NumberFormat,
+    TimeFormat,
     apply_screen_portion,
     resolve_display,
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
+
+# Static option lists for the locale settings form.  Defined at module
+# level so they are not reconstructed on every call to
+# async_step_locale_settings.  Each list starts with "" meaning
+# "no override / use the owner's preference".
+_NF_OPTIONS = [
+    "",
+    NumberFormat.LANGUAGE,
+    NumberFormat.COMMA_DECIMAL,
+    NumberFormat.DECIMAL_COMMA,
+    NumberFormat.SPACE_COMMA,
+    NumberFormat.QUOTE_DECIMAL,
+    NumberFormat.NONE,
+]
+_FW_OPTIONS = [
+    "",
+    "language",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
+_DF_OPTIONS = [
+    "",
+    DateFormat.LANGUAGE,
+    DateFormat.DMY,
+    DateFormat.MDY,
+    DateFormat.YMD,
+]
+_TF_OPTIONS = [
+    "",
+    TimeFormat.LANGUAGE,
+    TimeFormat.AM_PM,
+    TimeFormat.TWENTY_FOUR,
+]
 
 
 def _is_valid_url(value: str) -> bool:
@@ -440,6 +483,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         menu_options: list[str] = [
             "device_settings",
             "display_settings",
+            "locale_settings",
             "add_webhook",
             "copy_card_yaml",
             "copy_dashboard_yaml",
@@ -448,6 +492,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             menu_options = [
                 "device_settings",
                 "display_settings",
+                "locale_settings",
                 "add_webhook",
                 "remove_webhook",
                 "copy_card_yaml",
@@ -784,6 +829,89 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="custom_resolution",
             data_schema=_STEP_CUSTOM_RESOLUTION_SCHEMA,
+        )
+
+    async def async_step_locale_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Override locale settings for this display.
+
+        All fields are optional.  An empty value means "use the Home
+        Assistant owner's preference" (i.e. no per-device override).
+        Non-empty values are stored in ``entry.options`` under the
+        ``locale_language``, ``locale_number_format``,
+        ``locale_first_weekday``, ``locale_date_format``, and
+        ``locale_time_format`` keys and applied at render time
+        before the owner's preferences.
+        """
+        opts = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Optional(
+                    "locale_language",
+                    description={
+                        "suggested_value": opts.get("locale_language", "")
+                    },
+                ): LanguageSelector(LanguageSelectorConfig(native_name=True)),
+                vol.Optional(
+                    "locale_number_format",
+                    default=opts.get("locale_number_format", ""),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=_NF_OPTIONS,
+                        translation_key="locale_number_format",
+                    )
+                ),
+                vol.Optional(
+                    "locale_first_weekday",
+                    default=opts.get("locale_first_weekday", ""),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=_FW_OPTIONS,
+                        translation_key="locale_first_weekday",
+                    )
+                ),
+                vol.Optional(
+                    "locale_date_format",
+                    default=opts.get("locale_date_format", ""),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=_DF_OPTIONS,
+                        translation_key="locale_date_format",
+                    )
+                ),
+                vol.Optional(
+                    "locale_time_format",
+                    default=opts.get("locale_time_format", ""),
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=_TF_OPTIONS,
+                        translation_key="locale_time_format",
+                    )
+                ),
+            }
+        )
+        if user_input is not None:
+            validated = schema(user_input)
+            new_opts = deepcopy(dict(opts))
+            # Store non-empty overrides; remove the key entirely when
+            # cleared so absent keys are treated as "no override".
+            for key in (
+                "locale_language",
+                "locale_number_format",
+                "locale_first_weekday",
+                "locale_date_format",
+                "locale_time_format",
+            ):
+                value = validated.get(key, "")
+                if value:
+                    new_opts[key] = value
+                else:
+                    new_opts.pop(key, None)
+            return self.async_create_entry(data=new_opts)
+        return self.async_show_form(
+            step_id="locale_settings",
+            data_schema=schema,
         )
 
     async def async_step_display_settings(

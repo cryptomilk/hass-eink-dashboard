@@ -66,6 +66,7 @@
         "menu_options": {
           "device_settings": "Device settings",
           "display_settings": "Display settings",
+          "locale_settings": "Locale settings",
           "add_webhook": "Add push target",
           "remove_webhook": "Remove push target",
           "copy_card_yaml": "Copy card YAML",
@@ -153,6 +154,24 @@
           "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
           "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
         }
+      },
+      "locale_settings": {
+        "title": "Locale Settings",
+        "description": "Override the Home Assistant owner's locale preferences for this display. Leave fields empty to use the defaults.",
+        "data": {
+          "locale_language": "Language",
+          "locale_number_format": "Number format",
+          "locale_first_weekday": "First day of week",
+          "locale_date_format": "Date format",
+          "locale_time_format": "Time format"
+        },
+        "data_description": {
+          "locale_language": "Language for locale-dependent formatting. Leave empty to use the HA owner's language.",
+          "locale_number_format": "How numbers are formatted (decimal and thousands separators). Leave empty to use the HA owner's preference.",
+          "locale_first_weekday": "First day of the week for calendar and weather displays. Leave empty to use the HA owner's preference.",
+          "locale_date_format": "How dates are formatted. Leave empty to use the HA owner's preference.",
+          "locale_time_format": "12-hour or 24-hour clock. Leave empty to use the HA owner's preference."
+        }
       }
     },
     "error": {
@@ -177,6 +196,47 @@
       "options": {
         "portrait": "Portrait",
         "landscape": "Landscape"
+      }
+    },
+    "locale_number_format": {
+      "options": {
+        "": "Default (HA owner preference)",
+        "language": "Automatic (from language)",
+        "comma_decimal": "1,234.56 (US/UK)",
+        "decimal_comma": "1.234,56 (DE/ES/IT)",
+        "space_comma": "1 234,56 (FR/SE)",
+        "quote_decimal": "1'234.56 (Swiss)",
+        "none": "No grouping (1234.56)"
+      }
+    },
+    "locale_first_weekday": {
+      "options": {
+        "": "Default (HA owner preference)",
+        "language": "Automatic (from language)",
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "sunday": "Sunday"
+      }
+    },
+    "locale_date_format": {
+      "options": {
+        "": "Default (HA owner preference)",
+        "language": "Automatic (from language)",
+        "DMY": "Day-Month-Year (31/12/2026)",
+        "MDY": "Month-Day-Year (12/31/2026)",
+        "YMD": "Year-Month-Day (2026-12-31)"
+      }
+    },
+    "locale_time_format": {
+      "options": {
+        "": "Default (HA owner preference)",
+        "language": "Automatic (from language)",
+        "12": "12-hour (1:30 PM)",
+        "24": "24-hour (13:30)"
       }
     }
   }

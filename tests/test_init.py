@@ -3,12 +3,13 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.eink_dashboard import (
+    _async_get_locale,
     async_setup,
     async_setup_entry,
     async_unload_entry,
 )
 from custom_components.eink_dashboard.battery import resolve_battery_level
-from custom_components.eink_dashboard.const import DOMAIN
+from custom_components.eink_dashboard.const import DOMAIN, NumberFormat
 from custom_components.eink_dashboard.http import (
     EinkLayoutView,
     EinkPublicImageView,
@@ -385,3 +386,175 @@ class TestAsyncUnloadEntry:
 
         assert result is False
         assert entry.entry_id in hass.data[DOMAIN]
+
+
+_FRONTEND_STORAGE = (
+    "homeassistant.components.frontend.storage.async_user_store"
+)
+
+
+def _make_hass_with_locale(
+    number_format: str = "language",
+    language: str = "en",
+    first_weekday: str = "language",
+    date_format: str = "language",
+    time_format: str = "language",
+) -> tuple[MagicMock, AsyncMock]:
+    """Return (hass, async_user_store_mock) with the given locale preferences.
+
+    Returns a hass mock whose owner has the given locale preferences and an
+    AsyncMock for ``async_user_store`` so callers can patch it via
+    ``_FRONTEND_STORAGE``.
+    """
+    hass = MagicMock()
+    hass.config.language = "en"
+    locale_data = {
+        "number_format": number_format,
+        "language": language,
+        "first_weekday": first_weekday,
+        "date_format": date_format,
+        "time_format": time_format,
+    }
+    store = MagicMock()
+    store.data = {"language": locale_data}
+    owner = MagicMock()
+    hass.auth.async_get_owner = AsyncMock(return_value=owner)
+    user_store_mock = AsyncMock(return_value=store)
+    return hass, user_store_mock
+
+
+class TestAsyncGetLocale:
+    async def test_returns_owner_locale_with_no_options(self) -> None:
+        # Without options, owner's locale is returned unchanged.
+        hass, user_store_mock = _make_hass_with_locale(
+            number_format="decimal_comma",
+            language="de",
+            first_weekday="monday",
+            date_format="DMY",
+            time_format="24",
+        )
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            nf, lang, fw, df, tf = await _async_get_locale(hass, {})
+
+        assert nf == "decimal_comma"
+        assert lang == "de"
+        assert fw == "monday"
+        assert df == "DMY"
+        assert tf == "24"
+
+    async def test_language_override_applied(self) -> None:
+        # locale_language in options overrides the owner's language.
+        hass, user_store_mock = _make_hass_with_locale(language="en")
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            _nf, lang, _fw, _df, _tf = await _async_get_locale(
+                hass, {"locale_language": "de"}
+            )
+
+        assert lang == "de"
+
+    async def test_number_format_override_applied(self) -> None:
+        # locale_number_format in options overrides the owner's number_format.
+        hass, user_store_mock = _make_hass_with_locale(
+            number_format="language"
+        )
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            nf, _lang, _fw, _df, _tf = await _async_get_locale(
+                hass, {"locale_number_format": "space_comma"}
+            )
+
+        assert nf == "space_comma"
+
+    async def test_first_weekday_override_applied(self) -> None:
+        # locale_first_weekday in options overrides the owner's preference.
+        hass, user_store_mock = _make_hass_with_locale(
+            first_weekday="language"
+        )
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            _nf, _lang, fw, _df, _tf = await _async_get_locale(
+                hass, {"locale_first_weekday": "sunday"}
+            )
+
+        assert fw == "sunday"
+
+    async def test_date_format_override_applied(self) -> None:
+        # locale_date_format in options overrides the owner's preference.
+        hass, user_store_mock = _make_hass_with_locale(date_format="language")
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            _nf, _lang, _fw, df, _tf = await _async_get_locale(
+                hass, {"locale_date_format": "DMY"}
+            )
+
+        assert df == "DMY"
+
+    async def test_time_format_override_applied(self) -> None:
+        # locale_time_format in options overrides the owner's preference.
+        hass, user_store_mock = _make_hass_with_locale(time_format="language")
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            _nf, _lang, _fw, _df, tf = await _async_get_locale(
+                hass, {"locale_time_format": "24"}
+            )
+
+        assert tf == "24"
+
+    async def test_empty_string_overrides_are_ignored(self) -> None:
+        # Empty string values in options do not override owner locale.
+        hass, user_store_mock = _make_hass_with_locale(
+            number_format="decimal_comma",
+            language="de",
+            first_weekday="monday",
+            date_format="DMY",
+            time_format="24",
+        )
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            nf, lang, fw, df, tf = await _async_get_locale(
+                hass,
+                {
+                    "locale_language": "",
+                    "locale_number_format": "",
+                    "locale_first_weekday": "",
+                    "locale_date_format": "",
+                    "locale_time_format": "",
+                },
+            )
+
+        assert nf == "decimal_comma"
+        assert lang == "de"
+        assert fw == "monday"
+        assert df == "DMY"
+        assert tf == "24"
+
+    async def test_none_options_returns_owner_locale(self) -> None:
+        # options=None behaves the same as no options (backward compat).
+        hass, user_store_mock = _make_hass_with_locale(
+            number_format="space_comma",
+            language="fr",
+            first_weekday="monday",
+            date_format="DMY",
+            time_format="24",
+        )
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            nf, lang, fw, df, tf = await _async_get_locale(hass, None)
+
+        assert nf == "space_comma"
+        assert lang == "fr"
+        assert fw == "monday"
+        assert df == "DMY"
+        assert tf == "24"
+
+    async def test_falls_back_when_no_owner(self) -> None:
+        # No owner → falls back to hass.config.language defaults.
+        hass = MagicMock()
+        hass.config.language = "en"
+        hass.auth.async_get_owner = AsyncMock(return_value=None)
+        store = MagicMock()
+        store.data = {}
+        user_store_mock = AsyncMock(return_value=store)
+
+        with patch(_FRONTEND_STORAGE, user_store_mock):
+            nf, lang, fw, df, tf = await _async_get_locale(hass, {})
+
+        assert nf == NumberFormat.LANGUAGE
+        assert lang == "en"
+        assert fw == "language"
+        assert df == "language"
+        assert tf == "language"

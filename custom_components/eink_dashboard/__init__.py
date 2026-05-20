@@ -16,6 +16,8 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
@@ -26,7 +28,9 @@ from .const import (
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    DateFormat,
     NumberFormat,
+    TimeFormat,
     WidgetType,
 )
 from .http import EinkLayoutView, EinkPublicImageView
@@ -72,48 +76,132 @@ async def _async_update_listener(
     _register_device(hass, entry)
 
 
-async def _async_get_number_format(
+async def _async_get_locale(
     hass: HomeAssistant,
-) -> tuple[str, str]:
-    """Return ``(number_format, language)`` for server-side rendering.
+    options: Mapping[str, Any] | None = None,
+) -> tuple[str, str, str, str, str]:
+    """Return locale settings for server-side rendering.
+
+    Returns a 5-tuple
+    ``(number_format, language, first_weekday, date_format,
+    time_format)``.
 
     Reads the owner's frontend locale preferences (the ``language``
     key stored via ``frontend/set_user_data``) and falls back to
     ``hass.config.language`` when the owner cannot be determined or
-    when the frontend component is not available.
+    when the frontend component is not available.  Per-device
+    overrides in ``options`` (``locale_number_format``,
+    ``locale_language``, ``locale_first_weekday``,
+    ``locale_date_format``, ``locale_time_format``) take precedence
+    over the owner's preferences when non-empty.
 
     Args:
         hass: Home Assistant instance.
+        options: Config entry options dict, used to apply per-device
+            locale overrides.  ``None`` means no overrides.
 
     Returns:
-        A ``(number_format, language)`` tuple suitable for passing
-        into a :class:`~render.DisplayConfig` dict.
-        ``number_format`` is a :class:`~const.NumberFormat` value;
-        ``language`` is a BCP 47 language tag.
+        A 5-tuple suitable for passing into a ``DisplayConfig`` dict:
+        ``number_format`` (a ``NumberFormat`` string value),
+        ``language`` (BCP 47 tag),
+        ``first_weekday`` (e.g. ``"monday"``),
+        ``date_format`` (a ``DateFormat`` string value),
+        ``time_format`` (a ``TimeFormat`` string value).
     """
     fallback_language = hass.config.language
+    number_format: str = NumberFormat.LANGUAGE
+    language: str = fallback_language
+    first_weekday: str = "language"
+    date_format: str = DateFormat.LANGUAGE
+    time_format: str = TimeFormat.LANGUAGE
     try:
         from homeassistant.components.frontend.storage import (
             async_user_store,
         )
     except ImportError:
-        return NumberFormat.LANGUAGE, fallback_language
-    try:
-        owner = await hass.auth.async_get_owner()
-        if owner is not None:
-            store = await async_user_store(hass, owner.id)
-            locale_data = store.data.get("language")
-            if isinstance(locale_data, dict):
-                nf = locale_data.get("number_format", NumberFormat.LANGUAGE)
-                lang = locale_data.get("language", fallback_language)
-                return str(nf), str(lang)
-    except (AttributeError, KeyError, TypeError) as exc:
-        # Owner lookup or store access failed — log and fall back.
-        _LOGGER.debug(
-            "Could not read owner locale from frontend storage: %s",
-            exc,
-        )
-    return NumberFormat.LANGUAGE, fallback_language
+        pass
+    else:
+        try:
+            owner = await hass.auth.async_get_owner()
+            if owner is not None:
+                store = await async_user_store(hass, owner.id)
+                locale_data = store.data.get("language")
+                if isinstance(locale_data, dict):
+                    number_format = str(
+                        locale_data.get("number_format", NumberFormat.LANGUAGE)
+                    )
+                    language = str(
+                        locale_data.get("language", fallback_language)
+                    )
+                    first_weekday = str(
+                        locale_data.get("first_weekday", "language")
+                    )
+                    date_format = str(
+                        locale_data.get("date_format", DateFormat.LANGUAGE)
+                    )
+                    time_format = str(
+                        locale_data.get("time_format", TimeFormat.LANGUAGE)
+                    )
+        except (AttributeError, KeyError, TypeError) as exc:
+            # Owner lookup or store access failed — log and fall back.
+            _LOGGER.debug(
+                "Could not read owner locale from frontend storage: %s",
+                exc,
+            )
+    # Apply per-device overrides from the config entry options.
+    # Reject unrecognised values so stale or hand-edited configs
+    # cannot inject garbage into the renderer.
+    _valid_fw = {
+        "language",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    }
+    if options is not None:
+        override_nf = options.get("locale_number_format", "")
+        if override_nf:
+            if override_nf in NumberFormat._value2member_map_:
+                number_format = override_nf
+            else:
+                _LOGGER.warning(
+                    "Ignoring unrecognised locale_number_format %r",
+                    override_nf,
+                )
+        override_lang = options.get("locale_language", "")
+        if override_lang:
+            language = override_lang
+        override_fw = options.get("locale_first_weekday", "")
+        if override_fw:
+            if override_fw in _valid_fw:
+                first_weekday = override_fw
+            else:
+                _LOGGER.warning(
+                    "Ignoring unrecognised locale_first_weekday %r",
+                    override_fw,
+                )
+        override_df = options.get("locale_date_format", "")
+        if override_df:
+            if override_df in DateFormat._value2member_map_:
+                date_format = override_df
+            else:
+                _LOGGER.warning(
+                    "Ignoring unrecognised locale_date_format %r",
+                    override_df,
+                )
+        override_tf = options.get("locale_time_format", "")
+        if override_tf:
+            if override_tf in TimeFormat._value2member_map_:
+                time_format = override_tf
+            else:
+                _LOGGER.warning(
+                    "Ignoring unrecognised locale_time_format %r",
+                    override_tf,
+                )
+    return number_format, language, first_weekday, date_format, time_format
 
 
 async def _build_display_config(
@@ -123,7 +211,7 @@ async def _build_display_config(
 
     Snapshots current HA entity states, reads display dimensions from
     the config entry options, and reads the owner's locale preferences
-    via :func:`_async_get_number_format`.  Caller must ensure
+    via :func:`_async_get_locale`.  Caller must ensure
     ``entry_id`` exists in ``hass.data[DOMAIN]``.
 
     Args:
@@ -132,7 +220,8 @@ async def _build_display_config(
 
     Returns:
         Dict with ``width``, ``height``, ``grayscale_levels``,
-        ``number_format``, ``language``, ``states``, and (when
+        ``number_format``, ``language``, ``first_weekday``,
+        ``date_format``, ``time_format``, ``states``, and (when
         battery data is available) ``device_battery_level`` and
         ``device_battery_charging`` keys suitable for
         ``render_widget_svg()``.
@@ -149,7 +238,13 @@ async def _build_display_config(
             # existing nested values.
             "attributes": dict(state.attributes),
         }
-    number_format, language = await _async_get_number_format(hass)
+    (
+        number_format,
+        language,
+        first_weekday,
+        date_format,
+        time_format,
+    ) = await _async_get_locale(hass, entry.options)
     config: dict[str, Any] = {
         "width": entry.options.get("width", DEFAULT_WIDTH),
         "height": entry.options.get("height", DEFAULT_HEIGHT),
@@ -158,6 +253,9 @@ async def _build_display_config(
         ),
         "number_format": number_format,
         "language": language,
+        "first_weekday": first_weekday,
+        "date_format": date_format,
+        "time_format": time_format,
         "states": states,
     }
     level, is_charging = resolve_battery_level(

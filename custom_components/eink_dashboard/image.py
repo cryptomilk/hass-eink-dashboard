@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
 
-from . import _async_get_number_format, _fetch_forecasts
+from . import _async_get_locale, _fetch_forecasts
 from .battery import resolve_battery_level
 from .const import (
     DEFAULT_CONTRAST,
@@ -202,13 +202,19 @@ class EinkDashboardImage(ImageEntity):
             return
         _LOGGER.debug("_async_refresh: start for %s", self._entry.entry_id)
         push_targets: list[tuple[Any, str, bytes]] = []
+        # Fetch locale before acquiring the lock so that async store
+        # access does not extend the lock's critical section.
+        (
+            number_format,
+            language,
+            first_weekday,
+            date_format,
+            time_format,
+        ) = await _async_get_locale(self.hass, self._entry.options)
         try:
             async with self._refresh_lock:
                 states = self._build_states()
                 await self._async_fetch_forecasts(states)
-                number_format, language = await _async_get_number_format(
-                    self.hass
-                )
                 config = {
                     "width": self._entry.options.get("width", DEFAULT_WIDTH),
                     "height": self._entry.options.get(
@@ -229,6 +235,9 @@ class EinkDashboardImage(ImageEntity):
                     ),
                     "number_format": number_format,
                     "language": language,
+                    "first_weekday": first_weekday,
+                    "date_format": date_format,
+                    "time_format": time_format,
                     "states": states,
                 }
                 level, is_charging = resolve_battery_level(

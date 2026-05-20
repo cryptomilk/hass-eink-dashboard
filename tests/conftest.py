@@ -387,6 +387,26 @@ class _EntitySelector:
         return value
 
 
+class _LanguageSelectorConfig(dict):
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(kwargs)
+
+
+class _LanguageSelector:
+    """Stub for HA's LanguageSelector.
+
+    Note: unlike the real selector, this stub does not validate that
+    the submitted value is a known BCP 47 language tag.
+    """
+
+    def __init__(self, config: object = None) -> None:
+        pass
+
+    def __call__(self, value: object) -> object:
+        """Return value unchanged (no BCP 47 validation)."""
+        return value
+
+
 selector_mod = sys.modules["homeassistant.helpers.selector"]
 selector_mod.SelectSelectorMode = _SelectSelectorMode  # type: ignore[attr-defined]
 selector_mod.SelectSelectorConfig = _SelectSelectorConfig  # type: ignore[attr-defined]
@@ -398,6 +418,8 @@ selector_mod.TextSelectorConfig = _TextSelectorConfig  # type: ignore[attr-defin
 selector_mod.TextSelector = _TextSelector  # type: ignore[attr-defined]
 selector_mod.EntitySelectorConfig = _EntitySelectorConfig  # type: ignore[attr-defined]
 selector_mod.EntitySelector = _EntitySelector  # type: ignore[attr-defined]
+selector_mod.LanguageSelectorConfig = _LanguageSelectorConfig  # type: ignore[attr-defined]
+selector_mod.LanguageSelector = _LanguageSelector  # type: ignore[attr-defined]
 
 template_mod = sys.modules["homeassistant.helpers.template"]
 

@@ -431,6 +431,41 @@ class TestEinkDashboardImage:
             assert config["sharpness"] == 2.0
             assert config["contrast"] == 1.5
 
+    async def test_locale_options_forwarded_to_render(self) -> None:
+        # Locale values returned by _async_get_locale are placed in the
+        # config dict passed to render_dashboard.
+        from custom_components.eink_dashboard.render import render_dashboard
+
+        hass = _make_hass()
+        entry = _make_entry({"width": 200, "height": 100})
+        entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+
+        locale_tuple = (
+            "decimal_comma",
+            "de",
+            "monday",
+            "DMY",
+            "24",
+        )
+        with (
+            patch(
+                "custom_components.eink_dashboard.image._async_get_locale",
+                return_value=locale_tuple,
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                wraps=render_dashboard,
+            ) as mock_render,
+        ):
+            await entity._async_refresh(None)
+            config = mock_render.call_args[0][1]
+            assert config["number_format"] == "decimal_comma"
+            assert config["language"] == "de"
+            assert config["first_weekday"] == "monday"
+            assert config["date_format"] == "DMY"
+            assert config["time_format"] == "24"
+
 
 class TestImagePlatformSetup:
     async def test_async_setup_entry(self) -> None:
