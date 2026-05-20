@@ -2377,8 +2377,231 @@ def _build_heading_context(
     }
 
 
+def _build_entity_context(
+    widget: Widget,
+    config: DisplayConfig,
+) -> dict[str, object]:
+    """Build Jinja2 template context for the entity widget.
+
+    Renders a two-section card: a header row (entity name on the
+    left, optional icon on the right) and an info section below
+    (large state value with optional unit).  Mirrors HA's Entity
+    card (``hui-entity-card.ts``).
+
+    Icon style controls circle rendering, with automatic resolution
+    based on entity state when ``icon_style`` is omitted:
+
+    - ``"filled"`` — gray-filled circle (default for active states
+      when ``grayscale_levels > 2``).
+    - ``"outlined"`` — white circle with black stroke (default for
+      inactive states and all 2-level displays).
+    - ``"none"`` — no circle; icon glyph rendered without decoration.
+
+    Args:
+        widget: Widget config dict.  Recognised keys:
+            ``entity`` (HA entity ID, required),
+            ``name`` (display name override),
+            ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
+            ``attribute`` (attribute key to show as value instead of
+            state),
+            ``unit`` (unit string override),
+            ``icon_style`` (``"filled"`` / ``"outlined"`` /
+            ``"none"``),
+            ``card_style``, ``x``, ``w``, ``h``.
+        config: Display config with ``width``, ``states``, and
+            ``grayscale_levels``.
+
+    Returns:
+        Template context dict consumed by ``entity.svg.j2``.
+        Returns ``{"w": …, "h": …, "has_entity": False,
+        **_color_context()}`` when the entity is missing.
+        Full context includes widget dimensions, card style,
+        metrics, colors, icon geometry, header text, and info
+        section value/unit.
+    """
+    from .render import (
+        _compute_metrics,
+        _device_class_icon,
+        _load_font,
+        color_to_hex,
+    )
+
+    x = widget.get("x", PADDING)
+    svg_w = _widget_dim(widget, "w", config["width"] - x)
+    entity_id: str = widget.get("entity", "")
+    name_override = widget.get("name")
+    icon_override = widget.get("icon")
+    attribute: str | None = widget.get("attribute")
+    unit_override = widget.get("unit")
+    icon_style = widget.get("icon_style")
+    card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    states = config.get("states", {})
+    grayscale_levels = config.get("grayscale_levels", 16)
+
+    state = states.get(entity_id) if entity_id else None
+    colors = _color_context()
+    if state is None:
+        return {
+            "w": svg_w,
+            "h": _widget_dim(widget, "h", 2 * DEFAULT_ROW_H),
+            "has_entity": False,
+            **colors,
+        }
+
+    svg_h = _widget_dim(widget, "h", 2 * DEFAULT_ROW_H)
+    # Header takes 40% of height; info section takes the rest.
+    header_h = round(svg_h * 0.40)
+    info_h = svg_h - header_h
+    # Metrics derived from header height — icon and name live in
+    # the header row, so proportions (icon size, padding, font)
+    # should scale with that section, not the full widget.
+    m = _compute_metrics(header_h)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+
+    attrs = state.get("attributes", {})
+    domain = entity_id.split(".")[0]
+    state_val: str = state.get("state", "")
+
+    name_text: str = (
+        str(name_override)
+        if name_override is not None
+        else attrs.get("friendly_name", entity_id)
+    )
+
+    # Value: show attribute value when requested, else entity state.
+    if attribute is not None:
+        raw_val = attrs.get(attribute)
+        value_text = (
+            str(raw_val)
+            if raw_val is not None and raw_val != ""
+            else "unknown"
+        )
+        auto_unit = ""
+    else:
+        value_text = state_val
+        auto_unit = attrs.get("unit_of_measurement", "")
+    unit_text: str = (
+        str(unit_override) if unit_override is not None else auto_unit
+    )
+
+    # Icon resolution: explicit override → device_class → attrs icon.
+    icon_svg: markupsafe.Markup | str = ""
+    if icon_override is not None:
+        icon_name = str(icon_override)
+        if icon_name.startswith("mdi:"):
+            icon_name = icon_name[4:]
+        with contextlib.suppress(FileNotFoundError):
+            icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
+    else:
+        resolved_name = _device_class_icon(attrs, state_val, domain)
+        if resolved_name is None:
+            raw = attrs.get("icon", "")
+            if raw.startswith("mdi:"):
+                resolved_name = raw[4:]
+        if resolved_name:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(resolved_name, m.icon_inner)
+
+    letter = ""
+    if not icon_svg:
+        friendly = attrs.get("friendly_name", entity_id)
+        letter = friendly[:1].upper() if friendly else ""
+
+    # Auto-resolve icon style: active → filled, else outlined.
+    # 2-level displays always use outlined for readability.
+    is_active = state_val in _ACTIVE_STATES
+    if icon_style is None:
+        resolved_style = (
+            "outlined"
+            if grayscale_levels <= 2
+            else ("filled" if is_active else "outlined")
+        )
+    else:
+        resolved_style = str(icon_style)
+
+    icon_outline = resolved_style == "outlined"
+    icon_no_circle = resolved_style == "none"
+    # Widen the outline stroke on 2-level displays to avoid dithering.
+    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_fill = color_to_hex(COLOR_GRAY)
+    icon_color = (
+        colors["hex_black"]
+        if (icon_outline or icon_no_circle)
+        else colors["hex_white"]
+    )
+
+    # Icon: right-aligned in header row.
+    icon_r = m.icon_dia // 2
+    icon_cx = svg_w - r_inset - rpad - icon_r
+    icon_cy = header_h // 2
+    icon_glyph_x = icon_cx - m.icon_inner // 2
+    icon_glyph_y = icon_cy - m.icon_inner // 2
+
+    # Name: left-aligned in header row, vertically centered.
+    # Larger ratio than m.font_primary (0.32) — the entity name is
+    # the card's primary label and should fill the header row.
+    name_font_sz = round(header_h * 0.48)
+    name_x = x_off + lpad
+    name_y = header_h // 2
+
+    # Value: left-aligned, baseline at ~65% of the info section so
+    # the value and unit share an alphabetic baseline (HA style).
+    value_font_sz = max(10, round(svg_h * 0.28))
+    value_x = x_off + lpad
+    value_y = header_h + round(info_h * 0.65)
+
+    # Unit: positioned to the right of the value text.
+    unit_font_sz = m.font_secondary
+    unit_x = value_x
+    if unit_text:
+        value_font = _load_font(value_font_sz, medium=True)
+        text_w = round(value_font.getlength(value_text))
+        unit_x = value_x + text_w + m.inner_gap // 2
+
+    return {
+        "w": svg_w,
+        "h": svg_h,
+        "has_entity": True,
+        "card_style": card_style,
+        "bar_width": bar_width,
+        **_metrics_context(m),
+        **colors,
+        # Icon geometry.
+        "icon_svg": icon_svg,
+        "icon_cx": icon_cx,
+        "icon_cy": icon_cy,
+        "icon_r": icon_r,
+        "icon_stroke_w": icon_stroke_w,
+        "icon_fill": icon_fill,
+        "icon_color": icon_color,
+        "icon_outline": icon_outline,
+        "icon_no_circle": icon_no_circle,
+        "icon_glyph_x": icon_glyph_x,
+        "icon_glyph_y": icon_glyph_y,
+        "letter": letter,
+        "letter_font_sz": m.font_letter,
+        # Header row text.
+        "name_text": name_text,
+        "name_x": name_x,
+        "name_y": name_y,
+        "name_font_sz": name_font_sz,
+        # Info section.
+        "value_text": value_text,
+        "value_x": value_x,
+        "value_y": value_y,
+        "value_font_sz": value_font_sz,
+        "unit_text": unit_text,
+        "unit_x": unit_x,
+        "unit_y": value_y,
+        "unit_font_sz": unit_font_sz,
+    }
+
+
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
     WidgetType.DEVICE_BATTERY: _build_device_battery_context,
+    WidgetType.ENTITY: _build_entity_context,
     WidgetType.HEADING: _build_heading_context,
     WidgetType.SENSOR_ROWS: _build_sensor_rows_context,
     WidgetType.SEPARATOR: _build_separator_context,

@@ -81,6 +81,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  entity: {
+    label: "Entity",
+    description: "Single entity with large value display",
+    icon: "mdi:card-text-outline",
+    defaults: {
+      type: "entity",
+      x: 24,
+      y: 0,
+      w: 400,
+      h: 112,
+      entity: "",
+      card_style: DEFAULT_CARD_STYLE,
+      icon_style: DEFAULT_ICON_STYLE,
+    },
+  },
   tile: {
     label: "Tile",
     description: "Single entity state with icon and label",
@@ -537,6 +552,45 @@ export const SCHEMAS: Record<
     },
   ],
 
+  entity: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:card-text-outline",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: {} },
+        },
+        { name: "name", selector: { text: {} } },
+        { name: "icon", selector: { icon: {} } },
+        { name: "attribute", selector: { text: {} } },
+        { name: "unit", selector: { text: {} } },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector(), iconStyleSelector()],
+    },
+  ],
+
   heading: (d) => [
     identitySection(),
     {
@@ -805,6 +859,8 @@ export const LABELS: Record<string, string> = {
   font_size: "Font size",
   color: "Color",
   align: "Align",
+  attribute: "Attribute",
+  unit: "Unit",
   heading: "Heading",
   heading_style: "Heading style",
   badges: "Badges",
@@ -858,7 +914,7 @@ export function getSummary(widget: Widget): string {
     const s = String(widget.heading || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
-  if (t === "weather" || t === "tile") {
+  if (t === "weather" || t === "tile" || t === "entity") {
     return widget.entity || "(no entity)";
   }
   if (t === "device_battery") {

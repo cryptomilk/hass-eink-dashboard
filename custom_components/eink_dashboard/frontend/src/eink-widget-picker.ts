@@ -17,6 +17,7 @@ const ICON_FALLBACK: Record<string, string> = {
   "mdi:checkbox-marked-circle": "✓",
   "mdi:trash-can": "🗑",
   "mdi:card-text": "▣",
+  "mdi:card-text-outline": "▢",
 };
 
 /**

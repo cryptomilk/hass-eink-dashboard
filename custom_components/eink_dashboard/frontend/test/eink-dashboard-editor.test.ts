@@ -48,11 +48,12 @@ describe("WIDGET_TYPES", () => {
     "separator",
     "weather",
     "tile",
+    "entity",
     "device_battery",
     "waste_schedule",
   ];
 
-  it("has all 6 widget types", () => {
+  it("has all 7 widget types", () => {
     // text is deprecated and removed from the picker; heading replaces it.
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
@@ -94,13 +95,14 @@ describe("SCHEMAS", () => {
     "separator",
     "weather",
     "tile",
+    "entity",
     "sensor_rows",
     "device_battery",
     "status_icons",
     "waste_schedule",
   ];
 
-  it("has a schema builder for all 9 widget types", () => {
+  it("has a schema builder for all 10 widget types", () => {
     // text schema kept for backward-compat editing of existing configs.
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
@@ -279,6 +281,16 @@ describe("getSummary", () => {
     expect(getSummary({ type: "separator" })).toBe(
       "Horizontal line at Y:0"
     );
+  });
+
+  it("returns entity for entity widget", () => {
+    expect(
+      getSummary({ type: "entity", entity: "sensor.temperature" })
+    ).toBe("sensor.temperature");
+  });
+
+  it("returns '(no entity)' for entity widget with no entity", () => {
+    expect(getSummary({ type: "entity" })).toBe("(no entity)");
   });
 });
 

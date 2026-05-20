@@ -1,0 +1,65 @@
+{%- from "_macros.svg.j2" import card_container -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
+{%- if has_entity -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black,
+    bar_color=hex_gray) -%}
+{#- Header row: icon right-aligned, name on the left. -#}
+{%- if icon_svg or letter -%}
+{%- if not icon_no_circle -%}
+{%- if icon_outline -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="{{ hex_white }}"
+  stroke="{{ hex_black }}"
+  stroke-width="{{ icon_stroke_w }}"/>
+{%- else -%}
+<circle
+  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
+  fill="{{ icon_fill }}"/>
+{%- endif -%}
+{%- endif -%}
+{%- if icon_svg -%}
+<g transform="translate({{ icon_glyph_x }}, {{ icon_glyph_y }})"
+  style="color: {{ icon_color }}">{{ icon_svg }}</g>
+{%- else -%}
+<text
+  x="{{ icon_cx }}" y="{{ icon_cy }}"
+  font-family="Roboto"
+  font-size="{{ letter_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ icon_color }}">{{ letter }}</text>
+{%- endif -%}
+{%- endif -%}
+<text
+  x="{{ name_x }}" y="{{ name_y }}"
+  font-family="Roboto"
+  font-weight="500"
+  font-size="{{ name_font_sz }}"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ name_text }}</text>
+{#- Info section: large value with optional unit beside it. -#}
+<text
+  x="{{ value_x }}" y="{{ value_y }}"
+  font-family="Roboto"
+  font-size="{{ value_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_black }}">{{ value_text }}</text>
+{%- if unit_text -%}
+<text
+  x="{{ unit_x }}" y="{{ unit_y }}"
+  font-family="Roboto"
+  font-size="{{ unit_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_gray }}">{{ unit_text }}</text>
+{%- endif -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

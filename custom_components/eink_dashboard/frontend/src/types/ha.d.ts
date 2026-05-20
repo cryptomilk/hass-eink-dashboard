@@ -571,6 +571,37 @@ export interface HeadingWidget extends WidgetBase {
   card_style?: CardStyle;
 }
 
+/**
+ * Single-entity display with large state value, modelled after
+ * HA's Entity card (``hui-entity-card.ts``).
+ */
+export interface EntityWidget extends WidgetBase {
+  type: "entity";
+  /** HA entity ID to display. */
+  entity: string;
+  /** Override display name; falls back to the entity's friendly_name. */
+  name?: string;
+  /** MDI icon name override (e.g. "mdi:thermometer"). */
+  icon?: string;
+  /**
+   * Attribute key to display as the value instead of the entity
+   * state.  When set, automatic unit resolution is suppressed.
+   */
+  attribute?: string;
+  /** Unit string override; shown next to the value. */
+  unit?: string;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /**
+   * Icon circle rendering mode.
+   * - ``"filled"`` — gray-filled circle (default for active states).
+   * - ``"outlined"`` — white circle with black border (default for
+   *   inactive states and 2-level displays).
+   * - ``"none"`` — no circle; icon glyph rendered without decoration.
+   */
+  icon_style?: IconStyle;
+}
+
 export type Widget =
   | TextWidget
   | SeparatorWidget
@@ -580,7 +611,8 @@ export type Widget =
   | StatusIconsWidget
   | WasteScheduleWidget
   | TileWidget
-  | HeadingWidget;
+  | HeadingWidget
+  | EntityWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {
