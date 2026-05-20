@@ -3824,7 +3824,10 @@ class TestRenderTile:
         cy = 80 // 2
         r = m.icon_dia // 2
         cx = m.padding + r
-        ring_y1 = cy - r + 3
+        # Mirror the context builder's icon_stroke_w so the ring
+        # region starts past the stroke inner edge on 2-level.
+        icon_stroke_w = m.border * 3
+        ring_y1 = cy - r + icon_stroke_w // 2 + 3
         ring_y2 = cy - m.icon_inner // 2 - 1
         ring_x1 = cx - r // 2 + 3
         ring_x2 = cx + r // 2 - 3

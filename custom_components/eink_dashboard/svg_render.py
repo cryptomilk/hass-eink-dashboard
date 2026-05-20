@@ -2105,6 +2105,8 @@ def _build_tile_context(
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)
+    # Widen the outline stroke on 2-level displays to avoid dithering.
+    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
 
     return {
         "w": svg_w,
@@ -2125,6 +2127,7 @@ def _build_tile_context(
         "icon_fill": icon_fill,
         "icon_outline": icon_outline,
         "icon_no_circle": icon_no_circle,
+        "icon_stroke_w": icon_stroke_w,
         "letter": letter,
     }
 
@@ -2220,6 +2223,8 @@ def _build_heading_context(
     # Icon resolution: glyph size depends on circle style.
     icon_no_circle = icon_style == "none"
     icon_outline = icon_style == "outlined"
+    # Widen the outline stroke on 2-level displays to avoid dithering.
+    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
     icon_svg: markupsafe.Markup | str = ""
     glyph_sz = max(10, font_sz) if icon_no_circle else m.icon_inner
     if icon_override is not None:
@@ -2358,6 +2363,7 @@ def _build_heading_context(
         "icon_cx": icon_cx,
         "icon_cy": icon_cy,
         "icon_r": icon_r,
+        "icon_stroke_w": icon_stroke_w,
         "icon_fill": icon_fill,
         "icon_color": colors["hex_black"],
         "icon_outline": icon_outline,
