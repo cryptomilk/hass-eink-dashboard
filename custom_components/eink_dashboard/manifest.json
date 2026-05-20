@@ -1,7 +1,7 @@
 {
   "domain": "eink_dashboard",
   "name": "E-Ink Dashboard",
-  "after_dependencies": ["media_source"],
+  "after_dependencies": ["media_source", "recorder"],
   "codeowners": ["@cryptomilk"],
   "config_flow": true,
   "documentation": "https://github.com/cryptomilk/hass-eink-dashboard",
