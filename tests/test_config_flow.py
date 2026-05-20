@@ -1257,13 +1257,13 @@ class TestLocaleSettingsOptionsFlow:
                 "locale_language": "",
                 "locale_number_format": "",
                 "locale_first_weekday": "",
-                "locale_date_format": "DMY",
+                "locale_date_format": "dmy",
                 "locale_time_format": "",
             }
         )
 
         assert result["type"] == "create_entry"
-        assert result["data"]["locale_date_format"] == "DMY"
+        assert result["data"]["locale_date_format"] == "dmy"
         assert "locale_time_format" not in result["data"]
 
     async def test_locale_settings_stores_time_format_override(self) -> None:
@@ -1292,7 +1292,7 @@ class TestLocaleSettingsOptionsFlow:
                 "locale_language": "fr",
                 "locale_number_format": "space_comma",
                 "locale_first_weekday": "monday",
-                "locale_date_format": "DMY",
+                "locale_date_format": "dmy",
                 "locale_time_format": "24",
             }
         )
@@ -1301,7 +1301,7 @@ class TestLocaleSettingsOptionsFlow:
         assert result["data"]["locale_language"] == "fr"
         assert result["data"]["locale_number_format"] == "space_comma"
         assert result["data"]["locale_first_weekday"] == "monday"
-        assert result["data"]["locale_date_format"] == "DMY"
+        assert result["data"]["locale_date_format"] == "dmy"
         assert result["data"]["locale_time_format"] == "24"
 
     async def test_locale_settings_clears_existing_overrides(self) -> None:
@@ -1311,7 +1311,7 @@ class TestLocaleSettingsOptionsFlow:
                 "locale_language": "de",
                 "locale_number_format": "decimal_comma",
                 "locale_first_weekday": "monday",
-                "locale_date_format": "DMY",
+                "locale_date_format": "dmy",
                 "locale_time_format": "24",
             }
         )

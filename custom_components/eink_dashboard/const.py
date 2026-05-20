@@ -189,11 +189,11 @@ class DateFormat(StrEnum):
     """Derive format from the language setting (default)."""
     SYSTEM = "system"
     """System locale."""
-    DMY = "DMY"
+    DMY = "dmy"
     """Day-Month-Year (31/12/2026) — European style."""
-    MDY = "MDY"
+    MDY = "mdy"
     """Month-Day-Year (12/31/2026) — US style."""
-    YMD = "YMD"
+    YMD = "ymd"
     """Year-Month-Day (2026-12-31) — ISO/Asian style."""
 
 

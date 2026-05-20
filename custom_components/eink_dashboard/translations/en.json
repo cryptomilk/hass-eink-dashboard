@@ -226,9 +226,9 @@
       "options": {
         "ha_default": "Default (HA owner preference)",
         "language": "Automatic (from language)",
-        "DMY": "Day-Month-Year (31/12/2026)",
-        "MDY": "Month-Day-Year (12/31/2026)",
-        "YMD": "Year-Month-Day (2026-12-31)"
+        "dmy": "Day-Month-Year (31/12/2026)",
+        "mdy": "Month-Day-Year (12/31/2026)",
+        "ymd": "Year-Month-Day (2026-12-31)"
       }
     },
     "locale_time_format": {

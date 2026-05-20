@@ -430,7 +430,7 @@ class TestAsyncGetLocale:
             number_format="decimal_comma",
             language="de",
             first_weekday="monday",
-            date_format="DMY",
+            date_format="dmy",
             time_format="24",
         )
         with patch(_FRONTEND_STORAGE, user_store_mock):
@@ -439,7 +439,7 @@ class TestAsyncGetLocale:
         assert nf == "decimal_comma"
         assert lang == "de"
         assert fw == "monday"
-        assert df == "DMY"
+        assert df == "dmy"
         assert tf == "24"
 
     async def test_language_override_applied(self) -> None:
@@ -481,10 +481,10 @@ class TestAsyncGetLocale:
         hass, user_store_mock = _make_hass_with_locale(date_format="language")
         with patch(_FRONTEND_STORAGE, user_store_mock):
             _nf, _lang, _fw, df, _tf = await _async_get_locale(
-                hass, {"locale_date_format": "DMY"}
+                hass, {"locale_date_format": "dmy"}
             )
 
-        assert df == "DMY"
+        assert df == "dmy"
 
     async def test_time_format_override_applied(self) -> None:
         # locale_time_format in options overrides the owner's preference.
@@ -502,7 +502,7 @@ class TestAsyncGetLocale:
             number_format="decimal_comma",
             language="de",
             first_weekday="monday",
-            date_format="DMY",
+            date_format="dmy",
             time_format="24",
         )
         with patch(_FRONTEND_STORAGE, user_store_mock):
@@ -520,7 +520,7 @@ class TestAsyncGetLocale:
         assert nf == "decimal_comma"
         assert lang == "de"
         assert fw == "monday"
-        assert df == "DMY"
+        assert df == "dmy"
         assert tf == "24"
 
     async def test_none_options_returns_owner_locale(self) -> None:
@@ -529,7 +529,7 @@ class TestAsyncGetLocale:
             number_format="space_comma",
             language="fr",
             first_weekday="monday",
-            date_format="DMY",
+            date_format="dmy",
             time_format="24",
         )
         with patch(_FRONTEND_STORAGE, user_store_mock):
@@ -538,7 +538,7 @@ class TestAsyncGetLocale:
         assert nf == "space_comma"
         assert lang == "fr"
         assert fw == "monday"
-        assert df == "DMY"
+        assert df == "dmy"
         assert tf == "24"
 
     async def test_falls_back_when_no_owner(self) -> None:

@@ -441,7 +441,7 @@ class TestEinkDashboardImage:
             "decimal_comma",
             "de",
             "monday",
-            "DMY",
+            "dmy",
             "24",
         )
         with (
@@ -459,7 +459,7 @@ class TestEinkDashboardImage:
             assert config["number_format"] == "decimal_comma"
             assert config["language"] == "de"
             assert config["first_weekday"] == "monday"
-            assert config["date_format"] == "DMY"
+            assert config["date_format"] == "dmy"
             assert config["time_format"] == "24"
 
 
