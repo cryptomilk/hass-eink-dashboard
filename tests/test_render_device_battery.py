@@ -58,31 +58,31 @@ class TestRenderDeviceBattery:
 
     def test_icon_draws_nub(self) -> None:
         # Verify the nub (battery terminal) renders in gray.
-        # Nub at (PADDING+31, nub_y) to (PADDING+33, nub_y+8)
+        # body_x=lpad=8, nub at (PADDING+39, nub_y) to (PADDING+41, nub_y+8)
         # nub_y = icon_y + (14-8)//2 = 30 + 3 = 33
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(
             img,
-            PADDING + 31,
+            PADDING + 39,
             33,
-            PADDING + 34,
+            PADDING + 42,
             41,
             threshold=200,
         )
 
     def test_icon_draws_outline(self) -> None:
         # Verify the battery body outline (gray rectangle).
-        # Body from (PADDING, 30) to (PADDING+30, 44)
+        # body_x=lpad=8: body from (PADDING+8, 30) to (PADDING+38, 44)
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         img = render_to_image(widgets, self._config())
         # Top edge of body
         assert_has_dark_pixels(
-            img, PADDING, 30, PADDING + 30, 31, threshold=200
+            img, PADDING + 8, 30, PADDING + 38, 31, threshold=200
         )
         # Left edge of body
         assert_has_dark_pixels(
-            img, PADDING, 30, PADDING + 1, 44, threshold=200
+            img, PADDING + 8, 30, PADDING + 9, 44, threshold=200
         )
 
     def test_icon_vertically_centers_with_text(self) -> None:
@@ -103,12 +103,12 @@ class TestRenderDeviceBattery:
         # Verify 0% shows outline only, no fill.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         img = render_to_image(widgets, self._config(device_battery_level=0))
-        # Outline is present (gray, threshold=200)
+        # Outline is present (gray, threshold=200); body_x=lpad=8
         assert_has_dark_pixels(
-            img, PADDING, 30, PADDING + 34, 44, threshold=200
+            img, PADDING + 8, 30, PADDING + 42, 44, threshold=200
         )
         # Interior should be white (no fill bar)
-        assert_all_white(img, PADDING + 2, 32, PADDING + 28, 42)
+        assert_all_white(img, PADDING + 10, 32, PADDING + 36, 42)
 
     def test_icon_100_percent(self) -> None:
         # Verify 100% fills the entire battery body interior.
@@ -255,10 +255,11 @@ class TestRenderDeviceBattery:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Fill bar should exist in the left portion of the bar
-        assert_has_dark_pixels(img, PADDING + 8, 18, PADDING + 42, 36)
+        # Fill bar should exist in the left portion of the bar;
+        # chip_x=lpad=8, bar_abs_x=chip_x+pad=15, fill_abs_x=16
+        assert_has_dark_pixels(img, PADDING + 16, 18, PADDING + 50, 36)
         # Right 25% of bar interior should be unfilled
-        assert_all_white(img, PADDING + 43, 24, PADDING + 54, 36)
+        assert_all_white(img, PADDING + 51, 24, PADDING + 62, 36)
 
     def test_chip_draws_percentage_text(self) -> None:
         # Verify percentage label appears inside the chip.
@@ -290,9 +291,10 @@ class TestRenderDeviceBattery:
         ]
         img = render_to_image(widgets, self._config(device_battery_level=0))
         # The chip outline should still be present
-        assert_has_dark_pixels(img, PADDING + 10, 10, PADDING + 150, 50)
-        # Interior of the bar should be white (no fill)
-        assert_all_white(img, PADDING + 8, 24, PADDING + 54, 36)
+        assert_has_dark_pixels(img, PADDING + 18, 10, PADDING + 150, 50)
+        # Interior of the bar should be white (no fill);
+        # fill_abs_x=chip_x+pad+1=16, bar ends at chip_x+pad+bar_w=63
+        assert_all_white(img, PADDING + 16, 24, PADDING + 62, 36)
 
     def test_chip_100_percent_fills_bar(self) -> None:
         # Verify 100% chip fills the entire bar interior.
@@ -482,3 +484,24 @@ class TestRenderDeviceBattery:
         assert_all_white(img, 0, 0, 3, 3)
         # Right edge: white (no border)
         assert_all_white(img, 197, 0, 200, 3)
+
+    def test_card_style_none_has_soft_padding(self) -> None:
+        # card_style="none" applies soft lpad so content is inset
+        # by m.padding, consistent with tile/heading/entities.
+        m = _compute_metrics(40)
+        widgets = [
+            {
+                "type": "device_battery",
+                "x": 0,
+                "y": 0,
+                "w": 200,
+                "h": 40,
+                "card_style": "none",
+                "layout": "icon",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Left strip must be white (soft padding, no content).
+        assert_all_white(img, 0, 0, m.padding - 1, 40)
+        # Content must exist after the soft padding.
+        assert_has_dark_pixels(img, m.padding, 0, 200, 40, threshold=200)

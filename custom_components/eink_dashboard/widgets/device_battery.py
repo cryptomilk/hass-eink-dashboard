@@ -83,12 +83,17 @@ def _build_device_battery_context(
     m = _compute_metrics(svg_h)
 
     x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    # Soft-pad when the card provides no inset on that side,
+    # consistent with tile/heading/entities/waste_schedule/weather.
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+    content_left = x_off + lpad
 
     if layout == "chip":
         # svg_w is the available width (explicit w or remaining
         # canvas); used as upper bound for chip content before
         # svg_w is narrowed to actual content extent below.
-        content_w = svg_w - x_off - r_inset
+        content_w = svg_w - content_left - r_inset - rpad
         # pad, gap, and font_sz match the chip macro ratios;
         # bar_w_nat and bar_h are battery-specific geometry.
         pad = h * 18 // 100
@@ -119,7 +124,7 @@ def _build_device_battery_context(
         if w_override is not None:
             svg_w = max(1, w_override)
         else:
-            svg_w = max(1, x_off + chip_w + r_inset)
+            svg_w = max(1, content_left + chip_w + rpad + r_inset)
 
         return {
             "w": svg_w,
@@ -134,19 +139,19 @@ def _build_device_battery_context(
             "color_hex": color_hex,
             "label": label,
             "font_sz": font_sz,
-            "chip_x": x_off,
+            "chip_x": content_left,
             "chip_w": chip_w,
             "chip_radius": chip_radius,
-            "bar_abs_x": x_off + pad,
+            "bar_abs_x": content_left + pad,
             "bar_y": bar_y,
             "bar_w": bar_w,
             "bar_h": bar_h,
             "bar_border": bar_border,
-            "fill_abs_x": x_off + pad + 1,
+            "fill_abs_x": content_left + pad + 1,
             "fill_y": bar_y + 1,
             "fill_w": fill_w,
             "fill_h": max(0, bar_h - 2),
-            "text_abs_x": x_off + pad + bar_w + gap,
+            "text_abs_x": content_left + pad + bar_w + gap,
             "text_y": h // 2,
         }
 
@@ -180,7 +185,14 @@ def _build_device_battery_context(
     else:
         svg_w = max(
             1,
-            x_off + body_w + nub_gap + nub_w + gap + round(bbox[2]) + r_inset,
+            content_left
+            + body_w
+            + nub_gap
+            + nub_w
+            + gap
+            + round(bbox[2])
+            + rpad
+            + r_inset,
         )
 
     return {
@@ -196,18 +208,18 @@ def _build_device_battery_context(
         "color_hex": color_hex,
         "label": label,
         "font_sz": font_sz,
-        "body_x": x_off,
+        "body_x": content_left,
         "icon_y": icon_y,
         "body_w": body_w,
         "body_h": body_h,
-        "nub_abs_x": x_off + body_w + nub_gap,
+        "nub_abs_x": content_left + body_w + nub_gap,
         "nub_y": nub_y,
         "nub_w": nub_w,
         "nub_h": nub_h,
-        "fill_abs_x": x_off + 1,
+        "fill_abs_x": content_left + 1,
         "icon_fill_y": icon_y + 1,
         "fill_w": fill_w,
         "icon_fill_h": max(0, body_h - 2),
-        "text_abs_x": x_off + body_w + nub_gap + nub_w + gap,
+        "text_abs_x": content_left + body_w + nub_gap + nub_w + gap,
         "text_svg_y": icon_y + body_h // 2,
     }
