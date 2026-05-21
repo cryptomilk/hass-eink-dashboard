@@ -106,7 +106,10 @@ def _build_heading_context(
     grayscale_levels = config.get("grayscale_levels", 16)
 
     m = _compute_metrics(svg_h)
-    x_off, _r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    # Zero lpad/rpad when card_container already insets that side.
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
 
     # Heading style: title (default) = large black;
     # subtitle = small gray.
@@ -136,7 +139,7 @@ def _build_heading_context(
     icon_cx = icon_cy = icon_r = 0
     icon_fill = ""
     icon_glyph_x = icon_glyph_y = 0
-    content_left = x_off + m.padding
+    content_left = x_off + lpad
     if icon_svg:
         if icon_no_circle:
             # No circle: glyph sits flush at the content left
@@ -220,7 +223,7 @@ def _build_heading_context(
     # (its left edge would overlap the heading text), it and
     # all remaining badges to its left in config order are
     # dropped.
-    badge_right = svg_w - m.padding
+    badge_right = svg_w - r_inset - rpad
     rendered_badges: list[dict[str, object]] = []
     for bd in reversed(badge_data):
         new_right = badge_right - bd.total_w

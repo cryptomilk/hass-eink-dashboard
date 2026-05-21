@@ -110,6 +110,53 @@ class TestRenderHeading:
         )
         assert_all_white(img, 395, 0, 400, 1)
 
+    def test_heading_border_no_double_padding(self) -> None:
+        # With card_style="border", x_off is already m.padding.
+        # Content must start at m.padding (single inset), not 2*m.padding.
+        # The strip [m.padding, 2*m.padding) should have dark pixels after
+        # the fix; it would be white if double-padding were applied.
+        # "XXXX" is chosen because Roboto's X glyph has ink at its leftmost
+        # pixel, making the narrow-strip assertion reliable regardless of
+        # font hinting.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "XXXX",
+                "card_style": "border",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        single_pad = m.padding
+        double_pad = m.padding * 2
+        assert_has_dark_pixels(img, single_pad, 4, double_pad, 52)
+
+    def test_heading_left_bar_no_double_padding(self) -> None:
+        # With card_style="left_bar", x_off = bar_w + m.padding.
+        # Content must start at x_off (single inset), not x_off + m.padding.
+        # The strip [x_off, x_off + m.padding) should have dark pixels after
+        # the fix; it would be white if double-padding were applied.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "XXXX",
+                "card_style": "left_bar",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        x_off = m.left_bar + m.padding
+        assert m.left_bar > 0, "left_bar must be nonzero for this test"
+        assert_has_dark_pixels(img, x_off, 4, x_off + m.padding, 52)
+
     def test_heading_card_none(self) -> None:
         # No-decoration style has white corners — no border drawn.
         widgets = [
@@ -406,6 +453,48 @@ class TestRenderHeading:
             img, cx - r, cy - r, cx + r, cy + r, threshold=128
         )
 
+    def test_heading_icon_filled_with_left_bar(self) -> None:
+        # With card_style="left_bar" the icon circle center must be at
+        # content_left + r, where content_left = m.left_bar + m.padding
+        # (not m.padding alone). Asserts gray fill in the ring region
+        # around the correct center position.
+        m = _compute_metrics(80)
+        assert m.left_bar > 0, "left_bar must be nonzero for this test"
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 80,
+                "heading": "Section",
+                "icon": "mdi:home",
+                "icon_style": "filled",
+                "card_style": "left_bar",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        cy = 80 // 2
+        r = m.icon_dia // 2
+        x_off = m.left_bar + m.padding
+        cx = x_off + r
+        ring_y1 = cy - r + 3
+        ring_y2 = cy - m.icon_inner // 2 - 1
+        ring_x1 = cx - r // 2 + 3
+        ring_x2 = cx + r // 2 - 3
+        assert ring_y2 > ring_y1 and ring_x2 > ring_x1, (
+            "ring region must be non-empty"
+        )
+        assert_has_gray_pixels(
+            img,
+            ring_x1,
+            ring_y1,
+            ring_x2,
+            ring_y2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+
     def test_heading_icon_style_none_is_default(self) -> None:
         # Omitting icon_style produces byte-identical output to
         # icon_style="none".
@@ -498,6 +587,30 @@ class TestRenderHeading:
         img = render_to_image(widgets, self._config())
         # Badge text (e.g. "22.5°C") should appear in the right half.
         assert_has_dark_pixels(img, 200, 0, 400, 56)
+
+    def test_heading_badge_inset_with_border(self) -> None:
+        # With card_style="border", r_inset is m.padding, so badge content
+        # must reach up to 400 - m.padding (single right inset), not
+        # 400 - 2*m.padding (double inset). Assert dark pixels in the strip
+        # [400 - 2*m.padding, 400 - m.padding) — badge ink must appear
+        # there when the inset is computed correctly.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "A",
+                "badges": ["sensor.temperature"],
+                "card_style": "border",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        right_single = 400 - m.padding
+        right_double = 400 - m.padding * 2
+        assert_has_dark_pixels(img, right_double, 4, right_single, 52)
 
     # ── Edge case tests ───────────────────────────────
 
