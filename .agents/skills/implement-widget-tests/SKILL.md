@@ -109,7 +109,12 @@ existing file.
       without = render_dashboard([base], self._config())
       assert with_none == without
   ```
-- **Row dividers**: gray pixels at row boundaries (between entries)
+- **Row dividers**: light-gray pixels at row boundaries (between
+  entries) on 16-level displays; the divider color is
+  `COLOR_LIGHT_GRAY=180`, so pass explicit bounds to the helper:
+  `assert_has_gray_pixels(img, ..., low=COLOR_LIGHT_GRAY - 20,
+  high=COLOR_LIGHT_GRAY + 20)`.  On 2-level displays both gray
+  values dither identically, so the 2-level test path is unchanged.
 - **Chip shape**: rounded corners (corner pixels white, nearby edge
   pixels dark)
 - **Icon circle**: dark/gray pixels in the icon area

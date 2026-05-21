@@ -45,7 +45,7 @@ The output of this work is two artifacts:
 
 ## SVG macro signatures
 
-!`grep -n "{%- macro\|{%  macro" custom_components/eink_dashboard/templates/_macros.svg.j2`
+!`grep -n "macro card_container\|macro card_row\|macro chip\|macro icon_circle" custom_components/eink_dashboard/templates/_macros.svg.j2`
 
 ## WidgetMetrics and _compute_metrics (in render.py)
 
@@ -505,11 +505,16 @@ behavior.
   `widgets/_helpers.py`) determines active vs inactive state; use
   `contextlib.suppress(FileNotFoundError)` around every
   `_mdi_svg_filter()` call
-- **Custom icon circle stroke widening**: When a widget renders its
-  own icon circle (not via the `card_row` macro), the outline stroke
-  must be widened on 2-level displays to avoid dithering.  Compute
-  a separate variable in the context builder and pass it to the
-  template:
+- **Custom icon circle**: When a widget renders its own icon circle
+  (not via the `card_row` macro), use the `icon_circle` macro from
+  `_macros.svg.j2` — it handles filled/outlined/no-circle variants
+  and glyph/letter rendering.  The context builder must pass
+  `icon_cx`, `icon_cy`, `icon_r`, `icon_glyph_x`, `icon_glyph_y`,
+  `icon_stroke_w`, `icon_fill`, `icon_color`, `icon_svg`,
+  `icon_outline`, `icon_no_circle`, `letter`, and
+  `letter_font_sz` to the template.  Widen the outline stroke on
+  2-level displays to avoid dithering — compute this in the context
+  builder and pass it as `icon_stroke_w`:
 
   ```python
   # Widen the outline stroke on 2-level displays.
@@ -518,7 +523,5 @@ behavior.
   )
   ```
 
-  In the template use `{{ icon_stroke_w }}` as `stroke-width` on
-  the outlined circle, **not** `{{ m_border }}`.  The `card_row`
-  macro does not apply this widening — it only applies to
-  widget-specific circles drawn outside the macro.
+  The `card_row` macro handles this widening internally for row
+  icons.  Only apply it explicitly when using `icon_circle` directly.
