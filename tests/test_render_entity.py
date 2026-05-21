@@ -520,7 +520,8 @@ class TestRenderEntity:
         m = _compute_metrics(header_h)
         _, r_inset, _ = _card_insets(m, "none", 16)
         rpad = m.padding if r_inset == 0 else 0
-        icon_r = m.icon_dia // 2
+        icon_dia = round(header_h * 0.82)
+        icon_r = icon_dia // 2
         icon_x1 = 400 - r_inset - rpad - icon_r * 2
         widgets = [
             {
@@ -577,7 +578,8 @@ class TestRenderEntity:
         m = _compute_metrics(header_h)
         _, r_inset, _ = _card_insets(m, "none", 16)
         rpad = m.padding if r_inset == 0 else 0
-        icon_r = m.icon_dia // 2
+        icon_dia = round(header_h * 0.82)
+        icon_r = icon_dia // 2
         icon_cx = 400 - r_inset - rpad - icon_r
         icon_x1 = icon_cx - icon_r
         icon_x2 = min(icon_cx + icon_r + 1, 400)

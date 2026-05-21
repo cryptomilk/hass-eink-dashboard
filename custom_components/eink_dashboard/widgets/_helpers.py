@@ -426,6 +426,13 @@ def _entity_info_context(
     # the header row, so proportions (icon size, padding, font)
     # should scale with that section, not the full widget.
     m = _compute_metrics(header_h)
+    # Entity header icon uses larger ratios than standard metrics because
+    # the header is only 40% of the widget height — the default 0.64
+    # circle / 60% glyph ratios produce an icon too small to read on
+    # e-ink at default widget size.
+    icon_dia = round(header_h * 0.82)
+    icon_inner = icon_dia * 70 // 100
+    letter_font_sz = icon_dia * 5 // 10
     x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
@@ -462,7 +469,7 @@ def _entity_info_context(
         attrs,
         state_val,
         domain,
-        m.icon_inner,
+        icon_inner,
         entity_id,
     )
 
@@ -479,11 +486,11 @@ def _entity_info_context(
     )
 
     # Icon: right-aligned in header row.
-    icon_r = m.icon_dia // 2
+    icon_r = icon_dia // 2
     icon_cx = svg_w - r_inset - rpad - icon_r
     icon_cy = header_h // 2
-    icon_glyph_x = icon_cx - m.icon_inner // 2
-    icon_glyph_y = icon_cy - m.icon_inner // 2
+    icon_glyph_x = icon_cx - icon_inner // 2
+    icon_glyph_y = icon_cy - icon_inner // 2
 
     # Name: left-aligned in header row, vertically centered.
     # Larger ratio than m.font_primary (0.32) — the entity name is
@@ -527,7 +534,7 @@ def _entity_info_context(
         "icon_glyph_x": icon_glyph_x,
         "icon_glyph_y": icon_glyph_y,
         "letter": letter,
-        "letter_font_sz": m.font_letter,
+        "letter_font_sz": letter_font_sz,
         # Header row text.
         "name_text": name_text,
         "name_x": name_x,

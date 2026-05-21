@@ -319,14 +319,17 @@ def _right_icon_ring_region(
     m = _compute_metrics(header_h)
     _, r_inset, _ = _card_insets(m, card_style, grayscale_levels)
     rpad = m.padding if r_inset == 0 else 0
-    icon_r = m.icon_dia // 2
+    # Mirror the enlarged icon ratios from _entity_info_context().
+    icon_dia = round(header_h * 0.82)
+    icon_inner = icon_dia * 70 // 100
+    icon_r = icon_dia // 2
     icon_cx = w - r_inset - rpad - icon_r
     icon_cy = header_h // 2
     # Mirror the context builder's icon_stroke_w so the ring region
     # starts past the inner edge of a widened stroke on 2-level.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
     ring_y1 = icon_cy - icon_r + icon_stroke_w // 2 + 3
-    ring_y2 = icon_cy - m.icon_inner // 2 - 1
+    ring_y2 = icon_cy - icon_inner // 2 - 1
     ring_x1 = icon_cx - icon_r // 2 + 3
     ring_x2 = icon_cx + icon_r // 2 - 3
     return icon_cx, icon_cy, ring_x1, ring_y1, ring_x2, ring_y2
