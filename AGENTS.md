@@ -28,8 +28,9 @@ image entity and a public HTTP endpoint.
   imported lazily by `svg_render.py`)
 - `svg_render.py` — SVG rendering pipeline: Jinja2 templates, icon-inlining
   filters, `render_widget_svg()`, `_compose_svg()`, `_svg_to_png()` via
-  `resvg_py`, `_color_context()`, and per-widget context builders
-  (`_build_*_context()`)
+  `resvg_py`, `_color_context()`, and shared layout helpers
+- `widgets/` — per-widget SVG context builders (`_build_*_context()`),
+  one module per widget type; re-exported via `widgets/__init__.py`
 - `image.py` — `EinkDashboardImage` (`ImageEntity`), scheduled refresh, ETag tracking
 - `http.py` — unauthenticated HTTP view at `/api/eink_dashboard/{entry_id}/image.png` with ETag/304 support
 - `store.py` — `EinkDashboardStore`, persists widget list via HA's `Store` (`eink_dashboard.{entry_id}`)
@@ -68,8 +69,9 @@ configs): `TEXT` (superseded by `HEADING`), `SENSOR_ROWS`,
 **Adding a widget type**:
 1. Add the new value to `WidgetType` in `const.py`
 2. Create `templates/foo.svg.j2` (may import `_macros.svg.j2` helpers)
-3. Write `_build_foo_context(widget, config) -> dict` in `svg_render.py`
-4. Register it in `_SVG_RENDERERS` in `svg_render.py`
+3. Write `_build_foo_context(widget, config) -> dict` in `widgets/foo.py`
+4. Re-export from `widgets/__init__.py` and register in
+   `_SVG_RENDERERS` in `svg_render.py`
 5. Add the widget type to `frontend/src/types/ha.d.ts`
 6. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
 

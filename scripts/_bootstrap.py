@@ -21,10 +21,20 @@ sys.path.insert(0, str(ROOT))
 # (e.g. ``from .svg_render import ...`` in render.py) resolve
 # against already-bootstrapped siblings instead of triggering
 # __init__.py (which requires Home Assistant).
+# __path__ must point to real directories so Python can find
+# subpackages like ``widgets/``.
+_PKG_PATHS: dict[str, list[str]] = {
+    "custom_components": [
+        str(ROOT / "custom_components"),
+    ],
+    PKG: [
+        str(ROOT / "custom_components" / "eink_dashboard"),
+    ],
+}
 for _pkg in ("custom_components", PKG):
     if _pkg not in sys.modules:
         _m = ModuleType(_pkg)
-        _m.__path__ = []  # type: ignore[attr-defined]
+        _m.__path__ = _PKG_PATHS[_pkg]  # type: ignore[attr-defined]
         sys.modules[_pkg] = _m
 
 
