@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..const import DEFAULT_ROW_H, PADDING
-from ..svg_render import (
+from ._helpers import (
     _color_context,
     _entity_info_context,
     _widget_dim,

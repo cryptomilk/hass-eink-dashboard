@@ -18,7 +18,7 @@ from custom_components.eink_dashboard.render import (
     format_number,
     resolve_number_format,
 )
-from custom_components.eink_dashboard.svg_render import (
+from custom_components.eink_dashboard.widgets._helpers import (
     _auto_row_height,
     _card_insets,
     _metrics_context,

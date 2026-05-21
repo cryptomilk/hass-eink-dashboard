@@ -11,10 +11,8 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
 )
-from custom_components.eink_dashboard.svg_render import (
-    _card_insets,
-    render_widget_svg,
-)
+from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets._helpers import _card_insets
 from tests.helpers import (
     _right_icon_ring_region,
     assert_all_white,

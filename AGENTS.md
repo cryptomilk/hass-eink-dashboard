@@ -25,12 +25,16 @@ image entity and a public HTTP endpoint.
 - `render.py` — rendering orchestrator and shared helpers (delegates to
   `svg_render.py`; also holds `WidgetMetrics`, `_compute_metrics`,
   `color_to_hex`, `DEFAULT_METRICS`, `_load_font`, and other utilities
-  imported lazily by `svg_render.py`)
+  imported lazily by widget modules and `widgets/_helpers.py`)
 - `svg_render.py` — SVG rendering pipeline: Jinja2 templates, icon-inlining
-  filters, `render_widget_svg()`, `_compose_svg()`, `_svg_to_png()` via
-  `resvg_py`, `_color_context()`, and shared layout helpers
+  filters (`_mdi_svg_filter`, `_weather_svg_filter`), `render_widget_svg()`,
+  `_compose_svg()`, `_svg_to_png()` via `resvg_py`
 - `widgets/` — per-widget SVG context builders (`_build_*_context()`),
   one module per widget type; re-exported via `widgets/__init__.py`
+- `widgets/_helpers.py` — shared layout helpers for widget builders:
+  `_color_context()`, `_widget_dim()`, `_card_insets()`, `_metrics_context()`,
+  `_title_layout()`, `_auto_row_height()`, `_fmt()`, `_entity_info_context()`,
+  `_ACTIVE_STATES`
 - `image.py` — `EinkDashboardImage` (`ImageEntity`), scheduled refresh, ETag tracking
 - `http.py` — unauthenticated HTTP view at `/api/eink_dashboard/{entry_id}/image.png` with ETag/304 support
 - `store.py` — `EinkDashboardStore`, persists widget list via HA's `Store` (`eink_dashboard.{entry_id}`)

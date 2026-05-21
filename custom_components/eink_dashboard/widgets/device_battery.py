@@ -9,7 +9,7 @@ from ..const import (
     DEFAULT_CARD_STYLE,
     PADDING,
 )
-from ..svg_render import (
+from ._helpers import (
     _card_insets,
     _color_context,
     _metrics_context,

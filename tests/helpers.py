@@ -10,7 +10,7 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
 )
-from custom_components.eink_dashboard.svg_render import _card_insets
+from custom_components.eink_dashboard.widgets._helpers import _card_insets
 
 
 def make_config(defaults: dict[str, Any], **overrides: Any) -> dict[str, Any]:
