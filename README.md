@@ -2,8 +2,8 @@
 
 Home Assistant custom component that renders e-ink dashboard images as PNG
 from entity state using SVG templates rasterised by resvg, and serves them
-to Kindle and TRMNL devices. No headless browser or other server component
-required running.
+to Kindle, TRMNL, and [OpenDisplay](https://opendisplay.org/) devices. No
+headless browser or other server component required running.
 
 ## Features
 
@@ -16,7 +16,7 @@ required running.
 - **WYSIWYG Lovelace editor** - drag, resize, and configure widgets on a
   server-rendered SVG preview that matches your device's exact pixel dimensions
 - **Pull and push delivery** - devices can fetch the image on their own
-  schedule (Kindle) or have HA push it via webhook (TRMNL)
+  schedule (Kindle, OpenDisplay) or have HA push it via webhook (TRMNL)
 - **E-ink optimization** - optional post-processing pipeline: autocontrast,
   sharpness, contrast adjustment, and grayscale quantization (2/4/16/256
   levels with Floyd-Steinberg dithering)
@@ -222,6 +222,18 @@ minimum interval of 5 minutes and a 5 MB size cap per push.
 
 You can add multiple TRMNL webhook targets per dashboard entry via
 **Configure -> Add push target**.
+
+### OpenDisplay
+
+[OpenDisplay](https://opendisplay.org/) fetches images from Home Assistant's
+Media Browser. The integration registers a **Media Source** platform that
+exposes each dashboard entry as a media item, so OpenDisplay can pull the
+latest rendered PNG without any additional configuration.
+
+In the OpenDisplay app, point it at your Home Assistant instance and select
+the dashboard entry from the Media Browser. OpenDisplay will refresh the image
+on its own schedule, respecting the ETag so it only re-renders the display
+when the image has actually changed.
 
 ## License
 
