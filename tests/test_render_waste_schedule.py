@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
 )
 from custom_components.eink_dashboard.render import (
@@ -189,8 +190,8 @@ class TestRenderWasteSchedule:
             row_h - m.divider,
             380,
             row_h + m.divider,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
+            low=COLOR_LIGHT_GRAY - 20,
+            high=COLOR_LIGHT_GRAY + 20,
         )
 
     def test_no_divider_single_entry(self) -> None:

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import ClassVar
 
-from custom_components.eink_dashboard.const import COLOR_GRAY, PADDING
+from custom_components.eink_dashboard.const import (
+    COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
+    PADDING,
+)
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
@@ -357,6 +361,42 @@ class TestRenderWeather:
         # Pixels beyond 400 on separator line (~y=145)
         # should be white.
         assert_all_white(img, 400, 140, 600, 155)
+
+    def test_weather_separator_color_is_light_gray(self) -> None:
+        # Separator line uses COLOR_LIGHT_GRAY, not COLOR_GRAY, so
+        # it recedes behind the text on 16-level displays.
+        m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "forecast_days": 3,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # sep_y mirrors the renderer formula at s=1.0:
+        # content_top (m.padding) + icon_size (80) + detail_gap (2)
+        # + detail_icon_h (20) + sep_gap (8).
+        s = 1.0
+        sep_y = (
+            m.padding
+            + round(80 * s)
+            + round(2 * s)
+            + round(20 * s)
+            + round(8 * s)
+        )
+        assert_has_gray_pixels(
+            img,
+            m.padding + 20,
+            sep_y - m.divider,
+            380,
+            sep_y + m.divider + 1,
+            low=COLOR_LIGHT_GRAY - 20,
+            high=COLOR_LIGHT_GRAY + 20,
+        )
 
     def test_weather_card_border(self) -> None:
         # Border style wraps the entire weather layout in a

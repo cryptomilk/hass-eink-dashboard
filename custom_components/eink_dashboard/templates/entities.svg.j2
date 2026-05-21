@@ -41,7 +41,7 @@
   y1="{{ row.y + row_h }}"
   x2="{{ w - r_inset - rpad }}"
   y2="{{ row.y + row_h }}"
-  stroke="{{ hex_gray }}"
+  stroke="{{ hex_light_gray }}"
   stroke-width="{{ divider_stroke_w }}"/>
 {%- endif -%}
 {%- elif row.row_type == "divider" -%}
@@ -50,7 +50,7 @@
   y1="{{ row.line_y }}"
   x2="{{ w - r_inset - rpad }}"
   y2="{{ row.line_y }}"
-  stroke="{{ hex_gray }}"
+  stroke="{{ hex_light_gray }}"
   stroke-width="{{ divider_stroke_w }}"/>
 {%- elif row.row_type == "section" -%}
 <text

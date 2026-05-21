@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
 )
 from custom_components.eink_dashboard.render import (
@@ -186,8 +187,8 @@ class TestRenderEntities:
             56 - m.divider,
             380,
             56 + m.divider,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
+            low=COLOR_LIGHT_GRAY - 20,
+            high=COLOR_LIGHT_GRAY + 20,
         )
 
     def test_entities_no_divider_single_entity(self) -> None:
@@ -238,8 +239,8 @@ class TestRenderEntities:
             mid_y - m.divider,
             380,
             mid_y + m.divider + 1,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
+            low=COLOR_LIGHT_GRAY - 20,
+            high=COLOR_LIGHT_GRAY + 20,
         )
 
     def test_entities_section_row_renders_text(self) -> None:
