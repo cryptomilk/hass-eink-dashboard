@@ -12,12 +12,12 @@ from ..const import (
     color_to_hex,
 )
 from ._helpers import (
-    _ACTIVE_STATES,
     _auto_row_height,
     _card_insets,
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_style,
     _resolve_icon_svg,
     _widget_dim,
 )
@@ -146,22 +146,9 @@ def _build_tile_context(
         entity_id,
     )
 
-    # Icon style: explicit config overrides auto-switching.
-    is_active = state_val in _ACTIVE_STATES
-    if icon_style is None:
-        # 2-level displays use outlined for maximum contrast.
-        # Multi-level displays switch by entity state.
-        if grayscale_levels <= 2:
-            resolved_style = "outlined"
-        elif is_active:
-            resolved_style = "filled"
-        else:
-            resolved_style = "outlined"
-    else:
-        resolved_style = str(icon_style)
-
-    icon_outline = resolved_style == "outlined"
-    icon_no_circle = resolved_style == "none"
+    icon_outline, icon_no_circle = _resolve_icon_style(
+        icon_style, state_val, grayscale_levels
+    )
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)

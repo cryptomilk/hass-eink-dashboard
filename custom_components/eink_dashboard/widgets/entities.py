@@ -12,12 +12,12 @@ from ..const import (
     color_to_hex,
 )
 from ._helpers import (
-    _ACTIVE_STATES,
     _auto_row_height,
     _card_insets,
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_style,
     _resolve_icon_svg,
     _title_layout,
     _widget_dim,
@@ -252,20 +252,9 @@ def _build_entities_context(
                 entity_id,
             )
 
-            # Icon style: widget-level or auto by entity
-            # state.
-            is_active = state_val in _ACTIVE_STATES
-            if icon_style is None:
-                resolved_style = (
-                    "outlined"
-                    if grayscale_levels <= 2
-                    else ("filled" if is_active else "outlined")
-                )
-            else:
-                resolved_style = str(icon_style)
-
-            icon_outline = resolved_style == "outlined"
-            icon_no_circle = resolved_style == "none"
+            icon_outline, icon_no_circle = _resolve_icon_style(
+                icon_style, state_val, grayscale_levels
+            )
 
             # Auto-divider: draw after this entity row only
             # when the immediately following row is also an

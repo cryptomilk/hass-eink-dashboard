@@ -21,6 +21,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_style,
     _resolve_icon_svg,
     _widget_dim,
 )
@@ -118,8 +119,9 @@ def _build_heading_context(
     text_fill = colors["hex_black"] if is_title else colors["hex_gray"]
 
     # Icon resolution: glyph size depends on circle style.
-    icon_no_circle = icon_style == "none"
-    icon_outline = icon_style == "outlined"
+    icon_outline, icon_no_circle = _resolve_icon_style(
+        icon_style, grayscale_levels=grayscale_levels
+    )
     # Widen the outline stroke on 2-level displays to avoid
     # dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border

@@ -176,6 +176,46 @@ def _card_insets(
     return 0, 0, 0
 
 
+def _resolve_icon_style(
+    icon_style: str | None,
+    state_val: str = "",
+    grayscale_levels: int = 16,
+) -> tuple[bool, bool]:
+    """Resolve icon circle style to outline/no-circle flags.
+
+    When ``icon_style`` is ``None`` the style is chosen
+    automatically: 2-level displays always use ``"outlined"``
+    (maximum contrast); multi-level displays switch to
+    ``"filled"`` for active entities and fall back to
+    ``"outlined"`` otherwise.
+
+    Args:
+        icon_style: Explicit style override (``"filled"``,
+            ``"outlined"``, ``"none"``), or ``None`` for
+            automatic selection based on entity state.
+        state_val: Entity state string used for active
+            detection when ``icon_style`` is ``None``.
+            Defaults to ``""`` (treated as inactive).
+        grayscale_levels: Display grayscale depth.  Values
+            of 2 or fewer force ``"outlined"`` regardless
+            of state.
+
+    Returns:
+        ``(icon_outline, icon_no_circle)`` — boolean flags
+        consumed by the SVG template.
+    """
+    if icon_style is None:
+        is_active = state_val in _ACTIVE_STATES
+        resolved = (
+            "outlined"
+            if grayscale_levels <= 2
+            else ("filled" if is_active else "outlined")
+        )
+    else:
+        resolved = icon_style
+    return resolved == "outlined", resolved == "none"
+
+
 def _resolve_icon_svg(
     icon_override: str | None,
     attrs: dict[str, object],
@@ -426,20 +466,9 @@ def _entity_info_context(
         entity_id,
     )
 
-    # Auto-resolve icon style: active → filled, else outlined.
-    # 2-level displays always use outlined for readability.
-    is_active = state_val in _ACTIVE_STATES
-    if icon_style is None:
-        resolved_style = (
-            "outlined"
-            if grayscale_levels <= 2
-            else ("filled" if is_active else "outlined")
-        )
-    else:
-        resolved_style = str(icon_style)
-
-    icon_outline = resolved_style == "outlined"
-    icon_no_circle = resolved_style == "none"
+    icon_outline, icon_no_circle = _resolve_icon_style(
+        icon_style, state_val, grayscale_levels
+    )
     # Widen outline stroke on 2-level displays to avoid dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
     icon_fill = color_to_hex(COLOR_GRAY)

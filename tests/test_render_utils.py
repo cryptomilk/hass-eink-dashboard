@@ -22,6 +22,7 @@ from custom_components.eink_dashboard.widgets._helpers import (
     _auto_row_height,
     _card_insets,
     _metrics_context,
+    _resolve_icon_style,
     _title_layout,
 )
 from tests.helpers import (
@@ -500,3 +501,54 @@ class TestFormatNumber:
     def test_negative_value(self) -> None:
         # Negative numbers should preserve the minus sign.
         assert format_number("-8.41", "decimal_comma", "de") == "-8,4"
+
+
+class TestResolveIconStyle:
+    def test_auto_active_multilevel_filled(self) -> None:
+        # Active entity on a multi-level display auto-resolves to
+        # filled (icon_outline=False, icon_no_circle=False).
+        icon_outline, icon_no_circle = _resolve_icon_style(None, "on", 16)
+        assert not icon_outline
+        assert not icon_no_circle
+
+    def test_auto_inactive_multilevel_outlined(self) -> None:
+        # Inactive entity on a multi-level display auto-resolves to
+        # outlined (icon_outline=True, icon_no_circle=False).
+        icon_outline, icon_no_circle = _resolve_icon_style(None, "off", 16)
+        assert icon_outline
+        assert not icon_no_circle
+
+    def test_auto_active_2level_always_outlined(self) -> None:
+        # 2-level display forces outlined even for active entities.
+        icon_outline, icon_no_circle = _resolve_icon_style(None, "on", 2)
+        assert icon_outline
+        assert not icon_no_circle
+
+    def test_explicit_filled_overrides_state(self) -> None:
+        # Explicit "filled" forces filled regardless of entity state.
+        icon_outline, icon_no_circle = _resolve_icon_style("filled", "off", 16)
+        assert not icon_outline
+        assert not icon_no_circle
+
+    def test_explicit_outlined_overrides_state(self) -> None:
+        # Explicit "outlined" forces outlined regardless of state.
+        icon_outline, icon_no_circle = _resolve_icon_style(
+            "outlined", "on", 16
+        )
+        assert icon_outline
+        assert not icon_no_circle
+
+    def test_explicit_none_suppresses_circle(self) -> None:
+        # Explicit "none" sets icon_no_circle=True.
+        icon_outline, icon_no_circle = _resolve_icon_style("none", "on", 16)
+        assert not icon_outline
+        assert icon_no_circle
+
+    def test_default_state_val_treated_as_inactive(self) -> None:
+        # Omitting state_val uses the default "" which is not an
+        # active state, so auto-resolves to outlined on multi-level.
+        icon_outline, icon_no_circle = _resolve_icon_style(
+            None, grayscale_levels=16
+        )
+        assert icon_outline
+        assert not icon_no_circle
