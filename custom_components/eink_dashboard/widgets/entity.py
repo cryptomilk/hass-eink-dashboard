@@ -72,4 +72,4 @@ def _build_entity_context(
             "has_entity": False,
             **_color_context(),
         }
-    return ctx
+    return {**ctx, "has_graph": False}
