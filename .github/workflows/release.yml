@@ -22,6 +22,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
+      - uses: pnpm/action-setup@v4
+        if: matrix.name == 'test'
+        with:
+          run_install: false
+          package_json_file: custom_components/eink_dashboard/frontend/package.json
+      - uses: actions/setup-node@v4
+        if: matrix.name == 'test'
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: custom_components/eink_dashboard/frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        if: matrix.name == 'test'
+        working-directory: custom_components/eink_dashboard/frontend
       - run: ${{ matrix.cmd }}
 
   validate-frontend:
