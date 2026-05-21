@@ -96,6 +96,71 @@
 
 
 {#
+  icon_circle -- draw a circular icon with glyph or letter fallback.
+
+  Renders the three-layer icon element used by card_row, entity, sensor,
+  and heading: an optional background circle (filled or outlined), an MDI
+  icon glyph, or a single-character letter centered in the circle.
+
+  All positions and colors are pre-computed by the caller; this macro only
+  emits SVG elements.
+
+  Content priority: icon_svg > letter > empty circle (unless icon_no_circle
+  suppresses the circle entirely).
+
+  Parameters:
+    cx, cy     -- circle center
+    r          -- circle radius
+    glyph_x, glyph_y -- top-left of the icon glyph bounding box
+    stroke_w   -- stroke width for outlined circle
+    icon_fill  -- hex fill for solid circle
+    icon_color -- hex color for glyph or letter
+    hex_black  -- hex black for outlined circle stroke
+    hex_white  -- hex white for outlined circle fill
+    icon_svg       -- pre-built MDI SVG string; empty = use letter
+    icon_outline   -- when true, white fill + black stroke circle
+    icon_no_circle -- when true, circle suppressed entirely
+    letter         -- fallback single character when icon_svg is empty
+    letter_font_sz -- font size for the letter fallback
+#}
+{%- macro icon_circle(
+    cx, cy, r,
+    glyph_x, glyph_y,
+    stroke_w, icon_fill, icon_color,
+    hex_black, hex_white,
+    icon_svg="",
+    icon_outline=false, icon_no_circle=false,
+    letter="", letter_font_sz=0
+) -%}
+{%- if not icon_no_circle -%}
+{%- if icon_outline -%}
+<circle
+  cx="{{ cx }}" cy="{{ cy }}" r="{{ r }}"
+  fill="{{ hex_white }}"
+  stroke="{{ hex_black }}"
+  stroke-width="{{ stroke_w }}"/>
+{%- else -%}
+<circle
+  cx="{{ cx }}" cy="{{ cy }}" r="{{ r }}"
+  fill="{{ icon_fill }}"/>
+{%- endif -%}
+{%- endif -%}
+{%- if icon_svg -%}
+<g transform="translate({{ glyph_x }}, {{ glyph_y }})"
+  style="color: {{ icon_color }}">{{ icon_svg }}</g>
+{%- elif letter -%}
+<text
+  x="{{ cx }}" y="{{ cy }}"
+  font-family="Roboto"
+  font-size="{{ letter_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ icon_color }}">{{ letter }}</text>
+{%- endif -%}
+{%- endmacro -%}
+
+
+{#
   card_row -- draw one entity row with icon circle, text, and value.
 
   Lays out a single row: a circular icon area on the left, a primary
@@ -126,9 +191,9 @@
     hex_black -- hex black for outlined circle stroke and icon color
     hex_white -- hex white for outlined circle fill
     icon_inner    -- side length of the icon glyph inside the circle;
-                     -1 (default) falls back to icon_dia * 60 // 100
+                     none (default) falls back to icon_dia * 60 // 100
     letter_font_sz -- font size for the letter fallback drawn in the
-                     circle when icon_svg is empty; -1 (default) falls
+                     circle when icon_svg is empty; none (default) falls
                      back to icon_dia * 5 // 10
     primary   -- main label text
     secondary -- sub-label text (empty = single-line row)
@@ -164,42 +229,18 @@
 {%- set icon_cx = x + lpad + icon_dia // 2 -%}
 {%- set icon_cy = y + row_h // 2 -%}
 {%- set icon_r = icon_dia // 2 -%}
-{# Icon circle -- outline or solid fill.  Suppressed entirely
-   when icon_no_circle is true. #}
-{%- if not icon_no_circle -%}
-{%- if icon_outline -%}
-<circle
-  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
-  fill="{{ hex_white }}"
-  stroke="{{ hex_black }}"
-  stroke-width="{{ border }}"/>
-{%- else -%}
-<circle
-  cx="{{ icon_cx }}" cy="{{ icon_cy }}" r="{{ icon_r }}"
-  fill="{{ icon_fill }}"/>
-{%- endif -%}
-{%- endif -%}
-{# Icon content: inlined SVG or letter fallback #}
-{%- if icon_svg -%}
-{%- set icon_sz = icon_inner -%}
-{%- set ix = icon_cx - icon_sz // 2 -%}
-{%- set iy = icon_cy - icon_sz // 2 -%}
 {# Outlined and no-circle icons use black; solid-fill uses white. #}
-{%- set ic = hex_black if (icon_outline or icon_no_circle)
+{%- set icon_gx = icon_cx - icon_inner // 2 -%}
+{%- set icon_gy = icon_cy - icon_inner // 2 -%}
+{%- set icon_color = hex_black if (icon_outline or icon_no_circle)
     else hex_white -%}
-<g transform="translate({{ ix }}, {{ iy }})"
-  style="color: {{ ic }}">{{ icon_svg }}</g>
-{%- elif letter -%}
-{%- set lc = hex_black if (icon_outline or icon_no_circle)
-    else hex_white -%}
-<text
-  x="{{ icon_cx }}" y="{{ icon_cy }}"
-  font-family="Roboto"
-  font-size="{{ letter_font_sz }}"
-  text-anchor="middle"
-  dominant-baseline="central"
-  fill="{{ lc }}">{{ letter }}</text>
-{%- endif -%}
+{{- icon_circle(icon_cx, icon_cy, icon_r,
+    icon_gx, icon_gy,
+    border, icon_fill, icon_color,
+    hex_black, hex_white,
+    icon_svg=icon_svg,
+    icon_outline=icon_outline, icon_no_circle=icon_no_circle,
+    letter=letter, letter_font_sz=letter_font_sz) -}}
 {%- set tx = x + lpad + icon_dia + inner_gap -%}
 {# Text block -- vertically center primary + optional secondary #}
 {%- if secondary -%}

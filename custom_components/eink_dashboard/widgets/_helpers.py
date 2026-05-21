@@ -232,9 +232,9 @@ def _resolve_icon_svg(
        Strips the ``mdi:`` prefix when present and passes the
        bare name to ``_mdi_svg_filter``.  Values without the
        prefix are passed as-is.  When ``icon_override`` is set
-       the remaining steps are **never tried**, even if the icon
-       file is missing — the user's explicit choice is respected
-       and the function falls through directly to step 4.
+       the remaining steps (2–3) are **never tried**.  If the
+       override icon cannot be found, the function falls through
+       to step 4 (letter fallback).
     2. **Device-class icon** — looked up via
        ``_device_class_icon(attrs, state_val, domain)``.
     3. **Entity icon attribute** — ``attrs["icon"]`` when it
@@ -276,7 +276,7 @@ def _resolve_icon_svg(
         icon_name = str(icon_override)
         if icon_name.startswith("mdi:"):
             icon_name = icon_name[4:]
-        with contextlib.suppress(FileNotFoundError):
+        with contextlib.suppress(FileNotFoundError, ValueError):
             icon_svg = _mdi_svg_filter(icon_name, size)
     else:
         resolved = _device_class_icon(attrs, state_val, domain)
@@ -285,7 +285,7 @@ def _resolve_icon_svg(
             if isinstance(raw, str) and raw.startswith("mdi:"):
                 resolved = raw[4:]
         if resolved:
-            with contextlib.suppress(FileNotFoundError):
+            with contextlib.suppress(FileNotFoundError, ValueError):
                 icon_svg = _mdi_svg_filter(resolved, size)
 
     letter = ""
