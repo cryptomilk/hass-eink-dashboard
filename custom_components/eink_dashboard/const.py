@@ -32,6 +32,21 @@ COLOR_WHITE = 255
 COLOR_GRAY = 120
 COLOR_LIGHT_GRAY = 180
 
+
+def color_to_hex(c: int) -> str:
+    """Convert a grayscale 0–255 value to an SVG hex color string.
+
+    Args:
+        c: Grayscale intensity (0 = black, 255 = white).
+
+    Returns:
+        Lowercase six-digit hex string, e.g. ``"#000000"`` for 0,
+        ``"#787878"`` for 120, ``"#ffffff"`` for 255.
+    """
+    c = max(0, min(255, c))
+    return f"#{c:02x}{c:02x}{c:02x}"
+
+
 DEFAULT_CARD_STYLE = "none"
 
 # Scale denominator for weather widget geometry: all _WX_* base

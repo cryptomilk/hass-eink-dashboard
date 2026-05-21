@@ -75,20 +75,6 @@ def _load_font_cached(
     return ImageFont.load_default(size)
 
 
-def color_to_hex(c: int) -> str:
-    """Convert a grayscale 0–255 value to an SVG hex color string.
-
-    Args:
-        c: Grayscale intensity (0 = black, 255 = white).
-
-    Returns:
-        Lowercase six-digit hex string, e.g. ``"#000000"`` for 0,
-        ``"#787878"`` for 120, ``"#ffffff"`` for 255.
-    """
-    c = max(0, min(255, c))
-    return f"#{c:02x}{c:02x}{c:02x}"
-
-
 def _fmt_temp(
     value: str | float | int,
     number_format: str,

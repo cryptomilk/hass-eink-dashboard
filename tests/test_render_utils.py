@@ -8,13 +8,13 @@ import pytest
 from custom_components.eink_dashboard.const import (
     DEFAULT_ROW_H,
     NumberFormat,
+    color_to_hex,
 )
 from custom_components.eink_dashboard.render import (
     DEFAULT_METRICS,
     WidgetMetrics,
     _compute_metrics,
     _load_font,
-    color_to_hex,
     format_number,
     resolve_number_format,
 )

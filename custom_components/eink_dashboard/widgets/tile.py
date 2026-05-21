@@ -15,6 +15,7 @@ from ..const import (
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
@@ -83,7 +84,6 @@ def _build_tile_context(
     from ..render import (
         _compute_metrics,
         _device_class_icon,
-        color_to_hex,
     )
 
     x = widget.get("x", PADDING)

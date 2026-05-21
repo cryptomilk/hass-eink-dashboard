@@ -8,6 +8,7 @@ from ..const import (
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ._helpers import (
     _card_insets,
@@ -49,7 +50,7 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from ..render import _compute_metrics, _load_font, color_to_hex
+    from ..render import _compute_metrics, _load_font
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)

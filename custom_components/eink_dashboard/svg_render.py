@@ -26,9 +26,15 @@ import jinja2
 import markupsafe
 import resvg_py
 
-from .const import COLOR_WHITE, DisplayConfig, Widget, WidgetType
+from .const import (
+    COLOR_WHITE,
+    DisplayConfig,
+    Widget,
+    WidgetType,
+    color_to_hex,
+)
 
-_hex_white = f"#{COLOR_WHITE:02x}{COLOR_WHITE:02x}{COLOR_WHITE:02x}"
+_hex_white = color_to_hex(COLOR_WHITE)
 
 _FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"

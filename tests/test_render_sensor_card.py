@@ -7,10 +7,10 @@ from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
+    color_to_hex,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
-    color_to_hex,
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg

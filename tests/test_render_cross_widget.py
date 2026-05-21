@@ -11,10 +11,10 @@ from custom_components.eink_dashboard.const import (
     COLOR_LIGHT_GRAY,
     COLOR_WHITE,
     PADDING,
+    color_to_hex,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
-    color_to_hex,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from tests.helpers import (

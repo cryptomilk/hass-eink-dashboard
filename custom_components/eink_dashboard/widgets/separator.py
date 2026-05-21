@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from ..const import COLOR_BLACK, COLOR_GRAY, PADDING, DisplayConfig, Widget
+from ..const import (
+    COLOR_BLACK,
+    COLOR_GRAY,
+    PADDING,
+    DisplayConfig,
+    Widget,
+    color_to_hex,
+)
 from ._helpers import _color_context, _widget_dim
 
 
@@ -37,8 +44,6 @@ def _build_separator_context(
         Dict consumed by ``separator.svg.j2``: ``w``, ``h``,
         ``bar_w``, ``bar_h``, ``fill``.
     """
-    from ..render import color_to_hex
-
     x = widget.get("x", PADDING)
     y = widget.get("y", 0)
     direction = widget.get("direction", "horizontal")

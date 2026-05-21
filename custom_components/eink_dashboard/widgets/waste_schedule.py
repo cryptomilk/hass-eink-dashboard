@@ -10,6 +10,7 @@ from ..const import (
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
@@ -73,7 +74,6 @@ def _build_waste_schedule_context(
         _format_relative_date,
         _get_today,
         _parse_days_until,
-        color_to_hex,
     )
 
     x = widget.get("x", PADDING)

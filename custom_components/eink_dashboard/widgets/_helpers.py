@@ -31,6 +31,7 @@ from ..const import (
     DEFAULT_ROW_H,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
 
@@ -106,8 +107,6 @@ def _color_context() -> dict[str, str]:
         ``hex_gray``, and ``hex_light_gray`` to their
         SVG hex color strings.
     """
-    from ..render import color_to_hex
-
     return {
         "hex_black": color_to_hex(COLOR_BLACK),
         "hex_white": color_to_hex(COLOR_WHITE),
@@ -286,7 +285,6 @@ def _entity_info_context(
         _compute_metrics,
         _device_class_icon,
         _load_font,
-        color_to_hex,
     )
 
     entity_id: str = widget.get("entity", "")
