@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import markupsafe
-
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -17,7 +11,6 @@ from ..const import (
     Widget,
     color_to_hex,
 )
-from ..svg_render import _mdi_svg_filter
 from ._helpers import (
     _ACTIVE_STATES,
     _auto_row_height,
@@ -25,6 +18,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_svg,
     _title_layout,
     _widget_dim,
 )
@@ -86,10 +80,7 @@ def _build_entities_context(
         metrics (``m_*``), colors (``hex_*``), row list and
         per-row layout dicts.
     """
-    from ..render import (
-        _compute_metrics,
-        _device_class_icon,
-    )
+    from ..render import _compute_metrics
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -231,7 +222,10 @@ def _build_entities_context(
         else:
             entity_id = str(cls["entity_id"])
             name_override = cls["name_override"]
-            icon_override = cls["icon_override"]
+            _raw_icon = cls["icon_override"]
+            icon_override: str | None = (
+                str(_raw_icon) if _raw_icon is not None else None
+            )
             state = states[entity_id]
             attrs = state.get("attributes", {})
             domain = entity_id.split(".")[0]
@@ -249,27 +243,14 @@ def _build_entities_context(
 
             # Icon: explicit override → device_class →
             # attrs["icon"] → letter fallback.
-            icon_svg: markupsafe.Markup | str = ""
-            if icon_override is not None:
-                icon_name: str | None = str(icon_override)
-                if icon_name.startswith("mdi:"):
-                    icon_name = icon_name[4:]
-                with contextlib.suppress(FileNotFoundError):
-                    icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
-            else:
-                icon_name = _device_class_icon(attrs, state_val, domain)
-                if icon_name is None:
-                    raw = attrs.get("icon", "")
-                    if raw.startswith("mdi:"):
-                        icon_name = raw[4:]
-                if icon_name:
-                    with contextlib.suppress(FileNotFoundError):
-                        icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
-
-            letter = ""
-            if not icon_svg:
-                friendly = attrs.get("friendly_name", entity_id)
-                letter = friendly[:1].upper() if friendly else ""
+            icon_svg, letter = _resolve_icon_svg(
+                icon_override,
+                attrs,
+                state_val,
+                domain,
+                m.icon_inner,
+                entity_id,
+            )
 
             # Icon style: widget-level or auto by entity
             # state.

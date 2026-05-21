@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import markupsafe
-
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -17,7 +11,6 @@ from ..const import (
     Widget,
     color_to_hex,
 )
-from ..svg_render import _mdi_svg_filter
 from ._helpers import (
     _ACTIVE_STATES,
     _auto_row_height,
@@ -25,6 +18,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_svg,
     _widget_dim,
 )
 
@@ -81,10 +75,7 @@ def _build_tile_context(
         intentionally omitted — tiles have no right-aligned
         value text; the macro defaults to ``""``.
     """
-    from ..render import (
-        _compute_metrics,
-        _device_class_icon,
-    )
+    from ..render import _compute_metrics
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -145,31 +136,15 @@ def _build_tile_context(
         fmtd = _fmt(state_val, config)
         secondary = f"{fmtd}{unit}" if unit else fmtd
 
-    # Icon: explicit override → letter fallback when not found.
-    # No override → device_class → letter fallback.
-    # When an explicit icon is requested and its file is absent,
-    # skip device_class lookup so the user's intent is respected.
-    icon_svg: markupsafe.Markup | str = ""
-    if icon_override is not None:
-        icon_name = str(icon_override)
-        if icon_name.startswith("mdi:"):
-            icon_name = icon_name[4:]
-        with contextlib.suppress(FileNotFoundError):
-            icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
-    else:
-        resolved_name = _device_class_icon(attrs, state_val, domain)
-        if resolved_name is None:
-            raw = attrs.get("icon", "")
-            if raw.startswith("mdi:"):
-                resolved_name = raw[4:]
-        if resolved_name:
-            with contextlib.suppress(FileNotFoundError):
-                icon_svg = _mdi_svg_filter(resolved_name, m.icon_inner)
-
-    letter = ""
-    if not icon_svg:
-        friendly = attrs.get("friendly_name", entity_id)
-        letter = friendly[:1].upper() if friendly else ""
+    # Icon: explicit override → device_class → letter fallback.
+    icon_svg, letter = _resolve_icon_svg(
+        icon_override,
+        attrs,
+        state_val,
+        domain,
+        m.icon_inner,
+        entity_id,
+    )
 
     # Icon style: explicit config overrides auto-switching.
     is_active = state_val in _ACTIVE_STATES

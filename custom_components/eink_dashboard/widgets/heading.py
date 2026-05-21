@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
@@ -17,12 +16,12 @@ from ..const import (
     Widget,
     color_to_hex,
 )
-from ..svg_render import _mdi_svg_filter
 from ._helpers import (
     _card_insets,
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_icon_svg,
     _widget_dim,
 )
 
@@ -89,7 +88,6 @@ def _build_heading_context(
     """
     from ..render import (
         _compute_metrics,
-        _device_class_icon,
         _load_font,
     )
 
@@ -125,14 +123,14 @@ def _build_heading_context(
     # Widen the outline stroke on 2-level displays to avoid
     # dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
-    icon_svg: markupsafe.Markup | str = ""
     glyph_sz = max(10, font_sz) if icon_no_circle else m.icon_inner
-    if icon_override is not None:
-        icon_name = str(icon_override)
-        if icon_name.startswith("mdi:"):
-            icon_name = icon_name[4:]
-        with contextlib.suppress(FileNotFoundError):
-            icon_svg = _mdi_svg_filter(icon_name, glyph_sz)
+    icon_svg, _ = _resolve_icon_svg(
+        icon_override,
+        {},
+        "",
+        "",
+        glyph_sz,
+    )
 
     # Icon geometry: two modes depending on whether a circle
     # is drawn.
@@ -191,20 +189,19 @@ def _build_heading_context(
 
         badge_icon_svg: markupsafe.Markup | str = ""
         if show_icon:
-            b_name: str | None = None
-            # User-supplied icon override takes priority.
+            # Only mdi:-prefixed overrides are recognised; other
+            # values fall through to device_class resolution.
+            b_override: str | None = None
             if badge_icon_override.startswith("mdi:"):
-                b_name = badge_icon_override[4:]
-            if b_name is None:
-                domain = entity_id.split(".")[0]
-                b_name = _device_class_icon(attrs, state_val, domain)
-            if b_name is None:
-                raw = attrs.get("icon", "")
-                if raw.startswith("mdi:"):
-                    b_name = raw[4:]
-            if b_name:
-                with contextlib.suppress(FileNotFoundError):
-                    badge_icon_svg = _mdi_svg_filter(b_name, badge_icon_sz)
+                b_override = badge_icon_override[4:]
+            domain = entity_id.split(".")[0]
+            badge_icon_svg, _ = _resolve_icon_svg(
+                b_override,
+                attrs,
+                state_val,
+                domain,
+                badge_icon_sz,
+            )
 
         icon_w = (badge_icon_sz + m.inner_gap) if badge_icon_svg else 0
         text_w = round(badge_font.getlength(badge_text))

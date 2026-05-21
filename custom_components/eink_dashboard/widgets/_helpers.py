@@ -176,6 +176,85 @@ def _card_insets(
     return 0, 0, 0
 
 
+def _resolve_icon_svg(
+    icon_override: str | None,
+    attrs: dict[str, object],
+    state_val: str,
+    domain: str,
+    size: int,
+    entity_id: str = "",
+) -> tuple[markupsafe.Markup | str, str]:
+    """Resolve an MDI icon SVG and letter fallback for an entity.
+
+    Walks the icon resolution chain in priority order:
+
+    1. **Explicit override** — ``icon_override`` is not ``None``.
+       Strips the ``mdi:`` prefix when present and passes the
+       bare name to ``_mdi_svg_filter``.  Values without the
+       prefix are passed as-is.  When ``icon_override`` is set
+       the remaining steps are **never tried**, even if the icon
+       file is missing — the user's explicit choice is respected
+       and the function falls through directly to step 4.
+    2. **Device-class icon** — looked up via
+       ``_device_class_icon(attrs, state_val, domain)``.
+    3. **Entity icon attribute** — ``attrs["icon"]`` when it
+       carries an ``mdi:`` prefix.
+    4. **Letter fallback** — first character of ``friendly_name``
+       (or ``entity_id``) uppercased.  Skipped when ``entity_id``
+       is empty.
+
+    Callers that only want to honour ``mdi:``-prefixed overrides
+    (e.g. heading badges) must normalise non-``mdi:`` values to
+    ``None`` before calling, so the chain falls through to
+    device_class resolution instead of stopping at step 1.
+
+    Args:
+        icon_override: MDI icon name with optional ``mdi:``
+            prefix, or ``None`` when no override is configured.
+            Any non-``None`` value blocks steps 2–3.
+        attrs: Entity ``attributes`` dict from the HA state.
+        state_val: Entity state string (e.g. ``"on"``,
+            ``"22.1"``).
+        domain: HA entity domain (e.g. ``"sensor"``,
+            ``"binary_sensor"``).
+        size: Icon glyph size in pixels passed to
+            ``_mdi_svg_filter``.
+        entity_id: Full entity ID used for the letter fallback.
+            Empty string suppresses the fallback.
+
+    Returns:
+        ``(icon_svg, letter)`` where ``icon_svg`` is an inline
+        SVG ``Markup`` string (empty when no icon resolves) and
+        ``letter`` is the uppercase first character of the
+        friendly name (empty when an icon was found or when
+        ``entity_id`` is empty).
+    """
+    from ..render import _device_class_icon
+
+    icon_svg: markupsafe.Markup | str = ""
+    if icon_override is not None:
+        icon_name = str(icon_override)
+        if icon_name.startswith("mdi:"):
+            icon_name = icon_name[4:]
+        with contextlib.suppress(FileNotFoundError):
+            icon_svg = _mdi_svg_filter(icon_name, size)
+    else:
+        resolved = _device_class_icon(attrs, state_val, domain)
+        if resolved is None:
+            raw = attrs.get("icon", "")
+            if isinstance(raw, str) and raw.startswith("mdi:"):
+                resolved = raw[4:]
+        if resolved:
+            with contextlib.suppress(FileNotFoundError):
+                icon_svg = _mdi_svg_filter(resolved, size)
+
+    letter = ""
+    if not icon_svg and entity_id:
+        friendly = attrs.get("friendly_name", entity_id)
+        letter = str(friendly)[:1].upper() if friendly else ""
+    return icon_svg, letter
+
+
 def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
     """Return a widget dimension, clamped to >= 1.
 
@@ -283,7 +362,6 @@ def _entity_info_context(
     """
     from ..render import (
         _compute_metrics,
-        _device_class_icon,
         _load_font,
     )
 
@@ -339,27 +417,14 @@ def _entity_info_context(
     )
 
     # Icon resolution: explicit override → device_class → attrs icon.
-    icon_svg: markupsafe.Markup | str = ""
-    if icon_override is not None:
-        icon_name = str(icon_override)
-        if icon_name.startswith("mdi:"):
-            icon_name = icon_name[4:]
-        with contextlib.suppress(FileNotFoundError):
-            icon_svg = _mdi_svg_filter(icon_name, m.icon_inner)
-    else:
-        resolved_name = _device_class_icon(attrs, state_val, domain)
-        if resolved_name is None:
-            raw = attrs.get("icon", "")
-            if raw.startswith("mdi:"):
-                resolved_name = raw[4:]
-        if resolved_name:
-            with contextlib.suppress(FileNotFoundError):
-                icon_svg = _mdi_svg_filter(resolved_name, m.icon_inner)
-
-    letter = ""
-    if not icon_svg:
-        friendly = attrs.get("friendly_name", entity_id)
-        letter = friendly[:1].upper() if friendly else ""
+    icon_svg, letter = _resolve_icon_svg(
+        icon_override,
+        attrs,
+        state_val,
+        domain,
+        m.icon_inner,
+        entity_id,
+    )
 
     # Auto-resolve icon style: active → filled, else outlined.
     # 2-level displays always use outlined for readability.
