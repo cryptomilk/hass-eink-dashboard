@@ -16,10 +16,12 @@ TDD red phase — tests must FAIL until the SVG renderer is implemented.
 
 1. Read the task description / spec doc for the new widget.
 2. Read `tests/helpers.py` for available test helpers.
-3. Read existing test classes in `tests/test_render.py` for patterns.
-   The SEPARATOR tests (`TestRenderSeparator`) are the reference for
-   structural/pixel assertions. The weather tests (`TestRenderWeather`)
-   show the `_DEFAULTS` + `_config()` pattern.
+3. Read existing per-widget test files in `tests/test_render_*.py`
+   for patterns. The SEPARATOR tests (`TestRenderSeparator`) in
+   `tests/test_render_separator.py` are the reference for
+   structural/pixel assertions. The weather tests
+   (`TestRenderWeather`) in `tests/test_render_weather.py` show
+   the `_DEFAULTS` + `_config()` pattern.
 4. Read `custom_components/eink_dashboard/templates/_macros.svg.j2` for
    macro signatures (`card_container`, `card_row`, `chip`) so you know
    the card container insets to use in pixel region calculations.
@@ -28,7 +30,7 @@ TDD red phase — tests must FAIL until the SVG renderer is implemented.
 
 ## Existing test classes
 
-!`grep -n "^class Test" tests/test_render.py`
+!`grep -rn "^class Test" tests/test_render_*.py`
 
 ## Current test helper signatures
 
@@ -67,8 +69,10 @@ from custom_components.eink_dashboard.render import (
     _device_class_icon, render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import (
-    render_widget_svg, _card_insets, _metrics_context,
-    _auto_row_height,
+    render_widget_svg,
+)
+from custom_components.eink_dashboard.widgets._helpers import (
+    _card_insets, _metrics_context, _auto_row_height,
 )
 from tests.helpers import (
     assert_all_white, assert_card_border, assert_has_dark_pixels,
@@ -80,9 +84,10 @@ from tests.helpers import (
 
 ## Test structure
 
-Create a test class `TestRender{WidgetName}` (PascalCase) in
-`tests/test_render.py`. When redesigning an existing widget, replace
-the old test class in-place (same position in the file).
+Create a test class `TestRender{WidgetName}` (PascalCase) in a
+dedicated file `tests/test_render_{widget_type}.py`. When
+redesigning an existing widget, replace the old test class in its
+existing file.
 
 ### 1. Structural tests — verify visual elements exist
 
@@ -142,7 +147,8 @@ coordinates.
 
 If the widget displays numeric entity states (via `_fmt()`), add a
 test to the existing `TestLocaleFormattingInWidgets` class in
-`tests/test_render.py`.  Do NOT create a separate class.
+`tests/test_render_cross_widget.py`.  Do NOT create a separate
+class.
 
 ```python
 def test_{widget_type}_decimal_comma(self) -> None:
@@ -432,7 +438,7 @@ Run tests — they should FAIL at this point (TDD red phase):
 
 ```bash
 uv run --group test pytest \
-    tests/test_render.py::TestRender{WidgetName} -v
+    tests/test_render_{widget_type}.py::TestRender{WidgetName} -v
 ```
 
 The tests define the expected behavior. The renderer implementation
@@ -443,8 +449,9 @@ The tests define the expected behavior. The renderer implementation
 - Widget behavior source: task description / spec doc for the new widget
 - Test helpers: `tests/helpers.py`
 - Reference structural tests: `TestRenderSeparator` in
-  `tests/test_render.py`
+  `tests/test_render_separator.py`
 - Reference `_DEFAULTS` + `_config()` pattern: `TestRenderWeather`
+  in `tests/test_render_weather.py`
 - Sizing ratios: `_compute_metrics()` in `render.py`
 - SVG macros: `templates/_macros.svg.j2`
 - Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120` in

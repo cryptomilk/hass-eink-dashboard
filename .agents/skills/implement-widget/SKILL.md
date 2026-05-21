@@ -1,6 +1,6 @@
 ---
 name: implement-widget
-description: "Implement a widget's SVG template and Python context builder. Creates templates/{type}.svg.j2 and _build_{type}_context() in svg_render.py. Follows TDD green phase — makes existing tests pass."
+description: "Implement a widget's SVG template and Python context builder. Creates templates/{type}.svg.j2 and widgets/{type}.py with _build_{type}_context(). Follows TDD green phase — makes existing tests pass."
 when_to_use: "When implementing the SVG template and context builder for a new widget type. Always run AFTER tests are written (TDD green phase)."
 argument-hint: "[widget-type]"
 arguments: widget-type
@@ -13,23 +13,35 @@ Implement the SVG template and Python context builder for **$widget-type**.
 The output of this work is two artifacts:
 
 1. `custom_components/eink_dashboard/templates/$widget-type.svg.j2`
-2. `_build_$widget-type_context()` in `svg_render.py`
+2. `_build_$widget-type_context()` in `widgets/$widget-type.py`
 
 ## Before you start
 
 1. Read the existing tests (`TestRender{WidgetName}` in
-   `tests/test_render.py`) — these define the expected behavior.
+   `tests/test_render_{widget_type}.py`) — these define the expected
+   behavior.
 2. Read `const.py` for `WidgetType`, `COLOR_*` constants, `PADDING`,
-   `DEFAULT_CARD_STYLE`.
+   `DEFAULT_CARD_STYLE`, `Widget`, `DisplayConfig`, `color_to_hex`.
 3. Read `svg_render.py` for the Jinja2 environment, `_svg_to_png()`,
    icon filter functions (`_mdi_svg_filter`, `_weather_svg_filter`),
-   and any existing `_build_*_context()` functions.
-4. Read `templates/_macros.svg.j2` for the three shared macros:
+   and `_SVG_RENDERERS`.
+4. Read existing widget modules in `widgets/` (e.g. `widgets/tile.py`)
+   for the context builder pattern, and `widgets/_helpers.py` for
+   shared layout helpers.
+5. Read `templates/_macros.svg.j2` for the three shared macros:
    `card_container`, `card_row`, `chip`.
 
-## Current SVG infrastructure
+## Current SVG infrastructure (svg_render.py)
 
 !`grep -n "^def \|^_SVG_RENDERERS\|^_jinja_env\|^_TEMPLATE_DIR\|^_FONTS_DIR\|^_mdi\|^_weather" custom_components/eink_dashboard/svg_render.py`
+
+## Shared layout helpers (widgets/_helpers.py)
+
+!`grep -n "^def \|^_ACTIVE" custom_components/eink_dashboard/widgets/_helpers.py`
+
+## Existing widget context builders
+
+!`grep -rn "^def _build_" custom_components/eink_dashboard/widgets/*.py`
 
 ## SVG macro signatures
 
@@ -51,28 +63,36 @@ The output of this work is two artifacts:
 
 ## Imports
 
-Context builders need these imports from sibling modules.
-`_compute_metrics`, `_device_class_icon`, and `_load_font` live in
-`render.py` to avoid circular imports — `svg_render.py` imports them
-lazily at call time.
+Context builders live in `widgets/{type}.py` and use relative
+imports.  `_compute_metrics`, `_device_class_icon`, and `_load_font`
+live in `render.py`.  `color_to_hex`, `Widget`, `DisplayConfig`,
+and constants live in `const.py`.  Layout helpers live in
+`widgets/_helpers.py`.
 
 ```python
-from custom_components.eink_dashboard.const import (
+from ..const import (
     DEFAULT_CARD_STYLE,
+    DEFAULT_ROW_H,
     PADDING,
+    DisplayConfig,
+    Widget,
+    color_to_hex,
 )
-from custom_components.eink_dashboard.render import (
+from ..render import (
     _compute_metrics,
     _device_class_icon,
     _load_font,        # chip width measurement only
-    color_to_hex,
+)
+from ..svg_render import _mdi_svg_filter
+from ._helpers import (
+    _auto_row_height,
+    _card_insets,
+    _color_context,
+    _fmt,
+    _metrics_context,
+    _widget_dim,
 )
 ```
-
-`_mdi_svg_filter`, `_weather_svg_filter`, `_widget_dim`,
-`_auto_row_height`, `_card_insets`, `_metrics_context`, `_fmt`,
-and `DEFAULT_ROW_H` (imported from `const`) are already in
-`svg_render.py` — call them directly, no import needed.
 
 Use `_fmt(state_val, config)` whenever a context builder formats a
 numeric entity state for display.  This applies locale-aware decimal
@@ -80,7 +100,7 @@ and thousands separators matching the owner's HA preference.  Pass
 the raw state string — non-numeric strings (``"on"``, ``"unavailable"``)
 are returned unchanged.
 
-`_color_context()` in `svg_render.py` returns
+`_color_context()` in `widgets/_helpers.py` returns
 `{"hex_black": ..., "hex_white": ..., "hex_gray": ...}` by calling
 `color_to_hex()` on the `const.py` integer constants.  Spread it into
 the context dict with `**_color_context()` so templates can use
@@ -210,8 +230,9 @@ composition handles absolute `x`/`y` placement on the dashboard.
 
 ### 3. Write the context builder
 
-Add `_build_$widget-type_context(widget, config) -> dict` to
-`svg_render.py`. The context builder:
+Create `widgets/$widget-type.py` with
+`_build_$widget-type_context(widget, config) -> dict`. The context
+builder:
 
 - Extracts widget dimensions and config from `widget` and `config`
 - Calls `_compute_metrics(row_h)` to get `WidgetMetrics`
@@ -396,18 +417,34 @@ def _build_{widget_type}_context(
     }
 ```
 
-### 4. Register in _SVG_RENDERERS
+### 4. Re-export from widgets/__init__.py
 
-In `svg_render.py`, add to the `_SVG_RENDERERS` dict:
+In `widgets/__init__.py`, add the import and `__all__` entry:
 
 ```python
+from .{widget_type} import _build_{widget_type}_context
+
+__all__ = [
+    ...
+    "_build_{widget_type}_context",
+]
+```
+
+### 5. Register in _SVG_RENDERERS
+
+In `svg_render.py`, import from `widgets` and add to the
+`_SVG_RENDERERS` dict:
+
+```python
+from .widgets import _build_{widget_type}_context
+
 _SVG_RENDERERS: dict[str, SvgContextFn] = {
     ...
     WidgetType.{WIDGET_TYPE}: _build_{widget_type}_context,
 }
 ```
 
-### 5. Run tests
+### 6. Run tests
 
 ```bash
 uv run --group lint ruff check . && \
@@ -459,12 +496,13 @@ behavior.
 - Icon name resolution: `_device_class_icon()` in `render.py`
 - Colors: `COLOR_BLACK=0`, `COLOR_WHITE=255`, `COLOR_GRAY=120`,
   `COLOR_LIGHT_GRAY=180` in `const.py`
-- Auto-sizing helpers: `_widget_dim`, `_auto_row_height`,
-  `_card_insets`, `_metrics_context` in `svg_render.py` (no
-  import needed); `DEFAULT_ROW_H` in `const.py` (imported via
-  `svg_render.py`'s module-level `from const import ...`)
+- Layout helpers: `_widget_dim`, `_auto_row_height`,
+  `_card_insets`, `_metrics_context`, `_color_context`, `_fmt`,
+  `_entity_info_context`, `_title_layout` in `widgets/_helpers.py`
+- Constants: `DEFAULT_ROW_H`, `Widget`, `DisplayConfig`,
+  `color_to_hex` in `const.py`
 - Icon style pattern: `_ACTIVE_STATES` frozenset (in
-  `svg_render.py`) determines active vs inactive state; use
+  `widgets/_helpers.py`) determines active vs inactive state; use
   `contextlib.suppress(FileNotFoundError)` around every
   `_mdi_svg_filter()` call
 - **Custom icon circle stroke widening**: When a widget renders its
