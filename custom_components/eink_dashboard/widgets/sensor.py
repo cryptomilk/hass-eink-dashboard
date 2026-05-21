@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
-from ..const import DEFAULT_ROW_H, PADDING
+from ..const import DEFAULT_ROW_H, PADDING, DisplayConfig, Widget
 from ._helpers import (
     _color_context,
     _entity_info_context,
     _widget_dim,
 )
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 
 def _build_sensor_context(

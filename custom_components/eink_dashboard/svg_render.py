@@ -19,7 +19,6 @@ import functools
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 from xml.sax.saxutils import quoteattr
 
 import defusedxml.ElementTree as ET
@@ -27,7 +26,7 @@ import jinja2
 import markupsafe
 import resvg_py
 
-from .const import COLOR_WHITE, WidgetType
+from .const import COLOR_WHITE, DisplayConfig, Widget, WidgetType
 
 _hex_white = f"#{COLOR_WHITE:02x}{COLOR_WHITE:02x}{COLOR_WHITE:02x}"
 
@@ -403,8 +402,6 @@ _jinja_env = _make_jinja_env(
     jinja2.FileSystemLoader(str(_TEMPLATE_DIR)),
 )
 
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 type SvgContextFn = Callable[[Widget, DisplayConfig], dict[str, object]]
 
 # Import widget builders at module bottom to avoid circular imports:

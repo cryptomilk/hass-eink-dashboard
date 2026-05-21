@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ..const import (
     COLOR_BLACK,
     DEFAULT_CARD_STYLE,
     PADDING,
+    DisplayConfig,
+    Widget,
 )
 from ._helpers import (
     _card_insets,
@@ -15,9 +15,6 @@ from ._helpers import (
     _metrics_context,
     _widget_dim,
 )
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 
 def _build_device_battery_context(

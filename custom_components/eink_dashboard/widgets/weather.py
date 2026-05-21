@@ -11,6 +11,8 @@ from ..const import (
     DEFAULT_CARD_STYLE,
     FONT_SIZE_WEATHER,
     PADDING,
+    DisplayConfig,
+    Widget,
 )
 from ..svg_render import (
     _ICONS_DIR,
@@ -25,10 +27,6 @@ from ._helpers import (
     _metrics_context,
     _widget_dim,
 )
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
-
 
 # Weather base geometry at scale=1.0
 # (font_size == FONT_SIZE_WEATHER == 32).  Each value is multiplied

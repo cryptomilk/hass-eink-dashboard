@@ -2,6 +2,13 @@
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
+
+type Widget = dict[str, Any]
+"""Widget configuration dict passed to context builders."""
+
+type DisplayConfig = dict[str, Any]
+"""Display configuration dict with dimensions, states, etc."""
 
 DOMAIN = "eink_dashboard"
 

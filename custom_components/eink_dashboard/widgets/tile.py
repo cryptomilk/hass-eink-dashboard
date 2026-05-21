@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import markupsafe
@@ -13,6 +13,8 @@ from ..const import (
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
+    DisplayConfig,
+    Widget,
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
@@ -24,9 +26,6 @@ from ._helpers import (
     _metrics_context,
     _widget_dim,
 )
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 
 def _build_tile_context(

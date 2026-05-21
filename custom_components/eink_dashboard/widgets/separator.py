@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from ..const import COLOR_BLACK, COLOR_GRAY, PADDING
+from ..const import COLOR_BLACK, COLOR_GRAY, PADDING, DisplayConfig, Widget
 from ._helpers import _color_context, _widget_dim
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 
 def _build_separator_context(

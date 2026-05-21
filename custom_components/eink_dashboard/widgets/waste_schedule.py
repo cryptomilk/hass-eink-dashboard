@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
+    DisplayConfig,
+    Widget,
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
@@ -20,9 +20,6 @@ from ._helpers import (
     _title_layout,
     _widget_dim,
 )
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 
 def _build_waste_schedule_context(

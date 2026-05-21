@@ -22,7 +22,7 @@ from typing import Any
 from PIL import Image, ImageFont
 
 from .conditions import check_conditions
-from .const import DEFAULT_ROW_H, PADDING, NumberFormat
+from .const import DEFAULT_ROW_H, PADDING, DisplayConfig, NumberFormat, Widget
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
@@ -31,9 +31,6 @@ from .svg_render import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 _FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
 

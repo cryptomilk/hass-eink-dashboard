@@ -15,7 +15,7 @@ from __future__ import annotations
 import contextlib
 import functools
 from dataclasses import fields as dc_fields
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import markupsafe
@@ -29,11 +29,10 @@ from ..const import (
     COLOR_WHITE,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
+    DisplayConfig,
+    Widget,
 )
 from ..svg_render import _mdi_svg_filter
-
-type Widget = dict[str, Any]
-type DisplayConfig = dict[str, Any]
 
 # Entity states treated as "active" for the filled circle
 # indicator.  Covers binary_sensor/switch ("on"), cover ("open"),
