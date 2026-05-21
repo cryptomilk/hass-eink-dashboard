@@ -1322,12 +1322,18 @@ def _ensure_resize_math() -> None:
 
 
 # Default dashboard layout for multi-widget mode.
-# Each entry is (widget_type, y_override).  Weather sits at the top
-# (~300 px tall), tile follows, then waste_schedule at the bottom.
-_DEFAULT_DASHBOARD: list[tuple[str, int]] = [
-    (WidgetType.WEATHER, 10),
-    (WidgetType.TILE, 320),
-    (WidgetType.WASTE_SCHEDULE, 386),
+# Each entry is (widget_type, overrides) where overrides are merged
+# into the mock widget dict.  Layout (1024 px tall):
+#   weather ~300 px | tile 56 | entity 112 | sensor 112 |
+#   waste_schedule 168 | device_battery 40 (bottom-right corner)
+_DEFAULT_DASHBOARD: list[tuple[str, dict]] = [
+    (WidgetType.WEATHER, {"y": 10}),
+    (WidgetType.TILE, {"y": 320}),
+    (WidgetType.ENTITY, {"y": 386}),
+    (WidgetType.SENSOR, {"y": 508}),
+    (WidgetType.WASTE_SCHEDULE, {"y": 630}),
+    # Bottom-right corner: x=634 leaves 124 px to the right edge.
+    (WidgetType.DEVICE_BATTERY, {"y": 960, "x": 634}),
 ]
 
 
@@ -1358,9 +1364,9 @@ def main() -> None:
         # Default: compose a multi-widget dashboard preview.
         widgets = []
         states = {}
-        for wtype, y in _DEFAULT_DASHBOARD:
+        for wtype, overrides in _DEFAULT_DASHBOARD:
             base, ws = _MOCK_DATA[wtype]
-            widgets.append({**base, "y": y})
+            widgets.append({**base, **overrides})
             states.update(ws)
         widget_type = "dashboard"
         multi = True

@@ -139,6 +139,17 @@ _WEATHER_STATES = {
     },
 }
 
+
+def _sensor_history() -> list[dict]:
+    """Build 9 temperature history points spanning the last 22 hours."""
+    now = time.time()
+    # Readings every ~2.5 hours, simulating a day of temperature variation.
+    values = [20.0, 19.2, 18.8, 20.5, 22.1, 23.4, 22.8, 21.5, 22.1]
+    step = (22 * 3600) / (len(values) - 1)
+    base = now - 22 * 3600
+    return [{"s": str(v), "lu": base + i * step} for i, v in enumerate(values)]
+
+
 _SENSOR_STATES = {
     "sensor.living_room_temperature": {
         "state": "22.1",
@@ -147,6 +158,7 @@ _SENSOR_STATES = {
             "friendly_name": "Living Room",
             "device_class": "temperature",
         },
+        "history": _sensor_history(),
     },
     "sensor.bedroom_temperature": {
         "state": "19.8",
@@ -285,6 +297,7 @@ _MOCK_DATA: dict[str, tuple[dict, dict]] = {
             "h": 112,
             "entity": "sensor.living_room_temperature",
             "card_style": "border",
+            "graph": "line",
         },
         _SENSOR_STATES,
     ),
