@@ -488,7 +488,10 @@ def _entity_info_context(
     # Icon: right-aligned in header row.
     icon_r = icon_dia // 2
     icon_cx = svg_w - r_inset - rpad - icon_r
-    icon_cy = header_h // 2
+    # Mirror the right inset vertically so the circle has the same
+    # gap from the card border at the top as it does on the right.
+    # When there is no border (r_inset == 0), centre in the header.
+    icon_cy = r_inset + icon_r if r_inset else header_h // 2
     icon_glyph_x = icon_cx - icon_inner // 2
     icon_glyph_y = icon_cy - icon_inner // 2
 
