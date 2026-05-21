@@ -11,6 +11,7 @@ from tests.helpers import (
     assert_all_white,
     assert_has_dark_pixels,
     assert_has_gray_pixels,
+    content_bbox,
     make_config,
     render_to_image,
 )
@@ -469,6 +470,30 @@ class TestRenderWeather:
         )
         without = render_dashboard([base], self._config())
         assert with_none == without
+
+    def test_weather_card_style_none_has_soft_padding(self) -> None:
+        # card_style="none" applies soft lpad so content is inset by
+        # m.padding, consistent with tile/heading/entities.
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "none",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        m = _compute_metrics(48)  # _WX_ROW_H at scale=1.0
+        bbox = content_bbox(img, 0, 0, 400, 200)
+        assert bbox is not None, "expected non-white content"
+        # Content must start at m.padding (soft pad), not flush at
+        # x=0.  1px tolerance for sub-pixel rasterisation.
+        assert bbox[0] >= m.padding - 1, (
+            f"content left edge {bbox[0]} starts before soft padding "
+            f"({m.padding}); card_style='none' should apply lpad"
+        )
 
     def test_weather_card_border_nonzero_origin(self) -> None:
         # Border is correctly positioned when widget has non-zero x/y.

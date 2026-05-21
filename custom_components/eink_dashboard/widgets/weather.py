@@ -246,19 +246,13 @@ def _build_weather_context(
     # configured.
     svg_h = _widget_dim(widget, "h", total_h)
 
-    # Content insets — "border" and "left_bar" use the shared
-    # helper; "none" applies its own pad so that the weather card
-    # content never touches the viewport edge.
-    if card_style == "none":
-        content_left = pad
-        content_w = card_w - 2 * pad
-        bar_width = 0
-    else:
-        x_off, r_inset, bar_width = _card_insets(
-            m, card_style, grayscale_levels
-        )
-        content_left = x_off
-        content_w = card_w - x_off - r_inset
+    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    # Soft-pad when the card provides no inset on that side,
+    # consistent with tile/heading/entities/waste_schedule.
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+    content_left = x_off + lpad
+    content_w = card_w - content_left - r_inset - rpad
 
     content_top = top_pad
 
