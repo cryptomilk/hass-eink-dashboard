@@ -8,5 +8,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/cryptomilk/hass-eink-dashboard/issues",
   "requirements": ["defusedxml>=0.7.1", "resvg-py>=0.3.2"],
-  "version": "0.3.0"
+  "version": "0.4.0"
 }
