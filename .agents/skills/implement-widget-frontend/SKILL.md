@@ -239,6 +239,19 @@ first open (e.g. `heading: ""`, `heading_style: "title"`).  Override
 `icon_style` when the widget spec defines a different default (e.g.
 Heading uses `"none"` instead of `DEFAULT_ICON_STYLE`).
 
+**Add to `ICON_FALLBACK` in `frontend/src/eink-widget-picker.ts`** —
+every `icon` value used in `WIDGET_TYPES` must have a text/emoji entry
+in `ICON_FALLBACK`.  Without it the picker renders the raw MDI string
+(e.g. `"format-list-bulleted"`) instead of a glyph.  Check whether the
+icon is already present; add it only if missing:
+
+```typescript
+const ICON_FALLBACK: Record<string, string> = {
+  // … existing entries …
+  "mdi:some-icon": "X",   // add a short text or emoji fallback
+};
+```
+
 **Add to `SCHEMAS`** — use `identitySection()` plus grouped sections
 (`identitySection` first, Content expanded by default, Layout and
 Appearance collapsed).  The `flatten: true` flag on each expandable

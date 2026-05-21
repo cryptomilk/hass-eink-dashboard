@@ -18,6 +18,8 @@ const ICON_FALLBACK: Record<string, string> = {
   "mdi:trash-can": "🗑",
   "mdi:card-text": "▣",
   "mdi:card-text-outline": "▢",
+  "mdi:format-list-bulleted": "☰",
+  "mdi:chart-line": "📈",
 };
 
 /**
