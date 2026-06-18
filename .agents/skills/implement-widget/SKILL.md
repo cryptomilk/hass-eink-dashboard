@@ -151,12 +151,22 @@ The template receives a pre-computed context dict from the Python
 context builder. All layout math (positions, sizes, icon SVG strings,
 chip widths) is computed in Python. Templates only emit SVG markup.
 
-Every template must begin with a white background rect so the widget
-is opaque when composited onto the dashboard canvas:
+Widget SVGs are composited onto a white canvas using the alpha
+channel as a mask (`render_dashboard()` in `render.py`).  Transparent
+pixels preserve whatever is already on the canvas (white by default),
+so most templates do **not** need a white background rect.
 
-```xml
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
-```
+Add a full-viewport white background rect **only** when the template's
+rendered geometry is smaller than its SVG viewport — i.e. when content
+does not fill `w` × `h`.  The separator is the canonical example: its
+bar (`bar_w` × `bar_h`) is much smaller than the widget viewport, so
+surrounding transparent area would let earlier widget content bleed
+through without the rect.
+
+Card-style and chip-style templates omit the rect because the card
+chrome (via `card_container`) or chip flow covers the meaningful area,
+and any remaining transparent edge pixels are harmless (canvas is
+white).
 
 **Card-style template pattern** (tile, waste_schedule):
 
@@ -164,7 +174,6 @@ is opaque when composited onto the dashboard canvas:
 {%- from "_macros.svg.j2" import card_container, card_row -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- call(x_off, r_inset) card_container(
     x=0, y=0, w=w, h=h,
     card_style=card_style,
@@ -204,7 +213,6 @@ is opaque when composited onto the dashboard canvas:
 {%- from "_macros.svg.j2" import chip -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
 {%- for c in chips -%}
 {{ chip(
     x=c.x, y=c.y, w=c.w, h=chip_h,
@@ -215,12 +223,16 @@ is opaque when composited onto the dashboard canvas:
 </svg>
 ```
 
-**Simple template pattern** (text, separator):
+**Simple template pattern** (separator):
+
+When rendered geometry (e.g. a bar or line) is smaller than the SVG
+viewport, include a full-size white rect before it so the surrounding
+area is not transparent:
 
 ```jinja
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="white"/>
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
 <!-- widget-specific SVG elements here -->
 </svg>
 ```
@@ -470,8 +482,12 @@ behavior.
 - **All layout math in Python.** Templates receive final coordinates
   and data. No arithmetic or conditionals in Jinja2 beyond what the
   macros already compute internally.
-- **White background rect.** Every template starts with
-  `<rect width="{{ w }}" height="{{ h }}" fill="white"/>`.
+- **White background rect.** Only add
+  `<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>`
+  when the template's rendered geometry is smaller than its SVG
+  viewport (e.g. separator bar).  Card-style and chip-style templates
+  omit it — the canvas is pre-filled white and alpha masking handles
+  compositing.
 - **Missing state = skip.** If `states.get(entity_id)` returns
   `None`, skip the entity and continue. Do not crash.
 - **Icon inlining via filter functions.** Call `_mdi_svg_filter(name,
