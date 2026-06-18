@@ -140,6 +140,9 @@ def _compose_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg"'
         f' width="{width}" height="{height}"'
         f' viewBox="0 0 {width} {height}">',
+        # Root canvas fill — kept here unlike per-widget backgrounds
+        # (removed in commit 28ede13) because _compose_svg() is the
+        # preview path and has no PIL canvas to fall back on.
         f'<rect width="{width}" height="{height}" fill="{_hex_white}"/>',
     ]
     for svg, (x, y) in zip(svg_parts, positions, strict=True):

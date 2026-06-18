@@ -1,7 +1,6 @@
 {%- from "_macros.svg.j2" import card_container -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
 {%- if has_level -%}
 {%- call card_container(
     x=0, y=0, w=w, h=card_h,

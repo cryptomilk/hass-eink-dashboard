@@ -628,8 +628,19 @@ def render_dashboard(
         )
         svg = render_widget_svg(widget, config)
         png = _svg_to_png(svg)
-        wimg = Image.open(io.BytesIO(png)).convert("L")
-        img.paste(wimg, (wx, wy))
+        wimg = Image.open(io.BytesIO(png))
+        # Use alpha channel as mask so transparent widget areas
+        # do not overwrite the canvas or previously-rendered
+        # widgets underneath.
+        if wimg.mode == "RGBA":
+            mask = wimg.getchannel("A")
+        else:
+            mask = None
+            _LOGGER.warning(
+                "expected RGBA from resvg, got %s — pasting opaquely",
+                wimg.mode,
+            )
+        img.paste(wimg.convert("L"), (wx, wy), mask)
 
     mn, mx = img.getextrema()
     _LOGGER.debug(

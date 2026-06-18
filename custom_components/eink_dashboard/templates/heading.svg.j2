@@ -1,7 +1,6 @@
 {%- from "_macros.svg.j2" import card_container, icon_circle -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
-<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
 {%- if has_content -%}
 {%- call card_container(
     x=0, y=0, w=w, h=h,
