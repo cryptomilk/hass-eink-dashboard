@@ -941,7 +941,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     default=opts.get(
                         "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
                     ),
-                ): vol.In([2, 4, 16, 256]),
+                ): vol.All(vol.Coerce(int), vol.In([2, 4, 16, 256])),
                 vol.Optional(
                     "sharpness",
                     default=opts.get("sharpness", DEFAULT_SHARPNESS),

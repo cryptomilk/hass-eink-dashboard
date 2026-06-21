@@ -535,9 +535,9 @@ class TestEinkDashboardOptionsFlow:
             {
                 "update_interval": 60,
                 "optimize": True,
-                "grayscale_levels": 2,
-                "sharpness": 2.0,
-                "contrast": 1.5,
+                "grayscale_levels": "2",
+                "sharpness": "2.0",
+                "contrast": "1.5",
             }
         )
 
