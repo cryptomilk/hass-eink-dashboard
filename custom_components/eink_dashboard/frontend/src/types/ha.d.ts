@@ -385,6 +385,18 @@ export interface WeatherWidget extends WidgetBase {
   entity?: string;
   /** Number of forecast days to display (0–14). */
   forecast_days?: number;
+  /**
+   * Optional sensor entity that overrides the weather entity's
+   * temperature attribute. When set, the sensor's state is used
+   * and always formatted to one decimal place (e.g. 22.0°C).
+   */
+  temperature_entity?: string;
+  /**
+   * Optional sensor entity that overrides the weather entity's
+   * humidity attribute. When set, the sensor's state value is
+   * displayed in the humidity detail chip.
+   */
+  humidity_entity?: string;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

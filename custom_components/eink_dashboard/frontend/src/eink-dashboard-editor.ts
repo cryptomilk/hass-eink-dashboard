@@ -475,6 +475,14 @@ export const SCHEMAS: Record<
           default: 5,
           selector: { number: { min: 0, max: 14, mode: "box" } },
         },
+        {
+          name: "temperature_entity",
+          selector: { entity: { domain: "sensor" } },
+        },
+        {
+          name: "humidity_entity",
+          selector: { entity: { domain: "sensor" } },
+        },
       ],
     },
     {
@@ -933,6 +941,8 @@ export const LABELS: Record<string, string> = {
   show_all: "Show all upcoming dates",
   entries: "Entries",
   forecast_days: "Forecast days",
+  temperature_entity: "Temperature sensor",
+  humidity_entity: "Humidity sensor",
   graph: "Graph",
   hours_to_show: "Hours to show",
   detail: "Detail",

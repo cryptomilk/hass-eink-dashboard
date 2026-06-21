@@ -67,6 +67,42 @@ _DETAIL_ICON_MAP: dict[str, str] = {
 }
 
 
+def _resolve_sensor_override(
+    entity_id: str,
+    states: dict[str, Any],
+    fallback_value: Any,
+    fallback_unit: str,
+) -> tuple[Any, str, bool]:
+    """Return (value, unit, sensor_used) from a sensor entity override.
+
+    Looks up ``entity_id`` in ``states``.  If found and the state is
+    numeric, parses it and returns the sensor's value together with
+    ``unit_of_measurement`` from its attributes.  If the entity is
+    absent or non-numeric, returns the fallback values unchanged.
+
+    Args:
+        entity_id: HA entity ID of the overriding sensor.
+        states: Snapshot of HA entity states from the display config.
+        fallback_value: Value to return when the sensor is unusable.
+        fallback_unit: Unit to return when the sensor is unusable.
+
+    Returns:
+        A 3-tuple ``(value, unit, sensor_used)`` where ``sensor_used``
+        is ``True`` when the sensor state was successfully applied.
+    """
+    sensor_state = states.get(entity_id)
+    if sensor_state is None:
+        return fallback_value, fallback_unit, False
+    try:
+        value = float(sensor_state["state"])
+    except (ValueError, TypeError):
+        return fallback_value, fallback_unit, False
+    unit = sensor_state.get("attributes", {}).get(
+        "unit_of_measurement", fallback_unit
+    )
+    return value, unit, True
+
+
 def _cap_weather_font_xl(
     font_xl_size: int,
     font_xl: Any,
@@ -127,7 +163,8 @@ def _build_weather_context(
     Args:
         widget: Widget config dict.  Recognised keys:
             ``entity``, ``x``, ``y``, ``w``, ``font_size``,
-            ``forecast_days``, ``card_style``.
+            ``forecast_days``, ``card_style``,
+            ``temperature_entity``, ``humidity_entity``.
         config: Display config with ``width``, ``height``,
             ``states``, ``grayscale_levels``.
 
@@ -144,10 +181,12 @@ def _build_weather_context(
         _compute_metrics,
         _fmt_temp,
         _load_font,
+        format_number,
     )
 
     entity_id = widget.get("entity", "")
-    state = config.get("states", {}).get(entity_id)
+    states = config.get("states", {})
+    state = states.get(entity_id)
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
 
@@ -203,6 +242,25 @@ def _build_weather_context(
     cloud_coverage = attrs.get("cloud_coverage")
     forecast = attrs.get("forecast", [])
 
+    # Optional sensor overrides for temperature and humidity.
+    # When a sensor entity is configured and present in states, its
+    # state value replaces the weather entity's attribute.
+    temp_entity = widget.get("temperature_entity", "")
+    temp, temp_unit, use_temp_sensor = (
+        _resolve_sensor_override(temp_entity, states, temp, temp_unit)
+        if temp_entity
+        else (temp, temp_unit, False)
+    )
+    humidity_entity = widget.get("humidity_entity", "")
+    if humidity_entity:
+        humidity, _, _ = _resolve_sensor_override(
+            humidity_entity, states, humidity, ""
+        )
+    # Sensor state is parsed as float; normalize whole-number floats
+    # back to int so str(73.0) doesn't produce "73.0%" in the detail chip.
+    if isinstance(humidity, float) and humidity == int(humidity):
+        humidity = int(humidity)
+
     # Card metrics — 48 at scale=1 gives card-level metrics
     # (padding~10, radius~10) matching the original PIL layout.
     m = _compute_metrics(round(_WX_ROW_H * scale))
@@ -223,7 +281,13 @@ def _build_weather_context(
     # estimation.
     nf = config.get("number_format", "language")
     lang = config.get("language", "en")
-    temp_text = f"{_fmt_temp(temp, nf, lang)}{temp_unit}"
+    if use_temp_sensor:
+        # Sensor temperatures always show one decimal place (e.g.
+        # "22.0°C") so readings like 18.7 are not truncated and
+        # whole numbers still convey precision.
+        temp_text = f"{format_number(f'{temp:.1f}', nf, lang)}{temp_unit}"
+    else:
+        temp_text = f"{_fmt_temp(temp, nf, lang)}{temp_unit}"
     temp_bbox = font_xl.getbbox(temp_text)
     temp_h = temp_bbox[3] - temp_bbox[1]
 

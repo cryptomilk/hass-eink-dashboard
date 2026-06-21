@@ -133,6 +133,18 @@ describe("SCHEMAS", () => {
       domain: "sensor",
     });
   });
+
+  it("weather temperature_entity field uses domain filter 'sensor'", () => {
+    const schema = SCHEMAS.weather(DISPLAY);
+    const field = findField(schema, "temperature_entity");
+    expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
+  });
+
+  it("weather humidity_entity field uses domain filter 'sensor'", () => {
+    const schema = SCHEMAS.weather(DISPLAY);
+    const field = findField(schema, "humidity_entity");
+    expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
+  });
 });
 
 // ── LABELS ───────────────────────────────────────────────────────

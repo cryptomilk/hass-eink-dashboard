@@ -11,6 +11,9 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
 )
+from custom_components.eink_dashboard.widgets.weather import (
+    _build_weather_context,
+)
 from tests.helpers import (
     assert_all_white,
     assert_has_dark_pixels,
@@ -572,3 +575,142 @@ class TestRenderWeather:
         # content_left = ox + m.padding, temp_x = content_left + 80 + 16
         temp_x_min = ox + m.padding + 80 + 16
         assert_has_dark_pixels(img, temp_x_min, oy + 10, ox + 280, oy + 70)
+
+
+# ── Custom sensor overrides ─────────────────────────────────────────
+
+_SENSOR_STATES = {
+    **MOCK_WEATHER_STATE,
+    "sensor.outdoor_temp": {
+        "state": "18.7",
+        "attributes": {"unit_of_measurement": "°C"},
+    },
+    "sensor.outdoor_temp_whole": {
+        "state": "22",
+        "attributes": {"unit_of_measurement": "°C"},
+    },
+    "sensor.outdoor_temp_unavailable": {
+        "state": "unavailable",
+        "attributes": {},
+    },
+    "sensor.outdoor_humidity": {
+        "state": "73",
+        "attributes": {"unit_of_measurement": "%"},
+    },
+}
+
+_BASE_WIDGET: dict[str, object] = {
+    "type": "weather",
+    "entity": "weather.home",
+    "x": PADDING,
+    "y": 0,
+    "w": 400,
+    "forecast_days": 0,
+}
+
+_BASE_CONFIG: dict[str, object] = {
+    "width": 600,
+    "height": 300,
+    "states": _SENSOR_STATES,
+}
+
+
+class TestWeatherSensorOverrides:
+    def test_custom_temp_sensor_uses_sensor_value(self) -> None:
+        # temperature_entity overrides the weather entity's temperature
+        # attribute; the context temp_text should reflect the sensor state.
+        ctx = _build_weather_context(
+            {**_BASE_WIDGET, "temperature_entity": "sensor.outdoor_temp"},
+            _BASE_CONFIG,
+        )
+        assert ctx["temp_text"] == "18.7°C"
+
+    def test_custom_temp_sensor_formats_one_decimal_for_whole_number(
+        self,
+    ) -> None:
+        # A whole-number sensor value must still show one decimal place,
+        # e.g. "22.0°C" rather than "22°C".
+        ctx = _build_weather_context(
+            {
+                **_BASE_WIDGET,
+                "temperature_entity": "sensor.outdoor_temp_whole",
+            },
+            _BASE_CONFIG,
+        )
+        assert ctx["temp_text"] == "22.0°C"
+
+    def test_custom_temp_sensor_uses_sensor_unit(self) -> None:
+        # The temperature unit comes from the sensor's
+        # unit_of_measurement attribute, not the weather entity.
+        states = {
+            **_SENSOR_STATES,
+            "sensor.temp_f": {
+                "state": "65.3",
+                "attributes": {"unit_of_measurement": "°F"},
+            },
+        }
+        ctx = _build_weather_context(
+            {**_BASE_WIDGET, "temperature_entity": "sensor.temp_f"},
+            {**_BASE_CONFIG, "states": states},
+        )
+        assert ctx["temp_text"] == "65.3°F"
+
+    def test_custom_temp_sensor_missing_falls_back_to_weather(self) -> None:
+        # When the named temperature_entity is not in states, the widget
+        # falls back to the weather entity's temperature attribute.
+        ctx = _build_weather_context(
+            {**_BASE_WIDGET, "temperature_entity": "sensor.nonexistent"},
+            _BASE_CONFIG,
+        )
+        # Weather entity has temperature=22 (integer), formatted
+        # without decimal.
+        assert ctx["temp_text"] == "22°C"
+
+    def test_custom_temp_sensor_unavailable_falls_back_to_weather(
+        self,
+    ) -> None:
+        # When the sensor is present but in "unavailable" state (non-numeric),
+        # _resolve_sensor_override falls back to the weather entity's value.
+        ctx = _build_weather_context(
+            {
+                **_BASE_WIDGET,
+                "temperature_entity": "sensor.outdoor_temp_unavailable",
+            },
+            _BASE_CONFIG,
+        )
+        assert ctx["temp_text"] == "22°C"
+
+    def test_custom_humidity_sensor_overrides_weather_humidity(self) -> None:
+        # humidity_entity overrides the weather entity's humidity attribute
+        # in the detail chip row; value must be an integer percentage.
+        ctx = _build_weather_context(
+            {**_BASE_WIDGET, "humidity_entity": "sensor.outdoor_humidity"},
+            _BASE_CONFIG,
+        )
+        humidity_item = next(
+            (d for d in ctx["detail_items"] if d["text"] == "73%"),
+            None,
+        )
+        assert humidity_item is not None, (
+            "expected humidity chip with sensor value '73%', "
+            f"got detail_items: {ctx['detail_items']}"
+        )
+
+    def test_custom_humidity_sensor_missing_falls_back_to_weather(
+        self,
+    ) -> None:
+        # When humidity_entity is absent from states, humidity falls back
+        # to the weather entity's humidity attribute (58 in
+        # MOCK_WEATHER_STATE).
+        ctx = _build_weather_context(
+            {**_BASE_WIDGET, "humidity_entity": "sensor.nonexistent"},
+            _BASE_CONFIG,
+        )
+        humidity_item = next(
+            (d for d in ctx["detail_items"] if d["text"] == "58%"),
+            None,
+        )
+        assert humidity_item is not None, (
+            "expected fallback humidity chip with weather entity value "
+            f"'58%', got detail_items: {ctx['detail_items']}"
+        )
