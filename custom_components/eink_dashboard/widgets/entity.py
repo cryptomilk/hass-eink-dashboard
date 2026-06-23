@@ -70,6 +70,7 @@ def _build_entity_context(
             "w": svg_w,
             "h": svg_h,
             "has_entity": False,
+            "hide_state": False,
             **_color_context(),
         }
-    return {**ctx, "has_graph": False}
+    return {**ctx, "has_graph": False, "hide_state": False}

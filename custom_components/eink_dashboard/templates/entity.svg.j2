@@ -27,6 +27,7 @@
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>
 {#- Info section: large value with optional unit beside it. -#}
+{%- if not hide_state -%}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
@@ -40,6 +41,7 @@
   font-size="{{ unit_font_sz }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
+{%- endif -%}
 {%- endif -%}
 {#- Graph section: sparkline history chart below the info section. -#}
 {%- if has_graph and polyline_points -%}

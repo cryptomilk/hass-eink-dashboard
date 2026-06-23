@@ -683,6 +683,17 @@ export interface SensorWidget extends WidgetBase {
    * ``limits.max``).  Auto-computed from data when omitted.
    */
   limits_max?: number;
+  /**
+   * Suppress the filled area polygon below the graph line.
+   * When ``true``, only the polyline stroke is rendered.
+   * Has no effect when ``graph`` is not ``"line"``.
+   */
+  hide_fill?: boolean;
+  /**
+   * Suppress the large state value and unit text in the info
+   * section.  The header row (name and icon) is still rendered.
+   */
+  hide_state?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
   /**

@@ -794,6 +794,16 @@ export const SCHEMAS: Record<
             },
           ],
         },
+        {
+          name: "hide_fill",
+          default: false,
+          selector: { boolean: {} },
+        },
+        {
+          name: "hide_state",
+          default: false,
+          selector: { boolean: {} },
+        },
       ],
     },
     {
@@ -959,6 +969,7 @@ export const LABELS: Record<string, string> = {
   detail: "Detail",
   limits_min: "Y-axis minimum",
   limits_max: "Y-axis maximum",
+  hide_fill: "Hide fill",
   max_events: "Max events",
   days_ahead: "Days ahead",
 };

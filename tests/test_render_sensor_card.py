@@ -957,3 +957,124 @@ class TestRenderSensor:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == 200
+
+    # ── hide_fill tests ───────────────────────────────
+
+    def test_sensor_hide_fill_suppresses_polygon(self) -> None:
+        # hide_fill=True renders the polyline stroke but no fill
+        # polygon below it.
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 3 * DEFAULT_ROW_H,
+            "entity": "sensor.temperature",
+            "graph": "line",
+            "hide_fill": True,
+        }
+        svg = render_widget_svg(
+            widget,
+            self._config(states=MOCK_SENSOR_WITH_HISTORY),
+        )
+        assert "<polyline" in svg, "polyline should still be present"
+        assert "<polygon" not in svg, (
+            "fill polygon must be absent when hide_fill=True"
+        )
+
+    def test_sensor_hide_fill_default_shows_fill(self) -> None:
+        # Without hide_fill the fill polygon is rendered (default
+        # behaviour preserved).
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 3 * DEFAULT_ROW_H,
+            "entity": "sensor.temperature",
+            "graph": "line",
+        }
+        svg = render_widget_svg(
+            widget,
+            self._config(states=MOCK_SENSOR_WITH_HISTORY),
+        )
+        fill_hex = color_to_hex(COLOR_LIGHT_GRAY)
+        assert fill_hex in svg, "fill color must be present by default"
+
+    def test_sensor_hide_fill_no_history_no_crash(self) -> None:
+        # hide_fill=True with graph="line" but no history data is a
+        # no-op — no polygon or polyline to suppress.
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 3 * DEFAULT_ROW_H,
+            "entity": "sensor.temperature",
+            "graph": "line",
+            "hide_fill": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "<svg" in svg
+        assert "<polygon" not in svg
+        assert "<polyline" not in svg
+
+    # ── hide_state tests ──────────────────────────────
+
+    def test_sensor_hide_state_suppresses_value_text(self) -> None:
+        # hide_state=True suppresses the large value/unit text in
+        # the info section.
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 3 * DEFAULT_ROW_H,
+            "entity": "sensor.temperature",
+            "hide_state": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        state_val = MOCK_SENSOR_CARD_STATES["sensor.temperature"]["state"]
+        assert state_val not in svg, (
+            "state value text must not appear when hide_state=True"
+        )
+
+    def test_sensor_hide_state_header_still_visible(self) -> None:
+        # hide_state=True still renders the header row with name
+        # and icon; the widget must not produce an empty canvas.
+        h = 2 * DEFAULT_ROW_H
+        header_h = round(h * 0.40)
+        widgets = [
+            {
+                "type": "sensor",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+                "hide_state": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_has_dark_pixels(img, 0, 0, 400, header_h)
+
+    def test_sensor_hide_state_with_graph_still_renders(self) -> None:
+        # hide_state=True with graph="line" still renders the
+        # polyline graph.
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 3 * DEFAULT_ROW_H,
+            "entity": "sensor.temperature",
+            "graph": "line",
+            "hide_state": True,
+        }
+        svg = render_widget_svg(
+            widget,
+            self._config(states=MOCK_SENSOR_WITH_HISTORY),
+        )
+        assert "<polyline" in svg, (
+            "polyline must still be rendered with hide_state=True"
+        )

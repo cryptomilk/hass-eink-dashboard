@@ -50,6 +50,10 @@ def _build_sensor_context(
             ``limits`` (dict with optional ``"min"``/``"max"``
             keys to fix the Y-axis range; editor uses flat
             ``limits_min``/``limits_max`` keys instead),
+            ``hide_fill`` (suppress the filled area polygon below
+            the graph line; default ``False``),
+            ``hide_state`` (suppress the large value/unit text in
+            the info section; default ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.
@@ -85,6 +89,8 @@ def _build_sensor_context(
     grayscale_levels = config.get("grayscale_levels", 16)
 
     has_graph = graph == "line"
+    hide_fill: bool = widget.get("hide_fill", False)
+    hide_state: bool = widget.get("hide_state", False)
     # Default height: 3 rows with graph section, 2 rows without.
     default_h = 3 * DEFAULT_ROW_H if has_graph else 2 * DEFAULT_ROW_H
     svg_h = _widget_dim(widget, "h", default_h)
@@ -207,14 +213,15 @@ def _build_sensor_context(
             # Fill polygon rendered on all display types; on
             # 2-level displays Floyd-Steinberg dithering in
             # optimize.py converts the light-gray fill to a
-            # dot pattern.
-            bottom = gy2
-            fill_pts = [
-                *pts,
-                (pts[-1][0], bottom),
-                (pts[0][0], bottom),
-            ]
-            fill_points = " ".join(f"{px},{py}" for px, py in fill_pts)
+            # dot pattern.  Skipped when hide_fill is set.
+            if not hide_fill:
+                bottom = gy2
+                fill_pts = [
+                    *pts,
+                    (pts[-1][0], bottom),
+                    (pts[0][0], bottom),
+                ]
+                fill_points = " ".join(f"{px},{py}" for px, py in fill_pts)
 
     return {
         **ctx,
@@ -223,4 +230,5 @@ def _build_sensor_context(
         "polyline_points": polyline_points,
         "fill_points": fill_points,
         "graph_stroke_w": graph_stroke_w,
+        "hide_state": hide_state,
     }
