@@ -381,8 +381,8 @@ def _entity_info_context(
 
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``,
-            ``name``, ``icon``, ``unit``, ``icon_style``,
-            ``card_style``.
+            ``name``, ``icon``, ``unit``, ``hide_icon``,
+            ``icon_style``, ``card_style``.
         config: Display config with ``states`` and
             ``grayscale_levels``.
         section_h: Height of the entity info section in pixels.
@@ -409,6 +409,7 @@ def _entity_info_context(
     name_override = widget.get("name")
     icon_override = widget.get("icon")
     unit_override = widget.get("unit")
+    hide_icon: bool = widget.get("hide_icon", False)
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
@@ -464,18 +465,24 @@ def _entity_info_context(
     )
 
     # Icon resolution: explicit override → device_class → attrs icon.
-    icon_svg, letter = _resolve_icon_svg(
-        icon_override,
-        attrs,
-        state_val,
-        domain,
-        icon_inner,
-        entity_id,
-    )
-
-    icon_outline, icon_no_circle = _resolve_icon_style(
-        icon_style, state_val, grayscale_levels
-    )
+    # Skipped entirely when hide_icon is set.
+    if hide_icon:
+        icon_svg: markupsafe.Markup | str = ""
+        letter = ""
+        icon_outline = False
+        icon_no_circle = True
+    else:
+        icon_svg, letter = _resolve_icon_svg(
+            icon_override,
+            attrs,
+            state_val,
+            domain,
+            icon_inner,
+            entity_id,
+        )
+        icon_outline, icon_no_circle = _resolve_icon_style(
+            icon_style, state_val, grayscale_levels
+        )
     # Widen outline stroke on 2-level displays to avoid dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
     icon_fill = color_to_hex(COLOR_GRAY)

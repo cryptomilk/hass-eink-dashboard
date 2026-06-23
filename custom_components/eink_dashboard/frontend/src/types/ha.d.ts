@@ -468,6 +468,8 @@ export interface TileWidget extends WidgetBase {
   name?: string;
   /** Override the icon (MDI name, e.g. "mdi:thermometer"). */
   icon?: string;
+  /** When true, suppresses the icon circle and letter fallback. */
+  hide_icon?: boolean;
   /** When true, suppresses the secondary state/attribute line. */
   hide_state?: boolean;
   /**
@@ -613,6 +615,8 @@ export interface EntityWidget extends WidgetBase {
   name?: string;
   /** MDI icon name override (e.g. "mdi:thermometer"). */
   icon?: string;
+  /** When true, suppresses the icon circle and letter fallback. */
+  hide_icon?: boolean;
   /**
    * Attribute key to display as the value instead of the entity
    * state.  When set, automatic unit resolution is suppressed.

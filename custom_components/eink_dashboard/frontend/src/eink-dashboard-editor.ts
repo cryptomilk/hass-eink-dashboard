@@ -521,6 +521,11 @@ export const SCHEMAS: Record<
         { name: "name", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
         {
+          name: "hide_icon",
+          default: false,
+          selector: { boolean: {} },
+        },
+        {
           name: "hide_state",
           default: false,
           selector: { boolean: {} },
@@ -565,6 +570,11 @@ export const SCHEMAS: Record<
         },
         { name: "name", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
+        {
+          name: "hide_icon",
+          default: false,
+          selector: { boolean: {} },
+        },
         { name: "attribute", selector: { text: {} } },
         { name: "unit", selector: { text: {} } },
       ],
@@ -923,6 +933,7 @@ export const LABELS: Record<string, string> = {
   entities: "Entities",
   name: "Name",
   icon: "Icon",
+  hide_icon: "Hide icon",
   hide_state: "Hide state",
   state_content: "State attribute",
   title: "Title",

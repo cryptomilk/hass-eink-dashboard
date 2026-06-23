@@ -328,6 +328,46 @@ class TestRenderEntity:
             "even for active entity"
         )
 
+    def test_entity_hide_icon_suppresses_icon(self) -> None:
+        # hide_icon=True must leave the icon ring area white —
+        # no circle, no glyph, no letter fallback.
+        h = 224
+        _, _, ring_x1, ring_y1, ring_x2, ring_y2 = self._icon_ring(h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.no_class",
+                "hide_icon": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
+
+    def test_entity_hide_icon_with_icon_style(self) -> None:
+        # hide_icon=True must suppress the icon even when icon_style is
+        # set explicitly (e.g. "filled") — the style flag must not
+        # override the hide decision.
+        h = 224
+        _, _, ring_x1, ring_y1, ring_x2, ring_y2 = self._icon_ring(h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.no_class",
+                "hide_icon": True,
+                "icon_style": "filled",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
+
     # ── Content tests ─────────────────────────────────
 
     def test_entity_draws_name_and_value(self) -> None:

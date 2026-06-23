@@ -52,6 +52,7 @@ def _build_tile_context(
             ``entity`` (required entity ID),
             ``name`` (display name override),
             ``icon`` (MDI icon override, e.g. ``"mdi:lightbulb"``),
+            ``hide_icon`` (suppress icon and letter entirely),
             ``hide_state`` (suppress secondary text),
             ``state_content`` (attribute name or list; first element
             used when a list is provided),
@@ -82,6 +83,7 @@ def _build_tile_context(
     entity_id: str = widget.get("entity", "")
     name_override = widget.get("name")
     icon_override = widget.get("icon")
+    hide_icon: bool = widget.get("hide_icon", False)
     hide_state: bool = widget.get("hide_state", False)
     state_content = widget.get("state_content")
     icon_style = widget.get("icon_style")
@@ -137,18 +139,24 @@ def _build_tile_context(
         secondary = f"{fmtd}{unit}" if unit else fmtd
 
     # Icon: explicit override → device_class → letter fallback.
-    icon_svg, letter = _resolve_icon_svg(
-        icon_override,
-        attrs,
-        state_val,
-        domain,
-        m.icon_inner,
-        entity_id,
-    )
-
-    icon_outline, icon_no_circle = _resolve_icon_style(
-        icon_style, state_val, grayscale_levels
-    )
+    # Skipped entirely when hide_icon is set.
+    if hide_icon:
+        icon_svg = ""
+        letter = ""
+        icon_outline = False
+        icon_no_circle = True
+    else:
+        icon_svg, letter = _resolve_icon_svg(
+            icon_override,
+            attrs,
+            state_val,
+            domain,
+            m.icon_inner,
+            entity_id,
+        )
+        icon_outline, icon_no_circle = _resolve_icon_style(
+            icon_style, state_val, grayscale_levels
+        )
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)
@@ -156,7 +164,7 @@ def _build_tile_context(
     # dithering.
     icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
 
-    return {
+    ctx: dict[str, object] = {
         "w": svg_w,
         "h": svg_h,
         "has_entity": True,
@@ -178,3 +186,9 @@ def _build_tile_context(
         "icon_stroke_w": icon_stroke_w,
         "letter": letter,
     }
+    # When icon is hidden, collapse the icon column so text starts
+    # at the left edge.
+    if hide_icon:
+        ctx["m_icon_dia"] = 0
+        ctx["m_inner_gap"] = 0
+    return ctx

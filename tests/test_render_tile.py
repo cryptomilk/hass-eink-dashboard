@@ -13,6 +13,7 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from tests.helpers import (
+    _icon_ring_region,
     assert_all_white,
     assert_card_border,
     assert_has_dark_pixels,
@@ -368,6 +369,59 @@ class TestRenderTile:
             "2-level display must force outlined (no gray fill)"
             " even for active entity"
         )
+
+    def test_tile_hide_icon_suppresses_icon(self) -> None:
+        # hide_icon=True must leave the icon ring area white (no gray
+        # circle fill) and text must start near the left padding —
+        # shifted left relative to the normal icon+gap column.
+        # hide_state=True forces single-line text (primary centered at
+        # cy=40) so ascenders stay below the ring region and do not
+        # produce false positives.
+        row_h = 80
+        m = _compute_metrics(row_h)
+        ring_x1, ring_y1, ring_x2, ring_y2 = _icon_ring_region(row_h, m)
+        widgets = [
+            {
+                "type": "tile",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": row_h,
+                "entity": "binary_sensor.motion",
+                "hide_icon": True,
+                "hide_state": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # No gray fill in the icon ring (circle is suppressed).
+        assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
+        # With hide_icon the icon column collapses, so text appears
+        # starting near the left padding rather than after icon+gap.
+        normal_text_x = m.padding + m.icon_dia + m.inner_gap
+        assert_has_dark_pixels(img, m.padding, 0, normal_text_x, row_h)
+
+    def test_tile_hide_icon_with_icon_style(self) -> None:
+        # hide_icon=True must suppress the icon even when icon_style is
+        # set explicitly (e.g. "filled") — the style flag must not
+        # override the hide decision.
+        row_h = 80
+        m = _compute_metrics(row_h)
+        ring_x1, ring_y1, ring_x2, ring_y2 = _icon_ring_region(row_h, m)
+        widgets = [
+            {
+                "type": "tile",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": row_h,
+                "entity": "binary_sensor.motion",
+                "hide_icon": True,
+                "hide_state": True,
+                "icon_style": "filled",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
 
     # ── Content tests ─────────────────────────────────
 
