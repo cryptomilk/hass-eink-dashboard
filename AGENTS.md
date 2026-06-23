@@ -12,7 +12,7 @@ uv run --group interrogate interrogate -vv custom_components/eink_dashboard/  # 
 ```
 
 After making changes, ALWAYS run:
-- `uv run --group lint ruff check . && uv run --group format ruff format --check . && uv run --group typecheck ty check && uv run --group test pytest` for Python changes
+- `uv run --group format ruff format . && uv run --group lint ruff check . && uv run --group format ruff format --check . && uv run --group typecheck ty check && uv run --group test pytest` for Python changes
 - `pnpm --dir custom_components/eink_dashboard/frontend typecheck && pnpm --dir custom_components/eink_dashboard/frontend test` for TypeScript changes
 
 ## Architecture

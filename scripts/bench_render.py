@@ -211,6 +211,17 @@ _TILE_STATES = {
     },
 }
 
+_GAUGE_STATES = {
+    "sensor.dew_point": {
+        "state": "13.4",
+        "attributes": {
+            "unit_of_measurement": "°C",
+            "friendly_name": "Dew Point",
+            "device_class": "temperature",
+        },
+    },
+}
+
 # _MOCK_DATA maps WidgetType string -> (widget_dict, states_dict).
 # For device_battery the states dict is empty; the level is injected
 # as config["device_battery_level"] by _build_config().
@@ -325,6 +336,25 @@ _MOCK_DATA: dict[str, tuple[dict, dict]] = {
             "card_style": "border",
         },
         _WASTE_STATES,
+    ),
+    WidgetType.GAUGE: (
+        {
+            "type": "gauge",
+            "entity": "sensor.dew_point",
+            "x": 0,
+            "y": 0,
+            "w": 240,
+            "h": 240,
+            "min": -10,
+            "max": 30,
+            "icon": "mdi:water-thermometer",
+            "segments": [
+                {"from": -10, "color": 200, "label": "Dry"},
+                {"from": 10, "color": 120, "label": "Comfortable"},
+                {"from": 16, "color": 40, "label": "Humid"},
+            ],
+        },
+        _GAUGE_STATES,
     ),
 }
 

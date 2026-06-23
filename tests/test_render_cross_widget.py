@@ -450,3 +450,23 @@ class TestLocaleFormattingInWidgets:
         svg = render_widget_svg(widget, config)
         assert "8,4" in svg
         assert "8.41" not in svg
+
+    def test_gauge_decimal_comma(self) -> None:
+        # Gauge value must use comma decimal for German locale.
+        widget = {
+            "type": "gauge",
+            "entity": "sensor.humidity",
+        }
+        config = self._config(
+            states={
+                "sensor.humidity": {
+                    "state": "8.41",
+                    "attributes": {"unit_of_measurement": "g/m³"},
+                }
+            },
+            number_format="decimal_comma",
+            language="de",
+        )
+        svg = render_widget_svg(widget, config)
+        assert "8,4" in svg
+        assert "8.41" not in svg

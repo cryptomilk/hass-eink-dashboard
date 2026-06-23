@@ -706,6 +706,86 @@ export interface SensorWidget extends WidgetBase {
   icon_style?: IconStyle;
 }
 
+/** One threshold-based color band on the gauge track. */
+export interface GaugeSegment {
+  /** Value at which this segment begins. */
+  from: number;
+  /**
+   * Grayscale color for this band.
+   * Accepts an integer 0–255, a hex string ``"#rrggbb"``, or an
+   * RGB array ``[r, g, b]``.  Non-grayscale colors are converted
+   * via luminance on e-ink displays.
+   */
+  color?: number | string | [number, number, number];
+  /** Short label shown when the gauge value falls in this segment. */
+  label?: string;
+  /**
+   * MDI icon override shown when the gauge value falls in this
+   * segment (e.g. ``"mdi:thermometer-high"``).
+   */
+  icon?: string;
+}
+
+/**
+ * Circular arc gauge showing a sensor value on a 270°, 180°, or
+ * 360° track with optional color segments, fill arc or needle
+ * indicator, and segment labels.
+ */
+export interface GaugeWidget extends WidgetBase {
+  type: "gauge";
+  /** HA entity ID (sensor, counter, input_number, number). */
+  entity: string;
+  /** Override display name; falls back to the entity's friendly_name. */
+  name?: string;
+  /** MDI icon shown inside the arc (e.g. ``"mdi:thermometer"``). */
+  icon?: string;
+  /** Minimum value on the gauge track. Default: 0. */
+  min?: number;
+  /** Maximum value on the gauge track. Default: 100. */
+  max?: number;
+  /** Unit string override shown next to the center value. */
+  unit?: string;
+  /**
+   * Show the unit next to the value text.  Default: ``true``.
+   * Set to ``false`` to suppress the unit label.
+   */
+  show_unit?: boolean;
+  /** Number of decimal places for the displayed value. */
+  decimals?: number;
+  /**
+   * HA attribute name to use instead of the entity state.
+   * When omitted, the entity's state value is used.
+   */
+  attribute?: string;
+  /**
+   * Render a dot at the current value instead of a fill arc.
+   * Default: ``false`` (fill arc mode).
+   */
+  needle?: boolean;
+  /**
+   * Arc span of the gauge.
+   * - ``"standard"`` — 270° arc with a gap at the bottom (default).
+   * - ``"half"`` — 180° semicircle arc.
+   * - ``"full"`` — 360° full-circle arc.
+   */
+  gauge_type?: "standard" | "half" | "full";
+  /**
+   * Position of the name label.
+   * - ``"bottom"`` — below the gauge arc (default).
+   * - ``"top"`` — above the gauge arc.
+   */
+  header_position?: "bottom" | "top";
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+  /**
+   * Threshold-based color bands drawn over the gauge track.
+   *
+   * @remarks The editor UI does not support segment configuration.
+   * Segments must be configured via YAML.
+   */
+  segments?: GaugeSegment[];
+}
+
 export type Widget =
   | SeparatorWidget
   | WeatherWidget
@@ -716,7 +796,8 @@ export type Widget =
   | HeadingWidget
   | EntitiesWidget
   | EntityWidget
-  | SensorWidget;
+  | SensorWidget
+  | GaugeWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {

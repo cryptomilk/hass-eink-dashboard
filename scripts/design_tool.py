@@ -1332,6 +1332,8 @@ _DEFAULT_DASHBOARD: list[tuple[str, dict]] = [
     (WidgetType.ENTITY, {"y": 386}),
     (WidgetType.SENSOR, {"y": 508}),
     (WidgetType.WASTE_SCHEDULE, {"y": 630}),
+    # Gauge: 240×240 square in the space below waste_schedule.
+    (WidgetType.GAUGE, {"y": 800, "x": 0, "w": 240, "h": 200}),
     # Bottom-right corner: x=634 leaves 124 px to the right edge.
     (WidgetType.DEVICE_BATTERY, {"y": 960, "x": 634}),
 ]

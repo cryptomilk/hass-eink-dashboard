@@ -180,6 +180,20 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       icon_style: DEFAULT_ICON_STYLE,
     },
   },
+  gauge: {
+    label: "Gauge",
+    description: "Circular arc gauge for a sensor value",
+    icon: "mdi:gauge",
+    defaults: {
+      type: "gauge",
+      x: 24,
+      y: 0,
+      w: 240,
+      h: 240,
+      entity: "",
+      card_style: DEFAULT_CARD_STYLE,
+    },
+  },
 };
 
 // ── ha-form schema builders ──────────────────────────────────────
@@ -928,6 +942,102 @@ export const SCHEMAS: Record<
       schema: [cardStyleSelector()],
     },
   ],
+  gauge: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:gauge",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: {} },
+        },
+        { name: "name", selector: { text: {} } },
+        { name: "icon", selector: { icon: {} } },
+        { name: "attribute", selector: { text: {} } },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "min",
+              default: 0,
+              selector: { number: { mode: "box" } },
+            },
+            {
+              name: "max",
+              default: 100,
+              selector: { number: { mode: "box" } },
+            },
+          ],
+        },
+        { name: "unit", selector: { text: {} } },
+        {
+          name: "show_unit",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "decimals",
+          selector: {
+            number: { min: 0, max: 4, mode: "box" },
+          },
+        },
+        {
+          name: "gauge_type",
+          default: "standard",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "standard", label: "Standard (270°)" },
+                { value: "half", label: "Half (180°)" },
+                { value: "full", label: "Full (360°)" },
+              ],
+            },
+          },
+        },
+        {
+          name: "needle",
+          default: false,
+          selector: { boolean: {} },
+        },
+        {
+          name: "header_position",
+          default: "bottom",
+          selector: {
+            select: {
+              options: [
+                { value: "bottom", label: "Bottom" },
+                { value: "top", label: "Top" },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector()],
+    },
+  ],
 };
 
 export const HELPERS: Record<string, string> = {
@@ -972,6 +1082,13 @@ export const LABELS: Record<string, string> = {
   hide_fill: "Hide fill",
   max_events: "Max events",
   days_ahead: "Days ahead",
+  min: "Minimum",
+  max: "Maximum",
+  gauge_type: "Gauge type",
+  needle: "Needle mode",
+  header_position: "Name position",
+  show_unit: "Show unit",
+  decimals: "Decimal places",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -1012,7 +1129,7 @@ export function getSummary(widget: Widget): string {
   }
   if (
     t === "weather" || t === "tile" || t === "entity"
-    || t === "sensor" || t === "calendar"
+    || t === "sensor" || t === "calendar" || t === "gauge"
   ) {
     return widget.entity || "(no entity)";
   }

@@ -1,0 +1,92 @@
+{%- from "_macros.svg.j2" import card_container -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+{%- if not has_entity -%}
+<rect width="{{ w }}" height="{{ h }}" fill="{{ hex_white }}"/>
+{%- else -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black,
+    bar_color=hex_gray) -%}
+{# Background arc: full arc extent in light gray. #}
+<path d="{{ arc_path }}"
+  fill="none"
+  stroke="{{ bg_arc_color }}"
+  stroke-width="{{ stroke_w }}"
+  stroke-linecap="round"/>
+{%- if needle -%}
+{# Needle mode: draw per-segment colour bands, then the needle dot. #}
+{%- for seg in seg_arcs -%}
+<path d="{{ seg.path }}"
+  fill="none"
+  stroke="{{ seg.color }}"
+  stroke-width="{{ stroke_w }}"
+  stroke-linecap="round"/>
+{%- endfor -%}
+{# White halo behind the needle dot for visual separation. #}
+<circle
+  cx="{{ needle_x }}" cy="{{ needle_y }}"
+  r="{{ needle_border_r }}"
+  fill="{{ hex_white }}"/>
+{# Needle dot: filled circle at the current-value position. #}
+<circle
+  cx="{{ needle_x }}" cy="{{ needle_y }}"
+  r="{{ needle_dot_r }}"
+  fill="{{ needle_color }}"/>
+{%- else -%}
+{# Fill mode: stroke-dasharray clips the coloured arc to fill_pct. #}
+<path d="{{ arc_path }}"
+  fill="none"
+  stroke="{{ fill_color }}"
+  stroke-width="{{ stroke_w }}"
+  stroke-linecap="round"
+  stroke-dasharray="{{ fill_length }} {{ gap_length }}"/>
+{%- endif -%}
+{# Optional MDI icon above the value text (not shown for half gauge). #}
+{%- if has_icon and icon_svg -%}
+<g transform="translate({{ icon_x }}, {{ icon_y }})"
+  style="color: {{ hex_black }}">{{ icon_svg }}</g>
+{%- endif -%}
+{# Value text centred at the arc centre. #}
+<text
+  x="{{ value_x }}" y="{{ value_y }}"
+  font-family="Roboto"
+  font-size="{{ value_font_sz }}"
+  font-weight="500"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ hex_black }}">{{ formatted_val }}</text>
+{# Unit: smaller text just below the value glyph baseline. #}
+{%- if unit_text -%}
+<text
+  x="{{ unit_x }}" y="{{ unit_y }}"
+  font-family="Roboto"
+  font-size="{{ unit_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ unit_text }}</text>
+{%- endif -%}
+{# Segment label: describes the matching value range. #}
+{%- if segment_label -%}
+<text
+  x="{{ seg_label_x }}" y="{{ seg_label_y }}"
+  font-family="Roboto"
+  font-size="{{ seg_label_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ segment_label }}</text>
+{%- endif -%}
+{# Name label at top or bottom depending on header_position. #}
+<text
+  x="{{ name_x }}" y="{{ name_y }}"
+  font-family="Roboto"
+  font-size="{{ name_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ name_text }}</text>
+{%- endcall -%}
+{%- endif -%}
+</svg>
