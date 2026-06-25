@@ -786,6 +786,74 @@ export interface GaugeWidget extends WidgetBase {
   segments?: GaugeSegment[];
 }
 
+/**
+ * Dedicated full-card line graph widget for a single HA entity.
+ *
+ * Renders a compact header row (name, optional icon, current value)
+ * at the top and a line graph filling the remaining height.
+ * Designed for e-ink displays where the chart is the primary
+ * content rather than a supplementary sparkline.
+ */
+export interface GraphWidget extends WidgetBase {
+  type: "graph";
+  /** HA entity ID whose numeric state history is graphed. */
+  entity: string;
+  /** Override display name; falls back to the entity's friendly_name. */
+  name?: string;
+  /** MDI icon name override (e.g. ``"mdi:thermometer"``). */
+  icon?: string;
+  /** Unit string override shown next to the current state value. */
+  unit?: string;
+  /** History window in hours. Default: 24. */
+  hours_to_show?: number;
+  /**
+   * Number of data points per hour retained after bucketing.
+   * Each hour is split into ``1 / points_per_hour`` fixed-width
+   * buckets; multiple raw readings in the same bucket are merged
+   * by ``aggregate_func``.  Default: 0.5 (one point per 2 h).
+   */
+  points_per_hour?: number;
+  /**
+   * Aggregation function applied to readings within each time
+   * bucket.  Default: ``"avg"``.
+   */
+  aggregate_func?: "avg" | "min" | "max" | "first" | "last" | "sum";
+  /** Graph line stroke width in pixels. Default: 2. */
+  line_width?: number;
+  /**
+   * Fixed Y-axis upper bound.  Auto-computed from data when
+   * omitted.
+   */
+  upper_bound?: number;
+  /**
+   * Fixed Y-axis lower bound.  Auto-computed from data when
+   * omitted.
+   */
+  lower_bound?: number;
+  /**
+   * Draw a light-gray filled polygon below the line.
+   * Default: ``true``.
+   */
+  show_fill?: boolean;
+  /**
+   * Show the current entity value in the header row.
+   * Default: ``true``.
+   */
+  show_state?: boolean;
+  /**
+   * Show the entity name in the header row.
+   * Default: ``true``.
+   */
+  show_name?: boolean;
+  /**
+   * Show the icon circle in the header row.
+   * Default: ``true``.
+   */
+  show_icon?: boolean;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+}
+
 export type Widget =
   | SeparatorWidget
   | WeatherWidget
@@ -797,7 +865,8 @@ export type Widget =
   | EntitiesWidget
   | EntityWidget
   | SensorWidget
-  | GaugeWidget;
+  | GaugeWidget
+  | GraphWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {

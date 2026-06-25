@@ -325,15 +325,15 @@ async def _fetch_history(
     widgets: list[dict[str, Any]],
     states: dict[str, Any],
 ) -> None:
-    """Fetch state history for sensor widgets and inject into states.
+    """Fetch state history for sensor and graph widgets.
 
-    Scans ``widgets`` for sensor widgets with ``graph == "line"``,
-    then fetches compressed state history from the recorder component
-    for each referenced entity and writes it into
-    ``states[entity_id]["history"]`` as a list of
-    ``{"s": state_str, "lu": unix_timestamp_float}`` dicts so
-    ``_build_sensor_context`` can compute sparkline coordinates
-    without real-time HA access.
+    Scans ``widgets`` for sensor widgets with ``graph == "line"``
+    and for graph widgets, then fetches compressed state history
+    from the recorder component for each referenced entity and
+    writes it into ``states[entity_id]["history"]`` as a list of
+    ``{"s": state_str, "lu": unix_timestamp_float}`` dicts so the
+    context builders can compute graph coordinates without real-time
+    HA access.
 
     Silently skips if the recorder is not loaded or if fetching fails
     for any individual entity.  Tests inject history data directly
@@ -341,15 +341,18 @@ async def _fetch_history(
 
     Args:
         hass: Home Assistant instance.
-        widgets: Widget dicts to scan for sensor widgets needing
-            history data.
+        widgets: Widget dicts to scan for widgets needing history
+            data.
         states: Mutable states dict built by ``_build_display_config``.
     """
     # Build a map of entity_id → maximum hours_to_show across all
-    # sensor widgets referencing that entity.
+    # widgets that require history data.
     sensor_entities: dict[str, int] = {}
     for w in widgets:
-        if w.get("type") == WidgetType.SENSOR and w.get("graph") == "line":
+        needs_history = (
+            w.get("type") == WidgetType.SENSOR and w.get("graph") == "line"
+        ) or w.get("type") == WidgetType.GRAPH
+        if needs_history:
             eid = w.get("entity", "")
             if eid and eid in states:
                 try:

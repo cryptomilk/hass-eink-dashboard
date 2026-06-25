@@ -1,0 +1,63 @@
+{%- from "_macros.svg.j2" import card_container, icon_circle -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+{%- if has_entity -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black,
+    bar_color=hex_gray) -%}
+{#- Header row: icon right-aligned, name and value on the left. -#}
+{%- if icon_svg or letter -%}
+{{- icon_circle(icon_cx, icon_cy, icon_r,
+    icon_glyph_x, icon_glyph_y,
+    icon_stroke_w, icon_fill, icon_color,
+    hex_black, hex_white,
+    icon_svg=icon_svg,
+    icon_outline=icon_outline,
+    icon_no_circle=icon_no_circle,
+    letter=letter,
+    letter_font_sz=letter_font_sz) -}}
+{%- endif -%}
+{%- if show_name -%}
+<text
+  x="{{ name_x }}" y="{{ name_y }}"
+  font-family="Roboto"
+  font-weight="500"
+  font-size="{{ name_font_sz }}"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ name_text }}</text>
+{%- endif -%}
+{%- if not hide_state -%}
+<text
+  x="{{ value_x }}" y="{{ value_y }}"
+  font-family="Roboto"
+  font-size="{{ value_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_black }}">{{ value_text }}</text>
+{%- if unit_text -%}
+<text
+  x="{{ unit_x }}" y="{{ unit_y }}"
+  font-family="Roboto"
+  font-size="{{ unit_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_gray }}">{{ unit_text }}</text>
+{%- endif -%}
+{%- endif -%}
+{#- Graph area: fill polygon below the line, then the polyline. -#}
+{%- if has_graph and polyline_points -%}
+{%- if fill_points -%}
+<polygon points="{{ fill_points }}"
+  fill="{{ hex_light_gray }}" stroke="none"/>
+{%- endif -%}
+<polyline points="{{ polyline_points }}"
+  fill="none"
+  stroke="{{ hex_black }}"
+  stroke-width="{{ graph_stroke_w }}"
+  stroke-linejoin="round"/>
+{%- endif -%}
+{%- endcall -%}
+{%- endif -%}
+</svg>

@@ -16,6 +16,7 @@ from .entities import (
 )
 from .entity import _build_entity_context
 from .gauge import _build_gauge_context
+from .graph import _build_graph_context
 from .heading import _build_heading_context
 from .sensor import _build_sensor_context
 from .separator import _build_separator_context
@@ -31,6 +32,7 @@ __all__ = [
     "_build_entities_context",
     "_build_entity_context",
     "_build_gauge_context",
+    "_build_graph_context",
     "_build_heading_context",
     "_build_sensor_context",
     "_build_separator_context",

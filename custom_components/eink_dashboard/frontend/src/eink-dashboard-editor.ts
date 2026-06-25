@@ -194,6 +194,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  graph: {
+    label: "Graph",
+    description: "Single-entity line graph with compact header",
+    icon: "mdi:chart-line",
+    defaults: {
+      type: "graph",
+      x: 24,
+      y: 0,
+      w: 400,
+      // 5 × DEFAULT_ROW_H gives adequate graph area below the header.
+      h: 280,
+      entity: "",
+      card_style: DEFAULT_CARD_STYLE,
+    },
+  },
 };
 
 // ── ha-form schema builders ──────────────────────────────────────
@@ -1038,6 +1053,126 @@ export const SCHEMAS: Record<
       schema: [cardStyleSelector()],
     },
   ],
+  graph: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:chart-line",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: {} },
+        },
+        { name: "name", selector: { text: {} } },
+        { name: "icon", selector: { icon: {} } },
+        { name: "unit", selector: { text: {} } },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "hours_to_show",
+              default: 24,
+              selector: {
+                number: { min: 1, max: 168, mode: "box" },
+              },
+            },
+            {
+              name: "points_per_hour",
+              default: 0.5,
+              selector: {
+                number: {
+                  min: 0.1,
+                  max: 60,
+                  step: 0.1,
+                  mode: "box",
+                },
+              },
+            },
+          ],
+        },
+        {
+          name: "aggregate_func",
+          default: "avg",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "avg", label: "Average" },
+                { value: "min", label: "Minimum" },
+                { value: "max", label: "Maximum" },
+                { value: "first", label: "First" },
+                { value: "last", label: "Last" },
+                { value: "sum", label: "Sum" },
+              ],
+            },
+          },
+        },
+        {
+          name: "line_width",
+          default: 2,
+          selector: {
+            number: { min: 1, max: 10, mode: "box" },
+          },
+        },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "lower_bound",
+              selector: { number: { mode: "box" } },
+            },
+            {
+              name: "upper_bound",
+              selector: { number: { mode: "box" } },
+            },
+          ],
+        },
+        {
+          name: "show_fill",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_state",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_name",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_icon",
+          default: true,
+          selector: { boolean: {} },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector()],
+    },
+  ],
 };
 
 export const HELPERS: Record<string, string> = {
@@ -1089,6 +1224,15 @@ export const LABELS: Record<string, string> = {
   header_position: "Name position",
   show_unit: "Show unit",
   decimals: "Decimal places",
+  points_per_hour: "Points per hour",
+  aggregate_func: "Aggregate function",
+  line_width: "Line width",
+  upper_bound: "Y-axis upper bound",
+  lower_bound: "Y-axis lower bound",
+  show_fill: "Show fill",
+  show_state: "Show state",
+  show_name: "Show name",
+  show_icon: "Show icon",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -1130,6 +1274,7 @@ export function getSummary(widget: Widget): string {
   if (
     t === "weather" || t === "tile" || t === "entity"
     || t === "sensor" || t === "calendar" || t === "gauge"
+    || t === "graph"
   ) {
     return widget.entity || "(no entity)";
   }

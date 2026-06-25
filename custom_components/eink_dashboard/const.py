@@ -244,6 +244,7 @@ class WidgetType(StrEnum):
     ENTITIES = "entities"
     ENTITY = "entity"
     GAUGE = "gauge"
+    GRAPH = "graph"
     HEADING = "heading"
     SENSOR = "sensor"
     TILE = "tile"
