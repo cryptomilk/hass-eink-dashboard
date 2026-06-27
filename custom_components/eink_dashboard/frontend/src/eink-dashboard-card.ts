@@ -85,8 +85,13 @@ class EinkDashboardCard extends HTMLElement {
   private _hass: HomeAssistant | null = null;
   private _layout: LayoutResponse | null = null;
   private _connected = false;
-  // Guards layout fetch only; SVG fetches use _fetchGeneration.
+  // Guards layout fetch only
   private _fetching = false;
+  // Guards SVG fetch and used to coalesce multiple preview requests to one
+  private _fetchingSvgs: Promise<RenderWidgetsResponse> | null = null;
+  // Generation counter for SVG fetch only.
+  private _svgGeneration = 0;
+  // Generation counter for layout fetch. Incrementing this also invalidates any pending SVG fetch.
   private _fetchGeneration = 0;
   private _showServerImage = false;
   private _serverImg: HTMLImageElement | null = null;
@@ -108,7 +113,6 @@ class EinkDashboardCard extends HTMLElement {
   private _svgContainer: HTMLDivElement | null = null;
   private _scaleWrapper: HTMLDivElement | null = null;
   private _resizeObserver: ResizeObserver | null = null;
-  private _stateDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   // Drag/resize/hover state
   private _dragIndex = -1;
   private _dragStartX = 0;
@@ -142,10 +146,6 @@ class EinkDashboardCard extends HTMLElement {
       this._renderedSvgs = [];
       this._svgContainer = null;
       this._scaleWrapper = null;
-      if (this._stateDebounceTimer !== null) {
-        clearTimeout(this._stateDebounceTimer);
-        this._stateDebounceTimer = null;
-      }
       if (this._resizeObserver) {
         this._resizeObserver.disconnect();
         this._resizeObserver = null;
@@ -179,7 +179,7 @@ class EinkDashboardCard extends HTMLElement {
       this._fetchLayout();
     }
     if (this._layout) {
-      this._scheduleSvgRefresh();
+      void this._fetchWidgetSvgs();
       const newHeader = buildHeaderText(this._layout.device);
       if (this._headerEl.textContent !== newHeader) {
         this._headerEl.textContent = newHeader;
@@ -200,14 +200,11 @@ class EinkDashboardCard extends HTMLElement {
     this._connected = false;
     this._fetchGeneration++;
     this._fetching = false;
-    if (this._stateDebounceTimer !== null) {
-      clearTimeout(this._stateDebounceTimer);
-      this._stateDebounceTimer = null;
-    }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
     }
+    this._fetchingSvgs = null;
   }
 
   getCardSize(): number {
@@ -647,19 +644,35 @@ class EinkDashboardCard extends HTMLElement {
    *   or rejects silently on error.
    */
   private async _fetchWidgetSvgs(): Promise<void> {
-    if (!this._connected || !this._hass || !this._layout || !this._resolvedEntryId) return;
+    if (!this._connected || !this._hass || !this._layout || !this._resolvedEntryId || this._showServerImage) return;
     const gen = this._fetchGeneration;
+    const svg_gen = ++this._svgGeneration;
+    if (this._fetchingSvgs) { // Another _fetchWidgetSvgs is pending
+      try {
+        await this._fetchingSvgs;
+      } catch {
+        // Ignore exceptions caught here, it will also be caught by the original
+        // caller and logged below.
+      }
+      if (this._fetchGeneration != gen || svg_gen != this._svgGeneration) {
+        return; // This request has already become stale
+      }
+    }
+
     try {
-      const result = await this._hass.callWS<RenderWidgetsResponse>({
+      this._fetchingSvgs = this._hass.callWS<RenderWidgetsResponse>({
         type: "eink_dashboard/render_widgets",
         entry_id: this._resolvedEntryId,
         widgets: this._layout.widgets,
       });
-      if (gen !== this._fetchGeneration) return;
+      const result = await this._fetchingSvgs;
+      if (gen !== this._fetchGeneration || svg_gen != this._svgGeneration) return;
       this._widgetSvgs = result.svgs;
       this._updateSvgDom();
     } catch (err) {
       console.error("Failed to fetch widget SVGs:", err);
+    } finally {
+      this._fetchingSvgs = null;
     }
   }
 
@@ -711,26 +724,6 @@ class EinkDashboardCard extends HTMLElement {
         this._renderedSvgs[i] = svg;
       }
     }
-  }
-
-  /**
-   * Debounce SVG refreshes triggered by entity state changes.
-   * Batches rapid updates (e.g. multiple entities updating
-   * at once) into a single WS call 500 ms after the last
-   * hass assignment. Skips when the server image is visible
-   * because the SVG container is hidden. Also skips during
-   * active drag/resize to avoid overwriting in-flight CSS.
-   */
-  private _scheduleSvgRefresh(): void {
-    if (!this._connected || !this._layout || this._showServerImage) return;
-    if (this._dragIndex >= 0 || this._resizeIndex >= 0) return;
-    if (this._stateDebounceTimer !== null) {
-      clearTimeout(this._stateDebounceTimer);
-    }
-    this._stateDebounceTimer = setTimeout(() => {
-      this._stateDebounceTimer = null;
-      void this._fetchWidgetSvgs();
-    }, 500);
   }
 
   // ── Server image toggle ───────────────────────────────────────────────────
