@@ -196,7 +196,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   },
   graph: {
     label: "Graph",
-    description: "Single-entity line graph with compact header",
+    description: "Line graph with up to three overlaid entities",
     icon: "mdi:chart-line",
     defaults: {
       type: "graph",
@@ -1187,6 +1187,54 @@ export const SCHEMAS: Record<
           name: "min_bound_range",
           selector: { number: { mode: "box" } },
         },
+        {
+          name: "entity_2",
+          selector: { entity: {} },
+        },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            { name: "name_2", selector: { text: {} } },
+            {
+              name: "y_axis_2",
+              default: "primary",
+              selector: {
+                select: {
+                  mode: "dropdown",
+                  options: [
+                    { value: "primary", label: "Primary (left)" },
+                    { value: "secondary", label: "Secondary (right)" },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+        {
+          name: "entity_3",
+          selector: { entity: {} },
+        },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            { name: "name_3", selector: { text: {} } },
+            {
+              name: "y_axis_3",
+              default: "primary",
+              selector: {
+                select: {
+                  mode: "dropdown",
+                  options: [
+                    { value: "primary", label: "Primary (left)" },
+                    { value: "secondary", label: "Secondary (right)" },
+                  ],
+                },
+              },
+            },
+          ],
+        },
       ],
     },
     {
@@ -1271,6 +1319,12 @@ export const LABELS: Record<string, string> = {
   show_extrema: "Show extrema",
   group_by: "Group by",
   min_bound_range: "Min bound range",
+  entity_2: "Second entity",
+  name_2: "Second entity name",
+  y_axis_2: "Second entity Y axis",
+  entity_3: "Third entity",
+  name_3: "Third entity name",
+  y_axis_3: "Third entity Y axis",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -1312,9 +1366,16 @@ export function getSummary(widget: Widget): string {
   if (
     t === "weather" || t === "tile" || t === "entity"
     || t === "sensor" || t === "calendar" || t === "gauge"
-    || t === "graph"
   ) {
     return widget.entity || "(no entity)";
+  }
+  if (t === "graph") {
+    const primary = widget.entity || "";
+    const extras = [widget.entity_2, widget.entity_3].filter(Boolean);
+    if (!primary && !extras.length) return "(no entity)";
+    const base = primary || extras[0] || "";
+    const total = (primary ? 1 : 0) + extras.length;
+    return total > 1 ? `${base} +${total - 1}` : base;
   }
   if (t === "device_battery") {
     return "Device battery";

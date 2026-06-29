@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    import pytest
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
@@ -96,6 +99,19 @@ MOCK_GRAPH_STATES: dict[str, dict[str, object]] = {
             {"s": "65.0", "lu": 1747620000.0},
             {"s": "67.5", "lu": 1747645200.0},
             {"s": "70.0", "lu": 1747699200.0},
+        ],
+    },
+    "sensor.pressure": {
+        "state": "1013.0",
+        "attributes": {
+            "friendly_name": "Pressure",
+            "device_class": "pressure",
+            "unit_of_measurement": "hPa",
+        },
+        "history": [
+            {"s": "1013.0", "lu": 1747620000.0},
+            {"s": "1014.5", "lu": 1747645200.0},
+            {"s": "1015.0", "lu": 1747699200.0},
         ],
     },
 }
@@ -763,3 +779,368 @@ class TestRenderGraph:
         # Data range is ~3.0 (20.0-23.0), which exceeds 1.0, so
         # min_bound_range has no effect.
         assert svg_no_mbr == svg_with_mbr
+
+    # ── Phase 3: Multi-entity tests ───────────────────────────────────
+
+    def _multi_widget(self, **overrides: object) -> dict[str, object]:
+        """Return a 400×280 graph widget with two entities."""
+        w: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity"},
+            ],
+        }
+        w.update(overrides)
+        return w
+
+    # ── Phase 3: Backward compatibility tests ────────────────────────
+
+    def test_graph_single_entity_key_still_works(self) -> None:
+        # Single entity= key (no entities list) still renders a graph
+        # line when Phase 3 normalization is in place.
+        svg = render_widget_svg(
+            self._base_widget(smoothing=False), self._config()
+        )
+        assert "<polyline" in svg
+
+    def test_graph_entities_single_item_matches_entity_key(
+        self,
+    ) -> None:
+        # entities=[{entity: ...}] produces identical SVG to entity=...
+        # for a single entity, confirming the normalization path.
+        svg_key = render_widget_svg(
+            self._base_widget(smoothing=False), self._config()
+        )
+        svg_list = render_widget_svg(
+            {
+                "type": "graph",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 280,
+                "entities": [{"entity": "sensor.temperature"}],
+                "smoothing": False,
+            },
+            self._config(),
+        )
+        assert svg_key == svg_list
+
+    # ── Phase 3: Multi-entity line rendering tests ────────────────────
+
+    def test_graph_multi_entity_two_polylines(self) -> None:
+        # With two entities and smoothing=False, the SVG contains
+        # exactly two <polyline elements — one per series.
+        svg = render_widget_svg(
+            self._multi_widget(smoothing=False), self._config()
+        )
+        assert svg.count("<polyline") == 2
+
+    def test_graph_multi_entity_two_paths_smoothed(self) -> None:
+        # With two entities and default smoothing, the SVG contains
+        # multiple Q commands (at least two series worth of curves).
+        svg = render_widget_svg(self._multi_widget(), self._config())
+        assert svg.count(" Q ") >= 2
+
+    def test_graph_multi_entity_distinct_dash_patterns(self) -> None:
+        # Two entities produce one solid line (no stroke-dasharray)
+        # and one dashed line (stroke-dasharray="8,4").
+        svg = render_widget_svg(
+            self._multi_widget(smoothing=False), self._config()
+        )
+        assert 'stroke-dasharray="8,4"' in svg
+
+    def test_graph_three_entities_three_dash_patterns(self) -> None:
+        # Three entities produce solid, dashed, and dotted lines;
+        # all three dash patterns appear in the SVG.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity"},
+                {"entity": "sensor.pressure"},
+            ],
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'stroke-dasharray="8,4"' in svg
+        assert 'stroke-dasharray="2,4"' in svg
+
+    # ── Phase 3: Multi-entity fill tests ─────────────────────────────
+
+    def test_graph_multi_entity_only_first_entity_gets_fill(
+        self,
+    ) -> None:
+        # With two entities and show_fill=True (default), only the
+        # first entity gets a fill area — overlapping fills produce
+        # visual noise on e-ink.
+        svg = render_widget_svg(
+            self._multi_widget(smoothing=False), self._config()
+        )
+        assert svg.count("<polygon") == 1
+
+    def test_graph_multi_entity_no_fill_when_disabled(self) -> None:
+        # With show_fill=False and two entities, no fill element
+        # appears in the SVG.
+        svg = render_widget_svg(
+            self._multi_widget(smoothing=False, show_fill=False),
+            self._config(),
+        )
+        assert "<polygon" not in svg
+
+    # ── Phase 3: Secondary Y-axis tests ──────────────────────────────
+
+    def test_graph_secondary_y_axis_labels_both_sides(self) -> None:
+        # With one primary and one secondary entity, Y-axis labels
+        # appear for both scales: temperature (20.0–23.0) on the
+        # left and humidity (65.0–70.0) on the right.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+            "show_labels": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        # Primary axis: temperature range.
+        assert "20.0" in svg
+        # Secondary axis: humidity range.
+        assert "65.0" in svg
+
+    def test_graph_secondary_y_axis_changes_output(self) -> None:
+        # A secondary-axis entity shifts gx2 inward to make room for
+        # right-side labels, producing different SVG output.
+        svg_primary = render_widget_svg(self._multi_widget(), self._config())
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+        }
+        svg_secondary = render_widget_svg(widget, self._config())
+        assert svg_primary != svg_secondary
+
+    def test_graph_all_primary_no_right_secondary_labels(
+        self,
+    ) -> None:
+        # When both entities use primary Y-axis (default), no secondary
+        # Y-axis labels appear on the right.  Verify by comparing against
+        # a configuration where one entity is on the secondary axis: the
+        # secondary version must have more right-aligned text elements.
+        svg_all_primary = render_widget_svg(
+            self._multi_widget(show_labels=True), self._config()
+        )
+        widget_secondary: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity", "y_axis": "secondary"},
+            ],
+            "show_labels": True,
+        }
+        svg_with_secondary = render_widget_svg(
+            widget_secondary, self._config()
+        )
+        count_primary = svg_all_primary.count('text-anchor="end"')
+        count_secondary = svg_with_secondary.count('text-anchor="end"')
+        assert count_primary < count_secondary
+
+    # ── Phase 3: Legend tests ─────────────────────────────────────────
+
+    def test_graph_legend_shown_for_multi_entity(self) -> None:
+        # With two entities, the SVG contains both entity names in the
+        # legend area below the graph.
+        svg = render_widget_svg(self._multi_widget(), self._config())
+        assert "Living Room" in svg
+        assert "Humidity" in svg
+
+    def test_graph_legend_hidden_for_single_entity(self) -> None:
+        # A single-entity widget does not render a legend; the second
+        # entity's name does not appear.
+        svg = render_widget_svg(self._base_widget(), self._config())
+        assert "Humidity" not in svg
+
+    def test_graph_legend_has_line_sample_elements(self) -> None:
+        # Legend entries include <line> elements as dash-pattern
+        # samples (at least one per legend entry).
+        svg = render_widget_svg(
+            self._multi_widget(smoothing=False),
+            self._config(grayscale_levels=2),
+        )
+        # On 2-level display, grid lines are absent so any <line>
+        # must come from legend samples.
+        assert "<line" in svg
+
+    def test_graph_legend_reserves_vertical_space(self) -> None:
+        # Multi-entity render (with legend) differs from single-entity
+        # at same dimensions because the legend shifts the graph up.
+        svg_single = render_widget_svg(self._base_widget(), self._config())
+        svg_multi = render_widget_svg(self._multi_widget(), self._config())
+        assert svg_single != svg_multi
+
+    def test_graph_legend_pixel_region(self) -> None:
+        # With two entities, dark pixels appear in the bottom 20% of
+        # the widget height where legend text renders.
+        h = 280
+        widget = self._multi_widget(h=h)
+        img = render_to_image([widget], self._config())
+        bottom_y = int(h * 0.8)
+        assert_has_dark_pixels(img, 0, bottom_y, 400, h)
+
+    def test_graph_legend_name_override(self) -> None:
+        # A name override in the entities list appears in the legend
+        # instead of the entity friendly_name.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {
+                    "entity": "sensor.temperature",
+                    "name": "Temp Override",
+                },
+                {"entity": "sensor.humidity"},
+            ],
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "Temp Override" in svg
+
+    # ── Phase 3: Header test ──────────────────────────────────────────
+
+    def test_graph_multi_entity_header_shows_first_entity(
+        self,
+    ) -> None:
+        # The header still shows the first entity's friendly name even
+        # in multi-entity mode.
+        svg = render_widget_svg(self._multi_widget(), self._config())
+        assert "Living Room" in svg
+
+    # ── Phase 3: Edge case tests ──────────────────────────────────────
+
+    def test_graph_multi_entity_one_missing_still_renders(
+        self,
+    ) -> None:
+        # When the first entity is missing, the widget still renders
+        # the second entity's graph line without crashing.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.nonexistent"},
+                {"entity": "sensor.temperature"},
+            ],
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "<svg" in svg
+        assert "<polyline" in svg
+
+    def test_graph_multi_entity_all_missing_renders_blank(
+        self,
+    ) -> None:
+        # When all entities are missing from states, the widget
+        # renders valid SVG but no graph line.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.nonexistent1"},
+                {"entity": "sensor.nonexistent2"},
+            ],
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "<svg" in svg
+        assert "<polyline" not in svg
+
+    def test_graph_entities_empty_list_renders_blank(self) -> None:
+        # An empty entities list renders valid SVG with no graph line.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [],
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "<svg" in svg
+        assert "<polyline" not in svg
+
+    def test_graph_entities_all_invalid_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A non-empty entities list where all items lack the 'entity'
+        # key should log a warning before falling through to single-
+        # entity mode.
+        import logging
+
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [{"bad": "data"}, {"also": "bad"}],
+        }
+        with caplog.at_level(logging.WARNING):
+            render_widget_svg(widget, self._config())
+        assert "no valid items" in caplog.text
+
+    def test_graph_12h_time_format(self) -> None:
+        # time_format="12" renders AM/PM labels on the x-axis.
+        svg = render_widget_svg(
+            self._base_widget(show_labels=True),
+            self._config(time_format="12"),
+        )
+        assert "AM" in svg or "PM" in svg
+
+    def test_format_timestamp_12h_no_leading_zero(self) -> None:
+        # _format_timestamp with time_fmt="12" must not produce a
+        # leading zero (e.g. "9:30 AM" not "09:30 AM").
+        from custom_components.eink_dashboard.widgets.graph import (
+            _format_timestamp,
+        )
+
+        # 2025-05-19 09:30 UTC
+        ts = 1747647000.0
+        result = _format_timestamp(ts, "12")
+        assert result[0] != "0"
+        assert "AM" in result or "PM" in result

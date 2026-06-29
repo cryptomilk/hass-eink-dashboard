@@ -46,7 +46,7 @@
   fill="{{ hex_gray }}">{{ unit_text }}</text>
 {%- endif -%}
 {%- endif -%}
-{#- Graph area: grid lines, fill, line, axis labels, extrema. -#}
+{#- Graph area: grid, fills, lines, labels, extrema, legend. -#}
 {%- if has_graph -%}
 {#- Horizontal grid lines at the graph top and bottom edges. -#}
 {%- if show_grid -%}
@@ -59,30 +59,40 @@
       stroke="{{ hex_light_gray }}"
       stroke-width="{{ grid_stroke_w }}"/>
 {%- endif -%}
-{#- Fill area below the line (smoothed path or polygon). -#}
-{%- if fill_path -%}
-<path d="{{ fill_path }}"
+{#- Fill areas below lines — rendered first so lines appear on top. -#}
+{%- for s in series -%}
+{%- if s.fill_path -%}
+<path d="{{ s.fill_path }}"
   fill="{{ hex_light_gray }}" stroke="none"/>
-{%- elif fill_points -%}
-<polygon points="{{ fill_points }}"
+{%- elif s.fill_points -%}
+<polygon points="{{ s.fill_points }}"
   fill="{{ hex_light_gray }}" stroke="none"/>
 {%- endif -%}
-{#- Graph line (smoothed path or polyline). -#}
-{%- if graph_path -%}
-<path d="{{ graph_path }}"
+{%- endfor -%}
+{#- Graph lines rendered on top of fills. -#}
+{%- for s in series -%}
+{%- if s.graph_path -%}
+<path d="{{ s.graph_path }}"
   fill="none"
   stroke="{{ hex_black }}"
   stroke-width="{{ graph_stroke_w }}"
   stroke-linejoin="round"
-  stroke-linecap="round"/>
-{%- elif polyline_points -%}
-<polyline points="{{ polyline_points }}"
+  stroke-linecap="round"
+{%- if s.stroke_dasharray %}
+  stroke-dasharray="{{ s.stroke_dasharray }}"
+{%- endif %}/>
+{%- elif s.polyline_points -%}
+<polyline points="{{ s.polyline_points }}"
   fill="none"
   stroke="{{ hex_black }}"
   stroke-width="{{ graph_stroke_w }}"
-  stroke-linejoin="round"/>
+  stroke-linejoin="round"
+{%- if s.stroke_dasharray %}
+  stroke-dasharray="{{ s.stroke_dasharray }}"
+{%- endif %}/>
 {%- endif -%}
-{#- Y-axis labels: min at bottom, max at top. -#}
+{%- endfor -%}
+{#- Primary Y-axis labels: min at bottom, max at top. -#}
 {%- if show_labels -%}
 <text x="{{ y_label_x }}" y="{{ y_max_label_y }}"
   font-family="Roboto"
@@ -107,6 +117,21 @@
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ x_newest_str }}</text>
 {%- endif -%}
+{#- Secondary Y-axis labels: right side, separate scale. -#}
+{%- if show_secondary_labels -%}
+<text x="{{ y2_label_right_x }}" y="{{ y2_max_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  text-anchor="end"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ y2_max_str }}</text>
+<text x="{{ y2_label_right_x }}" y="{{ y2_min_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  text-anchor="end"
+  dominant-baseline="auto"
+  fill="{{ hex_gray }}">{{ y2_min_str }}</text>
+{%- endif -%}
 {#- Extrema: min/max values with timestamps below the graph. -#}
 {%- if show_extrema -%}
 <text x="{{ extrema_left }}" y="{{ extrema_y }}"
@@ -120,6 +145,23 @@
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ extrema_max_str }}</text>
+{%- endif -%}
+{#- Legend: one line-sample + label per entity (multi-entity only). -#}
+{%- if show_legend -%}
+{%- for entry in legend_entries -%}
+<line x1="{{ entry.line_x1 }}" y1="{{ entry.line_y }}"
+      x2="{{ entry.line_x2 }}" y2="{{ entry.line_y }}"
+      stroke="{{ hex_black }}"
+      stroke-width="{{ graph_stroke_w }}"
+{%- if entry.stroke_dasharray %}
+      stroke-dasharray="{{ entry.stroke_dasharray }}"
+{%- endif %}/>
+<text x="{{ entry.text_x }}" y="{{ entry.text_y }}"
+  font-family="Roboto"
+  font-size="{{ entry.font_sz }}"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ entry.name }}</text>
+{%- endfor -%}
 {%- endif -%}
 {%- endif -%}
 {%- endcall -%}

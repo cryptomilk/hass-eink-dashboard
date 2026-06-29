@@ -353,14 +353,32 @@ async def _fetch_history(
             w.get("type") == WidgetType.SENSOR and w.get("graph") == "line"
         ) or w.get("type") == WidgetType.GRAPH
         if needs_history:
-            eid = w.get("entity", "")
-            if eid and eid in states:
-                try:
-                    hours = max(1, int(w.get("hours_to_show", 24)))
-                except (ValueError, TypeError):
-                    hours = 24
-                if hours > sensor_entities.get(eid, 0):
-                    sensor_entities[eid] = hours
+            # Collect all entity IDs from the entities list,
+            # single entity= key, and flat editor keys entity_2/3.
+            eids: list[str] = []
+            entities_list = w.get("entities")
+            if isinstance(entities_list, list):
+                for e in entities_list:
+                    if isinstance(e, dict):
+                        eid = str(e.get("entity", ""))
+                        if eid:
+                            eids.append(eid)
+            if not eids:
+                eid = str(w.get("entity", ""))
+                if eid:
+                    eids.append(eid)
+                for suffix in ("_2", "_3"):
+                    eid2 = str(w.get(f"entity{suffix}", ""))
+                    if eid2:
+                        eids.append(eid2)
+            for eid in eids:
+                if eid in states:
+                    try:
+                        hours = max(1, int(w.get("hours_to_show", 24)))
+                    except (ValueError, TypeError):
+                        hours = 24
+                    if hours > sensor_entities.get(eid, 0):
+                        sensor_entities[eid] = hours
 
     if not sensor_entities:
         return

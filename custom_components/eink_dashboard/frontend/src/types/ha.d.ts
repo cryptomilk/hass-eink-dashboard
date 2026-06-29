@@ -787,17 +787,52 @@ export interface GaugeWidget extends WidgetBase {
 }
 
 /**
- * Dedicated full-card line graph widget for a single HA entity.
+ * One entity entry in a multi-entity graph widget's ``entities`` list.
+ *
+ * Used with the ``entities`` field on {@link GraphWidget} when
+ * overlaying multiple data series on the same graph.
+ */
+export interface GraphEntityConfig {
+  /** HA entity ID whose numeric state history is graphed. */
+  entity: string;
+  /**
+   * Override display name used in the legend.  Falls back to the
+   * entity's ``friendly_name`` when omitted.
+   */
+  name?: string;
+  /**
+   * Which Y axis this entity's line is scaled against.
+   * ``"primary"`` (default) uses the left-side scale shared by all
+   * primary entities.  ``"secondary"`` uses a separate right-side
+   * scale useful for entities with a different unit or magnitude.
+   */
+  y_axis?: "primary" | "secondary";
+  /**
+   * Line style for this entity's graph line.  Defaults to the
+   * position-based pattern: ``"solid"`` (1st), ``"dashed"`` (2nd),
+   * ``"dotted"`` (3rd).
+   */
+  line_style?: "solid" | "dashed" | "dotted";
+}
+
+/**
+ * Dedicated full-card line graph widget with optional multi-entity
+ * overlay support.
  *
  * Renders a compact header row (name, optional icon, current value)
  * at the top and a line graph filling the remaining height.
- * Designed for e-ink displays where the chart is the primary
- * content rather than a supplementary sparkline.
+ * Multiple entities can be overlaid with distinct dash patterns
+ * and an optional secondary Y-axis.
  */
 export interface GraphWidget extends WidgetBase {
   type: "graph";
-  /** HA entity ID whose numeric state history is graphed. */
-  entity: string;
+  /**
+   * HA entity ID for the primary (first) series.  Required when
+   * {@link entities} is not specified.  When both are present,
+   * {@link entities} takes precedence.
+   * @deprecated Prefer {@link entities} for multi-entity configs.
+   */
+  entity?: string;
   /** Override display name; falls back to the entity's friendly_name. */
   name?: string;
   /** MDI icon name override (e.g. ``"mdi:thermometer"``). */
@@ -885,6 +920,42 @@ export interface GraphWidget extends WidgetBase {
    * graph from over-amplifying tiny fluctuations.
    */
   min_bound_range?: number;
+  /**
+   * Multi-entity overlay list.  When present, takes precedence over
+   * the flat {@link entity} / {@link entity_2} / {@link entity_3}
+   * keys.  Maximum 3 entries; each entry controls one graph series.
+   */
+  entities?: GraphEntityConfig[];
+  /**
+   * HA entity ID for the second graph series (flat editor format).
+   * Ignored when {@link entities} is set.
+   */
+  entity_2?: string;
+  /**
+   * Display name override for the second series used in the legend.
+   * Falls back to the entity's ``friendly_name``.
+   */
+  name_2?: string;
+  /**
+   * Y-axis assignment for the second series.  ``"secondary"`` places
+   * its scale on the right side of the graph.
+   */
+  y_axis_2?: "primary" | "secondary";
+  /**
+   * HA entity ID for the third graph series (flat editor format).
+   * Ignored when {@link entities} is set.
+   */
+  entity_3?: string;
+  /**
+   * Display name override for the third series used in the legend.
+   * Falls back to the entity's ``friendly_name``.
+   */
+  name_3?: string;
+  /**
+   * Y-axis assignment for the third series.  ``"secondary"`` places
+   * its scale on the right side of the graph.
+   */
+  y_axis_3?: "primary" | "secondary";
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

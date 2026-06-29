@@ -268,6 +268,45 @@ describe("getSummary", () => {
   it("returns '(no entity)' for sensor widget with no entity", () => {
     expect(getSummary({ type: "sensor", entity: "" })).toBe("(no entity)");
   });
+
+  it("returns entity for single-entity graph", () => {
+    expect(
+      getSummary({ type: "graph", entity: "sensor.temperature" })
+    ).toBe("sensor.temperature");
+  });
+
+  it("returns '(no entity)' for graph with no entity", () => {
+    expect(getSummary({ type: "graph" })).toBe("(no entity)");
+  });
+
+  it("returns primary entity with count suffix for multi-entity graph", () => {
+    // Two entities: shows first + "+1" suffix.
+    expect(
+      getSummary({
+        type: "graph",
+        entity: "sensor.temperature",
+        entity_2: "sensor.humidity",
+      })
+    ).toBe("sensor.temperature +1");
+  });
+
+  it("shows three-entity graph summary with +2 suffix", () => {
+    expect(
+      getSummary({
+        type: "graph",
+        entity: "sensor.temperature",
+        entity_2: "sensor.humidity",
+        entity_3: "sensor.pressure",
+      })
+    ).toBe("sensor.temperature +2");
+  });
+
+  it("returns entity_2 as base when entity is absent in graph", () => {
+    // entity omitted but entity_2 present.
+    expect(
+      getSummary({ type: "graph", entity_2: "sensor.humidity" })
+    ).toBe("sensor.humidity");
+  });
 });
 
 // ── SCHEMAS form grouping ────────────────────────────────────────
