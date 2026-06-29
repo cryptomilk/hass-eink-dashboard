@@ -46,18 +46,83 @@
   fill="{{ hex_gray }}">{{ unit_text }}</text>
 {%- endif -%}
 {%- endif -%}
-{#- Graph area: fill polygon below the line, then the polyline. -#}
-{%- if has_graph and polyline_points -%}
-{%- if fill_points -%}
+{#- Graph area: grid lines, fill, line, axis labels, extrema. -#}
+{%- if has_graph -%}
+{#- Horizontal grid lines at the graph top and bottom edges. -#}
+{%- if show_grid -%}
+<line x1="{{ x_label_left }}" y1="{{ grid_y_top }}"
+      x2="{{ x_label_right }}" y2="{{ grid_y_top }}"
+      stroke="{{ hex_light_gray }}"
+      stroke-width="{{ grid_stroke_w }}"/>
+<line x1="{{ x_label_left }}" y1="{{ grid_y_bot }}"
+      x2="{{ x_label_right }}" y2="{{ grid_y_bot }}"
+      stroke="{{ hex_light_gray }}"
+      stroke-width="{{ grid_stroke_w }}"/>
+{%- endif -%}
+{#- Fill area below the line (smoothed path or polygon). -#}
+{%- if fill_path -%}
+<path d="{{ fill_path }}"
+  fill="{{ hex_light_gray }}" stroke="none"/>
+{%- elif fill_points -%}
 <polygon points="{{ fill_points }}"
   fill="{{ hex_light_gray }}" stroke="none"/>
 {%- endif -%}
+{#- Graph line (smoothed path or polyline). -#}
+{%- if graph_path -%}
+<path d="{{ graph_path }}"
+  fill="none"
+  stroke="{{ hex_black }}"
+  stroke-width="{{ graph_stroke_w }}"
+  stroke-linejoin="round"
+  stroke-linecap="round"/>
+{%- elif polyline_points -%}
 <polyline points="{{ polyline_points }}"
   fill="none"
   stroke="{{ hex_black }}"
   stroke-width="{{ graph_stroke_w }}"
   stroke-linejoin="round"/>
 {%- endif -%}
+{#- Y-axis labels: min at bottom, max at top. -#}
+{%- if show_labels -%}
+<text x="{{ y_label_x }}" y="{{ y_max_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ y_max_str }}</text>
+<text x="{{ y_label_x }}" y="{{ y_min_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_gray }}">{{ y_min_str }}</text>
+{#- X-axis labels: oldest time left, newest time right. -#}
+<text x="{{ x_label_left }}" y="{{ x_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ x_oldest_str }}</text>
+<text x="{{ x_label_right }}" y="{{ x_label_y }}"
+  font-family="Roboto"
+  font-size="{{ label_font_sz }}"
+  text-anchor="end"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ x_newest_str }}</text>
+{%- endif -%}
+{#- Extrema: min/max values with timestamps below the graph. -#}
+{%- if show_extrema -%}
+<text x="{{ extrema_left }}" y="{{ extrema_y }}"
+  font-family="Roboto"
+  font-size="{{ extrema_font_sz }}"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ extrema_min_str }}</text>
+<text x="{{ extrema_right }}" y="{{ extrema_y }}"
+  font-family="Roboto"
+  font-size="{{ extrema_font_sz }}"
+  text-anchor="end"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ extrema_max_str }}</text>
+{%- endif -%}
+{%- endif -%}
 {%- endcall -%}
+{#- No entity: render blank SVG. -#}
 {%- endif -%}
 </svg>

@@ -850,6 +850,41 @@ export interface GraphWidget extends WidgetBase {
    * Default: ``true``.
    */
   show_icon?: boolean;
+  /**
+   * Enable midpoint Q-curve path smoothing for the graph line.
+   * When true, each data point becomes a quadratic Bezier control
+   * point and the curve passes through midpoints between consecutive
+   * data points, producing a smooth continuous curve.
+   * Default: ``true``.
+   */
+  smoothing?: boolean;
+  /**
+   * Show Y-axis min/max value labels on the left edge and X-axis
+   * time labels (oldest and newest timestamps) at the bottom of
+   * the graph area.  Default: ``true``.
+   */
+  show_labels?: boolean;
+  /**
+   * Show minimum and maximum values with their timestamps below
+   * the graph.  Each is displayed as "Min/Max: value at HH:MM".
+   * Default: ``false``.
+   */
+  show_extrema?: boolean;
+  /**
+   * Data grouping strategy applied before bucketing.
+   * ``"interval"`` uses the configured ``points_per_hour``;
+   * ``"hour"`` forces one data point per hour;
+   * ``"date"`` forces one data point per day.
+   * Default: ``"interval"``.
+   */
+  group_by?: "interval" | "hour" | "date";
+  /**
+   * Minimum Y-axis range.  When the auto-computed range
+   * (``y_max - y_min``) is smaller than this value, both bounds
+   * are expanded symmetrically around the midpoint to prevent the
+   * graph from over-amplifying tiny fluctuations.
+   */
+  min_bound_range?: number;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

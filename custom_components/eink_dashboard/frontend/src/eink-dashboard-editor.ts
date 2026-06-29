@@ -1154,6 +1154,39 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "smoothing",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_labels",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_extrema",
+          default: false,
+          selector: { boolean: {} },
+        },
+        {
+          name: "group_by",
+          default: "interval",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "interval", label: "Interval" },
+                { value: "hour", label: "Hour" },
+                { value: "date", label: "Day" },
+              ],
+            },
+          },
+        },
+        {
+          name: "min_bound_range",
+          selector: { number: { mode: "box" } },
+        },
       ],
     },
     {
@@ -1233,6 +1266,11 @@ export const LABELS: Record<string, string> = {
   show_state: "Show state",
   show_name: "Show name",
   show_icon: "Show icon",
+  smoothing: "Smoothing",
+  show_labels: "Show labels",
+  show_extrema: "Show extrema",
+  group_by: "Group by",
+  min_bound_range: "Min bound range",
 };
 
 // ── HA component loader ──────────────────────────────────────────
