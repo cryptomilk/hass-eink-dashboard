@@ -196,7 +196,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
   },
   graph: {
     label: "Graph",
-    description: "Line graph with up to three overlaid entities",
+    description: "Line or bar graph with up to three overlaid entities",
     icon: "mdi:chart-line",
     defaults: {
       type: "graph",
@@ -1064,6 +1064,19 @@ export const SCHEMAS: Record<
       icon: "mdi:chart-line",
       schema: [
         {
+          name: "graph",
+          default: "line",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "line", label: "Line" },
+                { value: "bar", label: "Bar" },
+              ],
+            },
+          },
+        },
+        {
           name: "entity",
           required: true,
           selector: { entity: {} },
@@ -1290,7 +1303,7 @@ export const LABELS: Record<string, string> = {
   forecast_days: "Forecast days",
   temperature_entity: "Temperature sensor",
   humidity_entity: "Humidity sensor",
-  graph: "Graph",
+  graph: "Graph type",
   hours_to_show: "Hours to show",
   detail: "Detail",
   limits_min: "Y-axis minimum",

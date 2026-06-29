@@ -126,6 +126,12 @@ class TestRenderGraph:
 
     Phase 2 adds path smoothing, axis labels, grid lines, group_by,
     extrema display, and min_bound_range.
+
+    Phase 3 adds multi-entity overlay with distinct dash patterns,
+    secondary Y-axis, and legend.
+
+    Phase 4 adds bar chart mode (graph="bar") with grouped multi-entity
+    bars, distinct fill shades, and <rect> legend swatches.
     """
 
     _DEFAULTS: ClassVar[dict[str, object]] = {
@@ -1144,3 +1150,244 @@ class TestRenderGraph:
         result = _format_timestamp(ts, "12")
         assert result[0] != "0"
         assert "AM" in result or "PM" in result
+
+    # ── Phase 4: Bar graph tests ──────────────────────────────────────
+
+    def test_graph_bar_renders_rects(self) -> None:
+        # graph="bar" produces <rect> elements for the bar columns.
+        svg = render_widget_svg(self._base_widget(graph="bar"), self._config())
+        assert "<rect" in svg
+
+    def test_graph_bar_no_polyline_or_bezier(self) -> None:
+        # Bar mode must not produce <polyline> or Bezier Q-curve graph
+        # paths — those are line-graph elements, not bar elements.
+        svg = render_widget_svg(self._base_widget(graph="bar"), self._config())
+        assert "<polyline" not in svg
+        assert " Q " not in svg
+
+    def test_graph_bar_default_is_line(self) -> None:
+        # Omitting the graph key defaults to line mode; bar mode must
+        # produce different SVG (confirms the key is recognized).
+        svg_default = render_widget_svg(self._base_widget(), self._config())
+        svg_bar = render_widget_svg(
+            self._base_widget(graph="bar"), self._config()
+        )
+        assert svg_default != svg_bar
+
+    def test_graph_bar_differs_from_explicit_line(self) -> None:
+        # Explicit graph="line" and graph="bar" produce different SVG
+        # for the same entity and config.
+        svg_line = render_widget_svg(
+            self._base_widget(graph="line"), self._config()
+        )
+        svg_bar = render_widget_svg(
+            self._base_widget(graph="bar"), self._config()
+        )
+        assert svg_line != svg_bar
+
+    def test_graph_bar_no_data_no_rects(self) -> None:
+        # When the entity has no history, bar mode renders valid SVG
+        # but produces no <rect> graph elements.
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                "state": "22.5",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._base_widget(graph="bar"),
+            self._config(states=states),
+        )
+        assert "<svg" in svg
+        # No bars without history data.  The full-SVG substring check
+        # is safe here because _base_widget() uses card_style="none"
+        # (no card-border rect) and single-entity mode (no legend
+        # swatches) — both are the only other sources of <rect> in
+        # the graph template.
+        assert "<rect" not in svg
+
+    def test_graph_bar_ignores_smoothing(self) -> None:
+        # smoothing=True with graph="bar" still renders <rect> bar
+        # elements — smoothing is not applicable to bar charts.
+        svg = render_widget_svg(
+            self._base_widget(graph="bar", smoothing=True),
+            self._config(),
+        )
+        assert "<rect" in svg
+        assert " Q " not in svg
+
+    def test_graph_bar_show_fill_ignored(self) -> None:
+        # In bar mode, show_fill has no effect — bars are filled shapes
+        # by definition.  Both renders must produce identical SVG.
+        svg_fill_on = render_widget_svg(
+            self._base_widget(graph="bar", show_fill=True),
+            self._config(),
+        )
+        svg_fill_off = render_widget_svg(
+            self._base_widget(graph="bar", show_fill=False),
+            self._config(),
+        )
+        assert svg_fill_on == svg_fill_off
+
+    def test_graph_bar_labels_still_shown(self) -> None:
+        # Y-axis and X-axis labels render in bar mode just as they do
+        # in line mode.
+        svg = render_widget_svg(
+            self._base_widget(graph="bar", show_labels=True),
+            self._config(),
+        )
+        # Data range 20.0–23.0 must appear as Y-axis labels.
+        assert "20.0" in svg or "20" in svg
+        assert "23.0" in svg or "23" in svg
+        # X-axis labels must contain HH:MM time strings.
+        assert re.search(r"\d{2}:\d{2}", svg) is not None
+
+    def test_graph_bar_extrema_works(self) -> None:
+        # show_extrema=True produces "Min:" and "Max:" text in bar
+        # mode, just as in line mode.
+        svg = render_widget_svg(
+            self._base_widget(graph="bar", show_extrema=True),
+            self._config(),
+        )
+        assert "Min:" in svg
+        assert "Max:" in svg
+
+    def test_graph_bar_has_dark_pixels(self) -> None:
+        # The graph area (below the header) contains dark pixels from
+        # the bar rectangles.
+        h = 280
+        header_h = DEFAULT_ROW_H
+        widget = self._base_widget(h=h, graph="bar")
+        img = render_to_image([widget], self._config())
+        assert_has_dark_pixels(img, 0, header_h, 400, h)
+
+    def test_graph_bar_upper_lower_bound_affects_rendering(
+        self,
+    ) -> None:
+        # Explicit Y-axis bounds change the bar heights, altering the
+        # SVG coordinates.
+        svg_auto = render_widget_svg(
+            self._base_widget(graph="bar"), self._config()
+        )
+        svg_bounded = render_widget_svg(
+            self._base_widget(graph="bar", upper_bound=30.0, lower_bound=0.0),
+            self._config(),
+        )
+        assert svg_auto != svg_bounded
+
+    def test_graph_bar_group_by_date_fewer_bars_than_hour(
+        self,
+    ) -> None:
+        # group_by="date" collapses multi-day data to one bucket per
+        # day (3 buckets for _MULTIDAY_HISTORY), while group_by="hour"
+        # produces one bucket per entry (6 buckets).  Fewer buckets
+        # means fewer <rect> elements.
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                "state": "25.0",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+                "history": _MULTIDAY_HISTORY,
+            }
+        }
+        widget_base = self._base_widget(graph="bar", hours_to_show=72)
+        svg_hour = render_widget_svg(
+            {**widget_base, "group_by": "hour"},
+            self._config(states=states),
+        )
+        svg_date = render_widget_svg(
+            {**widget_base, "group_by": "date"},
+            self._config(states=states),
+        )
+        count_hour = svg_hour.count("<rect")
+        count_date = svg_date.count("<rect")
+        assert count_date < count_hour
+
+    # ── Phase 4: Multi-entity bar tests ──────────────────────────────
+
+    def _bar_multi_widget(self, **overrides: object) -> dict[str, object]:
+        """Return a 400×280 bar graph widget with two entities."""
+        w: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "graph": "bar",
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity"},
+            ],
+        }
+        w.update(overrides)
+        return w
+
+    def test_graph_bar_multi_entity_more_rects_than_single(
+        self,
+    ) -> None:
+        # Multi-entity bar mode renders more <rect> elements than
+        # single-entity mode: two full series of bars instead of one.
+        svg_single = render_widget_svg(
+            self._base_widget(graph="bar"), self._config()
+        )
+        svg_multi = render_widget_svg(self._bar_multi_widget(), self._config())
+        assert svg_multi.count("<rect") > svg_single.count("<rect")
+
+    def test_graph_bar_multi_entity_distinct_fill_colors(
+        self,
+    ) -> None:
+        # With two entities in bar mode (no card decoration to add
+        # extra grays), the second entity's bars use hex_gray as fill,
+        # which does not appear in the single-entity bar render.
+        from custom_components.eink_dashboard.const import (
+            COLOR_GRAY,
+            color_to_hex,
+        )
+
+        gray_hex = color_to_hex(COLOR_GRAY)
+        svg_single = render_widget_svg(
+            self._base_widget(graph="bar", card_style="none"),
+            self._config(),
+        )
+        svg_multi = render_widget_svg(
+            self._bar_multi_widget(card_style="none"), self._config()
+        )
+        # Second-entity bars use gray fill; single-entity does not.
+        assert svg_multi.count(gray_hex) > svg_single.count(gray_hex)
+
+    def test_graph_bar_legend_shows_entity_names(self) -> None:
+        # Multi-entity bar mode includes a legend with each entity's
+        # friendly name, just as in line mode.
+        svg = render_widget_svg(self._bar_multi_widget(), self._config())
+        assert "Living Room" in svg
+        assert "Humidity" in svg
+
+    def test_graph_bar_single_entity_no_legend(self) -> None:
+        # Single-entity bar mode does not show a legend; the second
+        # entity's name must not appear.
+        svg = render_widget_svg(self._base_widget(graph="bar"), self._config())
+        assert "Humidity" not in svg
+
+    def test_graph_bar_legend_uses_rect_swatches(self) -> None:
+        # Bar-mode legend uses <rect> swatches rather than <line>
+        # samples (lines show dash patterns; bars show fill shades).
+        # On 2-level displays, grid lines are suppressed, so any
+        # remaining <line> elements would be line-graph legend
+        # samples.  With bar mode, no <line> elements should appear.
+        svg = render_widget_svg(
+            self._bar_multi_widget(),
+            self._config(grayscale_levels=2),
+        )
+        # Legend entity names appear.
+        assert "Living Room" in svg
+        assert "Humidity" in svg
+        # No <line> elements: grid is suppressed on 2-level and
+        # legend uses <rect> swatches instead.
+        assert "<line" not in svg

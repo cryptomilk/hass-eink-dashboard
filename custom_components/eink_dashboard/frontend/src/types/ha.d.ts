@@ -816,13 +816,15 @@ export interface GraphEntityConfig {
 }
 
 /**
- * Dedicated full-card line graph widget with optional multi-entity
+ * Dedicated full-card graph widget with optional multi-entity
  * overlay support.
  *
  * Renders a compact header row (name, optional icon, current value)
- * at the top and a line graph filling the remaining height.
+ * at the top and a graph filling the remaining height.  The graph
+ * can be rendered as a line chart (default) or a bar chart.
  * Multiple entities can be overlaid with distinct dash patterns
- * and an optional secondary Y-axis.
+ * (line mode) or fill shades (bar mode) and an optional secondary
+ * Y-axis.
  */
 export interface GraphWidget extends WidgetBase {
   type: "graph";
@@ -956,6 +958,16 @@ export interface GraphWidget extends WidgetBase {
    * its scale on the right side of the graph.
    */
   y_axis_3?: "primary" | "secondary";
+  /**
+   * Chart rendering mode.  ``"line"`` (default) renders a polyline
+   * or smooth Bezier path; ``"bar"`` renders grouped ``<rect>``
+   * elements suitable for discrete-bucket data such as daily
+   * precipitation or hourly energy usage.  In bar mode,
+   * {@link smoothing} and {@link show_fill} are ignored; entities
+   * are distinguished by fill shade (black / gray / light gray)
+   * instead of dash patterns.
+   */
+  graph?: "line" | "bar";
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

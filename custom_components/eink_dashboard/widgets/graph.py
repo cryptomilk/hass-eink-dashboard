@@ -7,11 +7,15 @@ import logging
 from typing import Any, cast
 
 from ..const import (
+    COLOR_BLACK,
+    COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from ._helpers import (
     _card_insets,
@@ -27,6 +31,15 @@ _LOGGER = logging.getLogger(__name__)
 # Index 0 (solid) has no dasharray; index 1 is dashed; index 2
 # is dotted.  Empty string means attribute is omitted in template.
 _DASH_PATTERNS: tuple[str, ...] = ("", "8,4", "2,4")
+
+# Fill colors for bar chart entity series: first entity is black,
+# second is gray, third is light gray.  E-ink displays distinguish
+# shades rather than hues; these three values give maximum contrast.
+_BAR_FILL_COLORS: tuple[str, ...] = (
+    color_to_hex(COLOR_BLACK),
+    color_to_hex(COLOR_GRAY),
+    color_to_hex(COLOR_LIGHT_GRAY),
+)
 
 
 def _smooth_path(pts: list[tuple[int, int]]) -> str:
@@ -115,6 +128,7 @@ def _label_geometry(
     y_min: float,
     y_max: float,
     gx1: int,
+    gy1: int,
     gy2: int,
     config: DisplayConfig,
     graph_h: int,
@@ -124,12 +138,16 @@ def _label_geometry(
     Measures formatted label text widths to determine how much
     horizontal space to reserve on the left (Y-axis labels) and
     how much vertical space to reserve at the bottom (X-axis labels).
+    If the X-axis label band would leave no usable graph area
+    (``new_gy2 <= gy1``), X-axis labels are suppressed and ``gy2``
+    is left unchanged.
 
     Args:
         points: Sorted (timestamp, value) data pairs.
         y_min: Y-axis lower bound.
         y_max: Y-axis upper bound.
         gx1: Current left edge of the graph area (will be shifted).
+        gy1: Top edge of the graph area (used to detect clipping).
         gy2: Current bottom edge of the graph area (will be shifted).
         config: Display config for locale formatting and time_format.
         graph_h: Pixel height of the graph area (gy2 - gy1), used to
@@ -141,6 +159,8 @@ def _label_geometry(
            y_min_str, y_max_str, x_oldest_str, x_newest_str)``
         where ``new_gx1``/``new_gy2`` are the adjusted graph
         boundaries and the string fields are the formatted label texts.
+        When X-axis labels are suppressed, ``x_label_y`` is 0 and the
+        time strings are empty.
     """
     from ..render import _load_font
 
@@ -157,14 +177,24 @@ def _label_geometry(
     new_gx1 = gx1 + label_w + label_gap
 
     x_label_h = label_font_sz + label_font_sz // 2
-    x_label_y = gy2
     new_gy2 = gy2 - x_label_h
 
-    time_fmt = str(config.get("time_format", "24"))
-    t_oldest = min(t for t, _ in points)
-    t_newest = max(t for t, _ in points)
-    x_oldest_str = _format_timestamp(t_oldest, time_fmt)
-    x_newest_str = _format_timestamp(t_newest, time_fmt)
+    # Suppress X-axis labels when the widget is too short to
+    # accommodate them without inverting the graph area.
+    if new_gy2 <= gy1:
+        x_label_y = 0
+        new_gy2 = gy2
+        x_oldest_str = ""
+        x_newest_str = ""
+    else:
+        # Place the hanging baseline just below new_gy2 so the text
+        # body (label_font_sz tall) fits within the original gy2.
+        x_label_y = new_gy2 + label_gap
+        time_fmt = str(config.get("time_format", "24"))
+        t_oldest = min(t for t, _ in points)
+        t_newest = max(t for t, _ in points)
+        x_oldest_str = _format_timestamp(t_oldest, time_fmt)
+        x_newest_str = _format_timestamp(t_newest, time_fmt)
 
     return (
         new_gx1,
@@ -356,13 +386,15 @@ def _legend_geometry(
     gy2: int,
     label_font_sz: int,
     graph_h: int,
+    bar_fills: tuple[str, ...] | None = None,
 ) -> tuple[int, int, list[dict[str, object]]]:
     """Compute legend layout below the graph area.
 
-    Builds a horizontal legend row with one entry per entity: a short
-    line sample (with the entity's dash pattern) followed by the
-    entity name.  The legend is placed at ``gy2`` and that boundary
-    is shifted upward to reserve space.
+    Builds a horizontal legend row with one entry per entity.  For
+    line graphs, each entry shows a short dash-pattern line sample;
+    for bar charts, a small filled rectangle swatch in the entity's
+    fill color is shown instead.  The legend is placed at ``gy2``
+    and that boundary is shifted upward to reserve space.
 
     Args:
         entity_descs: Normalized entity descriptor list from
@@ -374,13 +406,19 @@ def _legend_geometry(
             same fallback formula as ``_label_geometry``.
         graph_h: Graph area pixel height used when
             ``label_font_sz`` is 0.
+        bar_fills: Tuple of hex fill colors for bar chart entities
+            (from ``_BAR_FILL_COLORS``), or ``None`` for line mode.
+            When provided, each legend entry includes swatch rect
+            geometry keyed as ``swatch_x``, ``swatch_y``,
+            ``swatch_w``, ``swatch_h``, ``bar_fill``.
 
     Returns:
         Tuple of ``(new_gy2, legend_y, legend_entries)`` where
         ``legend_entries`` is a list of dicts each containing
         ``name``, ``line_x1``, ``line_x2``, ``line_y``,
-        ``text_x``, ``text_y``, ``stroke_dasharray``, and
-        ``font_sz``.
+        ``swatch_x``, ``swatch_y``, ``swatch_w``, ``swatch_h``,
+        ``bar_fill``, ``text_x``, ``text_y``,
+        ``stroke_dasharray``, and ``font_sz``.
     """
     from ..render import _load_font
 
@@ -394,10 +432,11 @@ def _legend_geometry(
 
     entries: list[dict[str, object]] = []
     x = gx1
-    # Centre each line sample and text label vertically within the
-    # legend band.
+    # Centre each swatch/line sample and text label vertically
+    # within the legend band.
     entry_mid_y = legend_y + legend_h // 2
-    for desc in entity_descs:
+    swatch_h = max(4, font_sz // 2)
+    for i, desc in enumerate(entity_descs):
         eid = str(desc["entity"])
         name_override = str(desc.get("name", ""))
         if name_override:
@@ -410,12 +449,18 @@ def _legend_geometry(
                 if isinstance(attrs, dict)
                 else eid
             )
+        fill = bar_fills[i % len(bar_fills)] if bar_fills else ""
         entries.append(
             {
                 "name": name,
                 "line_x1": x,
                 "line_x2": x + line_sample_w,
                 "line_y": entry_mid_y,
+                "swatch_x": x,
+                "swatch_y": entry_mid_y - swatch_h // 2,
+                "swatch_w": line_sample_w,
+                "swatch_h": swatch_h,
+                "bar_fill": fill,
                 "text_x": x + line_sample_w + gap,
                 "text_y": entry_mid_y,
                 "stroke_dasharray": str(desc.get("dash", "")),
@@ -425,6 +470,234 @@ def _legend_geometry(
         text_w = round(legend_font.getlength(name))
         x += line_sample_w + gap + text_w + gap * 2
     return new_gy2, legend_y, entries
+
+
+def _bar_series(
+    per_entity_points: list[list[tuple[float, float]]],
+    entity_descs: list[dict[str, object]],
+    prim_y_min: float,
+    prim_y_max: float,
+    sec_y_min: float,
+    sec_y_max: float,
+    gx1: int,
+    gx2: int,
+    gy1: int,
+    gy2: int,
+) -> list[dict[str, object]]:
+    """Compute bar rectangles for a bar chart from per-entity points.
+
+    Each entity's data points are placed at evenly-spaced horizontal
+    positions across the graph area.  The bar height is proportional
+    to the data value relative to the entity's Y-axis bounds.
+    Entities with a secondary Y-axis use the secondary scale.
+
+    Each entity receives a distinct fill color from
+    ``_BAR_FILL_COLORS`` (black, gray, light gray) so that different
+    series are visually distinguishable on e-ink displays that
+    cannot rely on hue.
+
+    Args:
+        per_entity_points: One list of (timestamp, value) pairs
+            per entity, oldest-to-newest, post-aggregation.
+        entity_descs: Normalized entity descriptor dicts from
+            ``_normalize_entities()``.
+        prim_y_min: Primary Y-axis lower bound.
+        prim_y_max: Primary Y-axis upper bound.
+        sec_y_min: Secondary Y-axis lower bound.
+        sec_y_max: Secondary Y-axis upper bound.
+        gx1: Left pixel edge of the graph area.
+        gx2: Right pixel edge of the graph area.
+        gy1: Top pixel edge of the graph area.
+        gy2: Bottom pixel edge of the graph area (bar baseline).
+
+    Returns:
+        List of series dicts, one per entity.  Each dict contains:
+        ``bars`` (list of ``{x, y, w, h}`` dicts), ``bar_fill``
+        (hex fill color), ``has_data`` (bool), and empty string
+        fields for the line-graph keys (``polyline_points``,
+        ``graph_path``, ``fill_path``, ``fill_points``,
+        ``stroke_dasharray``) so the SVG template does not require
+        separate guards for bar vs line mode on those keys.
+    """
+    graph_w = gx2 - gx1
+    result: list[dict[str, object]] = []
+    for j, (desc, ep) in enumerate(
+        zip(entity_descs, per_entity_points, strict=False)
+    ):
+        fill = _BAR_FILL_COLORS[j % len(_BAR_FILL_COLORS)]
+        if not ep:
+            result.append(
+                {
+                    "bars": [],
+                    "bar_fill": fill,
+                    "has_data": False,
+                    "polyline_points": "",
+                    "graph_path": "",
+                    "fill_path": "",
+                    "fill_points": "",
+                    "stroke_dasharray": "",
+                }
+            )
+            continue
+
+        is_secondary = str(desc.get("y_axis", "primary")) == "secondary"
+        y_min = sec_y_min if is_secondary else prim_y_min
+        y_max = sec_y_max if is_secondary else prim_y_max
+        y_range = y_max - y_min
+
+        n = len(ep)
+        # Divide graph width evenly across all data points.
+        group_w = graph_w / n
+        # 10% inter-bar gap; at least 1 px so bars never touch.
+        spacing = max(1, round(group_w * 0.1))
+        bar_w = max(1, round(group_w - spacing))
+        # Centre the bar within its slot.
+        bar_start = (round(group_w) - bar_w) // 2
+
+        bars: list[dict[str, int]] = []
+        for i, (_t, v) in enumerate(ep):
+            bx = gx1 + round(i * group_w) + bar_start
+            # Clamp value to prevent bar from leaving graph area.
+            v_clamped = max(y_min, min(y_max, v))
+            py = round(gy2 - (v_clamped - y_min) / y_range * (gy2 - gy1))
+            py = max(gy1, min(gy2, py))
+            bar_h = gy2 - py
+            # Ensure a minimum visible bar height of 1 px.
+            if bar_h < 1:
+                bar_h = 1
+                py = gy2 - 1
+            bars.append({"x": bx, "y": py, "w": bar_w, "h": bar_h})
+
+        result.append(
+            {
+                "bars": bars,
+                "bar_fill": fill,
+                "has_data": True,
+                "polyline_points": "",
+                "graph_path": "",
+                "fill_path": "",
+                "fill_points": "",
+                "stroke_dasharray": "",
+            }
+        )
+    return result
+
+
+def _line_series(
+    per_entity_points: list[list[tuple[float, float]]],
+    entity_descs: list[dict[str, object]],
+    prim_y_min: float,
+    prim_y_max: float,
+    sec_y_min: float,
+    sec_y_max: float,
+    gx1: int,
+    gx2: int,
+    gy1: int,
+    gy2: int,
+    smoothing: bool,
+    show_fill: bool,
+) -> tuple[list[dict[str, object]], bool]:
+    """Compute SVG line/polyline series dicts from per-entity points.
+
+    Maps each entity's (timestamp, value) pairs to pixel coordinates
+    and generates SVG path strings for the graph line and optional fill
+    area.  Uses a shared X range spanning all entities' timestamps so
+    multiple overlaid lines share the same time axis.
+
+    Args:
+        per_entity_points: One list of (timestamp, value) pairs
+            per entity, oldest-to-newest, post-aggregation.
+        entity_descs: Normalized entity descriptor dicts from
+            ``_normalize_entities()``.
+        prim_y_min: Primary Y-axis lower bound.
+        prim_y_max: Primary Y-axis upper bound.
+        sec_y_min: Secondary Y-axis lower bound.
+        sec_y_max: Secondary Y-axis upper bound.
+        gx1: Left pixel edge of the graph area.
+        gx2: Right pixel edge of the graph area.
+        gy1: Top pixel edge of the graph area.
+        gy2: Bottom pixel edge of the graph area (line baseline).
+        smoothing: When ``True`` use midpoint Q-curve paths; when
+            ``False`` use polylines.
+        show_fill: When ``True`` draw a light-gray fill under the
+            first entity's line.
+
+    Returns:
+        Tuple of ``(series, has_any_data)`` where ``series`` is a
+        list of dicts (one per entity) containing ``polyline_points``,
+        ``graph_path``, ``fill_path``, ``fill_points``,
+        ``stroke_dasharray``, and ``has_data``.
+    """
+    all_timestamps = [t for ep in per_entity_points for t, _ in ep]
+    if all_timestamps:
+        t_min = min(all_timestamps)
+        t_max_all = max(all_timestamps)
+        t_range = max(t_max_all - t_min, 1.0)
+    else:
+        t_min, t_range = 0.0, 1.0
+
+    series: list[dict[str, object]] = []
+    has_any_data = False
+    first_with_data_seen = False
+    for desc, ep in zip(entity_descs, per_entity_points, strict=False):
+        if not ep:
+            series.append(
+                {
+                    "polyline_points": "",
+                    "graph_path": "",
+                    "fill_path": "",
+                    "fill_points": "",
+                    "stroke_dasharray": str(desc.get("dash", "")),
+                    "has_data": False,
+                }
+            )
+            continue
+
+        has_any_data = True
+        is_secondary = str(desc.get("y_axis", "primary")) == "secondary"
+        y_min_s = sec_y_min if is_secondary else prim_y_min
+        y_max_s = sec_y_max if is_secondary else prim_y_max
+        y_range_s = y_max_s - y_min_s
+
+        pxpts = [
+            (
+                round(gx1 + (t - t_min) / t_range * (gx2 - gx1)),
+                round(gy2 - (v - y_min_s) / y_range_s * (gy2 - gy1)),
+            )
+            for t, v in ep
+        ]
+
+        # Only the first primary-axis entity with data gets fill.
+        do_fill = show_fill and not first_with_data_seen and not is_secondary
+        if not is_secondary:
+            first_with_data_seen = True
+
+        gp = fp = pp = fpts = ""
+        if smoothing:
+            gp = _smooth_path(pxpts)
+            if do_fill and gp:
+                fp = _smooth_fill(gp, pxpts, gy2)
+        else:
+            pp = " ".join(f"{px},{py}" for px, py in pxpts)
+            if do_fill:
+                fill_poly = [
+                    *pxpts,
+                    (pxpts[-1][0], gy2),
+                    (pxpts[0][0], gy2),
+                ]
+                fpts = " ".join(f"{px},{py}" for px, py in fill_poly)
+
+        series.append(
+            {
+                "polyline_points": pp,
+                "graph_path": gp,
+                "fill_path": fp,
+                "fill_points": fpts,
+                "stroke_dasharray": str(desc.get("dash", "")),
+                "has_data": True,
+            }
+        )
+    return series, has_any_data
 
 
 def _extract_entity_points(
@@ -615,6 +888,10 @@ def _build_graph_context(
             ``True``),
             ``show_icon`` (show icon in the header; default
             ``True``),
+            ``graph`` (chart type: ``"line"`` (default) for a line
+            graph with polyline/path elements, or ``"bar"`` for a
+            bar chart with ``<rect>`` elements; in bar mode
+            ``smoothing`` and ``show_fill`` are ignored),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``,
             ``grayscale_levels``, and optionally ``time_format``
@@ -625,7 +902,9 @@ def _build_graph_context(
         Returns ``{"w": …, "h": …, "has_entity": False,
         **_color_context()}`` when no entity is present in states.
         Full context includes widget dimensions, card style, metrics,
-        colors, icon geometry, header text, series list, and optional
+        colors, icon geometry, header text, series list, ``is_bar``
+        (bool, ``True`` when ``graph="bar"``), ``legend_is_bar``
+        (bool, controls rect vs line legend swatches), and optional
         axis labels, grid lines, extrema, secondary Y-axis labels,
         and legend.
     """
@@ -648,6 +927,10 @@ def _build_graph_context(
     show_name: bool = bool(widget.get("show_name", True))
     show_icon: bool = bool(widget.get("show_icon", True))
     grayscale_levels = config.get("grayscale_levels", 16)
+    # "line" (default) renders polyline/path; "bar" renders <rect>
+    # elements.  smoothing and show_fill are ignored in bar mode.
+    graph_type: str = str(widget.get("graph", "line"))
+    is_bar: bool = graph_type == "bar"
 
     # group_by overrides points_per_hour before bucketing.
     if group_by == "hour":
@@ -801,6 +1084,7 @@ def _build_graph_context(
                 prim_y_min,
                 prim_y_max,
                 gx1,
+                gy1,
                 gy2,
                 config,
                 graph_h,
@@ -850,11 +1134,12 @@ def _build_graph_context(
         y2_max_label_y = gy1
 
     # --- Legend (shown when >1 entity configured) ---
-    show_legend = len(entity_descs) > 1
+    multi_entity = len(entity_descs) > 1
     legend_y = gy2
     legend_entries: list[dict[str, object]] = []
-    if show_legend and all_points:
+    if multi_entity and all_points:
         graph_h_leg = gy2 - gy1
+        bar_fills_legend = _BAR_FILL_COLORS if is_bar else None
         gy2, legend_y, legend_entries = _legend_geometry(
             entity_descs,
             states_dict,
@@ -862,77 +1147,40 @@ def _build_graph_context(
             gy2,
             label_font_sz,
             graph_h_leg,
+            bar_fills=bar_fills_legend,
         )
 
-    # --- Shared X range (union of all entities' timestamps) ---
-    all_timestamps = [t for ep in per_entity_points for t, _ in ep]
-    if all_timestamps:
-        t_min = min(all_timestamps)
-        t_max_all = max(all_timestamps)
-        t_range = max(t_max_all - t_min, 1.0)
-    else:
-        t_min, t_range = 0.0, 1.0
-
     # --- Build series list ---
-    series: list[dict[str, object]] = []
-    has_any_data = False
-    first_with_data_seen = False
-    for desc, ep in zip(entity_descs, per_entity_points, strict=False):
-        if not ep:
-            series.append(
-                {
-                    "polyline_points": "",
-                    "graph_path": "",
-                    "fill_path": "",
-                    "fill_points": "",
-                    "stroke_dasharray": str(desc.get("dash", "")),
-                    "has_data": False,
-                }
-            )
-            continue
-
-        has_any_data = True
-        is_secondary = str(desc.get("y_axis", "primary")) == "secondary"
-        y_min_s = sec_y_min if is_secondary else prim_y_min
-        y_max_s = sec_y_max if is_secondary else prim_y_max
-        y_range_s = y_max_s - y_min_s
-
-        pxpts = [
-            (
-                round(gx1 + (t - t_min) / t_range * (gx2 - gx1)),
-                round(gy2 - (v - y_min_s) / y_range_s * (gy2 - gy1)),
-            )
-            for t, v in ep
-        ]
-
-        # Only the first entity with data receives a fill area.
-        do_fill = show_fill and not first_with_data_seen
-        first_with_data_seen = True
-
-        gp = fp = pp = fpts = ""
-        if smoothing:
-            gp = _smooth_path(pxpts)
-            if do_fill and gp:
-                fp = _smooth_fill(gp, pxpts, gy2)
-        else:
-            pp = " ".join(f"{px},{py}" for px, py in pxpts)
-            if do_fill:
-                fill_poly = [
-                    *pxpts,
-                    (pxpts[-1][0], gy2),
-                    (pxpts[0][0], gy2),
-                ]
-                fpts = " ".join(f"{px},{py}" for px, py in fill_poly)
-
-        series.append(
-            {
-                "polyline_points": pp,
-                "graph_path": gp,
-                "fill_path": fp,
-                "fill_points": fpts,
-                "stroke_dasharray": str(desc.get("dash", "")),
-                "has_data": True,
-            }
+    if is_bar:
+        # Bar mode: each entity's data points become <rect> elements.
+        series: list[dict[str, object]] = _bar_series(
+            per_entity_points,
+            entity_descs,
+            prim_y_min,
+            prim_y_max,
+            sec_y_min,
+            sec_y_max,
+            gx1,
+            gx2,
+            gy1,
+            gy2,
+        )
+        has_any_data = any(bool(s["has_data"]) for s in series)
+    else:
+        # Line mode: delegate to helper to keep complexity in bounds.
+        series, has_any_data = _line_series(
+            per_entity_points,
+            entity_descs,
+            prim_y_min,
+            prim_y_max,
+            sec_y_min,
+            sec_y_max,
+            gx1,
+            gx2,
+            gy1,
+            gy2,
+            smoothing,
+            show_fill,
         )
 
     return {
@@ -979,9 +1227,14 @@ def _build_graph_context(
         "y2_min_label_y": y2_min_label_y,
         "y2_max_label_y": y2_max_label_y,
         # Legend.
-        "show_legend": show_legend and has_any_data,
+        "show_legend": multi_entity and has_any_data,
         "legend_y": legend_y,
         "legend_entries": legend_entries,
+        # Bar chart mode flag consumed by the template.
+        "is_bar": is_bar,
+        # True when bar mode AND legend is visible: template uses
+        # <rect> swatches instead of <line> dash-pattern samples.
+        "legend_is_bar": is_bar,
     }
 
 
@@ -994,8 +1247,9 @@ def _aggregate_history(
 
     Groups (timestamp, value) pairs into fixed-width time buckets based
     on ``points_per_hour``, then reduces each bucket to a single value
-    using ``aggregate_func``.  Falls back to the raw data when bucketing
-    yields fewer than two points.
+    using ``aggregate_func``.  Falls back to ``numeric`` sorted
+    oldest-to-newest only when no buckets are produced (degenerate
+    input).
 
     Args:
         numeric: Numeric (timestamp, value) pairs to aggregate, in any
@@ -1008,7 +1262,8 @@ def _aggregate_history(
 
     Returns:
         Sorted oldest-to-newest list of (timestamp, value) pairs, one
-        per non-empty bucket (or the raw data if < 2 buckets).
+        per non-empty bucket, or ``numeric`` sorted when bucketing
+        produces no entries.
     """
     bucket_size = 3600.0 / max(points_per_hour, 0.001)
     t_max = max(t for t, _ in numeric)
@@ -1041,7 +1296,9 @@ def _aggregate_history(
         bucketed.append((t_repr, agg_val))
 
     bucketed.sort(key=lambda p: p[0])
-    return bucketed if len(bucketed) >= 2 else numeric
+    if bucketed:
+        return bucketed
+    return sorted(numeric, key=lambda p: p[0])
 
 
 def _y_bounds(
