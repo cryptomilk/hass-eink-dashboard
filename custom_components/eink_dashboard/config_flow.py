@@ -267,6 +267,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
+                    "color_scheme": preset.color_scheme,
                 }
             )
             return self._create_pull_entry()
@@ -309,6 +310,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "optimize": preset.optimize,
                         "grayscale_levels": preset.grayscale_levels,
                         "dither_algorithm": preset.dither_algorithm,
+                        "color_scheme": preset.color_scheme,
                         "screen_portion": "custom",
                     }
                 )
@@ -324,6 +326,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
+                    "color_scheme": preset.color_scheme,
                     "screen_portion": portion,
                 }
             )
@@ -358,6 +361,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "optimize": DEFAULT_OPTIMIZE,
                         "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                         "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
+                        "color_scheme": None,
                     }
                 )
             device_model = self._data.get("device_model", "")
@@ -740,6 +744,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                             "optimize": preset.optimize,
                             "grayscale_levels": preset.grayscale_levels,
                             "dither_algorithm": preset.dither_algorithm,
+                            "color_scheme": preset.color_scheme,
                             "screen_portion": portion,
                         }
                     )
@@ -756,6 +761,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
+                    "color_scheme": preset.color_scheme,
                 }
             )
 
@@ -817,6 +823,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
+                    "color_scheme": preset.color_scheme,
                     "screen_portion": portion,
                 }
             )
@@ -845,6 +852,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "optimize": DEFAULT_OPTIMIZE,
                     "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                     "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
+                    "color_scheme": None,
                 }
             )
         return self.async_show_form(

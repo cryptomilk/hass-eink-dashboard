@@ -254,6 +254,7 @@ async def _build_display_config(
         "grayscale_levels": entry.options.get(
             "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
         ),
+        "color_scheme": entry.options.get("color_scheme"),
         "number_format": number_format,
         "language": language,
         "first_weekday": first_weekday,

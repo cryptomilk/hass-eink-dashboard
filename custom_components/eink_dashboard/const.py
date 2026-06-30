@@ -74,6 +74,10 @@ class DevicePreset:
     native_landscape: bool = False
     integration_dithers: bool = False
     dither_algorithm: str = DEFAULT_DITHER_ALGORITHM
+    color_scheme: str | None = None
+    """Color palette for color e-ink displays (e.g. ``"bwgbry"`` for
+    Spectra 6-color).  ``None`` means grayscale.  String values match
+    keys in ``optimize._COLOR_SCHEMES``."""
 
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {
@@ -145,6 +149,17 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "Seeed",
         native_landscape=True,
         integration_dithers=True,
+    ),
+    "reterminal_e1002": DevicePreset(
+        "reTerminal E1002",
+        800,
+        480,
+        256,
+        False,
+        "Seeed",
+        native_landscape=True,
+        integration_dithers=True,
+        color_scheme="bwgbry",
     ),
     "reterminal_e1003": DevicePreset(
         "reTerminal E1003",

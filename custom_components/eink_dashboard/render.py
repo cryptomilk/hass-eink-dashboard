@@ -738,7 +738,14 @@ def render_dashboard(
     w = config["width"]
     h = config["height"]
 
-    img = Image.new("L", (w, h), 255)
+    # Use an RGB canvas for color e-ink displays so per-widget SVGs
+    # are composited in full colour before colour dithering.
+    color_scheme = config.get("color_scheme")
+    canvas_mode = "RGB" if color_scheme else "L"
+    canvas_fill: int | tuple[int, int, int] = (
+        (255, 255, 255) if color_scheme else 255
+    )
+    img = Image.new(canvas_mode, (w, h), canvas_fill)
 
     for widget in widget_list:
         widget_type = widget.get("type")
@@ -787,13 +794,13 @@ def render_dashboard(
                 "expected RGBA from resvg, got %s — pasting opaquely",
                 wimg.mode,
             )
-        img.paste(wimg.convert("L"), (wx, wy), mask)
+        img.paste(wimg.convert(canvas_mode), (wx, wy), mask)
 
-    mn, mx = img.getextrema()
+    extrema = img.convert("L").getextrema()
     _LOGGER.debug(
         "render_dashboard: pre-optimize pixel range min=%d max=%d",
-        mn,
-        mx,
+        extrema[0],
+        extrema[1],
     )
 
     rotation = config.get("rotation", 0)

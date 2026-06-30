@@ -256,6 +256,57 @@ class TestDitherAlgorithmSelection:
         assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
 
 
+class TestColorSchemeDithering:
+    def test_color_scheme_produces_rgb_output(self) -> None:
+        # BWR dithering should return an RGB image, not grayscale.
+        img = _gradient()
+        result = optimize_for_eink(
+            img.convert("RGB"),
+            {"optimize": True, "color_scheme": "bwr"},
+        )
+        assert result.mode == "RGB"
+
+    def test_color_scheme_passes_correct_colorscheme(self) -> None:
+        # Verify that dither_image receives ColorScheme.BWR for "bwr".
+        from epaper_dithering import ColorScheme
+
+        img = _gradient()
+        mock = MagicMock(
+            return_value=img.convert("RGB").quantize(
+                colors=3, dither=Image.Dither.FLOYDSTEINBERG
+            )
+        )
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(
+                img.convert("RGB"),
+                {"optimize": True, "color_scheme": "bwr"},
+            )
+        mock.assert_called_once()
+        assert mock.call_args[0][1] is ColorScheme.BWR
+
+    def test_unknown_color_scheme_raises(self) -> None:
+        # An unrecognised color_scheme key must raise ValueError.
+        import pytest
+
+        img = _gradient()
+        with pytest.raises(ValueError, match="Unsupported color_scheme"):
+            optimize_for_eink(
+                img.convert("RGB"),
+                {"optimize": True, "color_scheme": "xyz_unknown"},
+            )
+
+    def test_color_scheme_disabled_optimize_returns_unchanged(self) -> None:
+        # optimize=False skips the entire pipeline including color dithering.
+        img = _gradient().convert("RGB")
+        result = optimize_for_eink(
+            img, {"optimize": False, "color_scheme": "bwr"}
+        )
+        assert result is img
+
+
 class TestOptimizeIntegration:
     def test_render_with_optimize_limits_colors(self) -> None:
         from custom_components.eink_dashboard.render import (
@@ -301,3 +352,52 @@ class TestOptimizeIntegration:
         img = Image.open(io.BytesIO(png))
         assert img.mode == "L"
         assert len(set(img.get_flattened_data())) > 4
+
+    def test_bwr_produces_at_most_3_colors(self) -> None:
+        # BWR palette has 3 colors; real dither_image output uses <= 3
+        # unique (r, g, b) triples.
+        img = _gradient()
+        result = optimize_for_eink(
+            img.convert("RGB"),
+            {"optimize": True, "color_scheme": "bwr"},
+        )
+        assert result.mode == "RGB"
+        w, h = result.size
+        pixels = {result.getpixel((x, y)) for x in range(w) for y in range(h)}
+        assert len(pixels) <= 3
+
+    def test_render_with_color_scheme_produces_rgb_png(self) -> None:
+        # render_dashboard with color_scheme and optimize=True
+        # returns an RGB PNG.
+        from custom_components.eink_dashboard.render import (
+            render_dashboard,
+        )
+
+        config = {
+            "width": 200,
+            "height": 100,
+            "optimize": True,
+            "color_scheme": "bwr",
+        }
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
+        png = render_dashboard(widgets, config)
+        img = Image.open(io.BytesIO(png))
+        assert img.mode == "RGB"
+
+    def test_render_color_scheme_no_optimize_produces_rgb_png(self) -> None:
+        # render_dashboard with color_scheme and optimize=False still
+        # creates an RGB canvas (for the OpenDisplay integration path).
+        from custom_components.eink_dashboard.render import (
+            render_dashboard,
+        )
+
+        config = {
+            "width": 200,
+            "height": 100,
+            "optimize": False,
+            "color_scheme": "bwr",
+        }
+        widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
+        png = render_dashboard(widgets, config)
+        img = Image.open(io.BytesIO(png))
+        assert img.mode == "RGB"

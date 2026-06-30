@@ -37,6 +37,7 @@ from . import (
 from .battery import resolve_battery_level
 from .const import (
     DEFAULT_CONTRAST,
+    DEFAULT_DITHER_ALGORITHM,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_OPTIMIZE,
@@ -239,6 +240,10 @@ class EinkDashboardImage(ImageEntity):
                     "contrast": self._entry.options.get(
                         "contrast", DEFAULT_CONTRAST
                     ),
+                    "dither_algorithm": self._entry.options.get(
+                        "dither_algorithm", DEFAULT_DITHER_ALGORITHM
+                    ),
+                    "color_scheme": self._entry.options.get("color_scheme"),
                     "number_format": number_format,
                     "language": language,
                     "first_weekday": first_weekday,
