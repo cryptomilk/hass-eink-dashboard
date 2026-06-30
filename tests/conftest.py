@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import sys
+from enum import Enum
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
 import voluptuous as vol
+from PIL import Image
 
 # Stub hass_frontend before any production code imports it.
 # Tests resolve MDI icons from the fixture directory rather than a
@@ -15,6 +17,92 @@ _HASS_FRONTEND_FIXTURE = Path(__file__).parent / "fixtures" / "hass_frontend"
 _hass_frontend_stub = ModuleType("hass_frontend")
 _hass_frontend_stub.where = lambda: str(_HASS_FRONTEND_FIXTURE)  # type: ignore[attr-defined]
 sys.modules["hass_frontend"] = _hass_frontend_stub
+
+# Stub epaper_dithering before production code imports it.
+# The real library is a PyO3/Rust native extension not installed in
+# the test environment. The stub replicates the public API surface
+# that optimize.py uses: DitherMode, ColorScheme, dither_image.
+
+
+class _StubDitherMode(Enum):
+    """Stub for epaper_dithering.DitherMode."""
+
+    NONE = 0
+    BURKES = 1
+    ORDERED = 2
+    FLOYD_STEINBERG = 3
+    ATKINSON = 4
+    STUCKI = 5
+    SIERRA = 6
+    SIERRA_LITE = 7
+    JARVIS_JUDICE_NINKE = 8
+
+
+class _StubColorScheme(Enum):
+    """Stub for epaper_dithering.ColorScheme.
+
+    Uses plain int values — optimize.py never accesses .palette, so
+    the real library's (int, ColorPalette) tuple values are not needed.
+    """
+
+    MONO = 0
+    BWR = 1
+    BWY = 2
+    BWRY = 3
+    BWGBRY = 4
+    GRAYSCALE_4 = 5
+    GRAYSCALE_16 = 6
+    GRAYSCALE_8 = 7
+
+
+_STUB_SCHEME_COLORS: dict[_StubColorScheme, int] = {
+    _StubColorScheme.MONO: 2,
+    _StubColorScheme.BWR: 3,
+    _StubColorScheme.BWY: 3,
+    _StubColorScheme.BWRY: 4,
+    _StubColorScheme.BWGBRY: 6,
+    _StubColorScheme.GRAYSCALE_4: 4,
+    _StubColorScheme.GRAYSCALE_8: 8,
+    _StubColorScheme.GRAYSCALE_16: 16,
+}
+
+
+def _stub_dither_image(
+    image: Image.Image,
+    color_scheme: _StubColorScheme,
+    *,
+    mode: _StubDitherMode = _StubDitherMode.BURKES,
+    serpentine: bool = True,
+    exposure: float = 1.0,
+    saturation: float = 1.0,
+    shadows: float = 0.0,
+    highlights: float = 0.0,
+    tone: float = 0.0,
+    gamut: float = 0.0,
+) -> Image.Image:
+    """Stub for epaper_dithering.dither_image.
+
+    Returns a palette-mode (``"P"``) PIL Image, matching the real
+    library's output contract. Uses Pillow's ``quantize()``
+    internally so tests get meaningful colour-count results.
+
+    The internal ``.convert("RGB")`` is defensive: production code
+    always passes an RGB image (convert happens in
+    ``optimize_for_eink``), but a test that calls this stub directly
+    with an ``"L"`` image would otherwise get a wrong result silently.
+    """
+    n = _STUB_SCHEME_COLORS[color_scheme]
+    return image.convert("RGB").quantize(
+        colors=n,
+        dither=Image.Dither.FLOYDSTEINBERG,
+    )
+
+
+_epaper_dithering_stub = ModuleType("epaper_dithering")
+_epaper_dithering_stub.DitherMode = _StubDitherMode  # type: ignore[attr-defined]
+_epaper_dithering_stub.ColorScheme = _StubColorScheme  # type: ignore[attr-defined]
+_epaper_dithering_stub.dither_image = _stub_dither_image  # type: ignore[attr-defined]
+sys.modules["epaper_dithering"] = _epaper_dithering_stub
 
 
 def _stub_module(name: str) -> ModuleType:
