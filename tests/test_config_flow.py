@@ -71,6 +71,7 @@ class TestEinkDashboardConfigFlow:
         assert opts["rotation"] == 0
         assert opts["optimize"] is True
         assert opts["grayscale_levels"] == 16
+        assert opts["dither_algorithm"] == "floyd_steinberg"
         assert opts["update_interval"] == 60
         assert opts["webhook_urls"] == []
 
@@ -555,6 +556,8 @@ class TestEinkDashboardOptionsFlow:
         assert result["step_id"] == "display_settings"
 
     async def test_display_settings_saves_values(self) -> None:
+        # Submitting update_interval with defaults in advanced_section
+        # merges all values into the stored options.
         flow = _make_options_flow(
             {
                 "width": 800,
@@ -564,7 +567,7 @@ class TestEinkDashboardOptionsFlow:
             }
         )
         result = await flow.async_step_display_settings(
-            {"update_interval": 120}
+            {"update_interval": 120, "advanced_section": {}}
         )
 
         assert result["type"] == "create_entry"
@@ -573,14 +576,18 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["webhook_urls"] == []
 
     async def test_display_settings_saves_optimize_values(self) -> None:
+        # Submitting optimize settings via the advanced_section persists them.
         flow = _make_options_flow({"update_interval": 60})
         result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
                 "optimize": True,
-                "grayscale_levels": "2",
-                "sharpness": "2.0",
-                "contrast": "1.5",
+                "advanced_section": {
+                    "dither_algorithm": "floyd_steinberg",
+                    "grayscale_levels": "2",
+                    "sharpness": "2.0",
+                    "contrast": "1.5",
+                },
             }
         )
 
@@ -593,10 +600,14 @@ class TestEinkDashboardOptionsFlow:
     async def test_display_settings_rejects_invalid_grayscale_levels(
         self,
     ) -> None:
+        # An invalid grayscale_levels value raises vol.Invalid.
         flow = _make_options_flow({"update_interval": 60})
         with pytest.raises(vol.Invalid):
             await flow.async_step_display_settings(
-                {"update_interval": 60, "grayscale_levels": 7}
+                {
+                    "update_interval": 60,
+                    "advanced_section": {"grayscale_levels": 7},
+                }
             )
 
     async def test_display_settings_shows_optimize_note_for_reterminal(
@@ -610,7 +621,7 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] == "form"
         placeholders = result.get("description_placeholders", {})
-        assert "optimization" in placeholders.get("optimize_note", "")
+        assert "double processing" in placeholders.get("optimize_note", "")
 
     async def test_display_settings_no_optimize_note_for_kindle(
         self,
@@ -635,6 +646,49 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] == "form"
         placeholders = result.get("description_placeholders", {})
         assert placeholders.get("optimize_note", "") == ""
+
+    async def test_display_settings_has_advanced_section(self) -> None:
+        # The display_settings form includes an advanced_section field.
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "advanced_section" in field_names
+
+    async def test_display_settings_saves_dither_algorithm(self) -> None:
+        # Submitting dither_algorithm via advanced_section persists it.
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "advanced_section": {
+                    "dither_algorithm": "atkinson",
+                    "grayscale_levels": "16",
+                    "sharpness": "1.0",
+                    "contrast": "1.0",
+                },
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["dither_algorithm"] == "atkinson"
+
+    async def test_display_settings_default_dither_algorithm(
+        self,
+    ) -> None:
+        # Legacy entries without dither_algorithm default to floyd_steinberg.
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "advanced_section": {}}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["dither_algorithm"] == "floyd_steinberg"
 
     async def test_device_settings_shows_form(self) -> None:
         flow = _make_options_flow(
@@ -670,6 +724,7 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["rotation"] == 0
         assert result["data"]["optimize"] is True
         assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["dither_algorithm"] == "floyd_steinberg"
         assert result["data"]["webhook_urls"] == []
 
     async def test_device_settings_orientation_change_recomputes(

@@ -18,6 +18,7 @@ DEFAULT_UPDATE_INTERVAL = 60
 DEFAULT_GRAYSCALE_DEPTH = 8
 DEFAULT_OPTIMIZE = False
 DEFAULT_GRAYSCALE_LEVELS = 16
+DEFAULT_DITHER_ALGORITHM = "floyd_steinberg"
 DEFAULT_SHARPNESS = 1.0
 DEFAULT_CONTRAST = 1.0
 DEFAULT_ROW_H = 56
@@ -72,6 +73,7 @@ class DevicePreset:
     manufacturer: str
     native_landscape: bool = False
     integration_dithers: bool = False
+    dither_algorithm: str = DEFAULT_DITHER_ALGORITHM
 
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {

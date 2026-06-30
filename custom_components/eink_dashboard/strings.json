@@ -144,16 +144,27 @@
         "description": "{optimize_note}",
         "data": {
           "update_interval": "Update interval (seconds)",
-          "optimize": "E-ink optimization",
-          "grayscale_levels": "Grayscale levels",
-          "sharpness": "Sharpness",
-          "contrast": "Contrast"
+          "optimize": "E-ink optimization"
         },
         "data_description": {
-          "optimize": "Apply autocontrast, sharpening, and quantization for e-ink displays",
-          "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
-          "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
-          "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
+          "optimize": "Apply autocontrast, sharpening, and quantization for e-ink displays"
+        },
+        "sections": {
+          "advanced_section": {
+            "name": "Advanced",
+            "data": {
+              "dither_algorithm": "Dither algorithm",
+              "grayscale_levels": "Grayscale levels",
+              "sharpness": "Sharpness",
+              "contrast": "Contrast"
+            },
+            "data_description": {
+              "dither_algorithm": "Algorithm used for error-diffusion dithering",
+              "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
+              "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
+              "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
+            }
+          }
         }
       },
       "locale_settings": {
@@ -181,6 +192,14 @@
     }
   },
   "selector": {
+    "dither_algorithm": {
+      "options": {
+        "floyd_steinberg": "Floyd-Steinberg (recommended)",
+        "atkinson": "Atkinson (high contrast)",
+        "stucki": "Stucki (smooth gradients)",
+        "burkes": "Burkes (balanced)"
+      }
+    },
     "device_model": {
       "options": {
         "kindle_4": "Kindle 4/5",

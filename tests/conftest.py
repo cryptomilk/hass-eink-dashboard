@@ -19,9 +19,12 @@ _hass_frontend_stub.where = lambda: str(_HASS_FRONTEND_FIXTURE)  # type: ignore[
 sys.modules["hass_frontend"] = _hass_frontend_stub
 
 # Stub epaper_dithering before production code imports it.
-# The real library is a PyO3/Rust native extension not installed in
-# the test environment. The stub replicates the public API surface
-# that optimize.py uses: DitherMode, ColorScheme, dither_image.
+# The real library is a PyO3/Rust native extension intentionally
+# absent from the test dependency group (pyproject.toml). The stub
+# below replicates the public API surface that optimize.py uses
+# (DitherMode, ColorScheme, dither_image) so tests run without the
+# native extension. Tests that need to verify call arguments patch
+# optimize.dither_image with a MagicMock instead of using the stub.
 
 
 class _StubDitherMode(Enum):

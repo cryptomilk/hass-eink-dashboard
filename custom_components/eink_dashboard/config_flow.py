@@ -35,6 +35,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     DEFAULT_CONTRAST,
+    DEFAULT_DITHER_ALGORITHM,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_OPTIMIZE,
@@ -93,6 +94,13 @@ _TF_OPTIONS = [
     TimeFormat.LANGUAGE,
     TimeFormat.AM_PM,
     TimeFormat.TWENTY_FOUR,
+]
+
+_DITHER_ALGO_OPTIONS = [
+    "floyd_steinberg",
+    "atkinson",
+    "stucki",
+    "burkes",
 ]
 
 
@@ -258,6 +266,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "dither_algorithm": preset.dither_algorithm,
                 }
             )
             return self._create_pull_entry()
@@ -299,6 +308,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "rotation": rotation,
                         "optimize": preset.optimize,
                         "grayscale_levels": preset.grayscale_levels,
+                        "dither_algorithm": preset.dither_algorithm,
                         "screen_portion": "custom",
                     }
                 )
@@ -313,6 +323,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "dither_algorithm": preset.dither_algorithm,
                     "screen_portion": portion,
                 }
             )
@@ -346,6 +357,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "rotation": 0,
                         "optimize": DEFAULT_OPTIMIZE,
                         "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                        "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                     }
                 )
             device_model = self._data.get("device_model", "")
@@ -727,6 +739,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                             "rotation": rot,
                             "optimize": preset.optimize,
                             "grayscale_levels": preset.grayscale_levels,
+                            "dither_algorithm": preset.dither_algorithm,
                             "screen_portion": portion,
                         }
                     )
@@ -742,6 +755,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "dither_algorithm": preset.dither_algorithm,
                 }
             )
 
@@ -802,6 +816,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "rotation": rotation,
                     "optimize": preset.optimize,
                     "grayscale_levels": preset.grayscale_levels,
+                    "dither_algorithm": preset.dither_algorithm,
                     "screen_portion": portion,
                 }
             )
@@ -829,6 +844,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "rotation": 0,
                     "optimize": DEFAULT_OPTIMIZE,
                     "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                    "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                 }
             )
         return self.async_show_form(
@@ -936,26 +952,59 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "optimize",
                     default=opts.get("optimize", DEFAULT_OPTIMIZE),
                 ): bool,
-                vol.Optional(
-                    "grayscale_levels",
-                    default=opts.get(
-                        "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+                vol.Required("advanced_section"): flow_section(
+                    vol.Schema(
+                        {
+                            vol.Optional(
+                                "dither_algorithm",
+                                default=opts.get(
+                                    "dither_algorithm",
+                                    DEFAULT_DITHER_ALGORITHM,
+                                ),
+                            ): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=_DITHER_ALGO_OPTIONS,
+                                    translation_key="dither_algorithm",
+                                    mode=SelectSelectorMode.DROPDOWN,
+                                )
+                            ),
+                            vol.Optional(
+                                "grayscale_levels",
+                                default=opts.get(
+                                    "grayscale_levels",
+                                    DEFAULT_GRAYSCALE_LEVELS,
+                                ),
+                            ): vol.All(
+                                vol.Coerce(int),
+                                vol.In([2, 4, 16, 256]),
+                            ),
+                            vol.Optional(
+                                "sharpness",
+                                default=opts.get(
+                                    "sharpness", DEFAULT_SHARPNESS
+                                ),
+                            ): vol.All(
+                                vol.Coerce(float),
+                                vol.Range(min=0.0, max=10.0),
+                            ),
+                            vol.Optional(
+                                "contrast",
+                                default=opts.get("contrast", DEFAULT_CONTRAST),
+                            ): vol.All(
+                                vol.Coerce(float),
+                                vol.Range(min=0.0, max=10.0),
+                            ),
+                        }
                     ),
-                ): vol.All(vol.Coerce(int), vol.In([2, 4, 16, 256])),
-                vol.Optional(
-                    "sharpness",
-                    default=opts.get("sharpness", DEFAULT_SHARPNESS),
-                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=10.0)),
-                vol.Optional(
-                    "contrast",
-                    default=opts.get("contrast", DEFAULT_CONTRAST),
-                ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=10.0)),
+                    {"collapsed": True},
+                ),
             }
         )
         if user_input is not None:
             validated = schema(user_input)
+            section = validated.pop("advanced_section", {})
             return self.async_create_entry(
-                data={**opts, **validated},
+                data={**opts, **validated, **section},
             )
         device_model = opts.get("device_model", "")
         preset = DEVICE_PRESETS.get(device_model)

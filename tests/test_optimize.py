@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from PIL import Image
 
@@ -71,11 +71,13 @@ class TestOptimizeEnabled:
             img, {"optimize": True, "grayscale_levels": 2}
         )
         assert result.mode == "1"
-        dark = sum(1 for b in result.tobytes() if b == 0)
+        dark = sum(1 for b in result.convert("L").tobytes() if b == 0)
         assert dark > 0
 
     def test_256_levels_skips_quantize(self) -> None:
         img = _gradient()
+        # Precondition: the default 256-wide gradient has 256 distinct values.
+        assert len(set(img.get_flattened_data())) == 256
         result = optimize_for_eink(
             img,
             {
@@ -155,6 +157,103 @@ class TestOptimizeEnabled:
         )
         assert result.mode == "L"
         assert result.size == img.size
+
+
+class TestDitherAlgorithmSelection:
+    def _run_with_mock(self, config: dict) -> MagicMock:
+        """Run optimize_for_eink with a mocked dither_image; return mock."""
+        img = _gradient()
+        mock = MagicMock(
+            return_value=img.convert("RGB").quantize(
+                colors=16, dither=Image.Dither.FLOYDSTEINBERG
+            )
+        )
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(img, config)
+        return mock
+
+    def test_default_uses_floyd_steinberg(self) -> None:
+        # Config without dither_algorithm defaults to Floyd-Steinberg.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock({"optimize": True, "grayscale_levels": 16})
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+
+    def test_explicit_floyd_steinberg(self) -> None:
+        # Explicit floyd_steinberg selects Floyd-Steinberg mode.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "dither_algorithm": "floyd_steinberg",
+            }
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+
+    def test_atkinson_selected(self) -> None:
+        # Config with dither_algorithm='atkinson' uses Atkinson mode.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "dither_algorithm": "atkinson",
+            }
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.ATKINSON
+
+    def test_stucki_selected(self) -> None:
+        # Config with dither_algorithm='stucki' uses Stucki mode.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "dither_algorithm": "stucki",
+            }
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.STUCKI
+
+    def test_burkes_selected(self) -> None:
+        # Config with dither_algorithm='burkes' uses Burkes mode.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "dither_algorithm": "burkes",
+            }
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.BURKES
+
+    def test_unknown_algorithm_falls_back_to_floyd_steinberg(
+        self,
+    ) -> None:
+        # An unrecognised algorithm string falls back to Floyd-Steinberg.
+        from epaper_dithering import DitherMode
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "dither_algorithm": "nonexistent_algo",
+            }
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
 
 
 class TestOptimizeIntegration:
