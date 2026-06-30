@@ -71,6 +71,7 @@ class DevicePreset:
     optimize: bool
     manufacturer: str
     native_landscape: bool = False
+    integration_dithers: bool = False
 
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {
@@ -138,17 +139,19 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         800,
         480,
         4,
-        True,
+        False,
         "Seeed",
         native_landscape=True,
+        integration_dithers=True,
     ),
     "reterminal_e1003": DevicePreset(
         "reTerminal E1003",
         1404,
         1872,
         16,
-        True,
+        False,
         "Seeed",
+        integration_dithers=True,
     ),
     "custom": DevicePreset(
         "Custom",

@@ -116,6 +116,49 @@ class TestEinkDashboardConfigFlow:
 
         assert "area_id" not in result["options"]
 
+    async def test_reterminal_e1001_creates_entry(self) -> None:
+        # reTerminal E1001 preset must have optimize=False to avoid
+        # double-dithering with HA Core's OpenDisplay integration.
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {
+                "name": "Office",
+                "device_model": "reterminal_e1001",
+                "orientation": "landscape",
+                "update_interval": 60,
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["optimize"] is False
+        assert opts["grayscale_levels"] == 4
+        # Native landscape device in landscape orientation: no rotation.
+        assert opts["width"] == 800
+        assert opts["height"] == 480
+        assert opts["rotation"] == 0
+
+    async def test_reterminal_e1003_creates_entry(self) -> None:
+        # reTerminal E1003 preset must have optimize=False to avoid
+        # double-dithering with HA Core's OpenDisplay integration.
+        flow = EinkDashboardConfigFlow()
+        result = await flow.async_step_user(
+            {
+                "name": "Office",
+                "device_model": "reterminal_e1003",
+                "orientation": "portrait",
+                "update_interval": 60,
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        opts = result["options"]
+        assert opts["optimize"] is False
+        assert opts["grayscale_levels"] == 16
+        assert opts["width"] == 1404
+        assert opts["height"] == 1872
+        assert opts["rotation"] == 0
+
     async def test_screen_portion_shows_form_for_trmnl(self) -> None:
         # TRMNL devices get a screen_portion form after the user step.
         flow = EinkDashboardConfigFlow()
@@ -555,6 +598,43 @@ class TestEinkDashboardOptionsFlow:
             await flow.async_step_display_settings(
                 {"update_interval": 60, "grayscale_levels": 7}
             )
+
+    async def test_display_settings_shows_optimize_note_for_reterminal(
+        self,
+    ) -> None:
+        # OpenDisplay devices show a note explaining HA Core dithers.
+        flow = _make_options_flow(
+            {"update_interval": 60, "device_model": "reterminal_e1001"}
+        )
+        result = await flow.async_step_display_settings(None)
+
+        assert result["type"] == "form"
+        placeholders = result.get("description_placeholders", {})
+        assert "optimization" in placeholders.get("optimize_note", "")
+
+    async def test_display_settings_no_optimize_note_for_kindle(
+        self,
+    ) -> None:
+        # Non-OpenDisplay devices have no optimize note.
+        flow = _make_options_flow(
+            {"update_interval": 60, "device_model": "kindle_pw"}
+        )
+        result = await flow.async_step_display_settings(None)
+
+        assert result["type"] == "form"
+        placeholders = result.get("description_placeholders", {})
+        assert placeholders.get("optimize_note", "") == ""
+
+    async def test_display_settings_no_optimize_note_for_legacy_entry(
+        self,
+    ) -> None:
+        # Legacy entries without a device_model key must not show the note.
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        assert result["type"] == "form"
+        placeholders = result.get("description_placeholders", {})
+        assert placeholders.get("optimize_note", "") == ""
 
     async def test_device_settings_shows_form(self) -> None:
         flow = _make_options_flow(

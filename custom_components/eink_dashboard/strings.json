@@ -141,6 +141,7 @@
       },
       "display_settings": {
         "title": "Display Settings",
+        "description": "{optimize_note}",
         "data": {
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",

@@ -957,7 +957,18 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             return self.async_create_entry(
                 data={**opts, **validated},
             )
+        device_model = opts.get("device_model", "")
+        preset = DEVICE_PRESETS.get(device_model)
+        if preset and preset.integration_dithers:
+            optimize_note = (
+                "This device's Home Assistant integration handles image"
+                " optimization. Leave e-ink optimization disabled to"
+                " avoid double processing."
+            )
+        else:
+            optimize_note = ""
         return self.async_show_form(
             step_id="display_settings",
             data_schema=schema,
+            description_placeholders={"optimize_note": optimize_note},
         )
