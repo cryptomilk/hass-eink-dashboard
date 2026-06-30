@@ -283,6 +283,50 @@ function posXYWH(d: DisplayConfig): HaFormSchema[] {
   ];
 }
 
+/** Available named shades for color threshold overrides. */
+const SHADE_OPTIONS = [
+  { value: "black", label: "Black" },
+  { value: "dark", label: "Dark" },
+  { value: "medium", label: "Medium" },
+  { value: "light", label: "Light" },
+];
+
+/**
+ * Threshold grid schema for one numbered threshold slot (1–4).
+ *
+ * Each slot has a numeric value, an optional hex color string,
+ * and an optional named shade override. When both color and
+ * shade are present, shade takes precedence in the renderer.
+ *
+ * @param n - Threshold slot number (1–4).
+ * @returns A grid ha-form schema entry with value, color, shade.
+ */
+function thresholdGrid(n: number): HaFormSchema {
+  return {
+    type: "grid",
+    name: "",
+    schema: [
+      {
+        name: `threshold_${n}_value`,
+        selector: { number: { mode: "box" } },
+      },
+      {
+        name: `threshold_${n}_color`,
+        selector: { text: {} },
+      },
+      {
+        name: `threshold_${n}_shade`,
+        selector: {
+          select: {
+            mode: "dropdown",
+            options: SHADE_OPTIONS,
+          },
+        },
+      },
+    ],
+  };
+}
+
 /**
  * Card style dropdown selector.
  *
@@ -1201,6 +1245,23 @@ export const SCHEMAS: Record<
           selector: { number: { mode: "box" } },
         },
         {
+          name: "color_thresholds_transition",
+          default: "smooth",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "smooth", label: "Smooth" },
+                { value: "hard", label: "Hard" },
+              ],
+            },
+          },
+        },
+        thresholdGrid(1),
+        thresholdGrid(2),
+        thresholdGrid(3),
+        thresholdGrid(4),
+        {
           name: "entity_2",
           selector: { entity: {} },
         },
@@ -1332,6 +1393,19 @@ export const LABELS: Record<string, string> = {
   show_extrema: "Show extrema",
   group_by: "Group by",
   min_bound_range: "Min bound range",
+  color_thresholds_transition: "Threshold transition",
+  threshold_1_value: "Threshold 1 value",
+  threshold_1_color: "Threshold 1 color",
+  threshold_1_shade: "Threshold 1 shade",
+  threshold_2_value: "Threshold 2 value",
+  threshold_2_color: "Threshold 2 color",
+  threshold_2_shade: "Threshold 2 shade",
+  threshold_3_value: "Threshold 3 value",
+  threshold_3_color: "Threshold 3 color",
+  threshold_3_shade: "Threshold 3 shade",
+  threshold_4_value: "Threshold 4 value",
+  threshold_4_color: "Threshold 4 color",
+  threshold_4_shade: "Threshold 4 shade",
   entity_2: "Second entity",
   name_2: "Second entity name",
   y_axis_2: "Second entity Y axis",

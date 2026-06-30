@@ -1,6 +1,31 @@
 {%- from "_macros.svg.j2" import card_container, icon_circle -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
+{#- Gradient definitions for color threshold line graphs.
+    Emitted before card_container so the IDs are in scope for any
+    stroke/fill url() references that appear inside it. -#}
+{%- if has_thresholds -%}
+<defs>
+{%- for s in series -%}
+{%- if s.has_threshold_gradient -%}
+<linearGradient id="thresh-stroke-{{ loop.index0 }}"
+  gradientUnits="userSpaceOnUse"
+  x1="0" y1="{{ gy1 }}" x2="0" y2="{{ gy2 }}">
+{%- for stop in s.threshold_stroke_stops -%}
+<stop offset="{{ stop.offset }}" stop-color="{{ stop.color }}"/>
+{%- endfor -%}
+</linearGradient>
+<linearGradient id="thresh-fill-{{ loop.index0 }}"
+  gradientUnits="userSpaceOnUse"
+  x1="0" y1="{{ gy1 }}" x2="0" y2="{{ gy2 }}">
+{%- for stop in s.threshold_fill_stops -%}
+<stop offset="{{ stop.offset }}" stop-color="{{ stop.color }}"/>
+{%- endfor -%}
+</linearGradient>
+{%- endif -%}
+{%- endfor -%}
+</defs>
+{%- endif -%}
 {%- if has_entity -%}
 {%- call card_container(
     x=0, y=0, w=w, h=h,
@@ -66,7 +91,7 @@
 {%- for bar in s.bars -%}
 <rect x="{{ bar.x }}" y="{{ bar.y }}"
   width="{{ bar.w }}" height="{{ bar.h }}"
-  fill="{{ s.bar_fill }}"
+  fill="{{ bar.bar_fill }}"
   stroke="none"/>
 {%- endfor -%}
 {%- endif -%}
@@ -76,10 +101,12 @@
 {%- for s in series -%}
 {%- if s.fill_path -%}
 <path d="{{ s.fill_path }}"
-  fill="{{ hex_light_gray }}" stroke="none"/>
+  fill="{{ 'url(#thresh-fill-' ~ loop.index0 ~ ')' if s.has_threshold_gradient else hex_light_gray }}"
+  stroke="none"/>
 {%- elif s.fill_points -%}
 <polygon points="{{ s.fill_points }}"
-  fill="{{ hex_light_gray }}" stroke="none"/>
+  fill="{{ 'url(#thresh-fill-' ~ loop.index0 ~ ')' if s.has_threshold_gradient else hex_light_gray }}"
+  stroke="none"/>
 {%- endif -%}
 {%- endfor -%}
 {#- Graph lines rendered on top of fills. -#}
@@ -87,7 +114,7 @@
 {%- if s.graph_path -%}
 <path d="{{ s.graph_path }}"
   fill="none"
-  stroke="{{ hex_black }}"
+  stroke="{{ 'url(#thresh-stroke-' ~ loop.index0 ~ ')' if s.has_threshold_gradient else hex_black }}"
   stroke-width="{{ graph_stroke_w }}"
   stroke-linejoin="round"
   stroke-linecap="round"
@@ -97,7 +124,7 @@
 {%- elif s.polyline_points -%}
 <polyline points="{{ s.polyline_points }}"
   fill="none"
-  stroke="{{ hex_black }}"
+  stroke="{{ 'url(#thresh-stroke-' ~ loop.index0 ~ ')' if s.has_threshold_gradient else hex_black }}"
   stroke-width="{{ graph_stroke_w }}"
   stroke-linejoin="round"
 {%- if s.stroke_dasharray %}

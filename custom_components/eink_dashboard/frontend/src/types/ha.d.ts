@@ -792,6 +792,34 @@ export interface GaugeWidget extends WidgetBase {
  * Used with the ``entities`` field on {@link GraphWidget} when
  * overlaying multiple data series on the same graph.
  */
+
+/**
+ * One color threshold entry for the graph widget.
+ *
+ * Each threshold defines a boundary value and a visual style for data
+ * points at or above that value.  On grayscale displays ``color``
+ * values are automatically mapped to the nearest available gray level;
+ * the ``shade`` key can override this mapping explicitly.
+ */
+export interface GraphColorThreshold {
+  /**
+   * Numeric boundary value.  Data at or above this value (up to the
+   * next threshold) uses this entry's color or shade.
+   */
+  value: number;
+  /**
+   * CSS hex color string (e.g. ``"#ff0000"``).  Mapped to grayscale
+   * automatically on non-color displays.  Ignored when ``shade`` is
+   * set.
+   */
+  color?: string;
+  /**
+   * Explicit grayscale shade override.  Takes precedence over
+   * ``color`` on grayscale displays.
+   */
+  shade?: "black" | "dark" | "medium" | "light";
+}
+
 export interface GraphEntityConfig {
   /** HA entity ID whose numeric state history is graphed. */
   entity: string;
@@ -970,6 +998,49 @@ export interface GraphWidget extends WidgetBase {
   graph?: "line" | "bar";
   /** Decorative frame style. */
   card_style?: CardStyle;
+  /**
+   * Threshold-based line/bar styling.  Each entry defines a numeric
+   * boundary; data at or above that value (up to the next threshold)
+   * uses this entry's color or shade.  Requires at least two entries
+   * to take effect.  Suppressed automatically on 2-level (B&W)
+   * displays where only black and white are available.
+   */
+  color_thresholds?: GraphColorThreshold[];
+  /**
+   * How threshold colors transition between bands.
+   *
+   * - ``"smooth"`` — one gradient stop per threshold value, producing
+   *   a continuous color blend.
+   * - ``"hard"`` — duplicate stops at each boundary, producing an
+   *   instantaneous step transition.
+   *
+   * Default: ``"smooth"``.
+   */
+  color_thresholds_transition?: "smooth" | "hard";
+  /** Numeric boundary for threshold 1. */
+  threshold_1_value?: number;
+  /** CSS hex color for threshold 1 (e.g. ``"#0000ff"``). */
+  threshold_1_color?: string;
+  /** Explicit grayscale shade override for threshold 1. */
+  threshold_1_shade?: "black" | "dark" | "medium" | "light";
+  /** Numeric boundary for threshold 2. */
+  threshold_2_value?: number;
+  /** CSS hex color for threshold 2. */
+  threshold_2_color?: string;
+  /** Explicit grayscale shade override for threshold 2. */
+  threshold_2_shade?: "black" | "dark" | "medium" | "light";
+  /** Numeric boundary for threshold 3. */
+  threshold_3_value?: number;
+  /** CSS hex color for threshold 3. */
+  threshold_3_color?: string;
+  /** Explicit grayscale shade override for threshold 3. */
+  threshold_3_shade?: "black" | "dark" | "medium" | "light";
+  /** Numeric boundary for threshold 4. */
+  threshold_4_value?: number;
+  /** CSS hex color for threshold 4. */
+  threshold_4_color?: string;
+  /** Explicit grayscale shade override for threshold 4. */
+  threshold_4_shade?: "black" | "dark" | "medium" | "light";
 }
 
 export type Widget =

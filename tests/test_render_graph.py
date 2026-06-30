@@ -1391,3 +1391,672 @@ class TestRenderGraph:
         # No <line> elements: grid is suppressed on 2-level and
         # legend uses <rect> swatches instead.
         assert "<line" not in svg
+
+    # ── Phase 5: Color thresholds ─────────────────────────────────────
+
+    # History that crosses multiple threshold boundaries so every
+    # threshold band is exercised.  Values range from 5 to 35,
+    # crossing boundaries at 10, 20, and 30.
+    _THRESHOLD_HISTORY: ClassVar[list[dict[str, object]]] = [
+        {"s": "5.0", "lu": 1747620000.0},
+        {"s": "15.0", "lu": 1747634400.0},
+        {"s": "25.0", "lu": 1747648800.0},
+        {"s": "35.0", "lu": 1747663200.0},
+        {"s": "25.0", "lu": 1747677600.0},
+        {"s": "10.0", "lu": 1747692000.0},
+        {"s": "20.0", "lu": 1747699200.0},
+    ]
+
+    def _threshold_config(self, **overrides: object) -> dict[str, object]:
+        """Return config with threshold history for sensor.temperature."""
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                "state": "20.0",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+                "history": self._THRESHOLD_HISTORY,
+            },
+            "sensor.humidity": {
+                "state": "65.0",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+                "history": [
+                    {"s": "65.0", "lu": 1747620000.0},
+                    {"s": "67.5", "lu": 1747645200.0},
+                    {"s": "70.0", "lu": 1747699200.0},
+                ],
+            },
+        }
+        return make_config(self._DEFAULTS, states=states, **overrides)
+
+    def _threshold_widget(self, **overrides: object) -> dict[str, object]:
+        """Return a 400×280 line graph widget with three color thresholds."""
+        w: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entity": "sensor.temperature",
+            "color_thresholds": [
+                {"value": 10, "color": "#0000ff"},
+                {"value": 20, "color": "#00ff00"},
+                {"value": 30, "color": "#ff0000"},
+            ],
+        }
+        w.update(overrides)
+        return w
+
+    def test_graph_thresholds_line_has_gradient_def(self) -> None:
+        # With thresholds on a line graph, the SVG output contains a
+        # <linearGradient> element inside <defs>.
+        svg = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        assert "<linearGradient" in svg
+        assert "<defs>" in svg
+
+    def test_graph_thresholds_line_uses_gradient_stroke(self) -> None:
+        # The line <path> uses a gradient URL for stroke color instead
+        # of the default hex_black when thresholds are active.
+        svg = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        assert 'stroke="url(#thresh-stroke-0)"' in svg
+
+    def test_graph_thresholds_smooth_single_stop_per_threshold(
+        self,
+    ) -> None:
+        # With color_thresholds_transition="smooth" (default), each
+        # threshold produces exactly one <stop> element in the gradient
+        # (no duplicate stops at boundaries).
+        svg = render_widget_svg(
+            self._threshold_widget(color_thresholds_transition="smooth"),
+            self._threshold_config(),
+        )
+        # 3 thresholds → 3 stops for stroke gradient + 3 for fill
+        # gradient = 6 total.  Count via the stop tag.
+        stop_count = svg.count("<stop ")
+        # Expect 2 gradients × 3 thresholds = 6 stops.
+        assert stop_count == 6
+
+    def test_graph_thresholds_hard_double_stops_at_boundaries(
+        self,
+    ) -> None:
+        # With color_thresholds_transition="hard", each threshold
+        # boundary gets two adjacent <stop> elements so colors snap
+        # rather than blend.
+        svg_smooth = render_widget_svg(
+            self._threshold_widget(color_thresholds_transition="smooth"),
+            self._threshold_config(),
+        )
+        svg_hard = render_widget_svg(
+            self._threshold_widget(color_thresholds_transition="hard"),
+            self._threshold_config(),
+        )
+        # Hard mode has strictly more stop elements than smooth mode.
+        assert svg_hard.count("<stop ") > svg_smooth.count("<stop ")
+
+    def test_graph_thresholds_changes_output(self) -> None:
+        # SVG with thresholds configured differs from SVG without any
+        # threshold configuration.
+        svg_no_thresh = render_widget_svg(
+            self._base_widget(), self._threshold_config()
+        )
+        svg_thresh = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        assert svg_no_thresh != svg_thresh
+
+    def test_graph_thresholds_bar_per_bar_fill(self) -> None:
+        # In bar mode with thresholds, bars at different value levels
+        # must get different fill colors because each bar's fill is
+        # determined by the threshold band containing its value.
+        # Resolved grayscale for blue (#0000ff): luminance ≈ 0.
+        # Resolved grayscale for red (#ff0000): luminance ≈ 76.
+        # They should map to different grayscale hex values.
+        svg = render_widget_svg(
+            self._threshold_widget(graph="bar"),
+            self._threshold_config(),
+        )
+        # Multiple distinct fill= values appear since bars span
+        # different threshold bands.
+        fill_hits = re.findall(r'fill="(#[0-9a-fA-F]{6})"', svg)
+        unique_fills = set(fill_hits)
+        # At least two distinct grayscale fill colors from thresholds.
+        assert len(unique_fills) >= 2
+
+    def test_graph_thresholds_bar_no_gradient(self) -> None:
+        # Bar mode with thresholds uses per-bar fill colors rather than
+        # SVG linearGradient — no <linearGradient> element is expected.
+        svg = render_widget_svg(
+            self._threshold_widget(graph="bar"),
+            self._threshold_config(),
+        )
+        assert "<linearGradient" not in svg
+
+    def test_graph_thresholds_rgb_mapped_to_grayscale(self) -> None:
+        # Threshold colors are auto-mapped to grayscale on e-ink
+        # displays.  The original RGB values (pure blue, green, red)
+        # must not appear as-is in the stop-color attributes; grayscale
+        # equivalents are expected instead.
+        svg = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        # Original saturated colors must not appear verbatim.
+        assert "#0000ff" not in svg
+        assert "#00ff00" not in svg
+        assert "#ff0000" not in svg
+
+    def test_graph_thresholds_shade_dark_maps_to_gray(self) -> None:
+        # A threshold entry with shade="dark" must resolve to the
+        # COLOR_GRAY hex value regardless of any color key.
+        from custom_components.eink_dashboard.const import (
+            COLOR_GRAY,
+            color_to_hex,
+        )
+
+        gray_hex = color_to_hex(COLOR_GRAY)
+        svg = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "shade": "dark", "color": "#ff0000"},
+                    {"value": 20, "shade": "medium"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        # COLOR_GRAY hex must appear as a stop-color (shade overrides).
+        assert f'stop-color="{gray_hex}"' in svg
+
+    def test_graph_thresholds_shade_only_no_color_key(self) -> None:
+        # A threshold entry with only shade (no color key) resolves to
+        # the appropriate constant without crashing.
+        from custom_components.eink_dashboard.const import (
+            COLOR_LIGHT_GRAY,
+            color_to_hex,
+        )
+
+        light_gray_hex = color_to_hex(COLOR_LIGHT_GRAY)
+        svg = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "shade": "light"},
+                    {"value": 25, "shade": "dark"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        assert f'stop-color="{light_gray_hex}"' in svg
+
+    def test_graph_thresholds_suppressed_on_2level(self) -> None:
+        # On 2-level (B&W) displays, color thresholds are suppressed
+        # entirely: no <linearGradient> appears even when configured.
+        svg = render_widget_svg(
+            self._threshold_widget(),
+            self._threshold_config(grayscale_levels=2),
+        )
+        assert "<linearGradient" not in svg
+
+    def test_graph_thresholds_line_stroke_black_on_2level(self) -> None:
+        # On 2-level displays with thresholds suppressed, the line
+        # uses the default hex_black stroke, not a gradient URL.
+        from custom_components.eink_dashboard.const import (
+            COLOR_BLACK,
+            color_to_hex,
+        )
+
+        black_hex = color_to_hex(COLOR_BLACK)
+        svg = render_widget_svg(
+            self._threshold_widget(),
+            self._threshold_config(grayscale_levels=2),
+        )
+        # Gradient URL must not appear for stroke; black must be present.
+        assert "thresh-stroke" not in svg
+        assert black_hex in svg
+
+    def test_graph_thresholds_bar_suppressed_on_2level(self) -> None:
+        # On 2-level displays with bar mode, per-bar threshold fills
+        # are suppressed and entity-level _BAR_FILL_COLORS are used.
+        # _BAR_FILL_COLORS[0] = black (#000000) for entity 0.
+        from custom_components.eink_dashboard.const import (
+            COLOR_BLACK,
+            color_to_hex,
+        )
+
+        black_hex = color_to_hex(COLOR_BLACK)
+        svg = render_widget_svg(
+            self._threshold_widget(graph="bar"),
+            self._threshold_config(grayscale_levels=2),
+        )
+        # All bar fills should be black (entity-level), not per-bar.
+        assert black_hex in svg
+        # Verify no threshold-derived non-black fills appear.  With
+        # thresholds suppressed, only black should appear in fill=
+        # attributes on rects (the entity-level color for entity 0).
+        fill_hits = re.findall(r'<rect[^>]*fill="(#[0-9a-fA-F]{6})"', svg)
+        # Should only contain the entity-level black fill.
+        assert all(f == black_hex for f in fill_hits)
+
+    def test_graph_thresholds_empty_list_no_effect(self) -> None:
+        # An empty color_thresholds list produces the same output as
+        # no threshold configuration at all.
+        svg_no_thresh = render_widget_svg(
+            self._base_widget(), self._threshold_config()
+        )
+        svg_empty_thresh = render_widget_svg(
+            self._base_widget(color_thresholds=[]),
+            self._threshold_config(),
+        )
+        assert svg_no_thresh == svg_empty_thresh
+
+    def test_graph_thresholds_single_entry_no_effect(self) -> None:
+        # A single threshold entry (fewer than 2) is not enough to
+        # activate the feature; output equals no-threshold baseline.
+        svg_no_thresh = render_widget_svg(
+            self._base_widget(), self._threshold_config()
+        )
+        svg_one_thresh = render_widget_svg(
+            self._base_widget(
+                color_thresholds=[{"value": 20, "color": "#ff0000"}]
+            ),
+            self._threshold_config(),
+        )
+        assert svg_no_thresh == svg_one_thresh
+
+    def test_graph_thresholds_default_transition_is_smooth(self) -> None:
+        # Omitting color_thresholds_transition defaults to "smooth"
+        # behavior, producing the same output as explicit "smooth".
+        svg_default = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        svg_smooth = render_widget_svg(
+            self._threshold_widget(color_thresholds_transition="smooth"),
+            self._threshold_config(),
+        )
+        assert svg_default == svg_smooth
+
+    def test_graph_thresholds_multi_entity_line_each_series_gets_gradient(
+        self,
+    ) -> None:
+        # With two entities and thresholds, both series get their own
+        # gradient definition (thresh-stroke-0 and thresh-stroke-1).
+        svg = render_widget_svg(
+            self._threshold_widget(
+                entities=[
+                    {"entity": "sensor.temperature"},
+                    {"entity": "sensor.humidity"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        assert "thresh-stroke-0" in svg
+        assert "thresh-stroke-1" in svg
+
+    def test_graph_thresholds_works_with_labels_and_extrema(self) -> None:
+        # Color thresholds render without conflict when axis labels and
+        # extrema text are also enabled.
+        svg = render_widget_svg(
+            self._threshold_widget(show_labels=True, show_extrema=True),
+            self._threshold_config(),
+        )
+        # Gradient still present alongside labels.
+        assert "<linearGradient" in svg
+        # Extrema strings also present.
+        assert "Min:" in svg
+
+    def test_graph_thresholds_has_gray_pixels_in_graph_area(
+        self,
+    ) -> None:
+        # When thresholds map to gray shades on a multi-grayscale
+        # display, the rendered graph area contains gray (non-black)
+        # pixels from the gradient.
+        h = 280
+        widget = self._threshold_widget(
+            h=h,
+            color_thresholds=[
+                {"value": 10, "shade": "medium"},
+                {"value": 25, "shade": "dark"},
+            ],
+        )
+        img = render_to_image([widget], self._threshold_config())
+        header_h = DEFAULT_ROW_H
+        # Check the graph region (below header) for gray pixels.
+        assert_has_gray_pixels(img, 0, header_h, 400, h)
+
+    def test_graph_thresholds_flat_keys_accepted(self) -> None:
+        # Flat editor keys (threshold_1_value, threshold_1_color, etc.)
+        # produce the same gradient output as the canonical
+        # color_thresholds list format.
+        svg_canonical = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "color": "#0000ff"},
+                    {"value": 20, "color": "#ff0000"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        svg_flat = render_widget_svg(
+            self._base_widget(
+                threshold_1_value=10,
+                threshold_1_color="#0000ff",
+                threshold_2_value=20,
+                threshold_2_color="#ff0000",
+            ),
+            self._threshold_config(),
+        )
+        assert svg_canonical == svg_flat
+
+    def test_graph_thresholds_canonical_list_overrides_flat_keys(
+        self,
+    ) -> None:
+        # When both color_thresholds list and flat keys are present,
+        # the canonical list takes precedence and the flat keys are
+        # ignored.
+        svg_list_only = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "color": "#0000ff"},
+                    {"value": 20, "color": "#ff0000"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        svg_both = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "color": "#0000ff"},
+                    {"value": 20, "color": "#ff0000"},
+                ],
+                # Flat keys present but should be ignored.
+                threshold_1_value=5,
+                threshold_1_color="#00ff00",
+                threshold_2_value=15,
+                threshold_2_color="#ff00ff",
+            ),
+            self._threshold_config(),
+        )
+        assert svg_list_only == svg_both
+
+    # ── Unit tests for threshold helper functions ──────────────────────
+
+    def test_rgb_hex_to_grayscale_pure_red(self) -> None:
+        # Pure red (#ff0000): BT.601 luminance = 0.299*255 ≈ 76 → gray.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _rgb_hex_to_grayscale,
+        )
+
+        result = _rgb_hex_to_grayscale("#ff0000", 16)
+        # Luminance of pure red is 76; quantized on 16 levels.
+        assert result.startswith("#")
+        assert len(result) == 7
+
+    def test_rgb_hex_to_grayscale_pure_white(self) -> None:
+        # Pure white (#ffffff) must map to white on any display depth.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _rgb_hex_to_grayscale,
+        )
+
+        assert _rgb_hex_to_grayscale("#ffffff", 16) == "#ffffff"
+
+    def test_rgb_hex_to_grayscale_pure_black(self) -> None:
+        # Pure black (#000000) must remain black on any display depth.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _rgb_hex_to_grayscale,
+        )
+
+        assert _rgb_hex_to_grayscale("#000000", 16) == "#000000"
+
+    def test_rgb_hex_to_grayscale_2level_threshold(self) -> None:
+        # On a 2-level display, mid-gray (127) maps to black and
+        # near-white (200) maps to white.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _rgb_hex_to_grayscale,
+        )
+
+        # Gray 127 → below 128 threshold → black.
+        dark = _rgb_hex_to_grayscale("#7f7f7f", 2)
+        assert dark == "#000000"
+        # Gray 200 → at or above 128 threshold → white.
+        light = _rgb_hex_to_grayscale("#c8c8c8", 2)
+        assert light == "#ffffff"
+
+    def test_rgb_hex_to_grayscale_bad_input(self) -> None:
+        # Inputs that cannot be parsed fall back to black.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _rgb_hex_to_grayscale,
+        )
+
+        assert _rgb_hex_to_grayscale("notacolor", 16) == "#000000"
+        assert _rgb_hex_to_grayscale("#gg0000", 16) == "#000000"
+
+    def test_lighter_hex_black_gives_mid_gray(self) -> None:
+        # _lighter_hex shifts 50% toward white: black (#000000) → 127.
+        from custom_components.eink_dashboard.const import color_to_hex
+        from custom_components.eink_dashboard.widgets.graph import _lighter_hex
+
+        result = _lighter_hex("#000000")
+        # (0 + 255) // 2 = 127.
+        assert result == color_to_hex(127)
+
+    def test_lighter_hex_white_stays_white(self) -> None:
+        # Shifting white 50% toward white produces white.
+        from custom_components.eink_dashboard.widgets.graph import _lighter_hex
+
+        assert _lighter_hex("#ffffff") == "#ffffff"
+
+    def test_lighter_hex_bad_input(self) -> None:
+        # A non-hex input falls back to COLOR_LIGHT_GRAY.
+        # "#gg0000" → slice [1:3] = "gg" → int("gg", 16) raises ValueError.
+        from custom_components.eink_dashboard.const import (
+            COLOR_LIGHT_GRAY,
+            color_to_hex,
+        )
+        from custom_components.eink_dashboard.widgets.graph import _lighter_hex
+
+        assert _lighter_hex("#gg0000") == color_to_hex(COLOR_LIGHT_GRAY)
+
+    def test_shade_to_hex_known_shades(self) -> None:
+        # Each named shade must map to the expected constant.
+        from custom_components.eink_dashboard.const import (
+            COLOR_BLACK,
+            COLOR_GRAY,
+            COLOR_LIGHT_GRAY,
+            COLOR_MEDIUM_GRAY,
+            color_to_hex,
+        )
+        from custom_components.eink_dashboard.widgets.graph import (
+            _shade_to_hex,
+        )
+
+        assert _shade_to_hex("black") == color_to_hex(COLOR_BLACK)
+        assert _shade_to_hex("dark") == color_to_hex(COLOR_GRAY)
+        assert _shade_to_hex("medium") == color_to_hex(COLOR_MEDIUM_GRAY)
+        assert _shade_to_hex("light") == color_to_hex(COLOR_LIGHT_GRAY)
+
+    def test_shade_to_hex_unknown_falls_back_to_black(self) -> None:
+        # An unrecognised shade string falls back to black.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _shade_to_hex,
+        )
+
+        assert _shade_to_hex("neon") == "#000000"
+
+    def test_resolve_threshold_color_shade_overrides_color(self) -> None:
+        # shade takes precedence over color in the same entry.
+        from custom_components.eink_dashboard.const import (
+            COLOR_GRAY,
+            color_to_hex,
+        )
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_threshold_color,
+        )
+
+        entry = {"shade": "dark", "color": "#ff0000"}
+        assert _resolve_threshold_color(entry, 16) == color_to_hex(COLOR_GRAY)
+
+    def test_resolve_threshold_color_no_keys_gives_black(self) -> None:
+        # An entry with neither shade nor color resolves to black.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_threshold_color,
+        )
+
+        assert _resolve_threshold_color({"value": 10}, 16) == "#000000"
+
+    def test_bar_threshold_fill_below_first_threshold(self) -> None:
+        # A value below all thresholds uses the lowest threshold's color.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _bar_threshold_fill,
+        )
+
+        thresholds = [
+            {"value": 10, "shade": "light"},
+            {"value": 20, "shade": "dark"},
+        ]
+        result = _bar_threshold_fill(5.0, thresholds, 16)
+        from custom_components.eink_dashboard.const import (
+            COLOR_LIGHT_GRAY,
+            color_to_hex,
+        )
+
+        assert result == color_to_hex(COLOR_LIGHT_GRAY)
+
+    def test_bar_threshold_fill_above_all_thresholds(self) -> None:
+        # A value at or above the highest threshold uses the top band.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _bar_threshold_fill,
+        )
+
+        thresholds = [
+            {"value": 10, "shade": "light"},
+            {"value": 20, "shade": "dark"},
+        ]
+        result = _bar_threshold_fill(25.0, thresholds, 16)
+        from custom_components.eink_dashboard.const import (
+            COLOR_GRAY,
+            color_to_hex,
+        )
+
+        assert result == color_to_hex(COLOR_GRAY)
+
+    def test_bar_threshold_fill_at_boundary(self) -> None:
+        # A value exactly equal to a threshold boundary uses that band.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _bar_threshold_fill,
+        )
+
+        thresholds = [
+            {"value": 10, "shade": "light"},
+            {"value": 20, "shade": "dark"},
+        ]
+        result = _bar_threshold_fill(20.0, thresholds, 16)
+        from custom_components.eink_dashboard.const import (
+            COLOR_GRAY,
+            color_to_hex,
+        )
+
+        assert result == color_to_hex(COLOR_GRAY)
+
+    def test_normalize_thresholds_duplicate_values_sorted(self) -> None:
+        # Duplicate threshold values are accepted and the result is
+        # sorted ascending by value.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _normalize_thresholds,
+        )
+
+        widget: dict[str, object] = {
+            "color_thresholds": [
+                {"value": 20, "color": "#ff0000"},
+                {"value": 10, "color": "#0000ff"},
+                {"value": 20, "color": "#00ff00"},
+            ]
+        }
+        result = _normalize_thresholds(widget)
+        values = [float(str(t["value"])) for t in result]
+        assert values == sorted(values)
+
+    def test_normalize_thresholds_skips_non_numeric_values(self) -> None:
+        # Entries with non-numeric value strings are silently skipped.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _normalize_thresholds,
+        )
+
+        widget: dict[str, object] = {
+            "color_thresholds": [
+                {"value": "bad", "color": "#ff0000"},
+                {"value": 15, "color": "#00ff00"},
+            ]
+        }
+        result = _normalize_thresholds(widget)
+        assert len(result) == 1
+        assert float(str(result[0]["value"])) == 15.0
+
+    def test_threshold_gradient_stops_out_of_range(self) -> None:
+        # Threshold values outside [y_min, y_max] are clamped to the
+        # 0% or 100% offset boundaries, not dropped.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _threshold_gradient_stops,
+        )
+
+        thresholds = [
+            {"value": -100, "shade": "light"},
+            {"value": 200, "shade": "dark"},
+        ]
+        stops = _threshold_gradient_stops(
+            thresholds, "smooth", y_min=0.0, y_max=100.0, grayscale_levels=16
+        )
+        # Both stops must still be present; offsets are clamped.
+        assert len(stops) == 2
+        offsets = [s["offset"] for s in stops]
+        # High value (200) → offset at 0% (top); low (-100) → 100% (bot).
+        assert "0.00%" in offsets
+        assert "100.00%" in offsets
+
+    # ── R7: Fill gradient presence test ───────────────────────────────
+
+    def test_graph_thresholds_fill_gradient_present(self) -> None:
+        # When thresholds are active, the SVG must contain both a
+        # stroke gradient (thresh-stroke-0) and a fill gradient
+        # (thresh-fill-0) for the first series.
+        svg = render_widget_svg(
+            self._threshold_widget(), self._threshold_config()
+        )
+        assert "thresh-stroke-0" in svg
+        assert "thresh-fill-0" in svg
+
+    def test_graph_thresholds_fill_gradient_uses_lighter_colors(
+        self,
+    ) -> None:
+        # The fill gradient stops must use lighter colors than the
+        # stroke gradient stops (each fill stop is 50% shifted toward
+        # white relative to the corresponding stroke stop).
+        import re as _re
+
+        svg = render_widget_svg(
+            self._threshold_widget(
+                color_thresholds=[
+                    {"value": 10, "shade": "black"},
+                    {"value": 25, "shade": "dark"},
+                ]
+            ),
+            self._threshold_config(),
+        )
+        # Extract all stop-color values in document order.
+        stop_colors = _re.findall(r'stop-color="(#[0-9a-fA-F]{6})"', svg)
+        # First half = stroke stops, second half = fill stops.
+        # (2 thresholds × 2 gradients = 4 stops total)
+        assert len(stop_colors) == 4
+        stroke_stops = stop_colors[:2]
+        fill_stops = stop_colors[2:]
+        for stroke_hex, fill_hex in zip(stroke_stops, fill_stops, strict=True):
+            stroke_val = int(stroke_hex[1:3], 16)
+            fill_val = int(fill_hex[1:3], 16)
+            # Fill is lighter (higher value) than stroke.
+            assert fill_val >= stroke_val

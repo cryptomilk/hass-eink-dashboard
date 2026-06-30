@@ -10,6 +10,7 @@ from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
+    COLOR_MEDIUM_GRAY,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
@@ -40,6 +41,273 @@ _BAR_FILL_COLORS: tuple[str, ...] = (
     color_to_hex(COLOR_GRAY),
     color_to_hex(COLOR_LIGHT_GRAY),
 )
+
+# Named shade → grayscale constant mapping for explicit threshold
+# overrides.  The four named levels map to the standard e-ink palette:
+# black, dark gray, light gray, and a near-white value that is still
+# visually distinct from the white background.
+_SHADE_VALUES: dict[str, int] = {
+    "black": COLOR_BLACK,
+    "dark": COLOR_GRAY,
+    "medium": COLOR_MEDIUM_GRAY,
+    "light": COLOR_LIGHT_GRAY,
+}
+
+
+def _rgb_hex_to_grayscale(
+    hex_color: str,
+    grayscale_levels: int,
+) -> str:
+    """Convert an RGB hex color string to a grayscale hex string.
+
+    Parses a ``#RRGGBB`` string, computes the ITU-R BT.601 luminance,
+    and quantizes the result to the number of levels available on the
+    display.  On 2-level (B&W) displays the result is clamped to pure
+    black or white.
+
+    Args:
+        hex_color: CSS hex color string, e.g. ``"#ff0000"``.  Must
+            start with ``#`` followed by exactly six hex digits.
+            Values that do not match this form are treated as black.
+        grayscale_levels: Number of distinct gray levels on the
+            display.  ``2`` produces only black or white; higher
+            values quantize to the nearest available step.
+
+    Returns:
+        Grayscale ``#rrggbb`` hex string suitable for SVG attributes.
+        Falls back to ``color_to_hex(COLOR_BLACK)`` on parse error.
+    """
+    try:
+        hex_clean = hex_color[1:]
+        if len(hex_clean) != 6:
+            raise ValueError("bad length")
+        r = int(hex_clean[0:2], 16)
+        g = int(hex_clean[2:4], 16)
+        b = int(hex_clean[4:6], 16)
+    except (ValueError, AttributeError):
+        return color_to_hex(COLOR_BLACK)
+    # ITU-R BT.601 luminance coefficients.
+    gray = round(0.299 * r + 0.587 * g + 0.114 * b)
+    if grayscale_levels <= 2:
+        # Hard threshold at mid-gray.
+        return color_to_hex(0 if gray < 128 else 255)
+    # Quantize to the nearest available step.
+    steps = grayscale_levels - 1
+    quantized = round(gray / 255 * steps) * 255 // steps
+    return color_to_hex(quantized)
+
+
+def _shade_to_hex(shade: str) -> str:
+    """Convert a named shade string to a grayscale hex color.
+
+    Args:
+        shade: One of ``"black"``, ``"dark"``, ``"medium"``,
+            or ``"light"``.  Unknown values fall back to black.
+
+    Returns:
+        Grayscale ``#rrggbb`` hex string.
+    """
+    return color_to_hex(_SHADE_VALUES.get(shade, COLOR_BLACK))
+
+
+def _resolve_threshold_color(
+    entry: dict[str, object],
+    grayscale_levels: int,
+) -> str:
+    """Resolve the final hex color for one threshold entry.
+
+    ``shade`` takes precedence over ``color`` on all displays.  When
+    neither key is present the fallback is black.
+
+    Args:
+        entry: Threshold dict with optional ``"shade"`` and
+            ``"color"`` keys.
+        grayscale_levels: Display grayscale depth, used when mapping
+            RGB colors to grayscale.
+
+    Returns:
+        Resolved ``#rrggbb`` hex string.
+    """
+    shade = str(entry.get("shade", ""))
+    if shade:
+        return _shade_to_hex(shade)
+    color = str(entry.get("color", ""))
+    if color:
+        return _rgb_hex_to_grayscale(color, grayscale_levels)
+    return color_to_hex(COLOR_BLACK)
+
+
+def _lighter_hex(hex_color: str) -> str:
+    """Shift a grayscale hex color 50% toward white.
+
+    Used to produce a softer fill gradient from the same threshold
+    colors as the stroke gradient.  Assumes the input is already a
+    grayscale color (all three channels equal).
+
+    Args:
+        hex_color: Grayscale ``#rrggbb`` hex string.
+
+    Returns:
+        Lightened ``#rrggbb`` hex string.  Falls back to
+        ``color_to_hex(COLOR_LIGHT_GRAY)`` on parse error.
+    """
+    try:
+        gray = int(hex_color[1:3], 16)
+    except (ValueError, AttributeError, IndexError):
+        return color_to_hex(COLOR_LIGHT_GRAY)
+    lighter = gray + (255 - gray) // 2
+    return color_to_hex(lighter)
+
+
+def _threshold_gradient_stops(
+    thresholds: list[dict[str, object]],
+    transition: str,
+    y_min: float,
+    y_max: float,
+    grayscale_levels: int,
+) -> list[dict[str, str]]:
+    """Compute SVG linearGradient stop entries for color thresholds.
+
+    The gradient runs top-to-bottom in SVG space.  Because the Y
+    axis is inverted (high data values map to small Y coordinates),
+    a high threshold value maps to a small offset percentage.
+
+    For ``"smooth"`` transitions each threshold produces one stop.
+    For ``"hard"`` transitions the boundary between consecutive
+    threshold bands is duplicated — two stops at the same offset with
+    different colors create a sharp edge with no blending.
+
+    Args:
+        thresholds: Sorted ascending by ``"value"``.  Must contain
+            at least two entries (enforced by caller).
+        transition: ``"smooth"`` or ``"hard"``.
+        y_min: Y-axis lower bound (bottom of graph area).
+        y_max: Y-axis upper bound (top of graph area).
+        grayscale_levels: Display grayscale depth for color mapping.
+
+    Returns:
+        List of ``{"offset": "XX.XX%", "color": "#hex"}`` dicts,
+        ordered top (0%) to bottom (100%) of the gradient.
+    """
+    y_range = y_max - y_min
+
+    def _offset(val: float) -> str:
+        # High value → small offset (near top of SVG gradient).
+        pct = (y_max - val) / y_range * 100.0
+        pct = max(0.0, min(100.0, pct))
+        return f"{pct:.2f}%"
+
+    colors = [
+        _resolve_threshold_color(t, grayscale_levels) for t in thresholds
+    ]
+
+    if transition == "hard":
+        # Descending by value so we build stops top → bottom.
+        desc = list(reversed(thresholds))
+        desc_colors = list(reversed(colors))
+        stops: list[dict[str, str]] = [
+            {"offset": "0.00%", "color": desc_colors[0]},
+        ]
+        for i in range(1, len(desc)):
+            off = _offset(float(str(desc[i]["value"])))
+            # Stop for the color of the band ABOVE the boundary.
+            stops.append({"offset": off, "color": desc_colors[i - 1]})
+            # Stop for the color of the band BELOW — same offset.
+            stops.append({"offset": off, "color": desc_colors[i]})
+        stops.append({"offset": "100.00%", "color": desc_colors[-1]})
+        return stops
+
+    # Smooth: one stop per threshold, descending (top → bottom).
+    return [
+        {
+            "offset": _offset(float(str(t["value"]))),
+            "color": c,
+        }
+        for t, c in zip(reversed(thresholds), reversed(colors), strict=True)
+    ]
+
+
+def _bar_threshold_fill(
+    value: float,
+    thresholds: list[dict[str, object]],
+    grayscale_levels: int,
+) -> str:
+    """Resolve the threshold fill color for a single bar value.
+
+    Walks the threshold list (sorted ascending) to find the highest
+    threshold boundary that the data value meets or exceeds.
+
+    Args:
+        value: The bar's data value.
+        thresholds: Sorted ascending by ``"value"``.
+        grayscale_levels: Display grayscale depth for color mapping.
+
+    Returns:
+        Resolved ``#rrggbb`` hex string for the bar's fill.
+    """
+    chosen = thresholds[0]
+    for t in thresholds:
+        if value >= float(str(t["value"])):
+            chosen = t
+        else:
+            break
+    return _resolve_threshold_color(chosen, grayscale_levels)
+
+
+def _normalize_thresholds(
+    widget: Widget,
+) -> list[dict[str, object]]:
+    """Normalize widget config into a canonical threshold list.
+
+    Accepts either the canonical ``color_thresholds`` list or flat
+    editor keys ``threshold_{1..4}_{value,color,shade}``.  When both
+    are present, the canonical list takes precedence.
+
+    Args:
+        widget: Widget config dict.
+
+    Returns:
+        List of threshold dicts each with keys ``value`` (float),
+        ``color`` (str, empty when absent), and ``shade`` (str, empty
+        when absent).  Sorted ascending by ``value``.  May be empty.
+    """
+    canonical = widget.get("color_thresholds")
+    if isinstance(canonical, list) and canonical:
+        result: list[dict[str, object]] = []
+        for item in canonical:
+            if not isinstance(item, dict):
+                continue
+            try:
+                v = float(str(item.get("value", "")))
+            except (ValueError, TypeError):
+                continue
+            result.append(
+                {
+                    "value": v,
+                    "color": str(item.get("color", "")),
+                    "shade": str(item.get("shade", "")),
+                }
+            )
+        return sorted(result, key=lambda t: float(str(t["value"])))
+
+    # Flat editor keys: threshold_1_value ... threshold_4_value.
+    result = []
+    for n in range(1, 5):
+        raw_v = widget.get(f"threshold_{n}_value")
+        if raw_v is None:
+            continue
+        try:
+            v = float(str(raw_v))
+        except (ValueError, TypeError):
+            continue
+        result.append(
+            {
+                "value": v,
+                "color": str(widget.get(f"threshold_{n}_color", "")),
+                "shade": str(widget.get(f"threshold_{n}_shade", "")),
+            }
+        )
+    return sorted(result, key=lambda t: float(str(t["value"])))
 
 
 def _smooth_path(pts: list[tuple[int, int]]) -> str:
@@ -483,6 +751,8 @@ def _bar_series(
     gx2: int,
     gy1: int,
     gy2: int,
+    thresholds: list[dict[str, object]] | None = None,
+    grayscale_levels: int = 16,
 ) -> list[dict[str, object]]:
     """Compute bar rectangles for a bar chart from per-entity points.
 
@@ -494,7 +764,9 @@ def _bar_series(
     Each entity receives a distinct fill color from
     ``_BAR_FILL_COLORS`` (black, gray, light gray) so that different
     series are visually distinguishable on e-ink displays that
-    cannot rely on hue.
+    cannot rely on hue.  When ``thresholds`` is non-empty each
+    individual bar's fill is determined by the threshold band
+    containing its value instead.
 
     Args:
         per_entity_points: One list of (timestamp, value) pairs
@@ -509,20 +781,26 @@ def _bar_series(
         gx2: Right pixel edge of the graph area.
         gy1: Top pixel edge of the graph area.
         gy2: Bottom pixel edge of the graph area (bar baseline).
+        thresholds: Optional sorted ascending threshold list; when
+            non-empty, per-bar threshold fills override entity-level
+            colors.
+        grayscale_levels: Display grayscale depth for threshold color
+            mapping.
 
     Returns:
         List of series dicts, one per entity.  Each dict contains:
-        ``bars`` (list of ``{x, y, w, h}`` dicts), ``bar_fill``
-        (hex fill color), ``has_data`` (bool), and empty string
-        fields for the line-graph keys (``polyline_points``,
-        ``graph_path``, ``fill_path``, ``fill_points``,
-        ``stroke_dasharray``) so the SVG template does not require
-        separate guards for bar vs line mode on those keys.
+        ``bars`` (list of ``{x, y, w, h, bar_fill}`` dicts),
+        ``bar_fill`` (entity-level hex fill color), ``has_data``
+        (bool), and empty string fields for the line-graph keys
+        (``polyline_points``, ``graph_path``, ``fill_path``,
+        ``fill_points``, ``stroke_dasharray``) so the SVG template
+        does not require separate guards for bar vs line mode on
+        those keys.
     """
     graph_w = gx2 - gx1
     result: list[dict[str, object]] = []
     for j, (desc, ep) in enumerate(
-        zip(entity_descs, per_entity_points, strict=False)
+        zip(entity_descs, per_entity_points, strict=True)
     ):
         fill = _BAR_FILL_COLORS[j % len(_BAR_FILL_COLORS)]
         if not ep:
@@ -554,7 +832,7 @@ def _bar_series(
         # Centre the bar within its slot.
         bar_start = (round(group_w) - bar_w) // 2
 
-        bars: list[dict[str, int]] = []
+        bars: list[dict[str, object]] = []
         for i, (_t, v) in enumerate(ep):
             bx = gx1 + round(i * group_w) + bar_start
             # Clamp value to prevent bar from leaving graph area.
@@ -566,7 +844,19 @@ def _bar_series(
             if bar_h < 1:
                 bar_h = 1
                 py = gy2 - 1
-            bars.append({"x": bx, "y": py, "w": bar_w, "h": bar_h})
+            bar: dict[str, object] = {
+                "x": bx,
+                "y": py,
+                "w": bar_w,
+                "h": bar_h,
+                "bar_fill": fill,
+            }
+            # Per-bar threshold fill overrides entity-level color.
+            if thresholds:
+                bar["bar_fill"] = _bar_threshold_fill(
+                    v, thresholds, grayscale_levels
+                )
+            bars.append(bar)
 
         result.append(
             {
@@ -596,6 +886,9 @@ def _line_series(
     gy2: int,
     smoothing: bool,
     show_fill: bool,
+    thresholds: list[dict[str, object]] | None = None,
+    threshold_transition: str = "smooth",
+    grayscale_levels: int = 16,
 ) -> tuple[list[dict[str, object]], bool]:
     """Compute SVG line/polyline series dicts from per-entity points.
 
@@ -603,6 +896,12 @@ def _line_series(
     and generates SVG path strings for the graph line and optional fill
     area.  Uses a shared X range spanning all entities' timestamps so
     multiple overlaid lines share the same time axis.
+
+    When ``thresholds`` is non-empty, each series dict includes
+    gradient stop lists (``threshold_stroke_stops`` and
+    ``threshold_fill_stops``) and ``has_threshold_gradient`` is
+    ``True``.  The SVG template uses these to emit ``<linearGradient>``
+    definitions and reference them via ``url(#thresh-stroke-N)``.
 
     Args:
         per_entity_points: One list of (timestamp, value) pairs
@@ -619,15 +918,22 @@ def _line_series(
         gy2: Bottom pixel edge of the graph area (line baseline).
         smoothing: When ``True`` use midpoint Q-curve paths; when
             ``False`` use polylines.
-        show_fill: When ``True`` draw a light-gray fill under the
-            first entity's line.
+        show_fill: When ``True`` draw a fill under the first
+            entity's line.
+        thresholds: Optional sorted ascending threshold list.  When
+            non-empty, gradient stops are computed per entity.
+        threshold_transition: ``"smooth"`` or ``"hard"``.
+        grayscale_levels: Display grayscale depth for color mapping.
 
     Returns:
         Tuple of ``(series, has_any_data)`` where ``series`` is a
         list of dicts (one per entity) containing ``polyline_points``,
         ``graph_path``, ``fill_path``, ``fill_points``,
-        ``stroke_dasharray``, and ``has_data``.
+        ``stroke_dasharray``, ``has_data``, ``has_threshold_gradient``
+        (bool), ``threshold_stroke_stops``, and
+        ``threshold_fill_stops``.
     """
+    active_thresholds = thresholds or []
     all_timestamps = [t for ep in per_entity_points for t, _ in ep]
     if all_timestamps:
         t_min = min(all_timestamps)
@@ -639,7 +945,7 @@ def _line_series(
     series: list[dict[str, object]] = []
     has_any_data = False
     first_with_data_seen = False
-    for desc, ep in zip(entity_descs, per_entity_points, strict=False):
+    for desc, ep in zip(entity_descs, per_entity_points, strict=True):
         if not ep:
             series.append(
                 {
@@ -649,6 +955,9 @@ def _line_series(
                     "fill_points": "",
                     "stroke_dasharray": str(desc.get("dash", "")),
                     "has_data": False,
+                    "has_threshold_gradient": False,
+                    "threshold_stroke_stops": [],
+                    "threshold_fill_stops": [],
                 }
             )
             continue
@@ -687,6 +996,26 @@ def _line_series(
                 ]
                 fpts = " ".join(f"{px},{py}" for px, py in fill_poly)
 
+        # --- Threshold gradient stops for this series ---
+        stroke_stops: list[dict[str, str]] = []
+        fill_stops: list[dict[str, str]] = []
+        has_grad = bool(active_thresholds)
+        if has_grad:
+            stroke_stops = _threshold_gradient_stops(
+                active_thresholds,
+                threshold_transition,
+                y_min_s,
+                y_max_s,
+                grayscale_levels,
+            )
+            fill_stops = [
+                {
+                    "offset": s["offset"],
+                    "color": _lighter_hex(s["color"]),
+                }
+                for s in stroke_stops
+            ]
+
         series.append(
             {
                 "polyline_points": pp,
@@ -695,6 +1024,9 @@ def _line_series(
                 "fill_points": fpts,
                 "stroke_dasharray": str(desc.get("dash", "")),
                 "has_data": True,
+                "has_threshold_gradient": has_grad,
+                "threshold_stroke_stops": stroke_stops,
+                "threshold_fill_stops": fill_stops,
             }
         )
     return series, has_any_data
@@ -932,6 +1264,19 @@ def _build_graph_context(
     graph_type: str = str(widget.get("graph", "line"))
     is_bar: bool = graph_type == "bar"
 
+    # --- Color thresholds ---
+    # Normalise threshold list (canonical list or flat editor keys).
+    # Suppressed on 2-level (B&W) displays where gradients produce
+    # dithering artifacts; mirrors the grid-line suppression pattern.
+    raw_thresholds = _normalize_thresholds(widget)
+    threshold_transition: str = str(
+        widget.get("color_thresholds_transition", "smooth")
+    )
+    has_thresholds: bool = len(raw_thresholds) >= 2 and grayscale_levels > 2
+    active_thresholds: list[dict[str, object]] = (
+        raw_thresholds if has_thresholds else []
+    )
+
     # group_by overrides points_per_hour before bucketing.
     if group_by == "hour":
         points_per_hour = 1.0
@@ -1164,6 +1509,8 @@ def _build_graph_context(
             gx2,
             gy1,
             gy2,
+            thresholds=active_thresholds,
+            grayscale_levels=grayscale_levels,
         )
         has_any_data = any(bool(s["has_data"]) for s in series)
     else:
@@ -1181,6 +1528,9 @@ def _build_graph_context(
             gy2,
             smoothing,
             show_fill,
+            thresholds=active_thresholds,
+            threshold_transition=threshold_transition,
+            grayscale_levels=grayscale_levels,
         )
 
     return {
@@ -1235,6 +1585,15 @@ def _build_graph_context(
         # True when bar mode AND legend is visible: template uses
         # <rect> swatches instead of <line> dash-pattern samples.
         "legend_is_bar": is_bar,
+        # Color thresholds: gradients for line graphs.
+        # has_thresholds is False on 2-level displays or when fewer
+        # than 2 thresholds are configured.
+        "has_thresholds": has_thresholds and not is_bar,
+        # Per-bar threshold fills active for bar chart mode.
+        "threshold_bar_mode": has_thresholds and is_bar,
+        # Graph area boundaries for gradient coordinate system.
+        "gy1": gy1,
+        "gy2": gy2,
     }
 
 
