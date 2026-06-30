@@ -1,0 +1,27 @@
+{#
+  Frame widget: a decorative rounded-corner rectangle.
+
+  Draws a single stroked rect.  The stroke is pre-inset by
+  border_width // 2 (computed in Python) so it grows fully inward.
+  Interior fill is "none" (transparent) by default so the underlying
+  canvas shows through; an explicit fill colour paints the interior.
+
+  Context variables (all computed by _build_frame_context()):
+    w, h           -- SVG viewport dimensions
+    rect_x, rect_y -- inset position of the rect boundary
+    rect_w, rect_h -- inset dimensions of the rect boundary
+    rx             -- corner radius
+    stroke         -- border hex colour
+    fill           -- interior hex colour, or "none"
+    border_width   -- stroke-width
+#}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+<rect
+  x="{{ rect_x }}" y="{{ rect_y }}"
+  width="{{ rect_w }}" height="{{ rect_h }}"
+  rx="{{ rx }}" ry="{{ rx }}"
+  fill="{{ fill }}"
+  stroke="{{ stroke }}"
+  stroke-width="{{ border_width }}"/>
+</svg>

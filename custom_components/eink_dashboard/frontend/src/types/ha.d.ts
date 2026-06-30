@@ -367,7 +367,27 @@ interface WidgetBase {
   visibility?: (Condition | LegacyCondition)[];
 }
 
-/** Horizontal or vertical divider line or filled bar. */
+/** Decorative rounded-corner border box. */
+export interface FrameWidget extends WidgetBase {
+  type: "frame";
+  /**
+   * Border stroke colour as a grayscale integer (0–255).
+   * Default: 0 (black).
+   */
+  color?: number;
+  /**
+   * Interior fill colour as a grayscale integer (0–255).
+   * Absent means transparent — the canvas behind the frame
+   * shows through the interior.
+   */
+  fill_color?: number;
+  /** Border stroke width in pixels. Default: 2. */
+  border_width?: number;
+  /** Corner radius in pixels. Default: 12. */
+  border_radius?: number;
+}
+
+/** Horizontal or vertical dividing line. */
 export interface SeparatorWidget extends WidgetBase {
   type: "separator";
   /** Orientation of the separator. */
@@ -1044,6 +1064,7 @@ export interface GraphWidget extends WidgetBase {
 }
 
 export type Widget =
+  | FrameWidget
   | SeparatorWidget
   | WeatherWidget
   | DeviceBatteryWidget

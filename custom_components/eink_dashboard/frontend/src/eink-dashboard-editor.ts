@@ -31,6 +31,18 @@ const DEFAULT_ICON_STYLE: IconStyle = "filled";
 // ── Widget type registry ─────────────────────────────────────────
 
 export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
+  frame: {
+    label: "Frame",
+    description: "Decorative rounded-corner border box",
+    icon: "mdi:rectangle-outline",
+    defaults: {
+      type: "frame",
+      x: 0,
+      y: 0,
+      w: 400,
+      h: 200,
+    },
+  },
   heading: {
     label: "Heading",
     description: "Section heading with optional icon and badges",
@@ -440,6 +452,69 @@ export const SCHEMAS: Record<
   string,
   (d: DisplayConfig) => HaFormSchema[]
 > = {
+  frame: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "color",
+              default: 0,
+              selector: {
+                number: {
+                  min: 0, max: 255, step: 1, mode: "box",
+                },
+              },
+            },
+            {
+              name: "fill_color",
+              selector: {
+                number: {
+                  min: 0, max: 255, step: 1, mode: "box",
+                },
+              },
+            },
+            {
+              name: "border_width",
+              default: 2,
+              selector: {
+                number: {
+                  min: 1, max: 40, step: 1, mode: "box",
+                },
+              },
+            },
+            {
+              name: "border_radius",
+              default: 12,
+              selector: {
+                number: {
+                  min: 0, max: 200, step: 2, mode: "box",
+                },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+  ],
+
   separator: (d) => [
     identitySection(),
     {
@@ -1348,6 +1423,9 @@ export const LABELS: Record<string, string> = {
   state_content: "State attribute",
   title: "Title",
   x: "X", y: "Y", w: "Width", h: "Height",
+  fill_color: "Fill color",
+  border_width: "Border width",
+  border_radius: "Corner radius",
   direction: "Direction", style: "Style", length: "Length",
   font_size: "Font size",
   color: "Color",
@@ -1446,6 +1524,9 @@ export async function loadHaComponents(): Promise<void> {
 
 export function getSummary(widget: Widget): string {
   const t = widget.type;
+  if (t === "frame") {
+    return `Frame at (${widget.x ?? 0}, ${widget.y ?? 0})`;
+  }
   if (t === "heading") {
     const s = String(widget.heading || "");
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
@@ -2086,6 +2167,9 @@ class EinkDashboardEditor extends HTMLElement {
         };
         if ("color" in data && data.color !== undefined) {
           data.color = parseInt(String(data.color), 10) || 0;
+        }
+        if ("fill_color" in data && data.fill_color !== undefined) {
+          data.fill_color = parseInt(String(data.fill_color), 10) || 0;
         }
         const cur = this._widgets[index] as
           unknown as Record<string, unknown>;

@@ -22,6 +22,7 @@ const ICON_FALLBACK: Record<string, string> = {
   "mdi:chart-line": "📈",
   "mdi:calendar": "📅",
   "mdi:gauge": "◎",
+  "mdi:rectangle-outline": "□",
 };
 
 /**

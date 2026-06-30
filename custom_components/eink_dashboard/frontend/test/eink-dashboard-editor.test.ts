@@ -44,6 +44,7 @@ function findField(
 
 describe("WIDGET_TYPES", () => {
   const ALL_TYPES = [
+    "frame",
     "heading",
     "separator",
     "weather",
@@ -58,7 +59,7 @@ describe("WIDGET_TYPES", () => {
     "graph",
   ];
 
-  it("has all 12 widget types", () => {
+  it("has all 13 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -94,6 +95,7 @@ describe("WIDGET_TYPES", () => {
 
 describe("SCHEMAS", () => {
   const ALL_TYPES = [
+    "frame",
     "heading",
     "separator",
     "weather",
@@ -108,7 +110,7 @@ describe("SCHEMAS", () => {
     "graph",
   ];
 
-  it("has a schema builder for all 12 widget types", () => {
+  it("has a schema builder for all 13 widget types", () => {
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 

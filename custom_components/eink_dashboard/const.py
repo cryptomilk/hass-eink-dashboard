@@ -261,6 +261,7 @@ class WidgetType(StrEnum):
     SEPARATOR = "separator"
     ENTITIES = "entities"
     ENTITY = "entity"
+    FRAME = "frame"
     GAUGE = "gauge"
     GRAPH = "graph"
     HEADING = "heading"
