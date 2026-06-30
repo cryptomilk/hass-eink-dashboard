@@ -133,6 +133,23 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "TRMNL",
         native_landscape=True,
     ),
+    "reterminal_e1001": DevicePreset(
+        "reTerminal E1001",
+        800,
+        480,
+        4,
+        True,
+        "Seeed",
+        native_landscape=True,
+    ),
+    "reterminal_e1003": DevicePreset(
+        "reTerminal E1003",
+        1404,
+        1872,
+        16,
+        True,
+        "Seeed",
+    ),
     "custom": DevicePreset(
         "Custom",
         758,
