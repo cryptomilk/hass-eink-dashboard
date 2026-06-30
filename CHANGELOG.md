@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-30
+
+### Added
+
+- **Graph widget**: time-series line chart for one or more numeric entities,
+  with configurable `hours_to_show`, `smoothing`, axis labels, grid lines,
+  `group_by` aggregation, `extrema` markers, `min_bound_range`, and
+  multi-entity overlay support.
+- **Bar chart mode** for the Graph widget (`chart_type: "bar"`).
+- **Color threshold styling** for the Graph widget: segments change color
+  based on configurable value thresholds.
+- **Gauge widget**: arc-style gauge for a single numeric entity with
+  configurable `min`, `max`, and optional color thresholds.
+- **Frame widget**: decorative card with rounded corners for visual grouping,
+  with no entity data of its own.
+- **Calendar widget**: upcoming-events list sourced from HA calendar entities.
+- **Custom sensor overrides** for the Weather widget: replace the built-in
+  temperature, humidity, or wind sensors with arbitrary entity IDs.
+- **`hide_icon`** option on the Entity and Tile widgets to suppress the icon
+  circle entirely.
+- **`hide_fill`** and **`hide_state`** options on the Sensor widget sparkline.
+- **Seeed reTerminal E1001 and E1003** device presets in the config flow.
+
+### Changed
+
+- Widget SVG backgrounds are now transparent, enabling correct compositing
+  when widgets overlap or when the dashboard background shows through.
+
+### Fixed
+
+- Config flow: `grayscale_levels` is now coerced to `int` before validation,
+  preventing a type error when the value arrives as a string.
+
+### Performance
+
+- Frontend editor skips redundant SVG renders instead of queuing them,
+  reducing unnecessary server round-trips during rapid widget edits.
+
 ## [0.4.1] - 2026-05-21
 
 ### Fixed
@@ -145,6 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.5.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.2.0...v0.3.0

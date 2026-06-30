@@ -80,6 +80,8 @@ Supported device presets:
 | TRMNL OG | 800 × 480 | 2 (black & white) |
 | TRMNL X | 1872 × 1404 | 16 |
 | TRMNL RGB | 2560 × 1440 | 2 (black & white) |
+| Seeed reTerminal E1001 | 800 × 480 | 4 |
+| Seeed reTerminal E1003 | 1404 × 1872 | 16 |
 | Custom | user-defined | 16 |
 
 ### Step 2 -- Image delivery
@@ -158,8 +160,12 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | Entities | Label / state rows for a list of entities, with optional title |
 | Tile | Card-style tile with icon and entity state |
 | Sensor | Entity state with sparkline history graph |
+| Graph | Time-series line or bar chart for one or more numeric entities |
+| Gauge | Arc-style gauge for a single numeric entity |
 | Weather | Current conditions + N-day forecast with icons |
+| Calendar | Upcoming events from a Home Assistant calendar entity |
 | Device Battery | Battery level indicator for a device |
+| Frame | Decorative rounded-corner box for visual grouping |
 | [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |
 
 All widgets support `x`, `y` positioning. Most support a `w` (width) override
