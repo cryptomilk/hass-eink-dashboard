@@ -715,6 +715,31 @@ wheels = [
 ]
 
 [[package]]
+name = "epaper-dithering"
+version = "5.0.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pillow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/bf/0f6468aea0a63ec887b65cc1d659dd6be28e2dbe99803d470a718c24e365/epaper_dithering-5.0.7.tar.gz", hash = "sha256:3fa659929b1ae97eb50280377826c3f807c1641ca0deb85647a3e7d47f81e37f", size = 61229, upload-time = "2026-06-29T17:10:38.198Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/e0/cf6a077d550c027fd55d565448939aae28baec27d721867d27210582aa41/epaper_dithering-5.0.7-cp314-cp314-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:f6b11df12513e4a2c54fb5baf09563f8d21c175c4fae239d2ec0cf24edb4679c", size = 603017, upload-time = "2026-06-29T17:10:08.066Z" },
+    { url = "https://files.pythonhosted.org/packages/50/0f/3ae86e877f3ed0f20a43ae9af2c79b1f19e5a93b43ea6d2d695dce6f008e/epaper_dithering-5.0.7-cp314-cp314-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:e413e1e8fcfd936207924c1980b369cbdfcd549e2b9c1e98bb58fe185a3bd907", size = 352741, upload-time = "2026-06-29T17:10:09.444Z" },
+    { url = "https://files.pythonhosted.org/packages/b8/41/5fe848b1874cdb3f2bc47de82f9c3c567f98de7d52b79bb6db8a0a188c8f/epaper_dithering-5.0.7-cp314-cp314-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:d7da55cf1f38a458e4fb5acbbca453619fd4f8453355b6bd2fb37ebbfb5d6e6e", size = 355152, upload-time = "2026-06-29T17:10:11.132Z" },
+    { url = "https://files.pythonhosted.org/packages/72/98/93d93ef3bba2cb7c7038285d70ce0d54feb6fd028095dba7a36b35196945/epaper_dithering-5.0.7-cp314-cp314-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5ead6f8ce495f5694de76995c4c596db51c8d7fa3f4fd574f4ad00119c50d4e0", size = 356851, upload-time = "2026-06-29T17:10:12.713Z" },
+    { url = "https://files.pythonhosted.org/packages/73/f8/8c70b71b8b2283af7766ec56d03ef79d7718270cd37d3ea657467d884634/epaper_dithering-5.0.7-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:86569a6b6a9c826f6a977b342d8101bdbeb025a799e4d1b67649e28e2cb03cee", size = 529604, upload-time = "2026-06-29T17:10:14.269Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/b2/2837ac575ee67d430503fa3d5117886de171cdfd8b78b480d23562eae280/epaper_dithering-5.0.7-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:62090c1c53f97ac044effb069bc27bf36746c6994dc97993d28048e5ab3a80e3", size = 562952, upload-time = "2026-06-29T17:10:15.661Z" },
+    { url = "https://files.pythonhosted.org/packages/90/55/6fdaaecf204c080d22fa8ac5fb60a4694cde998ef2505ded76aa563ad98d/epaper_dithering-5.0.7-cp314-cp314-win_amd64.whl", hash = "sha256:acee2eedc815cf40d28afbb93d6f7508d7e2d913f168a96e1a3e6151cb64c53d", size = 195714, upload-time = "2026-06-29T17:10:17.32Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/16/35f8aa932cdcfdf9a1ed3954fb1fa62d28f22f61d839b15894590f5d6934/epaper_dithering-5.0.7-cp314-cp314t-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:963d4242cd35045d7231682fc65da535cd13fa14f3268266cd2f59756a1f2477", size = 351674, upload-time = "2026-06-29T17:10:18.805Z" },
+    { url = "https://files.pythonhosted.org/packages/65/6e/e369cf3029d842806ea32b7803347bddf027eb4b1bc96afe93c12db6486e/epaper_dithering-5.0.7-cp314-cp314t-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:612e2c18e13e48c352960de8b3a31dbf24de59646691239d34f4396c8c028e1c", size = 354274, upload-time = "2026-06-29T17:10:20.29Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/c0/a14a569700771f4ca92bdf402f19044494c5ab855e0abf67cca2338ce826/epaper_dithering-5.0.7-cp314-cp314t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a95b9628ce5aebd5cb6833824240fbea6902d8fe1dbd880344edc2a72058c2e5", size = 357033, upload-time = "2026-06-29T17:10:22Z" },
+    { url = "https://files.pythonhosted.org/packages/23/ac/4bac599c96306c021e2aa8c95015bcb1d327c3c65a684eedb5ba92a04d16/epaper_dithering-5.0.7-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:c581898fad6ed3119689dbf9b93473cb3c73c50c67d9433f82e7d002e54b51c2", size = 528429, upload-time = "2026-06-29T17:10:23.721Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/9e/bdd671cfb078e5ba481776d8abe030e398e72f4b5ae20b5860490b5ea41b/epaper_dithering-5.0.7-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:4103a4709b5558c874e49c5e2302ccc70b7b1dfb9790d255b4d94e66162c61a0", size = 562071, upload-time = "2026-06-29T17:10:25.175Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/c3/928adbca1b9fd6f1a91d8955483808fb9ae22fe6cf33fa68309aa4982e3d/epaper_dithering-5.0.7-cp315-cp315-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0b4f785b621b58245d707c0c723dfc593ea0534bee66ebdf6fb6ad6cd1e5d826", size = 356947, upload-time = "2026-06-29T17:10:26.819Z" },
+    { url = "https://files.pythonhosted.org/packages/29/1d/dd0210f925e29aadc71be47ad6be93f3d334cd203b638603dc2cfa2f2725/epaper_dithering-5.0.7-cp315-cp315t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:bfdbee2c52f246ce961a79940df7f474bb9165f01eb9a4aa949bfd00c47b54f9", size = 356576, upload-time = "2026-06-29T17:10:28.435Z" },
+]
+
+[[package]]
 name = "fnv-hash-fast"
 version = "2.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -886,6 +911,7 @@ version = "0.5.0"
 source = { virtual = "." }
 dependencies = [
     { name = "defusedxml" },
+    { name = "epaper-dithering" },
     { name = "pillow" },
     { name = "resvg-py" },
 ]
@@ -935,6 +961,7 @@ typecheck = [
 [package.metadata]
 requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "epaper-dithering", specifier = ">=5.0.7" },
     { name = "pillow", specifier = ">=12.2" },
     { name = "resvg-py", specifier = ">=0.3.2" },
 ]
