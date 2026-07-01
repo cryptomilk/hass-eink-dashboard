@@ -409,8 +409,8 @@ class TestEinkDashboardImage:
                 "height": 100,
                 "optimize": True,
                 "grayscale_levels": 4,
-                "sharpness": 2.0,
-                "contrast": 1.5,
+                "exposure": 1.5,
+                "saturation": 0.8,
             }
         )
         entity = EinkDashboardImage(hass, entry)
@@ -424,8 +424,8 @@ class TestEinkDashboardImage:
             config = mock_render.call_args[0][1]
             assert config["optimize"] is True
             assert config["grayscale_levels"] == 4
-            assert config["sharpness"] == 2.0
-            assert config["contrast"] == 1.5
+            assert config["exposure"] == 1.5
+            assert config["saturation"] == 0.8
 
     async def test_locale_options_forwarded_to_render(self) -> None:
         # Locale values returned by _async_get_locale are placed in the

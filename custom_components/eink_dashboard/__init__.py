@@ -26,8 +26,10 @@ if TYPE_CHECKING:
 
 from .battery import resolve_battery_level
 from .const import (
+    DEFAULT_EXPOSURE,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_SATURATION,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
@@ -697,6 +699,43 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     websocket_api.async_register_command(hass, ws_render_widget)
     websocket_api.async_register_command(hass, ws_render_widgets)
     _LOGGER.debug("async_setup: complete")
+    return True
+
+
+async def async_migrate_entry(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> bool:
+    """Migrate a config entry to the current schema version.
+
+    Version 1.1 → 1.2: replace ``sharpness`` and ``contrast`` with
+    ``exposure`` and ``saturation``.  ``sharpness`` has no equivalent
+    in epaper-dithering; ``contrast`` is superseded by ``exposure``.
+    Both new keys default to 1.0 (no change).
+
+    Args:
+        hass: Home Assistant instance.
+        config_entry: The config entry to migrate.
+
+    Returns:
+        ``True`` if migration succeeded or was not needed.
+    """
+    if config_entry.minor_version == 1:
+        _LOGGER.debug(
+            "Migrating %s from minor version %d to 2",
+            config_entry.entry_id,
+            config_entry.minor_version,
+        )
+        new_options = dict(config_entry.options)
+        new_options.pop("sharpness", None)
+        new_options.pop("contrast", None)
+        new_options.setdefault("exposure", DEFAULT_EXPOSURE)
+        new_options.setdefault("saturation", DEFAULT_SATURATION)
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=new_options,
+            minor_version=2,
+        )
+
     return True
 
 

@@ -20,8 +20,8 @@ DEFAULT_OPTIMIZE = False
 DEFAULT_GRAYSCALE_LEVELS = 16
 DEFAULT_DITHER_ALGORITHM = "floyd_steinberg"
 DEFAULT_MEASURED_PALETTE = "auto"
-DEFAULT_SHARPNESS = 1.0
-DEFAULT_CONTRAST = 1.0
+DEFAULT_EXPOSURE = 1.0
+DEFAULT_SATURATION = 1.0
 DEFAULT_ROW_H = 56
 # DEFAULT_METRICS = _compute_metrics(DEFAULT_ROW_H) lives in render.py
 # rather than here to avoid a circular import (render.py imports const.py).

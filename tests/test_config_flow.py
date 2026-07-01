@@ -585,8 +585,8 @@ class TestEinkDashboardOptionsFlow:
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
                     "grayscale_levels": "2",
-                    "sharpness": "2.0",
-                    "contrast": "1.5",
+                    "exposure": "1.5",
+                    "saturation": "0.8",
                 },
             }
         )
@@ -594,8 +594,28 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] == "create_entry"
         assert result["data"]["optimize"] is True
         assert result["data"]["grayscale_levels"] == 2
-        assert result["data"]["sharpness"] == 2.0
-        assert result["data"]["contrast"] == 1.5
+        assert result["data"]["exposure"] == 1.5
+        assert result["data"]["saturation"] == 0.8
+
+    async def test_display_settings_hides_exposure_at_256_levels(
+        self,
+    ) -> None:
+        # When grayscale_levels==256 is saved in opts, exposure/saturation are
+        # excluded from the schema because dither_image() is not called on the
+        # 256-level passthrough path. Submitting those keys raises vol.Invalid.
+        flow = _make_options_flow(
+            {"update_interval": 60, "grayscale_levels": 256}
+        )
+        with pytest.raises(vol.Invalid):
+            await flow.async_step_display_settings(
+                {
+                    "update_interval": 60,
+                    "advanced_section": {
+                        "grayscale_levels": "256",
+                        "exposure": "1.5",
+                    },
+                }
+            )
 
     async def test_display_settings_rejects_invalid_grayscale_levels(
         self,
@@ -669,8 +689,8 @@ class TestEinkDashboardOptionsFlow:
                 "advanced_section": {
                     "dither_algorithm": "atkinson",
                     "grayscale_levels": "16",
-                    "sharpness": "1.0",
-                    "contrast": "1.0",
+                    "exposure": "1.0",
+                    "saturation": "1.0",
                 },
             }
         )
@@ -701,8 +721,8 @@ class TestEinkDashboardOptionsFlow:
                     "dither_algorithm": "floyd_steinberg",
                     "measured_palette": "spectra_7_3_6color",
                     "grayscale_levels": "16",
-                    "sharpness": "1.0",
-                    "contrast": "1.0",
+                    "exposure": "1.0",
+                    "saturation": "1.0",
                 },
             }
         )
@@ -1341,6 +1361,113 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] == "menu"
         assert result["step_id"] == "init"
+
+
+class TestMigrateEntry:
+    async def test_migration_removes_sharpness_contrast(self) -> None:
+        # Migration from minor_version<2 removes sharpness/contrast and adds
+        # exposure/saturation with their defaults.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        hass = MagicMock()
+        hass.config_entries.async_update_entry = MagicMock()
+        entry = MagicMock()
+        entry.minor_version = 1
+        entry.entry_id = "test-entry"
+        entry.options = {
+            "update_interval": 60,
+            "optimize": True,
+            "sharpness": 2.0,
+            "contrast": 1.5,
+        }
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        hass.config_entries.async_update_entry.assert_called_once()
+        call_kwargs = hass.config_entries.async_update_entry.call_args[1]
+        assert call_kwargs["minor_version"] == 2
+        new_opts = call_kwargs["options"]
+        assert "sharpness" not in new_opts
+        assert "contrast" not in new_opts
+        assert new_opts["exposure"] == 1.0
+        assert new_opts["saturation"] == 1.0
+
+    async def test_migration_preserves_other_options(self) -> None:
+        # Migration leaves unrelated options untouched.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        hass = MagicMock()
+        hass.config_entries.async_update_entry = MagicMock()
+        entry = MagicMock()
+        entry.minor_version = 1
+        entry.entry_id = "test-entry"
+        entry.options = {
+            "update_interval": 120,
+            "optimize": True,
+            "grayscale_levels": 4,
+            "sharpness": 1.0,
+            "contrast": 1.0,
+        }
+
+        await async_migrate_entry(hass, entry)
+
+        new_opts = hass.config_entries.async_update_entry.call_args[1][
+            "options"
+        ]
+        assert new_opts["update_interval"] == 120
+        assert new_opts["optimize"] is True
+        assert new_opts["grayscale_levels"] == 4
+
+    async def test_migration_skipped_when_already_at_minor_version_2(
+        self,
+    ) -> None:
+        # Entries already at minor_version=2 are not migrated again.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        hass = MagicMock()
+        hass.config_entries.async_update_entry = MagicMock()
+        entry = MagicMock()
+        entry.minor_version = 2
+        entry.entry_id = "test-entry"
+        entry.options = {
+            "update_interval": 60,
+            "exposure": 1.0,
+            "saturation": 1.0,
+        }
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        hass.config_entries.async_update_entry.assert_not_called()
+
+    async def test_migration_preserves_existing_exposure_saturation(
+        self,
+    ) -> None:
+        # setdefault must not overwrite exposure/saturation values that are
+        # already present in the entry options (e.g., hand-edited configs).
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        hass = MagicMock()
+        hass.config_entries.async_update_entry = MagicMock()
+        entry = MagicMock()
+        entry.minor_version = 1
+        entry.entry_id = "test-entry"
+        entry.options = {
+            "update_interval": 60,
+            "sharpness": 1.0,
+            "contrast": 1.0,
+            "exposure": 2.0,
+            "saturation": 0.5,
+        }
+
+        await async_migrate_entry(hass, entry)
+
+        new_opts = hass.config_entries.async_update_entry.call_args[1][
+            "options"
+        ]
+        assert new_opts["exposure"] == 2.0
+        assert new_opts["saturation"] == 0.5
 
 
 class TestLocaleSettingsOptionsFlow:

@@ -81,12 +81,7 @@ class TestOptimizeEnabled:
         assert len(set(img.get_flattened_data())) == 256
         result = optimize_for_eink(
             img,
-            {
-                "optimize": True,
-                "grayscale_levels": 256,
-                "sharpness": 1.0,
-                "contrast": 1.0,
-            },
+            {"optimize": True, "grayscale_levels": 256},
         )
         assert result.mode == "L"
         assert len(set(result.get_flattened_data())) == 256
@@ -99,65 +94,96 @@ class TestOptimizeEnabled:
                 img.putpixel((x, y), 100 + x)
         result = optimize_for_eink(
             img,
-            {
-                "optimize": True,
-                "grayscale_levels": 256,
-                "sharpness": 1.0,
-                "contrast": 1.0,
-            },
+            {"optimize": True, "grayscale_levels": 256},
         )
         data = list(result.get_flattened_data())
         assert min(data) <= 5
         assert max(data) >= 250
 
-    def test_sharpness_1_skips_enhance(self) -> None:
-        img = _gradient()
-        with patch(
-            "custom_components.eink_dashboard.optimize.ImageEnhance.Sharpness"
-        ) as mock_sharpness:
-            optimize_for_eink(
-                img,
-                {
-                    "optimize": True,
-                    "grayscale_levels": 256,
-                    "sharpness": 1.0,
-                    "contrast": 1.0,
-                },
-            )
-            mock_sharpness.assert_not_called()
 
-    def test_custom_sharpness_applied(self) -> None:
+class TestExposureSaturation:
+    def _run_with_mock(self, config: dict) -> MagicMock:
+        """Run optimize_for_eink with mocked dither_image; return the mock."""
         img = _gradient()
-        with patch(
-            "custom_components.eink_dashboard.optimize.ImageEnhance.Sharpness"
-        ) as mock_sharpness:
-            mock_enhancer = mock_sharpness.return_value
-            mock_enhancer.enhance.return_value = img.copy()
-            optimize_for_eink(
-                img,
-                {
-                    "optimize": True,
-                    "grayscale_levels": 256,
-                    "sharpness": 2.0,
-                    "contrast": 1.0,
-                },
+        mock = MagicMock(
+            return_value=img.convert("RGB").quantize(
+                colors=16, dither=Image.Dither.FLOYDSTEINBERG
             )
-            mock_sharpness.assert_called_once()
-            mock_enhancer.enhance.assert_called_once_with(2.0)
-
-    def test_custom_contrast_applied(self) -> None:
-        img = _gradient()
-        result = optimize_for_eink(
-            img,
-            {
-                "optimize": True,
-                "grayscale_levels": 256,
-                "sharpness": 1.0,
-                "contrast": 1.5,
-            },
         )
-        assert result.mode == "L"
-        assert result.size == img.size
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(img, config)
+        return mock
+
+    def test_default_exposure_saturation_passed(self) -> None:
+        # When not configured, dither_image receives the defaults (1.0/1.0).
+        mock = self._run_with_mock({"optimize": True, "grayscale_levels": 16})
+        mock.assert_called_once()
+        assert mock.call_args[1]["exposure"] == 1.0
+        assert mock.call_args[1]["saturation"] == 1.0
+
+    def test_custom_exposure_passed(self) -> None:
+        # A custom exposure value is forwarded to dither_image.
+        mock = self._run_with_mock(
+            {"optimize": True, "grayscale_levels": 16, "exposure": 1.5}
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["exposure"] == 1.5
+
+    def test_custom_saturation_passed(self) -> None:
+        # A custom saturation value is forwarded to dither_image.
+        mock = self._run_with_mock(
+            {"optimize": True, "grayscale_levels": 16, "saturation": 0.5}
+        )
+        mock.assert_called_once()
+        assert mock.call_args[1]["saturation"] == 0.5
+
+    def test_exposure_saturation_on_color_path(self) -> None:
+        # exposure/saturation are forwarded on the color path too.
+        img = _gradient().convert("RGB")
+        mock = MagicMock(
+            return_value=img.quantize(
+                colors=3, dither=Image.Dither.FLOYDSTEINBERG
+            )
+        )
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(
+                img,
+                {
+                    "optimize": True,
+                    "color_scheme": "bwr",
+                    "exposure": 1.2,
+                    "saturation": 0.8,
+                },
+            )
+        mock.assert_called_once()
+        assert mock.call_args[1]["exposure"] == 1.2
+        assert mock.call_args[1]["saturation"] == 0.8
+
+    def test_grayscale_256_skips_dither_image(self) -> None:
+        # grayscale_levels=256 is the passthrough path: dither_image() is
+        # never called, so exposure/saturation have no effect.
+        img = _gradient()
+        mock = MagicMock()
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(
+                img,
+                {
+                    "optimize": True,
+                    "grayscale_levels": 256,
+                    "exposure": 1.5,
+                    "saturation": 0.5,
+                },
+            )
+        mock.assert_not_called()
 
 
 class TestDitherAlgorithmSelection:

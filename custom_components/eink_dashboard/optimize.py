@@ -18,14 +18,14 @@ from epaper_dithering import (
     DitherMode,
     dither_image,
 )
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image, ImageOps
 
 from .const import (
-    DEFAULT_CONTRAST,
     DEFAULT_DITHER_ALGORITHM,
+    DEFAULT_EXPOSURE,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_MEASURED_PALETTE,
-    DEFAULT_SHARPNESS,
+    DEFAULT_SATURATION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def optimize_for_eink(
     img: Image.Image,
     config: dict,
 ) -> Image.Image:
-    """Apply autocontrast, sharpness, contrast, and dithering to an image.
+    """Apply autocontrast and dithering to an image for e-ink display.
 
     Two dithering paths are supported:
 
@@ -98,20 +98,25 @@ def optimize_for_eink(
         img: PIL image from the render pipeline. ``"L"`` for grayscale
             displays, ``"RGB"`` for color displays.
         config: Display config dict. Recognised keys: ``optimize``
-            (bool, required to enable the pipeline), ``sharpness``
-            (float, default 1.0), ``contrast`` (float, default 1.0),
-            ``color_scheme`` (str, one of ``"bwr"``, ``"bwy"``,
-            ``"bwry"``, ``"bwgbry"``; ``None`` or absent means
-            grayscale), ``grayscale_levels`` (int, one of 2/4/16/256,
-            default 16; ignored when ``color_scheme`` is set; 8 is
-            reserved for future Inkplate support but is not offered
-            in the UI), ``dither_algorithm`` (str, one of
-            ``floyd_steinberg``, ``atkinson``, ``stucki``,
-            ``burkes``; default ``floyd_steinberg``),
-            ``measured_palette`` (str, one of the keys in
-            ``_MEASURED_PALETTES`` or ``"auto"``; default
-            ``"auto"``). When a non-auto measured palette is
-            selected its calibrated ``ColorPalette`` is passed to
+            (bool, required to enable the pipeline), ``exposure``
+            (float, default 1.0; linear-RGB brightness multiplier
+            applied inside ``dither_image()``; no effect when
+            ``grayscale_levels`` is 256), ``saturation``
+            (float, default 1.0; OKLab chroma multiplier applied
+            inside ``dither_image()``; no effect when
+            ``grayscale_levels`` is 256), ``color_scheme`` (str, one
+            of ``"bwr"``, ``"bwy"``, ``"bwry"``, ``"bwgbry"``; ``None``
+            or absent means grayscale), ``grayscale_levels`` (int,
+            one of 2/4/16/256, default 16; ignored when
+            ``color_scheme`` is set; 256 means passthrough (only
+            autocontrast is applied); 8 is reserved for future
+            Inkplate support but is not offered in the UI),
+            ``dither_algorithm`` (str, one of ``floyd_steinberg``,
+            ``atkinson``, ``stucki``, ``burkes``; default
+            ``floyd_steinberg``), ``measured_palette`` (str, one of
+            the keys in ``_MEASURED_PALETTES`` or ``"auto"``; default
+            ``"auto"``). When a non-auto measured palette is selected
+            its calibrated ``ColorPalette`` is passed to
             ``dither_image()`` instead of the idealized
             ``ColorScheme``. The output mode (``"1"`` / ``"L"`` /
             ``"RGB"``) is derived from ``grayscale_levels`` /
@@ -133,13 +138,8 @@ def optimize_for_eink(
 
     img = ImageOps.autocontrast(img, preserve_tone=img.mode == "RGB")
 
-    factor = config.get("sharpness", DEFAULT_SHARPNESS)
-    if factor != 1.0:
-        img = ImageEnhance.Sharpness(img).enhance(factor)
-
-    factor = config.get("contrast", DEFAULT_CONTRAST)
-    if factor != 1.0:
-        img = ImageEnhance.Contrast(img).enhance(factor)
+    exposure = config.get("exposure", DEFAULT_EXPOSURE)
+    saturation = config.get("saturation", DEFAULT_SATURATION)
 
     algo = config.get("dither_algorithm", DEFAULT_DITHER_ALGORITHM)
     if algo not in _DITHER_MODES:
@@ -184,7 +184,13 @@ def optimize_for_eink(
             measured_palette if measured_palette is not None else scheme
         )
         # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(img, palette_or_scheme, mode=mode)
+        img = dither_image(
+            img,
+            palette_or_scheme,
+            mode=mode,
+            exposure=exposure,
+            saturation=saturation,
+        )
         return img.convert("RGB")
 
     # Grayscale path: quantise to the configured number of levels.
@@ -209,7 +215,13 @@ def optimize_for_eink(
         )
         # dither_image() expects RGB input; pipeline image is "L".
         # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(img.convert("RGB"), palette_or_scheme, mode=mode)
+        img = dither_image(
+            img.convert("RGB"),
+            palette_or_scheme,
+            mode=mode,
+            exposure=exposure,
+            saturation=saturation,
+        )
         # Output mode is derived from grayscale_levels, not the palette
         # type, so MONO_4_26 (a measured palette for a 2-color display)
         # still produces mode "1" when grayscale_levels == 2.

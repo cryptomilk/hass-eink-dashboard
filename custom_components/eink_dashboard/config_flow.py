@@ -34,13 +34,13 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
-    DEFAULT_CONTRAST,
     DEFAULT_DITHER_ALGORITHM,
+    DEFAULT_EXPOSURE,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
-    DEFAULT_SHARPNESS,
+    DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
@@ -216,6 +216,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     """Multi-step config flow for creating a new dashboard entry."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialise flow state."""
@@ -408,8 +409,8 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
             data={},
             options={
                 **self._data,
-                "sharpness": DEFAULT_SHARPNESS,
-                "contrast": DEFAULT_CONTRAST,
+                "exposure": DEFAULT_EXPOSURE,
+                "saturation": DEFAULT_SATURATION,
                 "webhook_urls": [],
             },
         )
@@ -461,8 +462,8 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     data={},
                     options={
                         **self._data,
-                        "sharpness": DEFAULT_SHARPNESS,
-                        "contrast": DEFAULT_CONTRAST,
+                        "exposure": DEFAULT_EXPOSURE,
+                        "saturation": DEFAULT_SATURATION,
                         "webhook_urls": [
                             {
                                 "name": name,
@@ -969,6 +970,66 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update refresh interval, optimize, and image quality settings."""
         opts = self.config_entry.options
+        grayscale_levels = opts.get(
+            "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+        )
+        # exposure/saturation are only forwarded to dither_image(), which
+        # is never called on the 256-level passthrough path, so those
+        # controls serve no purpose there.
+        advanced_fields: dict = {
+            vol.Optional(
+                "dither_algorithm",
+                default=opts.get(
+                    "dither_algorithm",
+                    DEFAULT_DITHER_ALGORITHM,
+                ),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=_DITHER_ALGO_OPTIONS,
+                    translation_key="dither_algorithm",
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                "measured_palette",
+                default=opts.get(
+                    "measured_palette",
+                    DEFAULT_MEASURED_PALETTE,
+                ),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=_MEASURED_PALETTE_OPTIONS,
+                    translation_key="measured_palette",
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                "grayscale_levels",
+                default=grayscale_levels,
+            ): vol.All(
+                vol.Coerce(int),
+                vol.In([2, 4, 16, 256]),
+            ),
+        }
+        if grayscale_levels != 256:
+            advanced_fields[
+                vol.Optional(
+                    "exposure",
+                    default=opts.get("exposure", DEFAULT_EXPOSURE),
+                )
+            ] = vol.All(
+                vol.Coerce(float),
+                vol.Range(min=0.0, max=10.0),
+            )
+            advanced_fields[
+                vol.Optional(
+                    "saturation",
+                    default=opts.get("saturation", DEFAULT_SATURATION),
+                )
+            ] = vol.All(
+                vol.Coerce(float),
+                vol.Range(min=0.0, max=10.0),
+            )
         schema = vol.Schema(
             {
                 vol.Required(
@@ -982,62 +1043,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     default=opts.get("optimize", DEFAULT_OPTIMIZE),
                 ): bool,
                 vol.Required("advanced_section"): flow_section(
-                    vol.Schema(
-                        {
-                            vol.Optional(
-                                "dither_algorithm",
-                                default=opts.get(
-                                    "dither_algorithm",
-                                    DEFAULT_DITHER_ALGORITHM,
-                                ),
-                            ): SelectSelector(
-                                SelectSelectorConfig(
-                                    options=_DITHER_ALGO_OPTIONS,
-                                    translation_key="dither_algorithm",
-                                    mode=SelectSelectorMode.DROPDOWN,
-                                )
-                            ),
-                            vol.Optional(
-                                "measured_palette",
-                                default=opts.get(
-                                    "measured_palette",
-                                    DEFAULT_MEASURED_PALETTE,
-                                ),
-                            ): SelectSelector(
-                                SelectSelectorConfig(
-                                    options=_MEASURED_PALETTE_OPTIONS,
-                                    translation_key="measured_palette",
-                                    mode=SelectSelectorMode.DROPDOWN,
-                                )
-                            ),
-                            vol.Optional(
-                                "grayscale_levels",
-                                default=opts.get(
-                                    "grayscale_levels",
-                                    DEFAULT_GRAYSCALE_LEVELS,
-                                ),
-                            ): vol.All(
-                                vol.Coerce(int),
-                                vol.In([2, 4, 16, 256]),
-                            ),
-                            vol.Optional(
-                                "sharpness",
-                                default=opts.get(
-                                    "sharpness", DEFAULT_SHARPNESS
-                                ),
-                            ): vol.All(
-                                vol.Coerce(float),
-                                vol.Range(min=0.0, max=10.0),
-                            ),
-                            vol.Optional(
-                                "contrast",
-                                default=opts.get("contrast", DEFAULT_CONTRAST),
-                            ): vol.All(
-                                vol.Coerce(float),
-                                vol.Range(min=0.0, max=10.0),
-                            ),
-                        }
-                    ),
+                    vol.Schema(advanced_fields),
                     {"collapsed": True},
                 ),
             }

@@ -36,13 +36,13 @@ from . import (
 )
 from .battery import resolve_battery_level
 from .const import (
-    DEFAULT_CONTRAST,
     DEFAULT_DITHER_ALGORITHM,
+    DEFAULT_EXPOSURE,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
-    DEFAULT_SHARPNESS,
+    DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_WIDTH,
     DOMAIN,
@@ -235,11 +235,11 @@ class EinkDashboardImage(ImageEntity):
                     "grayscale_levels": self._entry.options.get(
                         "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
                     ),
-                    "sharpness": self._entry.options.get(
-                        "sharpness", DEFAULT_SHARPNESS
+                    "exposure": self._entry.options.get(
+                        "exposure", DEFAULT_EXPOSURE
                     ),
-                    "contrast": self._entry.options.get(
-                        "contrast", DEFAULT_CONTRAST
+                    "saturation": self._entry.options.get(
+                        "saturation", DEFAULT_SATURATION
                     ),
                     "dither_algorithm": self._entry.options.get(
                         "dither_algorithm", DEFAULT_DITHER_ALGORITHM
