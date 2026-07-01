@@ -35,22 +35,26 @@ class TestEinkDashboardBatterySensor:
 
     def test_update_battery_sets_value_and_attrs(self) -> None:
         sensor = EinkDashboardBatterySensor(_make_entry())
+        sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(78, False)
         assert sensor._attr_native_value == 78
         assert sensor._attr_extra_state_attributes == {"is_charging": False}
 
     def test_update_battery_charging_true(self) -> None:
         sensor = EinkDashboardBatterySensor(_make_entry())
+        sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(42, True)
         assert sensor._attr_extra_state_attributes == {"is_charging": True}
 
     def test_update_battery_zero(self) -> None:
         sensor = EinkDashboardBatterySensor(_make_entry())
+        sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(0, False)
         assert sensor._attr_native_value == 0
 
     def test_update_battery_hundred(self) -> None:
         sensor = EinkDashboardBatterySensor(_make_entry())
+        sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(100, True)
         assert sensor._attr_native_value == 100
 

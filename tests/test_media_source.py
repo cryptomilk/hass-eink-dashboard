@@ -33,7 +33,7 @@ def _make_item(
     identifier: str = "",
 ) -> MediaSourceItem:
     """Build a MediaSourceItem with the given identifier."""
-    return MediaSourceItem(hass, DOMAIN, identifier)
+    return MediaSourceItem(hass, DOMAIN, identifier, None)
 
 
 @pytest.mark.asyncio

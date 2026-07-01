@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -440,7 +441,7 @@ class TestCommandRegistration:
     async def test_command_registered_on_setup(self) -> None:
         # async_setup() registers both WS commands via async_register_command.
         hass = _make_hass()
-        hass.data = {}
+        hass.data = defaultdict(MagicMock)
 
         with patch(
             "custom_components.eink_dashboard.websocket_api"

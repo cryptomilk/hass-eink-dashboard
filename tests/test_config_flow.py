@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import voluptuous as vol
@@ -32,7 +32,34 @@ _USER_INPUT_CUSTOM = {
 }
 
 
+def _make_config_flow() -> EinkDashboardConfigFlow:
+    flow = EinkDashboardConfigFlow()
+    flow.hass = MagicMock()
+    flow.hass.config_entries.async_entries = MagicMock(
+        return_value=[],
+    )
+    return flow
+
+
+@pytest.fixture(autouse=True)
+def _mock_entity_registry():
+    """Default: no own sensor found in entity registry.
+
+    Most options-flow tests expect async_get_entity_id to return None
+    (no battery sensor registered yet).  Tests that need a non-None
+    result supply their own inner patch that overrides this default.
+    """
+    mock_reg = MagicMock()
+    mock_reg.async_get_entity_id.return_value = None
+    with patch(
+        "homeassistant.helpers.entity_registry.async_get",
+        return_value=mock_reg,
+    ):
+        yield
+
+
 def _make_options_flow(options: dict) -> EinkDashboardOptionsFlow:
+    """Create an EinkDashboardOptionsFlow with the given options."""
     _entry = MagicMock()
     _entry.options = options
 
@@ -42,13 +69,15 @@ def _make_options_flow(options: dict) -> EinkDashboardOptionsFlow:
             return _entry
 
     flow = _Flow()
+    # hass is not injected by the flow manager in unit tests, so set
+    # it directly.
     flow.hass = MagicMock()
     return flow
 
 
 class TestEinkDashboardConfigFlow:
     async def test_step_user_shows_form(self) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(None)
 
         assert result["type"] == "form"
@@ -57,7 +86,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_kindle_creates_entry(self) -> None:
         # Kindle skips screen_portion and creates entry directly.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(_USER_INPUT_KINDLE)
 
         assert result["type"] == "create_entry"
@@ -77,7 +106,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_kindle_landscape_rotation(self) -> None:
         # Landscape orientation uses rotated dimensions and rotation=90.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "orientation": "landscape"},
         )
@@ -90,7 +119,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_kindle_pw4_dimensions(self) -> None:
         # Different device preset produces correct canvas size.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "device_model": "kindle_pw4"},
         )
@@ -102,7 +131,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_user_with_area(self) -> None:
         # Area selection is preserved in the created entry options.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(
             {**_USER_INPUT_KINDLE, "area": "kitchen"},
         )
@@ -112,7 +141,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_user_without_area(self) -> None:
         # Omitting area means area_id is absent from the entry options.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(_USER_INPUT_KINDLE)
 
         assert "area_id" not in result["options"]
@@ -120,7 +149,7 @@ class TestEinkDashboardConfigFlow:
     async def test_reterminal_e1001_creates_entry(self) -> None:
         # reTerminal E1001 preset must have optimize=False to avoid
         # double-dithering with HA Core's OpenDisplay integration.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(
             {
                 "name": "Office",
@@ -142,7 +171,7 @@ class TestEinkDashboardConfigFlow:
     async def test_reterminal_e1003_creates_entry(self) -> None:
         # reTerminal E1003 preset must have optimize=False to avoid
         # double-dithering with HA Core's OpenDisplay integration.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(
             {
                 "name": "Office",
@@ -162,7 +191,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_screen_portion_shows_form_for_trmnl(self) -> None:
         # TRMNL devices get a screen_portion form after the user step.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(_USER_INPUT_TRMNL)
 
         assert result["type"] == "form"
@@ -170,7 +199,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_screen_portion_full_stores_portion(self) -> None:
         # "full" preserves native dimensions and stores screen_portion.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
 
@@ -180,7 +209,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_screen_portion_half_halves_width(self) -> None:
         # "half" halves the width while keeping the full height.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_screen_portion(
             {"screen_portion": "half"}
@@ -194,7 +223,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_screen_portion_quarter_halves_both(self) -> None:
         # "quarter" halves both width and height.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_screen_portion(
             {"screen_portion": "quarter"}
@@ -210,7 +239,7 @@ class TestEinkDashboardConfigFlow:
         self,
     ) -> None:
         # Selecting "custom" routes to the custom_resolution step.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_screen_portion(
             {"screen_portion": "custom"}
@@ -221,7 +250,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_advances_to_setup(self) -> None:
         # TRMNL flow goes user → screen_portion → trmnl_setup.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_screen_portion(
             {"screen_portion": "full"}
@@ -232,7 +261,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_og_dimensions(self) -> None:
         # TRMNL OG preset produces 800×480 with no rotation.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
 
@@ -243,7 +272,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_portrait_rotation(self) -> None:
         # TRMNL in portrait orientation swaps dimensions and sets rotation=90.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(
             {**_USER_INPUT_TRMNL, "orientation": "portrait"},
         )
@@ -255,7 +284,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_setup_shows_form(self) -> None:
         # async_step_trmnl_setup(None) returns the form without submitting.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
         result = await flow.async_step_trmnl_setup(None)
@@ -265,7 +294,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_setup_advances_to_webhook(self) -> None:
         # Submitting the trmnl_setup step opens the webhook entry form.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
         result = await flow.async_step_trmnl_setup({})
@@ -275,7 +304,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_screen_portion_full_advances_to_setup(self) -> None:
         # Selecting "full" screen portion for a TRMNL device goes to setup.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         result = await flow.async_step_screen_portion(
             {"screen_portion": "full"}
@@ -286,7 +315,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_webhook_creates_entry(self) -> None:
         # Full TRMNL flow produces a correctly-shaped config entry.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
@@ -313,7 +342,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_webhook_defaults_label_to_device_name(self) -> None:
         # Omitting the label defaults the webhook name to the device name.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
@@ -326,7 +355,7 @@ class TestEinkDashboardConfigFlow:
 
     async def test_trmnl_webhook_rejects_invalid_url(self) -> None:
         # A non-URL value triggers an inline validation error.
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_TRMNL)
         await flow.async_step_screen_portion({"screen_portion": "full"})
         await flow.async_step_trmnl_setup({})
@@ -337,14 +366,14 @@ class TestEinkDashboardConfigFlow:
         assert result["errors"] == {"webhook_url": "invalid_url"}
 
     async def test_custom_advances_to_resolution(self) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         result = await flow.async_step_user(_USER_INPUT_CUSTOM)
 
         assert result["type"] == "form"
         assert result["step_id"] == "custom_resolution"
 
     async def test_custom_resolution_shows_form(self) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_CUSTOM)
         result = await flow.async_step_custom_resolution(None)
 
@@ -354,7 +383,7 @@ class TestEinkDashboardConfigFlow:
     async def test_custom_resolution_advances_to_menu(
         self,
     ) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_CUSTOM)
         result = await flow.async_step_custom_resolution(
             {"width": 600, "height": 800},
@@ -366,7 +395,7 @@ class TestEinkDashboardConfigFlow:
         assert "trmnl_setup" in result["menu_options"]
 
     async def test_custom_pull_only_creates_entry(self) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_CUSTOM)
         await flow.async_step_custom_resolution(
             {"width": 600, "height": 800},
@@ -384,7 +413,7 @@ class TestEinkDashboardConfigFlow:
         assert opts["webhook_urls"] == []
 
     async def test_custom_trmnl_webhook_creates_entry(self) -> None:
-        flow = EinkDashboardConfigFlow()
+        flow = _make_config_flow()
         await flow.async_step_user(_USER_INPUT_CUSTOM)
         await flow.async_step_custom_resolution({"width": 600, "height": 800})
         await flow.async_step_trmnl_setup({})
@@ -978,27 +1007,26 @@ class TestEinkDashboardOptionsFlow:
     ) -> None:
         # When the entity registry maps the own sensor, it is excluded
         # from the EntitySelector to prevent the user picking it.
-        from tests.conftest import entity_reg_mod  # type: ignore[import]
-
-        mock_reg = entity_reg_mod.async_get.return_value
+        mock_reg = MagicMock()
         mock_reg.async_get_entity_id.return_value = "sensor.eink_battery"
-        try:
+        with patch(
+            "homeassistant.helpers.entity_registry.async_get",
+            return_value=mock_reg,
+        ):
             flow = _make_options_flow(
                 {"device_model": "trmnl_og", "orientation": "landscape"}
             )
             result = await flow.async_step_device_settings(None)
 
-            battery_key = next(
-                k
-                for k in result["data_schema"].schema
-                if hasattr(k, "schema") and k.schema == "battery_entity_id"
-            )
-            selector = result["data_schema"].schema[battery_key]
-            assert selector.config.get("exclude_entities") == [
-                "sensor.eink_battery"
-            ]
-        finally:
-            mock_reg.async_get_entity_id.return_value = None
+        battery_key = next(
+            k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema") and k.schema == "battery_entity_id"
+        )
+        selector = result["data_schema"].schema[battery_key]
+        assert selector.config.get("exclude_entities") == [
+            "sensor.eink_battery"
+        ]
 
     async def test_screen_portion_options_shows_form_on_fallback(
         self,
@@ -1496,10 +1524,10 @@ class TestLocaleSettingsOptionsFlow:
         assert result["step_id"] == "locale_settings"
 
     async def test_locale_settings_stores_language_override(self) -> None:
-        # Submitting a language stores it; empty number_format is stripped.
+        # Submitting a language stores it; default number_format is stripped.
         flow = _make_options_flow({"width": 800, "height": 480})
         result = await flow.async_step_locale_settings(
-            {"locale_language": "de", "locale_number_format": ""}
+            {"locale_language": "de", "locale_number_format": "ha_default"}
         )
 
         assert result["type"] == "create_entry"
@@ -1525,12 +1553,13 @@ class TestLocaleSettingsOptionsFlow:
     async def test_locale_settings_stores_first_weekday_override(
         self,
     ) -> None:
-        # Submitting first_weekday stores it; other empty fields are stripped.
+        # Submitting first_weekday stores it; default other fields are
+        # stripped.
         flow = _make_options_flow({})
         result = await flow.async_step_locale_settings(
             {
                 "locale_language": "",
-                "locale_number_format": "",
+                "locale_number_format": "ha_default",
                 "locale_first_weekday": "sunday",
             }
         )
@@ -1541,16 +1570,16 @@ class TestLocaleSettingsOptionsFlow:
         assert "locale_number_format" not in result["data"]
 
     async def test_locale_settings_stores_date_format_override(self) -> None:
-        # Submitting date_format stores it; empty time_format and other
-        # empty fields are stripped from the result data.
+        # Submitting date_format stores it; default time_format and other
+        # default fields are stripped from the result data.
         flow = _make_options_flow({})
         result = await flow.async_step_locale_settings(
             {
                 "locale_language": "",
-                "locale_number_format": "",
-                "locale_first_weekday": "",
+                "locale_number_format": "ha_default",
+                "locale_first_weekday": "ha_default",
                 "locale_date_format": "dmy",
-                "locale_time_format": "",
+                "locale_time_format": "ha_default",
             }
         )
 
@@ -1559,15 +1588,15 @@ class TestLocaleSettingsOptionsFlow:
         assert "locale_time_format" not in result["data"]
 
     async def test_locale_settings_stores_time_format_override(self) -> None:
-        # Submitting time_format stores it; empty date_format and other
-        # empty fields are stripped from the result data.
+        # Submitting time_format stores it; default date_format and other
+        # default fields are stripped from the result data.
         flow = _make_options_flow({})
         result = await flow.async_step_locale_settings(
             {
                 "locale_language": "",
-                "locale_number_format": "",
-                "locale_first_weekday": "",
-                "locale_date_format": "",
+                "locale_number_format": "ha_default",
+                "locale_first_weekday": "ha_default",
+                "locale_date_format": "ha_default",
                 "locale_time_format": "24",
             }
         )
@@ -1597,7 +1626,8 @@ class TestLocaleSettingsOptionsFlow:
         assert result["data"]["locale_time_format"] == "24"
 
     async def test_locale_settings_clears_existing_overrides(self) -> None:
-        # Submitting empty values removes previously stored override keys.
+        # Submitting default/empty values removes previously stored override
+        # keys.
         flow = _make_options_flow(
             {
                 "locale_language": "de",
@@ -1610,10 +1640,10 @@ class TestLocaleSettingsOptionsFlow:
         result = await flow.async_step_locale_settings(
             {
                 "locale_language": "",
-                "locale_number_format": "",
-                "locale_first_weekday": "",
-                "locale_date_format": "",
-                "locale_time_format": "",
+                "locale_number_format": "ha_default",
+                "locale_first_weekday": "ha_default",
+                "locale_date_format": "ha_default",
+                "locale_time_format": "ha_default",
             }
         )
 

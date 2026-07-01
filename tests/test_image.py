@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.helpers.template import TemplateError
 from PIL import Image
 
@@ -42,6 +43,29 @@ def _make_hass() -> MagicMock:
 
 def _png_from_bytes(data: bytes) -> Image.Image:
     return Image.open(io.BytesIO(data))
+
+
+@pytest.fixture(autouse=True)
+def _patch_eink_image_hass():
+    """Set entity.hass after EinkDashboardImage.__init__.
+
+    Verified against HA core: Entity.hass is a class-level attribute
+    initialised to None; ImageEntity.__init__ receives hass but does
+    not store it (only passes it to get_async_client).  The entity
+    platform sets self.hass during add_to_platform_start — tests that
+    instantiate EinkDashboardImage directly need this workaround so
+    that self.hass.is_stopping does not raise AttributeError.
+    """
+    _orig_init = EinkDashboardImage.__init__
+
+    def _new_init(
+        self: EinkDashboardImage, hass: object, entry: object
+    ) -> None:
+        _orig_init(self, hass, entry)
+        self.hass = hass  # type: ignore[assignment]
+
+    with patch.object(EinkDashboardImage, "__init__", _new_init):
+        yield
 
 
 class TestEinkDashboardImage:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.eink_dashboard import (
@@ -31,8 +32,11 @@ def _make_entry(
 
 
 def _make_hass() -> MagicMock:
+    # defaultdict so real HA helpers (add_extra_js_url, dr.async_get,
+    # async_register_command, etc.) can access any hass.data key without
+    # raising KeyError; individual tests override specific keys as needed.
     hass = MagicMock()
-    hass.data = {}
+    hass.data = defaultdict(MagicMock)
     hass.config_entries.async_forward_entry_setups = AsyncMock()
     hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
     hass.http.async_register_static_paths = AsyncMock()
