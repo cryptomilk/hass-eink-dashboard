@@ -690,6 +690,36 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] == "create_entry"
         assert result["data"]["dither_algorithm"] == "floyd_steinberg"
 
+    async def test_display_settings_saves_measured_palette(self) -> None:
+        # Submitting measured_palette via advanced_section persists it.
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "advanced_section": {
+                    "dither_algorithm": "floyd_steinberg",
+                    "measured_palette": "spectra_7_3_6color",
+                    "grayscale_levels": "16",
+                    "sharpness": "1.0",
+                    "contrast": "1.0",
+                },
+            }
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["measured_palette"] == "spectra_7_3_6color"
+
+    async def test_display_settings_default_measured_palette(self) -> None:
+        # Legacy entries without measured_palette default to "auto".
+        flow = _make_options_flow({"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "advanced_section": {}}
+        )
+
+        assert result["type"] == "create_entry"
+        assert result["data"]["measured_palette"] == "auto"
+
     async def test_device_settings_shows_form(self) -> None:
         flow = _make_options_flow(
             {"device_model": "kindle_pw", "orientation": "portrait"}

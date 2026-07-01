@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from types import ModuleType
@@ -58,6 +59,104 @@ class _StubColorScheme(Enum):
     GRAYSCALE_8 = 7
 
 
+@dataclass(frozen=True)
+class _StubColorPalette:
+    """Stub for epaper_dithering.ColorPalette.
+
+    Only ``colors`` is inspected by the stub ``dither_image`` (to
+    derive color count). ``accent`` and ``scheme`` are present for
+    structural completeness but are not accessed by production code
+    under test.
+    """
+
+    colors: dict[str, tuple[int, int, int]]
+    accent: str
+    scheme: _StubColorScheme | None = None
+
+
+# Stub measured palette instances — RGB values are plausible but not
+# calibrated. Only color count (len(colors)) matters for tests.
+_STUB_SPECTRA_7_3_6COLOR = _StubColorPalette(
+    colors={
+        "black": (20, 10, 25),
+        "white": (188, 200, 200),
+        "yellow": (200, 180, 0),
+        "red": (180, 15, 10),
+        "blue": (10, 20, 180),
+        "green": (10, 150, 20),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWGBRY,
+)
+_STUB_SPECTRA_7_3_6COLOR_V2 = _StubColorPalette(
+    colors={
+        "black": (18, 8, 22),
+        "white": (190, 202, 202),
+        "yellow": (198, 178, 5),
+        "red": (175, 12, 8),
+        "blue": (8, 18, 175),
+        "green": (8, 148, 18),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWGBRY,
+)
+_STUB_MONO_4_26 = _StubColorPalette(
+    colors={
+        "black": (30, 25, 35),
+        "white": (200, 205, 200),
+    },
+    accent="black",
+    scheme=_StubColorScheme.MONO,
+)
+_STUB_BWRY_4_2 = _StubColorPalette(
+    colors={
+        "black": (22, 15, 28),
+        "white": (192, 200, 198),
+        "red": (172, 18, 12),
+        "yellow": (195, 175, 8),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWRY,
+)
+_STUB_BWRY_3_97 = _StubColorPalette(
+    colors={
+        "black": (24, 16, 30),
+        "white": (190, 198, 196),
+        "red": (170, 16, 10),
+        "yellow": (193, 173, 6),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWRY,
+)
+_STUB_SOLUM_BWR = _StubColorPalette(
+    colors={
+        "black": (26, 18, 32),
+        "white": (194, 202, 200),
+        "red": (174, 20, 14),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWR,
+)
+_STUB_HANSHOW_BWR = _StubColorPalette(
+    colors={
+        "black": (28, 20, 34),
+        "white": (196, 204, 202),
+        "red": (176, 22, 16),
+    },
+    accent="red",
+    scheme=_StubColorScheme.BWR,
+)
+_STUB_HANSHOW_BWY = _StubColorPalette(
+    colors={
+        "black": (28, 20, 34),
+        "white": (196, 204, 202),
+        "yellow": (194, 172, 4),
+    },
+    accent="yellow",
+    scheme=_StubColorScheme.BWY,
+)
+
+
 _STUB_SCHEME_COLORS: dict[_StubColorScheme, int] = {
     _StubColorScheme.MONO: 2,
     _StubColorScheme.BWR: 3,
@@ -72,7 +171,7 @@ _STUB_SCHEME_COLORS: dict[_StubColorScheme, int] = {
 
 def _stub_dither_image(
     image: Image.Image,
-    color_scheme: _StubColorScheme,
+    color_scheme: _StubColorScheme | _StubColorPalette,
     *,
     mode: _StubDitherMode = _StubDitherMode.BURKES,
     serpentine: bool = True,
@@ -89,12 +188,19 @@ def _stub_dither_image(
     library's output contract. Uses Pillow's ``quantize()``
     internally so tests get meaningful colour-count results.
 
+    Accepts either a ``_StubColorScheme`` (idealized) or a
+    ``_StubColorPalette`` (measured). For palettes, the color count
+    is derived from ``len(color_scheme.colors)``.
+
     The internal ``.convert("RGB")`` is defensive: production code
     always passes an RGB image (convert happens in
     ``optimize_for_eink``), but a test that calls this stub directly
     with an ``"L"`` image would otherwise get a wrong result silently.
     """
-    n = _STUB_SCHEME_COLORS[color_scheme]
+    if isinstance(color_scheme, _StubColorPalette):
+        n = len(color_scheme.colors)
+    else:
+        n = _STUB_SCHEME_COLORS[color_scheme]
     return image.convert("RGB").quantize(
         colors=n,
         dither=Image.Dither.FLOYDSTEINBERG,
@@ -104,7 +210,16 @@ def _stub_dither_image(
 _epaper_dithering_stub = ModuleType("epaper_dithering")
 _epaper_dithering_stub.DitherMode = _StubDitherMode  # type: ignore[attr-defined]
 _epaper_dithering_stub.ColorScheme = _StubColorScheme  # type: ignore[attr-defined]
+_epaper_dithering_stub.ColorPalette = _StubColorPalette  # type: ignore[attr-defined]
 _epaper_dithering_stub.dither_image = _stub_dither_image  # type: ignore[attr-defined]
+_epaper_dithering_stub.SPECTRA_7_3_6COLOR = _STUB_SPECTRA_7_3_6COLOR  # type: ignore[attr-defined]
+_epaper_dithering_stub.SPECTRA_7_3_6COLOR_V2 = _STUB_SPECTRA_7_3_6COLOR_V2  # type: ignore[attr-defined]
+_epaper_dithering_stub.MONO_4_26 = _STUB_MONO_4_26  # type: ignore[attr-defined]
+_epaper_dithering_stub.BWRY_4_2 = _STUB_BWRY_4_2  # type: ignore[attr-defined]
+_epaper_dithering_stub.BWRY_3_97 = _STUB_BWRY_3_97  # type: ignore[attr-defined]
+_epaper_dithering_stub.SOLUM_BWR = _STUB_SOLUM_BWR  # type: ignore[attr-defined]
+_epaper_dithering_stub.HANSHOW_BWR = _STUB_HANSHOW_BWR  # type: ignore[attr-defined]
+_epaper_dithering_stub.HANSHOW_BWY = _STUB_HANSHOW_BWY  # type: ignore[attr-defined]
 sys.modules["epaper_dithering"] = _epaper_dithering_stub
 
 

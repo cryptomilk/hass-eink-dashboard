@@ -154,12 +154,14 @@
             "name": "Advanced",
             "data": {
               "dither_algorithm": "Dither algorithm",
+              "measured_palette": "Measured palette",
               "grayscale_levels": "Grayscale levels",
               "sharpness": "Sharpness",
               "contrast": "Contrast"
             },
             "data_description": {
               "dither_algorithm": "Algorithm used for error-diffusion dithering",
+              "measured_palette": "Photographically calibrated palette for your specific display model. Auto uses the idealized palette.",
               "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
               "sharpness": "1.0 = unchanged, higher = sharper (0.0–10.0)",
               "contrast": "1.0 = unchanged, higher = more contrast (0.0–10.0)"
@@ -198,6 +200,19 @@
         "atkinson": "Atkinson (high contrast)",
         "stucki": "Stucki (smooth gradients)",
         "burkes": "Burkes (balanced)"
+      }
+    },
+    "measured_palette": {
+      "options": {
+        "auto": "Auto (use device default)",
+        "spectra_7_3_6color": "Spectra 7.3\" 6-color",
+        "spectra_7_3_6color_v2": "Spectra 7.3\" 6-color v2",
+        "mono_4_26": "Mono 4.26\"",
+        "bwry_4_2": "BWRY 4.2\"",
+        "bwry_3_97": "BWRY 3.97\"",
+        "solum_bwr": "Solum BWR",
+        "hanshow_bwr": "Hanshow BWR",
+        "hanshow_bwy": "Hanshow BWY"
       }
     },
     "device_model": {

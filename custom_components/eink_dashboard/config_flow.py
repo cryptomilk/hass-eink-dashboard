@@ -38,6 +38,7 @@ from .const import (
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
     DEFAULT_SHARPNESS,
     DEFAULT_UPDATE_INTERVAL,
@@ -101,6 +102,18 @@ _DITHER_ALGO_OPTIONS = [
     "atkinson",
     "stucki",
     "burkes",
+]
+
+_MEASURED_PALETTE_OPTIONS = [
+    "auto",
+    "spectra_7_3_6color",
+    "spectra_7_3_6color_v2",
+    "mono_4_26",
+    "bwry_4_2",
+    "bwry_3_97",
+    "solum_bwr",
+    "hanshow_bwr",
+    "hanshow_bwy",
 ]
 
 
@@ -268,6 +281,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
+                    "measured_palette": preset.measured_palette,
                 }
             )
             return self._create_pull_entry()
@@ -311,6 +325,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "grayscale_levels": preset.grayscale_levels,
                         "dither_algorithm": preset.dither_algorithm,
                         "color_scheme": preset.color_scheme,
+                        "measured_palette": preset.measured_palette,
                         "screen_portion": "custom",
                     }
                 )
@@ -327,6 +342,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
+                    "measured_palette": preset.measured_palette,
                     "screen_portion": portion,
                 }
             )
@@ -362,6 +378,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                         "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                         "color_scheme": None,
+                        "measured_palette": DEFAULT_MEASURED_PALETTE,
                     }
                 )
             device_model = self._data.get("device_model", "")
@@ -745,6 +762,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                             "grayscale_levels": preset.grayscale_levels,
                             "dither_algorithm": preset.dither_algorithm,
                             "color_scheme": preset.color_scheme,
+                            "measured_palette": preset.measured_palette,
                             "screen_portion": portion,
                         }
                     )
@@ -762,6 +780,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
+                    "measured_palette": preset.measured_palette,
                 }
             )
 
@@ -824,6 +843,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "grayscale_levels": preset.grayscale_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
+                    "measured_palette": preset.measured_palette,
                     "screen_portion": portion,
                 }
             )
@@ -853,6 +873,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
                     "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                     "color_scheme": None,
+                    "measured_palette": DEFAULT_MEASURED_PALETTE,
                 }
             )
         return self.async_show_form(
@@ -973,6 +994,19 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                                 SelectSelectorConfig(
                                     options=_DITHER_ALGO_OPTIONS,
                                     translation_key="dither_algorithm",
+                                    mode=SelectSelectorMode.DROPDOWN,
+                                )
+                            ),
+                            vol.Optional(
+                                "measured_palette",
+                                default=opts.get(
+                                    "measured_palette",
+                                    DEFAULT_MEASURED_PALETTE,
+                                ),
+                            ): SelectSelector(
+                                SelectSelectorConfig(
+                                    options=_MEASURED_PALETTE_OPTIONS,
+                                    translation_key="measured_palette",
                                     mode=SelectSelectorMode.DROPDOWN,
                                 )
                             ),

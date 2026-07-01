@@ -40,6 +40,7 @@ from .const import (
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
+    DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
     DEFAULT_SHARPNESS,
     DEFAULT_UPDATE_INTERVAL,
@@ -242,6 +243,9 @@ class EinkDashboardImage(ImageEntity):
                     ),
                     "dither_algorithm": self._entry.options.get(
                         "dither_algorithm", DEFAULT_DITHER_ALGORITHM
+                    ),
+                    "measured_palette": self._entry.options.get(
+                        "measured_palette", DEFAULT_MEASURED_PALETTE
                     ),
                     "color_scheme": self._entry.options.get("color_scheme"),
                     "number_format": number_format,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from unittest.mock import MagicMock, patch
 
+import pytest
 from PIL import Image
 
 from custom_components.eink_dashboard.optimize import optimize_for_eink
@@ -401,3 +402,150 @@ class TestOptimizeIntegration:
         png = render_dashboard(widgets, config)
         img = Image.open(io.BytesIO(png))
         assert img.mode == "RGB"
+
+
+class TestMeasuredPaletteDithering:
+    """Verify measured palette resolution and usage in optimize_for_eink."""
+
+    def _run_with_mock(
+        self, config: dict, return_colors: int = 16
+    ) -> MagicMock:
+        """Run optimize_for_eink with a mocked dither_image.
+
+        Returns the mock (not the image) for call-argument inspection.
+        The return value of optimize_for_eink is discarded; use
+        optimize_for_eink directly when the output image matters.
+        """
+        img = _gradient()
+        mock = MagicMock(
+            return_value=img.convert("RGB").quantize(
+                colors=return_colors, dither=Image.Dither.FLOYDSTEINBERG
+            )
+        )
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(img, config)
+        return mock
+
+    @pytest.mark.parametrize(
+        "config",
+        [
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "measured_palette": "auto",
+            },
+            {"optimize": True, "grayscale_levels": 16},
+        ],
+        ids=["explicit-auto", "absent-key"],
+    )
+    def test_auto_uses_idealized_scheme(self, config: dict) -> None:
+        # "auto" and absent measured_palette both pass a ColorScheme
+        # (not a ColorPalette) to dither_image.
+        from epaper_dithering import ColorScheme
+
+        mock = self._run_with_mock(config)
+        mock.assert_called_once()
+        assert isinstance(mock.call_args[0][1], ColorScheme)
+
+    def test_measured_palette_overrides_color_scheme(self) -> None:
+        # When measured_palette is set, dither_image receives a
+        # ColorPalette instead of a ColorScheme.
+        from epaper_dithering import SPECTRA_7_3_6COLOR, ColorPalette
+
+        img = _gradient().convert("RGB")
+        mock = MagicMock(
+            return_value=img.quantize(
+                colors=6, dither=Image.Dither.FLOYDSTEINBERG
+            )
+        )
+        with patch(
+            "custom_components.eink_dashboard.optimize.dither_image",
+            mock,
+        ):
+            optimize_for_eink(
+                img,
+                {
+                    "optimize": True,
+                    "color_scheme": "bwgbry",
+                    "measured_palette": "spectra_7_3_6color",
+                },
+            )
+        mock.assert_called_once()
+        palette_arg = mock.call_args[0][1]
+        assert isinstance(palette_arg, ColorPalette)
+        assert palette_arg is SPECTRA_7_3_6COLOR
+
+    def test_measured_palette_with_grayscale(self) -> None:
+        # Measured palette applies to the grayscale path too (e.g. mono_4_26).
+        from epaper_dithering import MONO_4_26, ColorPalette
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 2,
+                "measured_palette": "mono_4_26",
+            },
+            return_colors=2,
+        )
+        mock.assert_called_once()
+        palette_arg = mock.call_args[0][1]
+        assert isinstance(palette_arg, ColorPalette)
+        assert palette_arg is MONO_4_26
+
+    def test_unknown_measured_palette_falls_back_to_scheme(self) -> None:
+        # An unrecognised measured_palette key falls back to the idealized
+        # ColorScheme without raising.
+        from epaper_dithering import ColorScheme
+
+        mock = self._run_with_mock(
+            {
+                "optimize": True,
+                "grayscale_levels": 16,
+                "measured_palette": "nonexistent_palette",
+            }
+        )
+        mock.assert_called_once()
+        assert isinstance(mock.call_args[0][1], ColorScheme)
+
+    def test_measured_palette_produces_rgb_output(self) -> None:
+        # End-to-end: measured palette with a color scheme yields RGB output.
+        img = _gradient().convert("RGB")
+        result = optimize_for_eink(
+            img,
+            {
+                "optimize": True,
+                "color_scheme": "bwgbry",
+                "measured_palette": "spectra_7_3_6color",
+            },
+        )
+        assert result.mode == "RGB"
+
+    def test_measured_palette_produces_mono_output(self) -> None:
+        # End-to-end: measured MONO palette with grayscale_levels=2 still
+        # produces mode "1" (binary) output, not "L".
+        img = _gradient()
+        result = optimize_for_eink(
+            img,
+            {
+                "optimize": True,
+                "grayscale_levels": 2,
+                "measured_palette": "mono_4_26",
+            },
+        )
+        assert result.mode == "1"
+
+
+def test_measured_palette_options_match_optimize_keys() -> None:
+    # UI option list (minus "auto") must match the runtime lookup dict.
+    # This guard catches the two lists drifting out of sync when a new
+    # palette is added to one but not the other.
+    from custom_components.eink_dashboard.config_flow import (
+        _MEASURED_PALETTE_OPTIONS,
+    )
+    from custom_components.eink_dashboard.optimize import _MEASURED_PALETTES
+
+    ui_keys = {k for k in _MEASURED_PALETTE_OPTIONS if k != "auto"}
+    assert ui_keys == set(_MEASURED_PALETTES)

@@ -19,6 +19,7 @@ DEFAULT_GRAYSCALE_DEPTH = 8
 DEFAULT_OPTIMIZE = False
 DEFAULT_GRAYSCALE_LEVELS = 16
 DEFAULT_DITHER_ALGORITHM = "floyd_steinberg"
+DEFAULT_MEASURED_PALETTE = "auto"
 DEFAULT_SHARPNESS = 1.0
 DEFAULT_CONTRAST = 1.0
 DEFAULT_ROW_H = 56
@@ -78,6 +79,11 @@ class DevicePreset:
     """Color palette for color e-ink displays (e.g. ``"bwgbry"`` for
     Spectra 6-color).  ``None`` means grayscale.  String values match
     keys in ``optimize._COLOR_SCHEMES``."""
+    measured_palette: str = DEFAULT_MEASURED_PALETTE
+    """Measured palette key for photographically calibrated dithering.
+    ``"auto"`` means use the idealized ``ColorScheme`` derived from
+    ``color_scheme`` or ``grayscale_levels``.  Non-auto values match
+    keys in ``optimize._MEASURED_PALETTES``."""
 
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {

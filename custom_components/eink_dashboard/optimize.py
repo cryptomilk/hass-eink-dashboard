@@ -4,13 +4,27 @@ from __future__ import annotations
 
 import logging
 
-from epaper_dithering import ColorScheme, DitherMode, dither_image
+from epaper_dithering import (
+    BWRY_3_97,
+    BWRY_4_2,
+    HANSHOW_BWR,
+    HANSHOW_BWY,
+    MONO_4_26,
+    SOLUM_BWR,
+    SPECTRA_7_3_6COLOR,
+    SPECTRA_7_3_6COLOR_V2,
+    ColorPalette,
+    ColorScheme,
+    DitherMode,
+    dither_image,
+)
 from PIL import Image, ImageEnhance, ImageOps
 
 from .const import (
     DEFAULT_CONTRAST,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_GRAYSCALE_LEVELS,
+    DEFAULT_MEASURED_PALETTE,
     DEFAULT_SHARPNESS,
 )
 
@@ -40,6 +54,20 @@ _DITHER_MODES: dict[str, DitherMode] = {
     "atkinson": DitherMode.ATKINSON,
     "stucki": DitherMode.STUCKI,
     "burkes": DitherMode.BURKES,
+}
+
+# Maps measured_palette config strings to epaper-dithering ColorPalette
+# objects. "auto" is NOT a key here; it means "use the idealized
+# ColorScheme" and is handled by the absence of a palette override.
+_MEASURED_PALETTES: dict[str, ColorPalette] = {
+    "spectra_7_3_6color": SPECTRA_7_3_6COLOR,
+    "spectra_7_3_6color_v2": SPECTRA_7_3_6COLOR_V2,
+    "mono_4_26": MONO_4_26,
+    "bwry_4_2": BWRY_4_2,
+    "bwry_3_97": BWRY_3_97,
+    "solum_bwr": SOLUM_BWR,
+    "hanshow_bwr": HANSHOW_BWR,
+    "hanshow_bwy": HANSHOW_BWY,
 }
 
 
@@ -79,7 +107,15 @@ def optimize_for_eink(
             reserved for future Inkplate support but is not offered
             in the UI), ``dither_algorithm`` (str, one of
             ``floyd_steinberg``, ``atkinson``, ``stucki``,
-            ``burkes``; default ``floyd_steinberg``).
+            ``burkes``; default ``floyd_steinberg``),
+            ``measured_palette`` (str, one of the keys in
+            ``_MEASURED_PALETTES`` or ``"auto"``; default
+            ``"auto"``). When a non-auto measured palette is
+            selected its calibrated ``ColorPalette`` is passed to
+            ``dither_image()`` instead of the idealized
+            ``ColorScheme``. The output mode (``"1"`` / ``"L"`` /
+            ``"RGB"``) is derived from ``grayscale_levels`` /
+            ``color_scheme`` regardless of palette type.
 
     Returns:
         Processed PIL image. Mode is ``"RGB"`` for color schemes,
@@ -114,6 +150,19 @@ def optimize_for_eink(
         algo = DEFAULT_DITHER_ALGORITHM
     mode = _DITHER_MODES[algo]
 
+    # Resolve measured palette override. "auto" (the default) skips the
+    # lookup and uses the idealized ColorScheme. Unknown keys fall back
+    # to "auto" with a warning.
+    measured_palette_key = config.get(
+        "measured_palette", DEFAULT_MEASURED_PALETTE
+    )
+    measured_palette = _MEASURED_PALETTES.get(measured_palette_key)
+    if measured_palette is None and measured_palette_key != "auto":
+        _LOGGER.warning(
+            "Unknown measured_palette %r; falling back to auto",
+            measured_palette_key,
+        )
+
     # Color e-ink path: dither to a specific color palette (BWR, etc.).
     color_scheme_key = config.get("color_scheme")
     if color_scheme_key:
@@ -123,8 +172,19 @@ def optimize_for_eink(
                 f"Unsupported color_scheme value {color_scheme_key!r};"
                 f" expected one of {sorted(_COLOR_SCHEMES)}."
             )
+        if measured_palette is not None and len(measured_palette.colors) < 3:
+            _LOGGER.warning(
+                "Measured palette %r has only %d color(s); a mono "
+                "palette on a color display may produce unexpected "
+                "output",
+                measured_palette_key,
+                len(measured_palette.colors),
+            )
+        palette_or_scheme: ColorPalette | ColorScheme = (
+            measured_palette if measured_palette is not None else scheme
+        )
         # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(img, scheme, mode=mode)
+        img = dither_image(img, palette_or_scheme, mode=mode)
         return img.convert("RGB")
 
     # Grayscale path: quantise to the configured number of levels.
@@ -136,9 +196,23 @@ def optimize_for_eink(
                 f"Unsupported grayscale_levels value {colors!r}; "
                 f"expected one of {sorted(_GRAYSCALE_SCHEMES)}."
             )
+        if measured_palette is not None and len(measured_palette.colors) > 2:
+            _LOGGER.warning(
+                "Measured palette %r has %d colors but the grayscale "
+                "path is active; a color palette on a grayscale "
+                "display may produce unexpected output",
+                measured_palette_key,
+                len(measured_palette.colors),
+            )
+        palette_or_scheme = (
+            measured_palette if measured_palette is not None else scheme
+        )
         # dither_image() expects RGB input; pipeline image is "L".
         # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(img.convert("RGB"), scheme, mode=mode)
+        img = dither_image(img.convert("RGB"), palette_or_scheme, mode=mode)
+        # Output mode is derived from grayscale_levels, not the palette
+        # type, so MONO_4_26 (a measured palette for a 2-color display)
+        # still produces mode "1" when grayscale_levels == 2.
         img = (
             img.convert("1")
             if scheme is ColorScheme.MONO
