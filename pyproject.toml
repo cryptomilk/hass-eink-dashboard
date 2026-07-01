@@ -14,15 +14,13 @@ dependencies = [
 [dependency-groups]
 lint = ["ruff>=0.15"]
 format = ["ruff>=0.15"]
-typecheck = ["defusedxml>=0.7", "Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty", "homeassistant>=2026.3.0"]
+typecheck = ["defusedxml>=0.7", "Pillow>=12.2.0", "aiohttp>=3.0", "Jinja2>=3.1", "ty", "homeassistant>=2026.6.0"]
 test = [
+    "pytest-homeassistant-custom-component>=0.13.340",
     "defusedxml>=0.7.1",
     "Pillow>=12.2.0",
-    "aiohttp>=3.0",
     "Jinja2>=3.1",
-    "pytest>=8.0",
-    "pytest-asyncio>=1.0",
-    "voluptuous>=0.14",
+    # pytest, pytest-asyncio, voluptuous, aiohttp pulled in by phacc
 ]
 interrogate = ["interrogate"]
 dev = [
@@ -72,6 +70,7 @@ max-complexity = 25
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "--junit-xml=test-results.xml"
 
 [tool.interrogate]
