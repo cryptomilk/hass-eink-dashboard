@@ -1,75 +1,72 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 from custom_components.eink_dashboard.store import (
     EinkDashboardStore,
 )
 
 
-def _make_hass() -> MagicMock:
-    return MagicMock()
-
-
 class TestEinkDashboardStore:
     async def test_load_returns_empty_list_when_no_data(
         self,
+        hass: HomeAssistant,
+        hass_storage: dict,  # activates the in-memory Store interceptor
     ) -> None:
-        hass = _make_hass()
-        mock_store = MagicMock()
-        mock_store.async_load = AsyncMock(return_value=None)
-
-        with patch(
-            "custom_components.eink_dashboard.store.Store",
-            return_value=mock_store,
-        ):
-            store = EinkDashboardStore(hass, "entry1")
-            result = await store.async_load()
+        # No pre-populated storage entry — async_load should return [].
+        store = EinkDashboardStore(hass, "entry1")
+        result = await store.async_load()
 
         assert result == []
 
     async def test_load_returns_stored_widgets(
         self,
+        hass: HomeAssistant,
+        hass_storage: dict,
     ) -> None:
-        hass = _make_hass()
+        # Pre-populate storage so async_load returns the existing widget list.
         widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
-        mock_store = MagicMock()
-        mock_store.async_load = AsyncMock(return_value=widgets)
+        hass_storage["eink_dashboard.entry1"] = {
+            "version": 1,
+            "minor_version": 1,
+            "data": widgets,
+        }
 
-        with patch(
-            "custom_components.eink_dashboard.store.Store",
-            return_value=mock_store,
-        ):
-            store = EinkDashboardStore(hass, "entry1")
-            result = await store.async_load()
+        store = EinkDashboardStore(hass, "entry1")
+        result = await store.async_load()
 
         assert result == widgets
 
     async def test_save_delegates_to_ha_store(
         self,
+        hass: HomeAssistant,
+        hass_storage: dict,
     ) -> None:
-        hass = _make_hass()
+        # async_save should write through to hass_storage under the right key.
         widgets = [{"type": "heading", "x": 0, "y": 0}]
-        mock_store = MagicMock()
-        mock_store.async_save = AsyncMock()
 
-        with patch(
-            "custom_components.eink_dashboard.store.Store",
-            return_value=mock_store,
-        ):
-            store = EinkDashboardStore(hass, "entry1")
-            await store.async_save(widgets)
+        store = EinkDashboardStore(hass, "entry1")
+        await store.async_save(widgets)
 
-        mock_store.async_save.assert_called_once_with(widgets)
+        assert hass_storage["eink_dashboard.entry1"]["data"] == widgets
+        assert hass_storage["eink_dashboard.entry1"]["version"] == 1
 
-    async def test_store_key_includes_entry_id(
+    async def test_round_trip_save_then_load(
         self,
+        hass: HomeAssistant,
+        hass_storage: dict,  # activates the in-memory Store interceptor
     ) -> None:
-        hass = _make_hass()
-        with patch(
-            "custom_components.eink_dashboard.store.Store",
-        ) as mock_cls:
-            EinkDashboardStore(hass, "my_entry")
-            mock_cls.assert_called_once()
-            assert mock_cls.call_args.args[1] == 1
-            assert mock_cls.call_args.args[2] == "eink_dashboard.my_entry"
+        # Data saved by one store instance must be returned by a second
+        # instance for the same entry ID.
+        widgets = [
+            {"type": "separator", "x": 0, "y": 0},
+            {"type": "heading", "x": 0, "y": 60, "heading": "Test"},
+        ]
+
+        await EinkDashboardStore(hass, "entry_rt").async_save(widgets)
+        result = await EinkDashboardStore(hass, "entry_rt").async_load()
+
+        assert result == widgets
