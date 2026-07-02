@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
+
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    mock_restore_cache_with_extra_data,
+)
 
 from custom_components.eink_dashboard.battery_sensor import (
     EinkDashboardBatterySensor,
@@ -8,16 +14,15 @@ from custom_components.eink_dashboard.battery_sensor import (
 from custom_components.eink_dashboard.const import DOMAIN
 from custom_components.eink_dashboard.sensor import async_setup_entry
 
-
-def _make_entry(entry_id: str = "test_entry_id") -> MagicMock:
-    entry = MagicMock()
-    entry.entry_id = entry_id
-    return entry
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 class TestEinkDashboardBatterySensor:
     def test_sensor_attrs(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry("my_entry"))
+        # All fixed attributes are set correctly on construction.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="my_entry")
+        sensor = EinkDashboardBatterySensor(entry)
         assert sensor._attr_device_class == "battery"
         assert sensor._attr_state_class == "measurement"
         assert sensor._attr_native_unit_of_measurement == "%"
@@ -29,37 +34,49 @@ class TestEinkDashboardBatterySensor:
         }
 
     def test_initial_value_is_none(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # Native value and extra attributes start empty before any update.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         assert sensor._attr_native_value is None
         assert sensor._attr_extra_state_attributes == {}
 
     def test_update_battery_sets_value_and_attrs(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # update_battery stores the level and charging flag.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(78, False)
         assert sensor._attr_native_value == 78
         assert sensor._attr_extra_state_attributes == {"is_charging": False}
 
     def test_update_battery_charging_true(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # Charging flag is stored when is_charging=True.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(42, True)
         assert sensor._attr_extra_state_attributes == {"is_charging": True}
 
     def test_update_battery_zero(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # Zero is a valid battery level (not treated as falsy).
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(0, False)
         assert sensor._attr_native_value == 0
 
     def test_update_battery_hundred(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # 100% is a valid battery level.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         sensor.async_write_ha_state = MagicMock()
         sensor.update_battery(100, True)
         assert sensor._attr_native_value == 100
 
     def test_update_battery_calls_write_ha_state(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
+        # async_write_ha_state is called exactly once per update_battery call.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
         called = []
         sensor.async_write_ha_state = lambda: called.append(True)
         sensor.update_battery(50, False)
@@ -67,46 +84,90 @@ class TestEinkDashboardBatterySensor:
 
 
 class TestBatterySensorRestore:
-    async def test_restore_from_last_sensor_data(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
-        last_data = MagicMock()
-        last_data.native_value = 65
-        sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
-        sensor.async_get_last_state = AsyncMock(return_value=None)
+    async def test_restore_from_last_sensor_data(
+        self, hass: HomeAssistant
+    ) -> None:
+        # async_added_to_hass restores native_value from the extra stored data.
+        from homeassistant.core import State
+
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
+        sensor.hass = hass
+        sensor.entity_id = "sensor.eink_dashboard_battery"
+
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State("sensor.eink_dashboard_battery", "65"),
+                    {"native_value": 65, "native_unit_of_measurement": "%"},
+                )
+            ],
+        )
 
         await sensor.async_added_to_hass()
 
         assert sensor._attr_native_value == 65
 
-    async def test_restore_no_last_data(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
-        sensor.async_get_last_sensor_data = AsyncMock(return_value=None)
+    async def test_restore_no_last_data(self, hass: HomeAssistant) -> None:
+        # When the restore cache has no entry, native_value stays None.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
+        sensor.hass = hass
+        sensor.entity_id = "sensor.eink_dashboard_battery"
 
         await sensor.async_added_to_hass()
 
         assert sensor._attr_native_value is None
 
-    async def test_restore_is_charging(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
-        last_data = MagicMock()
-        last_data.native_value = 42
-        last_state = MagicMock()
-        last_state.attributes = {"is_charging": True}
-        sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
-        sensor.async_get_last_state = AsyncMock(return_value=last_state)
+    async def test_restore_is_charging(self, hass: HomeAssistant) -> None:
+        # is_charging attribute is restored from the State attributes dict.
+        from homeassistant.core import State
+
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
+        sensor.hass = hass
+        sensor.entity_id = "sensor.eink_dashboard_battery"
+
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State(
+                        "sensor.eink_dashboard_battery",
+                        "42",
+                        {"is_charging": True},
+                    ),
+                    {"native_value": 42, "native_unit_of_measurement": "%"},
+                )
+            ],
+        )
 
         await sensor.async_added_to_hass()
 
         assert sensor._attr_extra_state_attributes == {"is_charging": True}
 
-    async def test_restore_is_charging_absent_leaves_attrs_empty(self) -> None:
-        sensor = EinkDashboardBatterySensor(_make_entry())
-        last_data = MagicMock()
-        last_data.native_value = 42
-        last_state = MagicMock()
-        last_state.attributes = {}
-        sensor.async_get_last_sensor_data = AsyncMock(return_value=last_data)
-        sensor.async_get_last_state = AsyncMock(return_value=last_state)
+    async def test_restore_is_charging_absent_leaves_attrs_empty(
+        self, hass: HomeAssistant
+    ) -> None:
+        # When is_charging is absent from last state attributes,
+        # extra_state_attributes stays {}.
+        from homeassistant.core import State
+
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        sensor = EinkDashboardBatterySensor(entry)
+        sensor.hass = hass
+        sensor.entity_id = "sensor.eink_dashboard_battery"
+
+        mock_restore_cache_with_extra_data(
+            hass,
+            [
+                (
+                    State("sensor.eink_dashboard_battery", "42"),
+                    {"native_value": 42, "native_unit_of_measurement": "%"},
+                )
+            ],
+        )
 
         await sensor.async_added_to_hass()
 
@@ -114,10 +175,13 @@ class TestBatterySensorRestore:
 
 
 class TestSensorPlatformSetup:
-    async def test_async_setup_entry_creates_sensor(self) -> None:
-        entry = _make_entry()
-        hass = MagicMock()
-        hass.data = {DOMAIN: {entry.entry_id: {}}}
+    async def test_async_setup_entry_creates_sensor(
+        self, hass: HomeAssistant
+    ) -> None:
+        # async_setup_entry calls async_add_entities with one battery sensor.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        entry.add_to_hass(hass)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
         added: list = []
 
         await async_setup_entry(hass, entry, added.append)
@@ -127,10 +191,13 @@ class TestSensorPlatformSetup:
         assert len(sensors) == 1
         assert isinstance(sensors[0], EinkDashboardBatterySensor)
 
-    async def test_async_setup_entry_stores_sensor(self) -> None:
-        entry = _make_entry()
-        hass = MagicMock()
-        hass.data = {DOMAIN: {entry.entry_id: {}}}
+    async def test_async_setup_entry_stores_sensor(
+        self, hass: HomeAssistant
+    ) -> None:
+        # The sensor is stored in hass.data under the "battery_sensor" key.
+        entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
+        entry.add_to_hass(hass)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
 
         await async_setup_entry(hass, entry, lambda entities: None)
 
