@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import io
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.helpers.template import TemplateError
 from PIL import Image
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_UPDATE_INTERVAL,
@@ -19,26 +20,20 @@ from custom_components.eink_dashboard.image import (
     async_setup_entry,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from homeassistant.core import HomeAssistant
+
 
 def _make_entry(
     options: dict[str, Any] | None = None,
-) -> MagicMock:
-    entry = MagicMock()
-    entry.entry_id = "test_entry_id"
-    entry.title = "Test Dashboard"
-    entry.options = options or {
-        "width": 200,
-        "height": 100,
-    }
-    return entry
-
-
-def _make_hass() -> MagicMock:
-    hass = MagicMock()
-    hass.states.async_all.return_value = []
-    hass.async_add_executor_job = AsyncMock(side_effect=lambda fn, *a: fn(*a))
-    hass.is_stopping = False
-    return hass
+) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Dashboard",
+        options=options or {"width": 200, "height": 100},
+    )
 
 
 def _png_from_bytes(data: bytes) -> Image.Image:
@@ -68,40 +63,63 @@ def _patch_eink_image_hass():
         yield
 
 
-class TestEinkDashboardImage:
-    def test_attributes_set_from_entry(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
+@pytest.fixture
+def make_entity(
+    hass: HomeAssistant,
+) -> Callable[
+    [dict[str, Any] | None], tuple[EinkDashboardImage, MockConfigEntry]
+]:
+    """Build an EinkDashboardImage backed by a registered config entry.
+
+    Returns a factory that creates a MockConfigEntry (registered via
+    add_to_hass), seeds hass.data[DOMAIN][entry.entry_id], and
+    constructs an EinkDashboardImage with async_write_ha_state mocked.
+    """
+
+    def _make(
+        options: dict[str, Any] | None = None,
+    ) -> tuple[EinkDashboardImage, MockConfigEntry]:
+        entry = _make_entry(options)
+        entry.add_to_hass(hass)
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
         entity = EinkDashboardImage(hass, entry)
+        entity.async_write_ha_state = MagicMock()
+        return entity, entry
+
+    return _make
+
+
+class TestEinkDashboardImage:
+    async def test_attributes_set_from_entry(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, entry = make_entity()
 
         assert entity._attr_name == "Test Dashboard"
-        assert entity._attr_unique_id == "test_entry_id"
+        assert entity._attr_unique_id == entry.entry_id
         assert entity._attr_content_type == "image/png"
 
-    def test_device_info_set_from_entry(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+    async def test_device_info_set_from_entry(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, entry = make_entity()
 
         assert entity._attr_device_info == {
-            "identifiers": {(DOMAIN, "test_entry_id")}
+            "identifiers": {(DOMAIN, entry.entry_id)}
         }
 
     async def test_async_image_returns_none_before_refresh(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+        entity, _entry = make_entity()
 
         result = await entity.async_image()
         assert result is None
 
-    async def test_refresh_renders_png(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_refresh_renders_png(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
 
         await entity._async_refresh(None)
 
@@ -111,23 +129,19 @@ class TestEinkDashboardImage:
         assert img.size == (200, 100)
         assert img.mode == "L"
 
-    async def test_refresh_updates_timestamp(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_refresh_updates_timestamp(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
 
         assert entity._attr_image_last_updated is None
         await entity._async_refresh(None)
         assert entity._attr_image_last_updated is not None
 
     async def test_refresh_skips_write_when_unchanged(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity()
 
         await entity._async_refresh(None)
         entity.async_write_ha_state.reset_mock()
@@ -136,12 +150,9 @@ class TestEinkDashboardImage:
         entity.async_write_ha_state.assert_not_called()
 
     async def test_added_to_hass_sets_up_interval(
-        self,
+        self, hass: HomeAssistant, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity()
 
         unsub = MagicMock()
         with patch(
@@ -155,12 +166,9 @@ class TestEinkDashboardImage:
             assert args[0][2] == timedelta(seconds=DEFAULT_UPDATE_INTERVAL)
 
     async def test_remove_from_hass_cancels_interval(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity()
 
         unsub = MagicMock()
         with patch(
@@ -173,12 +181,9 @@ class TestEinkDashboardImage:
         unsub.assert_called_once()
 
     async def test_set_widgets_affects_render(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity()
 
         entity.set_widgets(
             [
@@ -202,16 +207,14 @@ class TestEinkDashboardImage:
         )
         assert has_dark
 
-    async def test_build_states_from_hass(self) -> None:
-        hass = _make_hass()
-        state_obj = MagicMock()
-        state_obj.entity_id = "sensor.temp"
-        state_obj.state = "22"
-        state_obj.attributes = {"unit_of_measurement": "°C"}
-        hass.states.async_all.return_value = [state_obj]
+    async def test_build_states_from_hass(
+        self, hass: HomeAssistant, make_entity: Callable[..., Any]
+    ) -> None:
+        hass.states.async_set(
+            "sensor.temp", "22", {"unit_of_measurement": "°C"}
+        )
 
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+        entity, _entry = make_entity()
 
         states = entity._build_states()
         assert "sensor.temp" in states
@@ -220,18 +223,13 @@ class TestEinkDashboardImage:
             states["sensor.temp"]["attributes"]["unit_of_measurement"] == "°C"
         )
 
-    async def test_fetch_forecasts_merges_into_states(self) -> None:
-        hass = _make_hass()
+    async def test_fetch_forecasts_merges_into_states(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
         forecast_data = [
             {"datetime": "2025-05-04", "temperature": 18, "templow": 8},
         ]
-        hass.services.async_call = AsyncMock(
-            return_value={
-                "weather.home": {"forecast": forecast_data},
-            }
-        )
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+        entity, _entry = make_entity()
         entity.set_widgets([{"type": "weather", "entity": "weather.home"}])
 
         states = {
@@ -240,12 +238,22 @@ class TestEinkDashboardImage:
                 "attributes": {"temperature": 20},
             }
         }
-        await entity._async_fetch_forecasts(states)
+        # ServiceRegistry uses __slots__; patch the class, not the
+        # instance.
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(
+                return_value={
+                    "weather.home": {"forecast": forecast_data},
+                }
+            ),
+        ) as mock_call:
+            await entity._async_fetch_forecasts(states)
 
         assert (
             states["weather.home"]["attributes"]["forecast"] == forecast_data
         )
-        hass.services.async_call.assert_called_once_with(
+        mock_call.assert_called_once_with(
             "weather",
             "get_forecasts",
             {"entity_id": "weather.home", "type": "daily"},
@@ -253,25 +261,24 @@ class TestEinkDashboardImage:
             return_response=True,
         )
 
-    async def test_fetch_forecasts_skips_missing_entity(self) -> None:
-        hass = _make_hass()
-        hass.services.async_call = AsyncMock()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+    async def test_fetch_forecasts_skips_missing_entity(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets([{"type": "weather", "entity": "weather.missing"}])
 
         states: dict[str, Any] = {}
-        await entity._async_fetch_forecasts(states)
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call", AsyncMock()
+        ) as mock_call:
+            await entity._async_fetch_forecasts(states)
 
-        hass.services.async_call.assert_not_called()
+        mock_call.assert_not_called()
 
-    async def test_fetch_forecasts_handles_service_error(self) -> None:
-        hass = _make_hass()
-        hass.services.async_call = AsyncMock(
-            side_effect=Exception("service unavailable")
-        )
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
+    async def test_fetch_forecasts_handles_service_error(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets([{"type": "weather", "entity": "weather.home"}])
 
         states = {
@@ -280,17 +287,20 @@ class TestEinkDashboardImage:
                 "attributes": {"temperature": 20},
             }
         }
-        await entity._async_fetch_forecasts(states)
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(side_effect=Exception("service unavailable")),
+        ):
+            await entity._async_fetch_forecasts(states)
 
         assert "forecast" not in states["weather.home"]["attributes"]
 
-    async def test_custom_update_interval(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(
+    async def test_custom_update_interval(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(
             {"width": 200, "height": 100, "update_interval": 30}
         )
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
 
         with patch(
             "custom_components.eink_dashboard.image.async_track_time_interval",
@@ -300,11 +310,12 @@ class TestEinkDashboardImage:
             args = mock_track.call_args
             assert args[0][2] == timedelta(seconds=30)
 
-    async def test_rotation_applied(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry({"width": 200, "height": 100, "rotation": 90})
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_rotation_applied(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(
+            {"width": 200, "height": 100, "rotation": 90}
+        )
 
         await entity._async_refresh(None)
 
@@ -313,11 +324,10 @@ class TestEinkDashboardImage:
         img = _png_from_bytes(result)
         assert img.size == (100, 200)
 
-    async def test_template_in_text_widget_is_resolved(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_template_in_text_widget_is_resolved(
+        self, hass: HomeAssistant, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets(
             [
                 {
@@ -351,11 +361,10 @@ class TestEinkDashboardImage:
         )
         assert has_dark
 
-    async def test_static_text_skips_template_render(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_static_text_skips_template_render(
+        self, hass: HomeAssistant, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets(
             [
                 {
@@ -376,11 +385,10 @@ class TestEinkDashboardImage:
             instance.async_render.assert_not_called()
             MockTemplate.assert_called_once_with("Hello", hass)
 
-    async def test_template_error_falls_back_to_raw(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_template_error_falls_back_to_raw(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets(
             [
                 {
@@ -410,11 +418,10 @@ class TestEinkDashboardImage:
         )
         assert has_dark
 
-    async def test_non_text_widget_unaffected_by_templates(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_non_text_widget_unaffected_by_templates(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
         entity.set_widgets([{"type": "separator", "y": 50}])
 
         with patch(
@@ -423,11 +430,12 @@ class TestEinkDashboardImage:
             await entity._async_refresh(None)
             MockTemplate.assert_not_called()
 
-    async def test_optimize_options_forwarded_to_render(self) -> None:
+    async def test_optimize_options_forwarded_to_render(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
         from custom_components.eink_dashboard.render import render_dashboard
 
-        hass = _make_hass()
-        entry = _make_entry(
+        entity, _entry = make_entity(
             {
                 "width": 200,
                 "height": 100,
@@ -437,8 +445,6 @@ class TestEinkDashboardImage:
                 "saturation": 0.8,
             }
         )
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
 
         with patch(
             "custom_components.eink_dashboard.image.render_dashboard",
@@ -451,15 +457,14 @@ class TestEinkDashboardImage:
             assert config["exposure"] == 1.5
             assert config["saturation"] == 0.8
 
-    async def test_locale_options_forwarded_to_render(self) -> None:
+    async def test_locale_options_forwarded_to_render(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
         # Locale values returned by _async_get_locale are placed in the
         # config dict passed to render_dashboard.
         from custom_components.eink_dashboard.render import render_dashboard
 
-        hass = _make_hass()
-        entry = _make_entry({"width": 200, "height": 100})
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity({"width": 200, "height": 100})
 
         locale_tuple = (
             "decimal_comma",
@@ -488,11 +493,11 @@ class TestEinkDashboardImage:
 
 
 class TestImagePlatformSetup:
-    async def test_async_setup_entry(self) -> None:
-        hass = _make_hass()
+    async def test_async_setup_entry(self, hass: HomeAssistant) -> None:
         entry = _make_entry()
+        entry.add_to_hass(hass)
         widgets = [{"type": "separator", "y": 50}]
-        hass.data = {DOMAIN: {entry.entry_id: {"widgets": widgets}}}
+        hass.data[DOMAIN] = {entry.entry_id: {"widgets": widgets}}
 
         async_add_entities = MagicMock()
         await async_setup_entry(hass, entry, async_add_entities)
@@ -514,11 +519,10 @@ _WEBHOOK_OPTS = {
 
 
 class TestWebhookPush:
-    async def test_push_skipped_on_initial_render(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_skipped_on_initial_render(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         with (
             patch(
@@ -534,11 +538,10 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
-    async def test_push_fires_on_image_change(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_fires_on_image_change(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -566,9 +569,10 @@ class TestWebhookPush:
                 b"changed-image",
             )
 
-    async def test_push_fires_for_each_webhook(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(
+    async def test_push_fires_for_each_webhook(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(
             {
                 "width": 200,
                 "height": 100,
@@ -578,8 +582,6 @@ class TestWebhookPush:
                 ],
             }
         )
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -608,11 +610,10 @@ class TestWebhookPush:
                 "https://trmnl.com/api/2",
             }
 
-    async def test_push_does_not_fire_when_unchanged(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_does_not_fire_when_unchanged(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         with (
             patch(
@@ -631,12 +632,9 @@ class TestWebhookPush:
             mock_push.assert_not_called()
 
     async def test_push_does_not_fire_without_webhook_urls(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry({"width": 200, "height": 100})
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity({"width": 200, "height": 100})
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -655,12 +653,11 @@ class TestWebhookPush:
             mock_push.assert_not_called()
 
     async def test_push_does_not_fire_with_empty_webhook_urls(
-        self,
+        self, make_entity: Callable[..., Any]
     ) -> None:
-        hass = _make_hass()
-        entry = _make_entry({"width": 200, "height": 100, "webhook_urls": []})
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+        entity, _entry = make_entity(
+            {"width": 200, "height": 100, "webhook_urls": []}
+        )
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -678,11 +675,10 @@ class TestWebhookPush:
             await entity._async_refresh(None)
             mock_push.assert_not_called()
 
-    async def test_push_skipped_when_image_too_large(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_skipped_when_image_too_large(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -705,11 +701,10 @@ class TestWebhookPush:
             mock_push.assert_not_called()
             mock_log.warning.assert_called_once()
 
-    async def test_push_rate_limited(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_rate_limited(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
@@ -736,11 +731,10 @@ class TestWebhookPush:
             mock_push.assert_not_called()
             assert entity._last_push == 1.0
 
-    async def test_push_skipped_when_image_blank(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry(_WEBHOOK_OPTS)
-        entity = EinkDashboardImage(hass, entry)
-        entity.async_write_ha_state = MagicMock()
+    async def test_push_skipped_when_image_blank(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity(_WEBHOOK_OPTS)
 
         # Initial render (push skipped).
         await entity._async_refresh(None)
