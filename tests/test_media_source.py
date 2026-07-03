@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,65 +11,45 @@ from homeassistant.components.media_source import (
     MediaSourceItem,
     Unresolvable,
 )
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.eink_dashboard.const import DOMAIN
 from custom_components.eink_dashboard.media_source import (
     EinkDashboardMediaSource,
     async_get_media_source,
 )
 
-DOMAIN = "eink_dashboard"
-
-
-def _make_hass(
-    entries: dict | None = None,
-) -> MagicMock:
-    """Build a minimal stub hass with the given entry data."""
-    hass = MagicMock()
-    hass.data = {DOMAIN: entries or {}}
-    return hass
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
 def _make_item(
-    hass: object,
+    hass: HomeAssistant,
     identifier: str = "",
 ) -> MediaSourceItem:
     """Build a MediaSourceItem with the given identifier."""
     return MediaSourceItem(hass, DOMAIN, identifier, None)
 
 
-@pytest.mark.asyncio
-async def test_async_get_media_source() -> None:
-    """Factory returns an EinkDashboardMediaSource instance."""
-    hass = _make_hass()
+async def test_async_get_media_source(hass: HomeAssistant) -> None:
+    # Factory returns an EinkDashboardMediaSource instance.
     source = await async_get_media_source(hass)
     assert isinstance(source, EinkDashboardMediaSource)
     assert source.name == "E-Ink Dashboard"
 
 
-@pytest.mark.asyncio
-async def test_browse_root_lists_entries() -> None:
-    """Root browse returns one child per dashboard entry."""
-    entry_a = MagicMock()
-    entry_a.title = "Kitchen"
+async def test_browse_root_lists_entries(hass: HomeAssistant) -> None:
+    # Root browse returns one child per dashboard entry.
+    entry_a = MockConfigEntry(domain=DOMAIN, entry_id="aaa", title="Kitchen")
     entity_a = MagicMock()
     entity_a.entity_id = "image.kitchen"
-    entry_b = MagicMock()
-    entry_b.title = "Office"
+    entry_b = MockConfigEntry(domain=DOMAIN, entry_id="bbb", title="Office")
     entity_b = MagicMock()
     entity_b.entity_id = "image.office"
-    entries = {
-        "aaa": {
-            "entry": entry_a,
-            "entity": entity_a,
-            "widgets": [],
-        },
-        "bbb": {
-            "entry": entry_b,
-            "entity": entity_b,
-            "widgets": [],
-        },
+    hass.data[DOMAIN] = {
+        "aaa": {"entry": entry_a, "entity": entity_a, "widgets": []},
+        "bbb": {"entry": entry_b, "entity": entity_b, "widgets": []},
     }
-    hass = _make_hass(entries)
     source = EinkDashboardMediaSource(hass)
 
     result = await source.async_browse_media(
@@ -92,10 +73,11 @@ async def test_browse_root_lists_entries() -> None:
         assert child.thumbnail == (f"/api/image_proxy/{expected_entity}")
 
 
-@pytest.mark.asyncio
-async def test_browse_root_empty_when_no_entries() -> None:
-    """Root browse returns an empty children list with no entries."""
-    hass = _make_hass({})
+async def test_browse_root_empty_when_no_entries(
+    hass: HomeAssistant,
+) -> None:
+    # Root browse returns an empty children list with no entries.
+    hass.data[DOMAIN] = {}
     source = EinkDashboardMediaSource(hass)
 
     result = await source.async_browse_media(
@@ -104,10 +86,9 @@ async def test_browse_root_empty_when_no_entries() -> None:
     assert result.children == []
 
 
-@pytest.mark.asyncio
-async def test_browse_non_root_raises() -> None:
-    """Browsing a non-root identifier raises BrowseError."""
-    hass = _make_hass()
+async def test_browse_non_root_raises(hass: HomeAssistant) -> None:
+    # Browsing a non-root identifier raises BrowseError.
+    hass.data[DOMAIN] = {}
     source = EinkDashboardMediaSource(hass)
 
     with pytest.raises(BrowseError):
@@ -116,21 +97,14 @@ async def test_browse_non_root_raises() -> None:
         )
 
 
-@pytest.mark.asyncio
-async def test_resolve_valid_entry() -> None:
-    """Resolving a known entry returns the image proxy URL."""
-    entry = MagicMock()
-    entry.title = "Kitchen"
+async def test_resolve_valid_entry(hass: HomeAssistant) -> None:
+    # Resolving a known entry returns the image proxy URL.
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="abc123", title="Kitchen")
     entity = MagicMock()
     entity.entity_id = "image.kitchen"
-    entries = {
-        "abc123": {
-            "entry": entry,
-            "entity": entity,
-            "widgets": [],
-        },
+    hass.data[DOMAIN] = {
+        "abc123": {"entry": entry, "entity": entity, "widgets": []},
     }
-    hass = _make_hass(entries)
     source = EinkDashboardMediaSource(hass)
 
     result = await source.async_resolve_media(
@@ -140,10 +114,9 @@ async def test_resolve_valid_entry() -> None:
     assert result.mime_type == "image/png"
 
 
-@pytest.mark.asyncio
-async def test_resolve_unknown_entry_raises() -> None:
-    """Resolving an unknown entry raises Unresolvable."""
-    hass = _make_hass({})
+async def test_resolve_unknown_entry_raises(hass: HomeAssistant) -> None:
+    # Resolving an unknown entry raises Unresolvable.
+    hass.data[DOMAIN] = {}
     source = EinkDashboardMediaSource(hass)
 
     with pytest.raises(Unresolvable):
