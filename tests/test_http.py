@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import hashlib
-import json
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-from aiohttp import web
+from homeassistant.components.frontend import (
+    DATA_EXTRA_MODULE_URL,
+    UrlManager,
+)
+from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
+    DOMAIN,
     WidgetType,
 )
 from custom_components.eink_dashboard.http import (
@@ -17,330 +22,420 @@ from custom_components.eink_dashboard.http import (
     EinkPublicImageView,
 )
 
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
+    from pytest_homeassistant_custom_component.typing import (
+        ClientSessionGenerator,
+    )
+
+    from custom_components.eink_dashboard.image import EinkDashboardImage
+
 PNG_STUB = b"\x89PNG_STUB_DATA"
 PNG_ETAG = f'"{hashlib.sha256(PNG_STUB).hexdigest()}"'
 
-
-def _make_entity(image_bytes: bytes | None = PNG_STUB) -> MagicMock:
-    entity = MagicMock()
-    entity.async_image = AsyncMock(return_value=image_bytes)
-    if image_bytes:
-        entity.etag = f'"{hashlib.sha256(image_bytes).hexdigest()}"'
-    else:
-        entity.etag = None
-    return entity
+_DEFAULT_OPTIONS = {
+    "device_model": "custom",
+    "width": 758,
+    "height": 1024,
+}
 
 
-def _make_request(
-    entry_id: str = "test_entry",
-    entity: MagicMock | None = None,
-    headers: dict[str, str] | None = None,
+def _image_url(entry_id: str) -> str:
+    return f"/api/eink_dashboard/{entry_id}/image.png"
+
+
+def _layout_url(entry_id: str) -> str:
+    return f"/api/eink_dashboard/{entry_id}/layout"
+
+
+async def _setup_entry(
+    hass: HomeAssistant,
     *,
-    entry_missing: bool = False,
-    query: dict[str, str] | None = None,
-    battery_sensor: MagicMock | None = None,
-) -> web.Request:
-    request = MagicMock(spec=web.Request)
-    request.headers = headers or {}
-    request.query = query if query is not None else {}
+    options: dict[str, Any] | None = None,
+    widgets: list[dict[str, Any]] | None = None,
+) -> MockConfigEntry:
+    """Set up the integration with a config entry via the real HA machinery.
 
-    hass = MagicMock()
-    if entry_missing:
-        hass.data = {}
-    else:
-        ent = entity if entity is not None else _make_entity()
-        entry_data: dict = {"entity": ent}
-        if battery_sensor is not None:
-            entry_data["battery_sensor"] = battery_sensor
-        hass.data = {
-            "eink_dashboard": {
-                entry_id: entry_data,
-            },
-        }
+    Brings up the ``http`` component, registers a config entry, and
+    forwards platform setup so the real image and battery sensor
+    entities exist at ``hass.data[DOMAIN][entry.entry_id]``.
 
-    request.app = {"hass": hass}
-    return request
+    Args:
+        hass: Home Assistant instance.
+        options: Config entry options, or None for a default preset.
+        widgets: Widget list to expose to the views, or None to leave
+            the store-loaded (empty) list untouched.
+
+    Returns:
+        The registered config entry.
+    """
+    assert await async_setup_component(hass, "http", {})
+    hass.data[DATA_EXTRA_MODULE_URL] = UrlManager(
+        lambda _event, _url: None, []
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Test Dashboard",
+        options=options or _DEFAULT_OPTIONS,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    if widgets is not None:
+        hass.data[DOMAIN][entry.entry_id]["widgets"] = widgets
+    return entry
 
 
-class TestEinkPublicImageView:
-    def test_view_attributes(self) -> None:
+def _seed_rendered(
+    entity: EinkDashboardImage,
+    image: bytes = PNG_STUB,
+    etag: str = PNG_ETAG,
+) -> None:
+    """Seed a rendered image and ETag directly onto the entity.
+
+    Bypasses the render pipeline so HTTP-layer tests don't depend on
+    a real SVG render having happened first.
+
+    Args:
+        entity: The image entity to seed.
+        image: Rendered PNG bytes to store.
+        etag: ETag string matching ``image``.
+    """
+    entity._rendered = image
+    entity._etag = etag
+
+
+class TestViewAttributes:
+    def test_image_view_attributes(self) -> None:
+        # Public image view has no auth requirement.
         view = EinkPublicImageView()
         assert "eink_dashboard" in view.url
         assert "image.png" in view.url
         assert view.requires_auth is False
 
-    async def test_returns_png_with_etag(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request()
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 200
-        assert response.content_type == "image/png"
-        assert response.body == PNG_STUB
-        assert "ETag" in response.headers
-        assert response.headers["Cache-Control"] == "no-cache"
-
-    async def test_etag_is_sha256(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request()
-
-        response = await view.get(request, "test_entry")
-
-        assert response.headers["ETag"] == PNG_ETAG
-
-    async def test_304_on_matching_etag(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request(headers={"If-None-Match": PNG_ETAG})
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 304
-        assert response.body is None
-        assert response.headers["ETag"] == PNG_ETAG
-        assert response.headers["Cache-Control"] == "no-cache"
-
-    async def test_304_on_wildcard_etag(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request(headers={"If-None-Match": "*"})
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 304
-        assert response.headers["ETag"] == PNG_ETAG
-
-    async def test_200_on_no_etag_header(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request()  # no If-None-Match header
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 200
-        assert response.body == PNG_STUB
-
-    async def test_200_on_mismatched_etag(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request(headers={"If-None-Match": '"stale"'})
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 200
-        assert response.body == PNG_STUB
-
-    async def test_missing_entry_raises_404(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request(entry_missing=True)
-
-        with pytest.raises(web.HTTPNotFound):
-            await view.get(request, "test_entry")
-
-    async def test_no_image_raises_503(self) -> None:
-        view = EinkPublicImageView()
-        entity = _make_entity(image_bytes=None)
-        request = _make_request(entity=entity)
-
-        with pytest.raises(web.HTTPServiceUnavailable):
-            await view.get(request, "test_entry")
-
-    async def test_battery_params_update_sensor(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "78", "isCharging": "1"},
-            battery_sensor=sensor,
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(78, True)
-
-    async def test_battery_not_charging(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "50", "isCharging": "0"},
-            battery_sensor=sensor,
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(50, False)
-
-    async def test_battery_no_params_no_sensor_call(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(query={}, battery_sensor=sensor)
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_not_called()
-
-    async def test_battery_invalid_value_ignored(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "abc"}, battery_sensor=sensor
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_not_called()
-
-    async def test_battery_no_sensor_registered(self) -> None:
-        view = EinkPublicImageView()
-        request = _make_request(query={"batteryLevel": "50"})
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 200
-
-    async def test_battery_missing_is_charging_defaults_false(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "50"}, battery_sensor=sensor
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(50, False)
-
-    async def test_battery_clamped_above_100(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "150"}, battery_sensor=sensor
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(100, False)
-
-    async def test_battery_clamped_below_0(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "-5"}, battery_sensor=sensor
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(0, False)
-
-    async def test_battery_float_truncated(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            query={"batteryLevel": "78.9"}, battery_sensor=sensor
-        )
-
-        await view.get(request, "test_entry")
-
-        sensor.update_battery.assert_called_once_with(78, False)
-
-    async def test_battery_updated_on_304(self) -> None:
-        view = EinkPublicImageView()
-        sensor = MagicMock()
-        request = _make_request(
-            headers={"If-None-Match": PNG_ETAG},
-            query={"batteryLevel": "78", "isCharging": "1"},
-            battery_sensor=sensor,
-        )
-
-        response = await view.get(request, "test_entry")
-
-        assert response.status == 304
-        sensor.update_battery.assert_called_once_with(78, True)
-
-
-def _make_layout_request(
-    entry_id: str = "test_entry",
-    widgets: list | None = None,
-    options: dict | None = None,
-    data: dict | None = None,
-    *,
-    entry_missing: bool = False,
-    body: object = None,
-    store: MagicMock | None = None,
-    entity: MagicMock | None = None,
-    battery_sensor: MagicMock | None = None,
-    battery_entity_id: str | None = None,
-    battery_entity_state: str | None = None,
-    json_error: bool = False,
-) -> web.Request:
-    request = MagicMock(spec=web.Request)
-    hass = MagicMock()
-    if json_error:
-        request.json = AsyncMock(side_effect=ValueError("bad json"))
-    elif body is not None:
-        request.json = AsyncMock(return_value=body)
-    if entry_missing:
-        hass.data = {}
-    else:
-        ha_opts = options or {"width": 758, "height": 1024}
-        if battery_entity_id is not None:
-            ha_opts = {**ha_opts, "battery_entity_id": battery_entity_id}
-        ha_entry = MagicMock()
-        ha_entry.title = "Test Dashboard"
-        ha_entry.options = ha_opts
-        ha_entry.data = data or {}
-        entry_data: dict = {
-            "widgets": widgets or [],
-            "entry": ha_entry,
-        }
-        if store is not None:
-            entry_data["store"] = store
-        if entity is not None:
-            entry_data["entity"] = entity
-        if battery_sensor is not None:
-            entry_data["battery_sensor"] = battery_sensor
-        hass.data = {"eink_dashboard": {entry_id: entry_data}}
-        if battery_entity_id and battery_entity_state is not None:
-            ha_state = MagicMock()
-            ha_state.state = battery_entity_state
-            ha_state.attributes = {}
-            hass.states.get.return_value = ha_state
-        else:
-            hass.states.get.return_value = None
-    request.app = {"hass": hass}
-    return request
-
-
-def _make_store() -> MagicMock:
-    store = MagicMock()
-    store.async_save = AsyncMock()
-    return store
-
-
-def _make_post_entity() -> MagicMock:
-    entity = MagicMock()
-    entity.async_request_refresh = AsyncMock()
-    return entity
-
-
-class TestEinkLayoutView:
     def test_layout_view_attributes(self) -> None:
+        # Layout view requires authentication.
         view = EinkLayoutView()
         assert "eink_dashboard" in view.url
         assert "layout" in view.url
         assert view.requires_auth is True
 
-    async def test_returns_layout_json(self) -> None:
+
+class TestEinkPublicImageView:
+    async def test_returns_png_with_etag(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Image endpoint serves the rendered PNG with an ETag header.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_image_url(entry.entry_id))
+
+        assert resp.status == 200
+        assert resp.content_type == "image/png"
+        assert await resp.read() == PNG_STUB
+        assert "ETag" in resp.headers
+        assert resp.headers["Cache-Control"] == "no-cache"
+
+    async def test_etag_is_sha256(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # ETag value matches the sha256 hash of the image bytes.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_image_url(entry.entry_id))
+
+        assert resp.headers["ETag"] == PNG_ETAG
+
+    async def test_304_on_matching_etag(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # A matching If-None-Match returns 304 with no body.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(
+            _image_url(entry.entry_id),
+            headers={"If-None-Match": PNG_ETAG},
+        )
+
+        assert resp.status == 304
+        assert await resp.read() == b""
+        assert resp.headers["ETag"] == PNG_ETAG
+        assert resp.headers["Cache-Control"] == "no-cache"
+
+    async def test_304_on_wildcard_etag(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # A wildcard If-None-Match always returns 304.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(
+            _image_url(entry.entry_id), headers={"If-None-Match": "*"}
+        )
+
+        assert resp.status == 304
+        assert resp.headers["ETag"] == PNG_ETAG
+
+    async def test_200_on_no_etag_header(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # No If-None-Match header means a full 200 response.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_image_url(entry.entry_id))
+
+        assert resp.status == 200
+        assert await resp.read() == PNG_STUB
+
+    async def test_200_on_mismatched_etag(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # A stale If-None-Match means a full 200 response.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(
+            _image_url(entry.entry_id),
+            headers={"If-None-Match": '"stale"'},
+        )
+
+        assert resp.status == 200
+        assert await resp.read() == PNG_STUB
+
+    async def test_missing_entry_raises_404(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Unknown entry_id in the URL returns 404.
+        await _setup_entry(hass)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_image_url("nonexistent_entry"))
+
+        assert resp.status == 404
+
+    async def test_no_image_raises_503(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # No rendered image yet means 503.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity._rendered = None
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_image_url(entry.entry_id))
+
+        assert resp.status == 503
+
+    async def test_battery_params_update_sensor(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Battery query params call update_battery on the sensor.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id),
+            params={"batteryLevel": "78", "isCharging": "1"},
+        )
+
+        sensor.update_battery.assert_called_once_with(78, True)
+
+    async def test_battery_not_charging(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # isCharging=0 maps to False.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id),
+            params={"batteryLevel": "50", "isCharging": "0"},
+        )
+
+        sensor.update_battery.assert_called_once_with(50, False)
+
+    async def test_battery_no_params_no_sensor_call(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # No battery query params means update_battery is not called.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(_image_url(entry.entry_id))
+
+        sensor.update_battery.assert_not_called()
+
+    async def test_battery_invalid_value_ignored(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Non-numeric batteryLevel is silently ignored.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "abc"}
+        )
+
+        sensor.update_battery.assert_not_called()
+
+    async def test_battery_no_sensor_registered(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Missing sensor does not crash; still returns 200.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        del hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+
+        client = await hass_client_no_auth()
+        resp = await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "50"}
+        )
+
+        assert resp.status == 200
+
+    async def test_battery_missing_is_charging_defaults_false(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Missing isCharging defaults to False.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "50"}
+        )
+
+        sensor.update_battery.assert_called_once_with(50, False)
+
+    async def test_battery_clamped_above_100(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # batteryLevel=150 is clamped to 100.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "150"}
+        )
+
+        sensor.update_battery.assert_called_once_with(100, False)
+
+    async def test_battery_clamped_below_0(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # batteryLevel=-5 is clamped to 0.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "-5"}
+        )
+
+        sensor.update_battery.assert_called_once_with(0, False)
+
+    async def test_battery_float_truncated(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # batteryLevel=78.9 is truncated to 78.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        await client.get(
+            _image_url(entry.entry_id), params={"batteryLevel": "78.9"}
+        )
+
+        sensor.update_battery.assert_called_once_with(78, False)
+
+    async def test_battery_updated_on_304(
+        self, hass: HomeAssistant, hass_client_no_auth: ClientSessionGenerator
+    ) -> None:
+        # Battery is still updated even on a 304 response.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        _seed_rendered(entity)
+        sensor = MagicMock()
+        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+
+        client = await hass_client_no_auth()
+        resp = await client.get(
+            _image_url(entry.entry_id),
+            headers={"If-None-Match": PNG_ETAG},
+            params={"batteryLevel": "78", "isCharging": "1"},
+        )
+
+        assert resp.status == 304
+        sensor.update_battery.assert_called_once_with(78, True)
+
+
+class TestEinkLayoutView:
+    async def test_returns_layout_json(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Widgets, display config, and device metadata all round-trip.
         widgets = [{"type": "separator", "y": 50}]
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            widgets=widgets,
+        entry = await _setup_entry(
+            hass,
             options={
                 "width": 758,
                 "height": 1024,
                 "device_model": "kindle_pw",
             },
+            widgets=widgets,
         )
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        assert response.status == 200
-        body = json.loads(response.text)
+        assert resp.status == 200
+        body = await resp.json()
         assert body["widgets"] == widgets
         assert body["display"] == {
             "width": 758,
@@ -354,42 +449,52 @@ class TestEinkLayoutView:
         assert body["device"]["area_id"] is None
         assert body["device"]["has_webhooks"] is False
 
-    async def test_device_metadata_from_entry_options(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
+    async def test_device_metadata_from_entry_options(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Device metadata is read from entry options.
+        entry = await _setup_entry(
+            hass,
             options={
                 "width": 758,
                 "height": 1024,
                 "device_model": "kindle_pw4",
                 "orientation": "landscape",
                 "area_id": "kitchen",
-            }
+            },
         )
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["model"] == "kindle_pw4"
         assert device["model_label"] == "Kindle Paperwhite 4"
         assert device["orientation"] == "landscape"
         assert device["area_id"] == "kitchen"
 
-    async def test_device_metadata_defaults(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(data={})
+    async def test_device_metadata_defaults(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Default model is "custom", default orientation is "portrait".
+        entry = await _setup_entry(hass, options={})
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["model"] == "custom"
         assert device["model_label"] == "Custom"
         assert device["orientation"] == "portrait"
         assert device["area_id"] is None
         assert device["has_webhooks"] is False
 
-    async def test_has_webhooks_true(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
+    async def test_has_webhooks_true(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # has_webhooks is True when webhook_urls is non-empty.
+        entry = await _setup_entry(
+            hass,
             options={
                 "width": 758,
                 "height": 1024,
@@ -397,238 +502,315 @@ class TestEinkLayoutView:
                     {"name": "trmnl", "url": "https://example.com"}
                 ],
             },
-            data={},
         )
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["has_webhooks"] is True
 
-    async def test_missing_entry_raises_404(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(entry_missing=True)
+    async def test_missing_entry_raises_404(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Unknown entry_id in the URL returns 404.
+        await _setup_entry(hass)
 
-        with pytest.raises(web.HTTPNotFound):
-            await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url("nonexistent_entry"))
 
-    async def test_default_dimensions(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(options={})
+        assert resp.status == 404
 
-        response = await view.get(request, "test_entry")
+    async def test_default_dimensions(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Empty options fall back to DEFAULT_WIDTH / DEFAULT_HEIGHT.
+        entry = await _setup_entry(hass, options={})
 
-        body = json.loads(response.text)
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
+
+        body = await resp.json()
         assert body["display"]["width"] == DEFAULT_WIDTH
         assert body["display"]["height"] == DEFAULT_HEIGHT
 
-    async def test_layout_includes_device_battery_level(self) -> None:
-        view = EinkLayoutView()
-        sensor = MagicMock()
-        sensor.native_value = 72
-        request = _make_layout_request(battery_sensor=sensor)
+    async def test_layout_includes_device_battery_level(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Battery level from the internal sensor appears in device metadata.
+        entry = await _setup_entry(hass)
+        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor.update_battery(72, True)
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["device_battery_level"] == 72
 
-    async def test_layout_battery_level_none_without_sensor(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request()
+    async def test_layout_battery_level_none_without_sensor(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Battery is None when the sensor has never been updated.
+        entry = await _setup_entry(hass)
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["device_battery_level"] is None
 
-    async def test_layout_battery_from_entity_id(self) -> None:
-        # battery_entity_id option overrides internal sensor.
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            battery_entity_id="sensor.trmnl_battery",
-            battery_entity_state="63",
+    async def test_layout_battery_from_entity_id(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # battery_entity_id option reads from real HA state.
+        entry = await _setup_entry(
+            hass,
+            options={
+                **_DEFAULT_OPTIONS,
+                "battery_entity_id": "sensor.trmnl_battery",
+            },
         )
+        hass.states.async_set("sensor.trmnl_battery", "63")
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["device_battery_level"] == 63
 
     async def test_layout_battery_entity_id_priority_over_sensor(
-        self,
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
     ) -> None:
-        # battery_entity_id wins even when internal sensor also has a value.
-        view = EinkLayoutView()
-        sensor = MagicMock()
-        sensor.native_value = 50
-        request = _make_layout_request(
-            battery_sensor=sensor,
-            battery_entity_id="sensor.trmnl_battery",
-            battery_entity_state="77",
+        # battery_entity_id wins even when the internal sensor also has
+        # a value.
+        entry = await _setup_entry(
+            hass,
+            options={
+                **_DEFAULT_OPTIONS,
+                "battery_entity_id": "sensor.trmnl_battery",
+            },
         )
+        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor.update_battery(50, False)
+        hass.states.async_set("sensor.trmnl_battery", "77")
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["device_battery_level"] == 77
 
     async def test_layout_battery_entity_id_missing_state_falls_through(
-        self,
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
     ) -> None:
-        # Entity ID configured but state not found → falls back to sensor.
-        view = EinkLayoutView()
-        sensor = MagicMock()
-        sensor.native_value = 40
-        request = _make_layout_request(
-            battery_sensor=sensor,
-            battery_entity_id="sensor.trmnl_battery",
-            battery_entity_state=None,
+        # Entity ID configured but no state exists: falls back to sensor.
+        entry = await _setup_entry(
+            hass,
+            options={
+                **_DEFAULT_OPTIONS,
+                "battery_entity_id": "sensor.trmnl_battery",
+            },
         )
+        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor.update_battery(40, False)
 
-        response = await view.get(request, "test_entry")
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
 
-        device = json.loads(response.text)["device"]
+        device = (await resp.json())["device"]
         assert device["device_battery_level"] == 40
+
+    async def test_layout_get_rejects_unauthenticated(
+        self,
+        hass: HomeAssistant,
+        hass_client_no_auth: ClientSessionGenerator,
+    ) -> None:
+        # Layout GET requires authentication.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client_no_auth()
+        resp = await client.get(_layout_url(entry.entry_id))
+
+        assert resp.status == 401
 
 
 class TestEinkLayoutViewPost:
-    async def test_post_saves_and_returns_ok(self) -> None:
+    async def test_post_saves_and_returns_ok(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # POST persists widgets, refreshes the entity, and returns ok.
         widgets = [{"type": "separator", "y": 50}]
-        store = _make_store()
-        entity = _make_post_entity()
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=widgets, store=store, entity=entity
-        )
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity.async_request_refresh = AsyncMock()
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store.async_save = AsyncMock()
 
-        response = await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
 
-        assert response.status == 200
-        assert json.loads(response.text) == {"status": "ok"}
+        assert resp.status == 200
+        assert await resp.json() == {"status": "ok"}
         store.async_save.assert_called_once_with(widgets)
         entity.async_request_refresh.assert_called_once_with(widgets)
 
-    async def test_post_updates_in_memory_widgets(self) -> None:
+    async def test_post_updates_in_memory_widgets(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # The in-memory widgets list is updated after a successful POST.
         new_widgets = [{"type": "heading", "heading": "hi"}]
-        store = _make_store()
-        entity = _make_post_entity()
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            widgets=[], body=new_widgets, store=store, entity=entity
-        )
-        hass = request.app["hass"]
+        entry = await _setup_entry(hass, widgets=[])
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity.async_request_refresh = AsyncMock()
 
-        await view.post(request, "test_entry")
+        client = await hass_client()
+        await client.post(_layout_url(entry.entry_id), json=new_widgets)
 
-        assert hass.data["eink_dashboard"]["test_entry"]["widgets"] == (
-            new_widgets
-        )
+        assert hass.data[DOMAIN][entry.entry_id]["widgets"] == new_widgets
 
-    async def test_post_missing_entry_raises_404(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(entry_missing=True, body=[])
+    async def test_post_missing_entry_raises_404(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Unknown entry_id in the URL returns 404.
+        await _setup_entry(hass)
 
-        with pytest.raises(web.HTTPNotFound):
-            await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url("nonexistent_entry"), json=[])
 
-    async def test_post_invalid_json_raises_400(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=None,
-            json_error=True,
-            store=_make_store(),
-            entity=_make_post_entity(),
-        )
+        assert resp.status == 404
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+    async def test_post_invalid_json_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Malformed JSON body returns 400.
+        entry = await _setup_entry(hass)
 
-    async def test_post_non_list_raises_400(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body={"type": "heading"},
-            store=_make_store(),
-            entity=_make_post_entity(),
+        client = await hass_client()
+        resp = await client.post(
+            _layout_url(entry.entry_id),
+            data=b"not json",
+            headers={"Content-Type": "application/json"},
         )
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        assert resp.status == 400
 
-    async def test_post_invalid_widget_type_raises_400(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=[{"type": "bogus"}],
-            store=_make_store(),
-            entity=_make_post_entity(),
+    async def test_post_non_list_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Body must be a list, not a dict.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client()
+        resp = await client.post(
+            _layout_url(entry.entry_id), json={"type": "heading"}
         )
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        assert resp.status == 400
 
-    async def test_post_missing_type_key_raises_400(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=[{"x": 10}],
-            store=_make_store(),
-            entity=_make_post_entity(),
+    async def test_post_invalid_widget_type_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Unknown widget type returns 400.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client()
+        resp = await client.post(
+            _layout_url(entry.entry_id), json=[{"type": "bogus"}]
         )
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        assert resp.status == 400
 
-    async def test_post_non_dict_widget_raises_400(self) -> None:
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=["not a dict"],
-            store=_make_store(),
-            entity=_make_post_entity(),
+    async def test_post_missing_type_key_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # A widget dict with no "type" key returns 400.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=[{"x": 10}])
+
+        assert resp.status == 400
+
+    async def test_post_non_dict_widget_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # A widget list item that is not a dict returns 400.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client()
+        resp = await client.post(
+            _layout_url(entry.entry_id), json=["not a dict"]
         )
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        assert resp.status == 400
 
-    async def test_post_empty_list_succeeds(self) -> None:
-        store = _make_store()
-        entity = _make_post_entity()
-        view = EinkLayoutView()
-        request = _make_layout_request(body=[], store=store, entity=entity)
+    async def test_post_empty_list_succeeds(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # An empty widget list is valid.
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity.async_request_refresh = AsyncMock()
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store.async_save = AsyncMock()
 
-        response = await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=[])
 
-        assert response.status == 200
+        assert resp.status == 200
         store.async_save.assert_called_once_with([])
 
-    async def test_post_all_valid_widget_types(self) -> None:
+    async def test_post_all_valid_widget_types(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Every WidgetType enum value is accepted.
         widgets = [{"type": t.value} for t in WidgetType]
-        store = _make_store()
-        entity = _make_post_entity()
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=widgets, store=store, entity=entity
-        )
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity.async_request_refresh = AsyncMock()
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store.async_save = AsyncMock()
 
-        response = await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
 
-        assert response.status == 200
+        assert resp.status == 200
         store.async_save.assert_called_once_with(widgets)
 
-    async def test_post_too_many_widgets_raises_400(self) -> None:
+    async def test_post_too_many_widgets_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # More than MAX_WIDGETS (200) entries returns 400.
         widgets = [{"type": "separator", "y": i} for i in range(201)]
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=widgets, store=_make_store(), entity=_make_post_entity()
-        )
+        entry = await _setup_entry(hass)
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
 
-    async def test_post_nested_dict_field_raises_400(self) -> None:
+        assert resp.status == 400
+
+    async def test_post_nested_dict_field_raises_400(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # A widget field value that is a nested dict returns 400.
         widgets = [{"type": "heading", "heading": {"nested": "bad"}}]
-        view = EinkLayoutView()
-        request = _make_layout_request(
-            body=widgets, store=_make_store(), entity=_make_post_entity()
-        )
+        entry = await _setup_entry(hass)
 
-        with pytest.raises(web.HTTPBadRequest):
-            await view.post(request, "test_entry")
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
+
+        assert resp.status == 400
+
+    async def test_post_rejects_unauthenticated(
+        self,
+        hass: HomeAssistant,
+        hass_client_no_auth: ClientSessionGenerator,
+    ) -> None:
+        # Layout POST requires authentication.
+        entry = await _setup_entry(hass)
+
+        client = await hass_client_no_auth()
+        resp = await client.post(_layout_url(entry.entry_id), json=[])
+
+        assert resp.status == 401
