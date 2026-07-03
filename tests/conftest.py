@@ -17,28 +17,6 @@ _hass_frontend_stub.where = lambda: str(_HASS_FRONTEND_FIXTURE)  # type: ignore[
 sys.modules["hass_frontend"] = _hass_frontend_stub
 
 
-def pytest_configure(config) -> None:  # type: ignore[no-untyped-def]
-    """Replace @async_response before collection.
-
-    The decorator is applied at function-definition time when
-    custom_components.eink_dashboard.websocket is imported.  Patching
-    here (before collection starts) means ws_render_widget remains a
-    plain awaitable coroutine that tests can call directly with
-    ``await handler(hass, conn, msg)``.  Restored by pytest_unconfigure.
-    """
-    import homeassistant.components.websocket_api as ws
-
-    config._orig_async_response = ws.async_response  # type: ignore[attr-defined]
-    ws.async_response = lambda f: f  # type: ignore[attr-defined]
-
-
-def pytest_unconfigure(config) -> None:  # type: ignore[no-untyped-def]
-    """Restore @async_response after the test session."""
-    import homeassistant.components.websocket_api as ws
-
-    ws.async_response = config._orig_async_response  # type: ignore[attr-defined]
-
-
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
     """Allow phacc's hass fixture to discover custom_components/.
