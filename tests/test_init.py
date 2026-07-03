@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from homeassistant.components.frontend import (
+    DATA_EXTRA_MODULE_URL,
+    UrlManager,
+)
+from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard import (
     _async_get_locale,
@@ -16,54 +24,71 @@ from custom_components.eink_dashboard.http import (
     EinkPublicImageView,
 )
 
-
-def _make_entry(
-    entry_id: str = "entry1",
-    data: dict | None = None,
-    options: dict | None = None,
-    title: str = "My Dashboard",
-) -> MagicMock:
-    entry = MagicMock()
-    entry.entry_id = entry_id
-    entry.title = title
-    entry.data = data or {}
-    entry.options = options or {}
-    return entry
+if TYPE_CHECKING:
+    from homeassistant.core import HomeAssistant
 
 
-def _make_hass() -> MagicMock:
-    # defaultdict so real HA helpers (add_extra_js_url, dr.async_get,
-    # async_register_command, etc.) can access any hass.data key without
-    # raising KeyError; individual tests override specific keys as needed.
-    hass = MagicMock()
-    hass.data = defaultdict(MagicMock)
-    hass.config_entries.async_forward_entry_setups = AsyncMock()
-    hass.config_entries.async_unload_platforms = AsyncMock(return_value=True)
-    hass.http.async_register_static_paths = AsyncMock()
-    return hass
+async def _setup_http(hass: HomeAssistant) -> None:
+    """Set up real HTTP so ``async_setup`` can register views on it.
+
+    ``async_setup`` also calls ``add_extra_js_url``, which normally
+    requires the real ``frontend`` component. That component depends
+    on the ``hass_frontend`` PyPI package (a built frontend bundle)
+    which is not part of the test dependency group -- ``hass_frontend``
+    is stubbed in conftest.py for MDI icon lookups only. Pre-populating
+    ``DATA_EXTRA_MODULE_URL`` satisfies ``add_extra_js_url`` without
+    requiring the real ``frontend`` component to be set up.
+    """
+    assert await async_setup_component(hass, "http", {})
+    hass.data[DATA_EXTRA_MODULE_URL] = UrlManager(
+        lambda _event, _url: None, []
+    )
+
+
+@pytest.fixture
+def mock_store_class():
+    """Patch EinkDashboardStore with async_load returning [] by default.
+
+    Tests that need a specific widget list can override it via
+    ``mock_store_class.return_value.async_load.return_value = widgets``.
+    """
+    with patch(
+        "custom_components.eink_dashboard.EinkDashboardStore"
+    ) as mock_store:
+        mock_store.return_value.async_load = AsyncMock(return_value=[])
+        yield mock_store
 
 
 class TestAsyncSetup:
-    async def test_registers_http_views(self) -> None:
-        hass = _make_hass()
+    async def test_registers_http_views(self, hass: HomeAssistant) -> None:
+        # async_setup registers both HTTP view classes exactly once each.
+        await _setup_http(hass)
 
-        await async_setup(hass, {})
+        with patch.object(
+            hass.http, "register_view", wraps=hass.http.register_view
+        ) as mock_register_view:
+            await async_setup(hass, {})
 
-        assert hass.http.register_view.call_count == 2
+        assert mock_register_view.call_count == 2
         view_types = {
-            type(call.args[0])
-            for call in hass.http.register_view.call_args_list
+            type(call.args[0]) for call in mock_register_view.call_args_list
         }
         assert EinkPublicImageView in view_types
         assert EinkLayoutView in view_types
 
-    async def test_registers_static_path(self) -> None:
-        hass = _make_hass()
+    async def test_registers_static_path(self, hass: HomeAssistant) -> None:
+        # async_setup registers the frontend, fonts, and icons dirs.
+        await _setup_http(hass)
 
-        await async_setup(hass, {})
+        with patch.object(
+            hass.http,
+            "async_register_static_paths",
+            wraps=hass.http.async_register_static_paths,
+        ) as mock_register_paths:
+            await async_setup(hass, {})
 
-        hass.http.async_register_static_paths.assert_called_once()
-        configs = hass.http.async_register_static_paths.call_args.args[0]
+        mock_register_paths.assert_called_once()
+        configs = mock_register_paths.call_args.args[0]
         assert len(configs) == 3
         assert configs[0].url_path == "/eink_dashboard/frontend"
         assert configs[0].path.endswith("frontend")
@@ -72,8 +97,9 @@ class TestAsyncSetup:
         assert configs[2].url_path == "/eink_dashboard/icons"
         assert configs[2].path.endswith("icons")
 
-    async def test_returns_true(self) -> None:
-        hass = _make_hass()
+    async def test_returns_true(self, hass: HomeAssistant) -> None:
+        # async_setup reports success.
+        await _setup_http(hass)
 
         result = await async_setup(hass, {})
 
@@ -81,70 +107,81 @@ class TestAsyncSetup:
 
 
 class TestAsyncSetupEntry:
-    async def test_populates_hass_data(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry()
-        widgets = [{"type": "separator", "y": 10}]
+    async def test_populates_hass_data(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # Setting up an entry stores its runtime data under hass.data[DOMAIN].
+        await _setup_http(hass)
+        entry = MockConfigEntry(domain=DOMAIN)
+        entry.add_to_hass(hass)
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=widgets)
-            await async_setup_entry(hass, entry)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
 
         assert entry.entry_id in hass.data[DOMAIN]
         data = hass.data[DOMAIN][entry.entry_id]
         assert "store" in data
-        assert data["widgets"] == widgets
+        assert data["widgets"] == []
 
-    async def test_stores_entry_reference(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry()
+    async def test_stores_entry_reference(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # The runtime data dict keeps a reference to the config entry itself.
+        await _setup_http(hass)
+        entry = MockConfigEntry(domain=DOMAIN)
+        entry.add_to_hass(hass)
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, entry)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
 
         assert hass.data[DOMAIN][entry.entry_id]["entry"] is entry
 
-    async def test_forwards_to_image_platform(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry()
+    async def test_forwards_to_image_platform(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # Setup forwards to the image and sensor platforms, which
+        # register their entities in the state machine.
+        await _setup_http(hass)
+        entry = MockConfigEntry(domain=DOMAIN, title="Test Dashboard")
+        entry.add_to_hass(hass)
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            await async_setup_entry(hass, entry)
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
 
-        hass.config_entries.async_forward_entry_setups.assert_called_once_with(
-            entry, ["image", "sensor"]
-        )
+        assert hass.states.get("image.test_dashboard") is not None
+        assert hass.states.get("sensor.test_dashboard_battery") is not None
 
-    async def test_returns_true(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry()
+    async def test_returns_true(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # async_setup_entry reports success.
+        await _setup_http(hass)
+        entry = MockConfigEntry(domain=DOMAIN)
+        entry.add_to_hass(hass)
 
-        with patch(
-            "custom_components.eink_dashboard.EinkDashboardStore"
-        ) as MockStore:
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
-            result = await async_setup_entry(hass, entry)
+        result = await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
 
         assert result is True
 
-    async def test_registers_device_with_preset(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry(
-            options={"device_model": "kindle_pw4", "area_id": "kitchen"}
+    async def test_registers_device_with_preset(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # A recognised device_model plus area_id populates manufacturer,
+        # model, and suggested_area on the device registry entry.
+        #
+        # async_setup_entry is called directly (not via
+        # hass.config_entries.async_setup) and platform forwarding is
+        # mocked out: patching dr.async_get replaces the real
+        # homeassistant.helpers.device_registry.async_get globally
+        # (custom_components.eink_dashboard.dr *is* that module), which
+        # would otherwise break real image/sensor entity registration.
+        hass.data.setdefault(DOMAIN, {})
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            options={"device_model": "kindle_pw4", "area_id": "kitchen"},
         )
+        entry.add_to_hass(hass)
         mock_area = MagicMock()
         mock_area.name = "Kitchen"
         mock_area_reg = MagicMock()
@@ -153,9 +190,6 @@ class TestAsyncSetupEntry:
 
         with (
             patch(
-                "custom_components.eink_dashboard.EinkDashboardStore"
-            ) as MockStore,
-            patch(
                 "custom_components.eink_dashboard.ar.async_get",
                 return_value=mock_area_reg,
             ),
@@ -163,8 +197,12 @@ class TestAsyncSetupEntry:
                 "custom_components.eink_dashboard.dr.async_get",
                 return_value=mock_dev_reg,
             ),
+            patch.object(
+                hass.config_entries,
+                "async_forward_entry_setups",
+                AsyncMock(),
+            ),
         ):
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
         mock_dev_reg.async_get_or_create.assert_called_once_with(
@@ -176,22 +214,28 @@ class TestAsyncSetupEntry:
             suggested_area="Kitchen",
         )
 
-    async def test_registers_device_custom_no_area(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry(options={"device_model": "custom"})
+    async def test_registers_device_custom_no_area(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # device_model="custom" with no area falls back to Custom/None.
+        hass.data.setdefault(DOMAIN, {})
+        entry = MockConfigEntry(
+            domain=DOMAIN, options={"device_model": "custom"}
+        )
+        entry.add_to_hass(hass)
         mock_dev_reg = MagicMock()
 
         with (
             patch(
-                "custom_components.eink_dashboard.EinkDashboardStore"
-            ) as MockStore,
-            patch(
                 "custom_components.eink_dashboard.dr.async_get",
                 return_value=mock_dev_reg,
             ),
+            patch.object(
+                hass.config_entries,
+                "async_forward_entry_setups",
+                AsyncMock(),
+            ),
         ):
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
         mock_dev_reg.async_get_or_create.assert_called_once_with(
@@ -203,22 +247,26 @@ class TestAsyncSetupEntry:
             suggested_area=None,
         )
 
-    async def test_registers_device_no_model_key(self) -> None:
-        hass = _make_hass()
-        hass.data[DOMAIN] = {}
-        entry = _make_entry(data={})
+    async def test_registers_device_no_model_key(
+        self, hass: HomeAssistant, mock_store_class: MagicMock
+    ) -> None:
+        # Missing device_model key defaults to the Custom model.
+        hass.data.setdefault(DOMAIN, {})
+        entry = MockConfigEntry(domain=DOMAIN)
+        entry.add_to_hass(hass)
         mock_dev_reg = MagicMock()
 
         with (
             patch(
-                "custom_components.eink_dashboard.EinkDashboardStore"
-            ) as MockStore,
-            patch(
                 "custom_components.eink_dashboard.dr.async_get",
                 return_value=mock_dev_reg,
             ),
+            patch.object(
+                hass.config_entries,
+                "async_forward_entry_setups",
+                AsyncMock(),
+            ),
         ):
-            MockStore.return_value.async_load = AsyncMock(return_value=[])
             await async_setup_entry(hass, entry)
 
         call_kwargs = mock_dev_reg.async_get_or_create.call_args.kwargs
@@ -227,13 +275,18 @@ class TestAsyncSetupEntry:
 
 
 class TestAsyncUpdateListener:
-    async def test_update_listener_re_registers_device(self) -> None:
+    async def test_update_listener_delegates_to_register_device(
+        self, hass: HomeAssistant
+    ) -> None:
+        # The update listener delegates to _register_device with the
+        # entry's current options.
         from custom_components.eink_dashboard import _async_update_listener
 
-        hass = _make_hass()
-        entry = _make_entry(
-            options={"device_model": "kindle_pw4", "area_id": "kitchen"}
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            options={"device_model": "kindle_pw4", "area_id": "kitchen"},
         )
+        entry.add_to_hass(hass)
         mock_area = MagicMock()
         mock_area.name = "Kitchen"
         mock_area_reg = MagicMock()
@@ -357,36 +410,53 @@ class TestResolveBatteryLevel:
 
 
 class TestAsyncUnloadEntry:
-    async def test_unloads_platforms(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        hass.data = {DOMAIN: {entry.entry_id: {"store": MagicMock()}}}
+    async def test_unloads_platforms(self, hass: HomeAssistant) -> None:
+        # Unloading forwards to config_entries.async_unload_platforms
+        # for both platforms and reports success.
+        entry = MockConfigEntry(domain=DOMAIN)
+        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
 
-        result = await async_unload_entry(hass, entry)
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            AsyncMock(return_value=True),
+        ) as mock_unload_platforms:
+            result = await async_unload_entry(hass, entry)
 
-        hass.config_entries.async_unload_platforms.assert_called_once_with(
+        mock_unload_platforms.assert_called_once_with(
             entry, ["image", "sensor"]
         )
         assert result is True
 
-    async def test_removes_entry_data_on_success(self) -> None:
-        hass = _make_hass()
-        entry = _make_entry()
-        hass.data = {DOMAIN: {entry.entry_id: {"store": MagicMock()}}}
+    async def test_removes_entry_data_on_success(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A successful unload removes the entry's runtime data.
+        entry = MockConfigEntry(domain=DOMAIN)
+        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
 
-        await async_unload_entry(hass, entry)
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            AsyncMock(return_value=True),
+        ):
+            await async_unload_entry(hass, entry)
 
         assert entry.entry_id not in hass.data[DOMAIN]
 
-    async def test_keeps_entry_data_on_failure(self) -> None:
-        hass = _make_hass()
-        hass.config_entries.async_unload_platforms = AsyncMock(
-            return_value=False
-        )
-        entry = _make_entry()
-        hass.data = {DOMAIN: {entry.entry_id: {"store": MagicMock()}}}
+    async def test_keeps_entry_data_on_failure(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A failed unload keeps the entry's runtime data intact.
+        entry = MockConfigEntry(domain=DOMAIN)
+        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
 
-        result = await async_unload_entry(hass, entry)
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            AsyncMock(return_value=False),
+        ):
+            result = await async_unload_entry(hass, entry)
 
         assert result is False
         assert entry.entry_id in hass.data[DOMAIN]
