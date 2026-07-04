@@ -67,7 +67,9 @@ def _build_entities_context(
             ``entities`` (list of row configs),
             ``title`` (optional label above the card),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``), ``card_style``, ``x``, ``w``, ``h``.
+            ``"none"``), ``bold_value`` (render the right-aligned
+            state value in bold; default ``False``), ``card_style``,
+            ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.
 
@@ -87,6 +89,7 @@ def _build_entities_context(
     title: str = widget.get("title", "")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    value_bold: bool = widget.get("bold_value", False)
     entity_configs: list = widget.get("entities", [])
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
@@ -305,4 +308,5 @@ def _build_entities_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
+        "value_bold": value_bold,
     }

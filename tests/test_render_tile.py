@@ -474,6 +474,35 @@ class TestRenderTile:
             for x in range(text_left, 300)
         ), "state value text should be black (< 64)"
 
+    def test_tile_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders the secondary state line with a
+        # bold font-weight attribute in the SVG.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.temperature",
+            "bold_value": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_tile_default_value_not_bold(self) -> None:
+        # Without bold_value, the secondary state line has no bold
+        # font-weight attribute.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.temperature",
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' not in svg
+
     def test_tile_hide_state(self) -> None:
         # hide_state=True suppresses secondary text; only primary name
         # is rendered in the text area.

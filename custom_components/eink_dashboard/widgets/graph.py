@@ -627,7 +627,12 @@ def _fix_header_layout(
     value_x = cast("int", ctx["value_x"])
     ctx["unit_x"] = value_x
     if unit_text_str and value_text_str:
-        vf = _load_font(m_hdr.font_secondary, medium=True)
+        value_bold = bool(ctx["value_bold"])
+        vf = _load_font(
+            m_hdr.font_secondary,
+            medium=not value_bold,
+            bold=value_bold,
+        )
         ctx["unit_x"] = (
             value_x
             + round(vf.getlength(value_text_str))
@@ -1224,6 +1229,8 @@ def _build_graph_context(
             graph with polyline/path elements, or ``"bar"`` for a
             bar chart with ``<rect>`` elements; in bar mode
             ``smoothing`` and ``show_fill`` are ignored),
+            ``bold_value`` (render the header value in bold;
+            default ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``,
             ``grayscale_levels``, and optionally ``time_format``

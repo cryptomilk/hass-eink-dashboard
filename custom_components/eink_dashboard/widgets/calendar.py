@@ -51,6 +51,8 @@ def _build_calendar_context(
             ``entity`` (calendar entity ID),
             ``max_events`` (int, default 5),
             ``title`` (optional header string),
+            ``bold_value`` (render the right-aligned date/time
+            value in bold; default ``False``),
             ``card_style`` (``"border"``, ``"left_bar"``,
             or ``"none"``), ``x``, ``w``, ``h``.
         config: Display config with ``states``,
@@ -78,6 +80,7 @@ def _build_calendar_context(
     max_events: int = int(widget.get("max_events", 5))
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
+    value_bold: bool = widget.get("bold_value", False)
     time_format: str = config.get("time_format", "24")
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
@@ -183,4 +186,5 @@ def _build_calendar_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
+        "value_bold": value_bold,
     }

@@ -31,6 +31,9 @@
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
+{%- if value_bold %}
+  font-weight="bold"
+{%- endif %}
   font-size="{{ value_font_sz }}"
   dominant-baseline="auto"
   fill="{{ hex_black }}">{{ value_text }}</text>

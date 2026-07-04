@@ -8,6 +8,9 @@
     radius=m_radius, border=m_border,
     bar_width=bar_width,
     border_color=hex_black, bar_color=hex_gray) -%}
+{#- tile has no right-aligned value slot; the state line is
+    rendered as the macro's secondary text, so bold_value
+    maps to secondary_bold below. #}
 {{ card_row(
     x=x_off, y=0,
     w=w - x_off - r_inset, row_h=row_h,
@@ -26,6 +29,7 @@
     primary_fill=hex_gray,
     secondary_fill=hex_black,
     value_fill=hex_black,
+    secondary_bold=value_bold,
     letter=letter,
     lpad=lpad, rpad=rpad,
     hex_black=hex_black, hex_white=hex_white) }}

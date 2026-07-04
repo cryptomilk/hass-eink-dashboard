@@ -57,7 +57,8 @@ def _build_tile_context(
             ``state_content`` (attribute name or list; first element
             used when a list is provided),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``), ``card_style``,
+            ``"none"``), ``bold_value`` (render the secondary
+            state line in bold; default ``False``), ``card_style``,
             ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``height``,
             ``states``, and ``grayscale_levels``.
@@ -85,6 +86,7 @@ def _build_tile_context(
     icon_override = widget.get("icon")
     hide_icon: bool = widget.get("hide_icon", False)
     hide_state: bool = widget.get("hide_state", False)
+    value_bold: bool = widget.get("bold_value", False)
     state_content = widget.get("state_content")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -179,6 +181,7 @@ def _build_tile_context(
         "rpad": rpad,
         "primary": primary,
         "secondary": secondary,
+        "value_bold": value_bold,
         "icon_svg": icon_svg,
         "icon_fill": icon_fill,
         "icon_outline": icon_outline,

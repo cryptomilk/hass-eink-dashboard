@@ -690,6 +690,34 @@ class TestRenderWasteSchedule:
         # Icon should span at least 40% of widget height
         assert icon_h > h * 0.4
 
+    # ── Bold value tests ───────────────────────────────
+
+    def test_bold_value_list_layout(self) -> None:
+        # bold_value=True renders the right-aligned date value
+        # (list layout) with a bold font-weight attribute.
+        w = self._widget(bold_value=True)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_bold_value_card_layout(self) -> None:
+        # bold_value=True renders the secondary date line (card
+        # layout) with a bold font-weight attribute.
+        w = self._widget(layout="card", bold_value=True)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_default_value_not_bold(self) -> None:
+        # Without bold_value, neither layout renders a bold value.
+        w = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' not in svg
+
     # ── Auto-sizing tests ─────────────────────────────
 
     def test_waste_schedule_auto_height_single_entry(self) -> None:

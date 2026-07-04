@@ -219,6 +219,20 @@ class TestRenderGraph:
         )
         assert "<polyline" in svg
 
+    def test_graph_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders the header value text with a
+        # bold font-weight attribute in the SVG.
+        svg = render_widget_svg(
+            self._base_widget(bold_value=True), self._config()
+        )
+        assert 'font-weight="bold"' in svg
+
+    def test_graph_default_value_not_bold(self) -> None:
+        # Without bold_value, the header value text has no bold
+        # font-weight attribute.
+        svg = render_widget_svg(self._base_widget(), self._config())
+        assert 'font-weight="bold"' not in svg
+
     def test_graph_fill_shown_by_default(self) -> None:
         # With show_fill not set (default true) and smoothing off,
         # SVG contains a <polygon> fill area below the line.

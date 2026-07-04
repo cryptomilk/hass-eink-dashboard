@@ -207,6 +207,10 @@
     rpad      -- right padding override; -1 (default) uses padding
     font_value -- font size for the right-aligned value; none
                  (default) falls back to font_secondary
+    secondary_bold -- when true, secondary text renders
+                      font-weight="bold"
+    value_bold     -- when true, the right-aligned value text
+                      renders font-weight="bold"
 #}
 {%- macro card_row(
     x, y, w, row_h,
@@ -221,7 +225,9 @@
     icon_no_circle=false,
     letter="",
     lpad=-1, rpad=-1,
-    font_value=none
+    font_value=none,
+    secondary_bold=false,
+    value_bold=false
 ) -%}
 {%- set lpad = lpad if lpad >= 0 else padding -%}
 {%- set rpad = rpad if rpad >= 0 else padding -%}
@@ -265,6 +271,9 @@
 <text
   x="{{ tx }}" y="{{ sy }}"
   font-family="Roboto"
+{%- if secondary_bold %}
+  font-weight="bold"
+{%- endif %}
   font-size="{{ font_secondary }}"
   dominant-baseline="central"
   fill="{{ secondary_fill }}">{{ secondary }}</text>
@@ -284,6 +293,9 @@
 <text
   x="{{ x + w - rpad }}" y="{{ y + row_h // 2 }}"
   font-family="Roboto"
+{%- if value_bold %}
+  font-weight="bold"
+{%- endif %}
   font-size="{{ font_value }}"
   text-anchor="end"
   dominant-baseline="central"

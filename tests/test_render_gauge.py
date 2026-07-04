@@ -140,6 +140,21 @@ class TestRenderGauge:
         img = render_to_image([self._base_widget()], self._config())
         assert_has_dark_pixels(img, 45, 45, 155, 145)
 
+    def test_gauge_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders the center value text with a
+        # bold font-weight instead of the default medium (500).
+        svg = render_widget_svg(
+            self._base_widget(bold_value=True), self._config()
+        )
+        assert 'font-weight="bold"' in svg
+
+    def test_gauge_default_value_is_medium_weight(self) -> None:
+        # Without bold_value, the center value text uses the
+        # medium (500) font-weight, not bold.
+        svg = render_widget_svg(self._base_widget(), self._config())
+        assert 'font-weight="500"' in svg
+        assert 'font-weight="bold"' not in svg
+
     def test_gauge_name_label_at_bottom(self) -> None:
         # Default header_position="bottom": name label rendered near
         # the bottom of the widget.

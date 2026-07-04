@@ -54,6 +54,8 @@ def _build_sensor_context(
             the graph line; default ``False``),
             ``hide_state`` (suppress the large value/unit text in
             the info section; default ``False``),
+            ``bold_value`` (render the value text in bold; default
+            ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.

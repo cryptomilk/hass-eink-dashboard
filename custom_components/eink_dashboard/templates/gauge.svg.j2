@@ -50,12 +50,14 @@
 <g transform="translate({{ icon_x }}, {{ icon_y }})"
   style="color: {{ hex_black }}">{{ icon_svg }}</g>
 {%- endif -%}
-{# Value text centred at the arc centre. #}
+{# Value text centred at the arc centre. Unlike other widgets, the
+   default (non-bold) weight here is medium (500), not the browser
+   default, so the fallback must be explicit rather than omitted. #}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
   font-size="{{ value_font_sz }}"
-  font-weight="500"
+  font-weight="{{ 'bold' if value_bold else '500' }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ formatted_val }}</text>

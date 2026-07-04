@@ -60,6 +60,8 @@ def _build_waste_schedule_context(
             ``entries`` (list of ``{"attribute": …, "label": …}``
             dicts), ``layout`` (``"list"`` or ``"card"``),
             ``show_all`` (``bool``, default ``False``),
+            ``bold_value`` (render the date text in bold; default
+            ``False``),
             ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
             state dict) and ``grayscale_levels``.
@@ -87,6 +89,7 @@ def _build_waste_schedule_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
     show_all: bool = bool(widget.get("show_all", False))
+    value_bold: bool = widget.get("bold_value", False)
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
@@ -214,4 +217,5 @@ def _build_waste_schedule_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
+        "value_bold": value_bold,
     }

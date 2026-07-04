@@ -41,6 +41,8 @@ def _build_entity_context(
             ``unit`` (unit string override),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
             ``"none"``),
+            ``bold_value`` (render the state value in bold;
+            default ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.

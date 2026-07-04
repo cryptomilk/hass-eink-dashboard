@@ -11,6 +11,7 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
 )
+from custom_components.eink_dashboard.svg_render import render_widget_svg
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
@@ -55,6 +56,25 @@ class TestRenderDeviceBattery:
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
         img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING + 38, 29, PADDING + 80, 47)
+
+    def test_icon_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders the percentage label in icon
+        # layout with a bold font-weight attribute.
+        widget = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 20,
+            "bold_value": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_icon_default_value_not_bold(self) -> None:
+        # Without bold_value, the percentage label has no bold
+        # font-weight attribute.
+        widget = {"type": "device_battery", "x": PADDING, "y": 20}
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' not in svg
 
     def test_icon_draws_nub(self) -> None:
         # Verify the nub (battery terminal) renders in gray.
@@ -276,6 +296,35 @@ class TestRenderDeviceBattery:
         img = render_to_image(widgets, self._config())
         # Text should appear in the right portion of the chip
         assert_has_dark_pixels(img, PADDING + 60, 14, PADDING + 150, 46)
+
+    def test_chip_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders the percentage label in chip
+        # layout with a bold font-weight attribute.
+        widget = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "w": 200,
+            "h": 40,
+            "layout": "chip",
+            "bold_value": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_chip_default_value_not_bold(self) -> None:
+        # Without bold_value, the chip percentage label has no bold
+        # font-weight attribute.
+        widget = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "w": 200,
+            "h": 40,
+            "layout": "chip",
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' not in svg
 
     def test_chip_zero_percent_shows_outline_only(self) -> None:
         # Verify 0% chip has the bar outline but no fill inside.

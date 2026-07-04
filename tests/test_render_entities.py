@@ -550,6 +550,35 @@ class TestRenderEntities:
         value_h = value_bbox[3] - value_bbox[1]
         assert value_h > name_h
 
+    def test_entities_bold_value_renders_bold_weight(self) -> None:
+        # bold_value=True renders each row's right-aligned state
+        # value with a bold font-weight attribute in the SVG.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entities": ["sensor.temperature"],
+            "bold_value": True,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_entities_default_value_not_bold(self) -> None:
+        # Without bold_value, the row value has no bold
+        # font-weight attribute.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entities": ["sensor.temperature"],
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' not in svg
+
     # ── Icon style tests ──────────────────────────────
 
     def test_entities_icon_circle_gray_fill_active(self) -> None:

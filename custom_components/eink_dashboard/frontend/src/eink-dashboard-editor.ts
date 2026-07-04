@@ -362,6 +362,19 @@ function cardStyleSelector(): HaFormSchema {
 }
 
 /**
+ * Bold-value boolean toggle.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function boldValueSelector(): HaFormSchema {
+  return {
+    name: "bold_value",
+    default: false,
+    selector: { boolean: {} },
+  };
+}
+
+/**
  * Icon style dropdown selector.
  *
  * @param defaultStyle - Default icon style value. Defaults to
@@ -697,7 +710,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector()],
+      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
     },
   ],
 
@@ -741,7 +754,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector()],
+      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
     },
   ],
 
@@ -776,7 +789,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector()],
+      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
     },
   ],
 
@@ -869,7 +882,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [colorSelector(), cardStyleSelector()],
+      schema: [colorSelector(), cardStyleSelector(), boldValueSelector()],
     },
   ],
 
@@ -968,7 +981,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector()],
+      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
     },
   ],
 
@@ -1024,7 +1037,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector()],
+      schema: [cardStyleSelector(), boldValueSelector()],
     },
   ],
   calendar: (d) => [
@@ -1073,7 +1086,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector()],
+      schema: [cardStyleSelector(), boldValueSelector()],
     },
   ],
   gauge: (d) => [
@@ -1169,7 +1182,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector()],
+      schema: [cardStyleSelector(), boldValueSelector()],
     },
   ],
   graph: (d) => [
@@ -1400,7 +1413,7 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector()],
+      schema: [cardStyleSelector(), boldValueSelector()],
     },
   ],
 };
@@ -1436,6 +1449,7 @@ export const LABELS: Record<string, string> = {
   badges: "Badges",
   card_style: "Card style",
   icon_style: "Icon style",
+  bold_value: "Bold value",
   layout: "Layout",
   show_all: "Show all upcoming dates",
   entries: "Entries",

@@ -185,6 +185,8 @@ def _build_gauge_context(
             ``"full"``; default ``"standard"``),
             ``header_position`` (``"bottom"`` / ``"top"``;
             default ``"bottom"``),
+            ``bold_value`` (render the value text in bold instead
+            of medium weight; default ``False``),
             ``card_style``, ``segments``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.
@@ -218,6 +220,7 @@ def _build_gauge_context(
     show_unit: bool = bool(widget.get("show_unit", True))
     decimals = widget.get("decimals")
     attribute: str | None = widget.get("attribute")
+    value_bold: bool = widget.get("bold_value", False)
 
     # Missing entity → blank white canvas.
     state = states.get(entity_id) if entity_id else None
@@ -470,6 +473,7 @@ def _build_gauge_context(
         "value_x": value_x,
         "value_y": value_y,
         "value_font_sz": value_font_sz,
+        "value_bold": value_bold,
         # Unit text.
         "unit_text": unit_text,
         "unit_x": cx,

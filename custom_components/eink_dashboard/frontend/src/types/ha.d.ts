@@ -428,6 +428,8 @@ export interface DeviceBatteryWidget extends WidgetBase {
   layout?: "icon" | "chip";
   /** Decorative frame style. */
   card_style?: CardStyle;
+  /** When true, renders the percentage label in bold. */
+  bold_value?: boolean;
 }
 
 /** A single waste-collection type entry in the schedule widget. */
@@ -457,6 +459,8 @@ export interface CalendarWidget extends WidgetBase {
   days_ahead?: number;
   /** Decorative frame style. */
   card_style?: CardStyle;
+  /** When true, renders the event date/time value in bold. */
+  bold_value?: boolean;
 }
 
 /** Waste-collection schedule widget with relative dates. */
@@ -477,6 +481,8 @@ export interface WasteScheduleWidget extends WidgetBase {
   show_all?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
+  /** When true, renders the date value in bold. */
+  bold_value?: boolean;
 }
 
 /** Single-entity tile card modelled after the HA Tile card. */
@@ -506,6 +512,8 @@ export interface TileWidget extends WidgetBase {
   card_style?: CardStyle;
   /** Icon circle rendering mode (auto-selected when absent). */
   icon_style?: IconStyle;
+  /** When true, renders the secondary state line in bold. */
+  bold_value?: boolean;
 }
 
 /**
@@ -621,6 +629,8 @@ export interface EntitiesWidget extends WidgetBase {
    * - ``"none"`` — no circle; icon glyph rendered without decoration.
    */
   icon_style?: IconStyle;
+  /** When true, renders each row's state value in bold. */
+  bold_value?: boolean;
 }
 
 /**
@@ -654,6 +664,8 @@ export interface EntityWidget extends WidgetBase {
    * - ``"none"`` — no circle; icon glyph rendered without decoration.
    */
   icon_style?: IconStyle;
+  /** When true, renders the state value in bold. */
+  bold_value?: boolean;
 }
 
 /** Y-axis range limits for the sensor sparkline graph. */
@@ -724,6 +736,8 @@ export interface SensorWidget extends WidgetBase {
    * - ``"none"`` — no circle; icon glyph rendered without decoration.
    */
   icon_style?: IconStyle;
+  /** When true, renders the state value in bold. */
+  bold_value?: boolean;
 }
 
 /** One threshold-based color band on the gauge track. */
@@ -804,6 +818,11 @@ export interface GaugeWidget extends WidgetBase {
    * Segments must be configured via YAML.
    */
   segments?: GaugeSegment[];
+  /**
+   * When true, renders the center value text in bold instead of
+   * medium weight.
+   */
+  bold_value?: boolean;
 }
 
 /**
@@ -1061,6 +1080,8 @@ export interface GraphWidget extends WidgetBase {
   threshold_4_color?: string;
   /** Explicit grayscale shade override for threshold 4. */
   threshold_4_shade?: "black" | "dark" | "medium" | "light";
+  /** When true, renders the header value text in bold. */
+  bold_value?: boolean;
 }
 
 export type Widget =

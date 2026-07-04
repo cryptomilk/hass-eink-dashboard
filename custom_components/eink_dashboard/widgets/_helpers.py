@@ -382,7 +382,7 @@ def _entity_info_context(
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``,
             ``name``, ``icon``, ``unit``, ``hide_icon``,
-            ``icon_style``, ``card_style``.
+            ``icon_style``, ``card_style``, ``bold_value``.
         config: Display config with ``states`` and
             ``grayscale_levels``.
         section_h: Height of the entity info section in pixels.
@@ -412,6 +412,7 @@ def _entity_info_context(
     hide_icon: bool = widget.get("hide_icon", False)
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    value_bold: bool = widget.get("bold_value", False)
     states = config.get("states", {})
     grayscale_levels = config.get("grayscale_levels", 16)
 
@@ -519,7 +520,9 @@ def _entity_info_context(
     unit_font_sz = m.font_secondary
     unit_x = value_x
     if unit_text:
-        value_font = _load_font(value_font_sz, medium=True)
+        value_font = _load_font(
+            value_font_sz, medium=not value_bold, bold=value_bold
+        )
         text_w = round(value_font.getlength(value_text))
         unit_x = value_x + text_w + m.inner_gap // 2
 
@@ -555,6 +558,7 @@ def _entity_info_context(
         "value_x": value_x,
         "value_y": value_y,
         "value_font_sz": value_font_sz,
+        "value_bold": value_bold,
         "unit_text": unit_text,
         "unit_x": unit_x,
         "unit_y": value_y,
