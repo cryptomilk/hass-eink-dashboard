@@ -21,6 +21,7 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -523,6 +524,31 @@ class TestRenderEntities:
             for y in range(20, 60)
             for x in range(300, 395)
         ), "state value text should be black (< 64)"
+
+    def test_entities_value_font_larger_than_name(self) -> None:
+        # The state value is the element users scan for at a
+        # glance, so it must render in a larger font than the
+        # entity name — compare rendered glyph heights.
+        m = _compute_metrics(80)
+        widgets = [
+            {
+                "type": "entities",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 80,
+                "entities": ["sensor.temperature"],
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        name_left = m.padding + m.icon_dia + m.inner_gap
+        name_bbox = content_bbox(img, name_left, 0, 280, 80)
+        value_bbox = content_bbox(img, 300, 0, 395, 80)
+        assert name_bbox is not None
+        assert value_bbox is not None
+        name_h = name_bbox[3] - name_bbox[1]
+        value_h = value_bbox[3] - value_bbox[1]
+        assert value_h > name_h
 
     # ── Icon style tests ──────────────────────────────
 

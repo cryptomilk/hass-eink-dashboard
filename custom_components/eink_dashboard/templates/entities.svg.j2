@@ -12,13 +12,19 @@
     border_color=hex_black, bar_color=hex_gray) -%}
 {%- for row in rows -%}
 {%- if row.row_type == "entity" -%}
+{#- The name renders in the secondary (smaller, gray) style
+    and the value in the primary (larger, black) style, so
+    the metrics are cross-wired here: m_font_secondary feeds
+    font_primary (name) and m_font_primary feeds font_value
+    (value) -- the value gets visual priority. -#}
 {{ card_row(
     x=x_off, y=row.y,
     w=w - x_off - r_inset, row_h=row_h,
     padding=m_padding, icon_dia=m_icon_dia,
     inner_gap=m_inner_gap, border=icon_stroke_w,
-    font_primary=m_font_primary,
+    font_primary=m_font_secondary,
     font_secondary=m_font_secondary,
+    font_value=m_font_primary,
     icon_inner=m_icon_inner,
     letter_font_sz=m_font_letter,
     primary=row.primary,

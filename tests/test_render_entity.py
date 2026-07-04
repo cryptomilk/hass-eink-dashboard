@@ -13,6 +13,9 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import _card_insets
+from custom_components.eink_dashboard.widgets.entity import (
+    _build_entity_context,
+)
 from tests.helpers import (
     _right_icon_ring_region,
     assert_all_white,
@@ -20,6 +23,7 @@ from tests.helpers import (
     assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -391,6 +395,48 @@ class TestRenderEntity:
         assert_has_dark_pixels(img, m.padding, 0, 200, header_h)
         # Value area: info section below the header row.
         assert_has_dark_pixels(img, m.padding, header_h, 350, h)
+
+    def test_entity_value_font_larger_than_name(self) -> None:
+        # The state value is the element users scan for at a
+        # glance, so it must render in a larger font than the
+        # entity name -- compare rendered glyph heights.
+        h = 112
+        header_h = round(h * 0.40)
+        m = _compute_metrics(header_h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Name area: left portion of the header row.
+        name_bbox = content_bbox(img, m.padding, 0, 200, header_h)
+        # Value area: info section below the header row.
+        value_bbox = content_bbox(img, m.padding, header_h, 350, h)
+        assert name_bbox is not None
+        assert value_bbox is not None
+        name_h = name_bbox[3] - name_bbox[1]
+        value_h = value_bbox[3] - value_bbox[1]
+        assert value_h > name_h
+
+    def test_entity_name_font_floor_at_compact_h(self) -> None:
+        # At compact widget heights the name font size must not
+        # drop below the 10px legibility floor.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 60,
+            "entity": "sensor.temperature",
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["name_font_sz"] >= 10
 
     def test_entity_name_override(self) -> None:
         # name= overrides the entity friendly_name; renders differ.

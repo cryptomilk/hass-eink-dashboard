@@ -502,16 +502,16 @@ def _entity_info_context(
     icon_glyph_x = icon_cx - icon_inner // 2
     icon_glyph_y = icon_cy - icon_inner // 2
 
-    # Name: left-aligned in header row, vertically centered.
-    # Larger ratio than m.font_primary (0.32) — the entity name is
-    # the card's primary label and should fill the header row.
-    name_font_sz = round(header_h * 0.48)
+    # Name: left-aligned in header row, vertically centered. Kept
+    # small relative to the value below — the value is what users
+    # scan for at a glance, so it gets visual priority.
+    name_font_sz = max(10, round(header_h * 0.32))
     name_x = x_off + lpad
     name_y = header_h // 2
 
     # Value: left-aligned, baseline at ~65% of the info section so
     # the value and unit share an alphabetic baseline (HA style).
-    value_font_sz = max(10, round(section_h * 0.28))
+    value_font_sz = max(10, round(section_h * 0.38))
     value_x = x_off + lpad
     value_y = header_h + round(info_h * 0.65)
 

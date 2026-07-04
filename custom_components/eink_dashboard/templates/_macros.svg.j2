@@ -183,7 +183,7 @@
     inner_gap -- gap between circle right edge and text
     border    -- stroke width for outlined icon circle
     font_primary   -- Roboto Medium font size for the main label
-    font_secondary -- font size for secondary text and value
+    font_secondary -- font size for secondary text (sub-label)
     icon_fill      -- hex fill color for solid icon circle
     primary_fill   -- hex color for primary text
     secondary_fill -- hex color for secondary text
@@ -205,6 +205,8 @@
     letter    -- fallback letter drawn in circle when icon_svg is empty
     lpad      -- left padding override; -1 (default) uses padding
     rpad      -- right padding override; -1 (default) uses padding
+    font_value -- font size for the right-aligned value; none
+                 (default) falls back to font_secondary
 #}
 {%- macro card_row(
     x, y, w, row_h,
@@ -218,10 +220,13 @@
     icon_outline=false,
     icon_no_circle=false,
     letter="",
-    lpad=-1, rpad=-1
+    lpad=-1, rpad=-1,
+    font_value=none
 ) -%}
 {%- set lpad = lpad if lpad >= 0 else padding -%}
 {%- set rpad = rpad if rpad >= 0 else padding -%}
+{%- set font_value = font_value if font_value is not none
+    else font_secondary -%}
 {%- set icon_inner = icon_inner if icon_inner is not none
     else icon_dia * 60 // 100 -%}
 {%- set letter_font_sz = letter_font_sz if letter_font_sz is not none
@@ -279,7 +284,7 @@
 <text
   x="{{ x + w - rpad }}" y="{{ y + row_h // 2 }}"
   font-family="Roboto"
-  font-size="{{ font_secondary }}"
+  font-size="{{ font_value }}"
   text-anchor="end"
   dominant-baseline="central"
   fill="{{ value_fill }}">{{ value }}</text>
