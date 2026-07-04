@@ -501,8 +501,10 @@ class TestRenderEntities:
             threshold=200,
         )
 
-    def test_entities_value_text_gray(self) -> None:
-        # The right-aligned state value is rendered in gray.
+    def test_entities_value_text_black(self) -> None:
+        # The right-aligned state value is rendered in black (the
+        # value is the most important element, so it gets the
+        # highest contrast).
         widgets = [
             {
                 "type": "entities",
@@ -514,17 +516,13 @@ class TestRenderEntities:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Right portion of the row at mid-height should have gray
+        # Right portion of the row at mid-height should have black
         # pixels from the right-aligned state value text.
-        assert_has_gray_pixels(
-            img,
-            300,
-            20,
-            395,
-            60,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
+        assert any(
+            pixel(img, x, y) < 64
+            for y in range(20, 60)
+            for x in range(300, 395)
+        ), "state value text should be black (< 64)"
 
     # ── Icon style tests ──────────────────────────────
 

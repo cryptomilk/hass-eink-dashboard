@@ -511,9 +511,10 @@ class TestRenderWasteSchedule:
             for x in range(300, 400)
         ), "days=0 date text should be black (< 64)"
 
-    def test_urgency_tomorrow_date_gray(self) -> None:
-        # days=1: date text should be gray, not black.  Verify
-        # the value region has gray pixels but no black pixels.
+    def test_urgency_tomorrow_date_black(self) -> None:
+        # days=1: date text is black regardless of urgency — the
+        # date is the value users scan for, so it always gets the
+        # highest contrast. Urgency is conveyed by the icon instead.
         entries = [
             {"attribute": "Restmuell", "label": "Restmuell"},
         ]
@@ -522,14 +523,11 @@ class TestRenderWasteSchedule:
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img = render_to_image([w], self._config())
-        # Should have gray pixels (date label "tomorrow")
-        assert_has_gray_pixels(img, 300, 0, 400, 56)
-        # Should NOT have black pixels — date is gray for days=1
-        assert not any(
+        assert any(
             pixel(img, x, y) < 64
             for y in range(0, 56)
             for x in range(300, 400)
-        ), "days=1 date text should be gray, not black"
+        ), "days=1 date text should be black (< 64)"
 
     def test_past_date_skipped(self) -> None:
         # Entry with date in the past is not rendered.

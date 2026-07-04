@@ -38,10 +38,13 @@ def _build_calendar_context(
 
     Icon urgency rules:
 
-    - Happening now: black-filled circle, black label.
-    - Today (not now): gray-filled circle, gray label.
-    - Future: outlined circle (white fill, black stroke),
-      gray label.
+    - Happening now: black-filled circle.
+    - Today (not now): gray-filled circle.
+    - Future: outlined circle (white fill, black stroke).
+
+    The date/time value text is always black regardless of
+    urgency; the event summary name is always gray. Urgency is
+    conveyed by the icon fill/outline alone.
 
     Args:
         widget: Widget config dict.  Recognised keys:
@@ -139,12 +142,11 @@ def _build_calendar_context(
 
         if is_now:
             icon_fill = color_to_hex(COLOR_BLACK)
-            value_fill = color_to_hex(COLOR_BLACK)
             use_outline = False
         else:
             icon_fill = color_to_hex(COLOR_GRAY)
-            value_fill = color_to_hex(COLOR_GRAY)
             use_outline = not is_today
+        value_fill = color_to_hex(COLOR_BLACK)
 
         rows.append(
             {

@@ -33,10 +33,12 @@ def _build_waste_schedule_context(
     styling.  Each entry maps an entity attribute (ISO date string
     or integer day offset) to a short label and colour scheme:
 
-    - ``days <= 1``: black-filled icon circle; date text is black
-      when ``days == 0`` (today) and gray otherwise.
+    - ``days <= 1``: black-filled icon circle.
     - ``days >= 2``: outlined icon circle (white fill, black
-      stroke); date text is gray.
+      stroke).
+
+    Date text is always black regardless of urgency; urgency is
+    conveyed by the icon fill/outline alone.
 
     Two layouts are supported via the ``layout`` parameter:
 
@@ -164,13 +166,9 @@ def _build_waste_schedule_context(
     rows: list[dict[str, object]] = []
     for i, (label, raw, days) in enumerate(visible):
         date_str = _format_relative_date(days, raw)
-        # days == 0 (today): black date text for urgency.
-        # days >= 1: gray date text.
-        date_fill = (
-            color_to_hex(COLOR_BLACK)
-            if days == 0
-            else color_to_hex(COLOR_GRAY)
-        )
+        # Date text is always black; urgency is conveyed by the
+        # icon fill/outline instead.
+        date_fill = color_to_hex(COLOR_BLACK)
         use_outline = days >= 2
         # Outlined circles ignore icon_fill (macro uses white
         # fill + black stroke), but we still pass it correctly.

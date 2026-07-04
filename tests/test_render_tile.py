@@ -452,7 +452,8 @@ class TestRenderTile:
 
     def test_tile_shows_state_text(self) -> None:
         # Secondary text (state + unit) renders below the primary name
-        # when hide_state is not set.
+        # when hide_state is not set, in black (the value is the most
+        # important element, so it gets the highest contrast).
         m = _compute_metrics(80)
         widgets = [
             {
@@ -466,16 +467,12 @@ class TestRenderTile:
         ]
         img = render_to_image(widgets, self._config())
         text_left = m.padding + m.icon_dia + m.inner_gap
-        # Lower half of text area should have gray (secondary) text.
-        assert_has_gray_pixels(
-            img,
-            text_left,
-            40,
-            300,
-            75,
-            low=COLOR_GRAY - 20,
-            high=COLOR_GRAY + 20,
-        )
+        # Lower half of text area should have black (secondary) text.
+        assert any(
+            pixel(img, x, y) < 64
+            for y in range(40, 75)
+            for x in range(text_left, 300)
+        ), "state value text should be black (< 64)"
 
     def test_tile_hide_state(self) -> None:
         # hide_state=True suppresses secondary text; only primary name

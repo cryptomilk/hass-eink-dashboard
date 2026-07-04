@@ -556,6 +556,31 @@ class TestRenderCalendar:
             img = render_to_image([w], self._config())
         assert_has_dark_pixels(img, 300, 0, 400, h, threshold=200)
 
+    def test_calendar_value_text_black(self) -> None:
+        # The right-aligned date/time value is rendered in black
+        # (the value is the most important element, so it gets the
+        # highest contrast).
+        h = 56
+        w = self._widget(entity="calendar.future_only", h=h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        assert any(
+            pixel(img, x, y) < 64 for y in range(0, h) for x in range(300, 400)
+        ), "date value text should be black (< 64)"
+
+    def test_calendar_name_text_gray(self) -> None:
+        # The event summary (name) is rendered in gray, secondary
+        # to the black date/time value.
+        h = 56
+        m = _compute_metrics(h)
+        w = self._widget(entity="calendar.future_only", h=h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        text_left = m.padding + m.icon_dia + m.inner_gap
+        assert_has_gray_pixels(img, text_left, 0, 300, h)
+
     # ── Urgency / icon fill tests ─────────────────────
 
     def test_calendar_today_event_gray_filled_icon(self) -> None:
