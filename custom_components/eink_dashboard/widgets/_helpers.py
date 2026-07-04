@@ -382,7 +382,8 @@ def _entity_info_context(
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``,
             ``name``, ``icon``, ``unit``, ``hide_icon``,
-            ``icon_style``, ``card_style``, ``bold_value``.
+            ``hide_name``, ``icon_style``, ``card_style``,
+            ``bold_value``.
         config: Display config with ``states`` and
             ``grayscale_levels``.
         section_h: Height of the entity info section in pixels.
@@ -410,6 +411,7 @@ def _entity_info_context(
     icon_override = widget.get("icon")
     unit_override = widget.get("unit")
     hide_icon: bool = widget.get("hide_icon", False)
+    hide_name: bool = widget.get("hide_name", False)
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     value_bold: bool = widget.get("bold_value", False)
@@ -549,6 +551,7 @@ def _entity_info_context(
         "letter": letter,
         "letter_font_sz": letter_font_sz,
         # Header row text.
+        "hide_name": hide_name,
         "name_text": name_text,
         "name_x": name_x,
         "name_y": name_y,

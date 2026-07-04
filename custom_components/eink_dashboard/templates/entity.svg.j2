@@ -19,6 +19,7 @@
     icon_outline=icon_outline, icon_no_circle=icon_no_circle,
     letter=letter, letter_font_sz=letter_font_sz) -}}
 {%- endif -%}
+{%- if not hide_name -%}
 <text
   x="{{ name_x }}" y="{{ name_y }}"
   font-family="Roboto"
@@ -26,6 +27,7 @@
   font-size="{{ name_font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>
+{%- endif -%}
 {#- Info section: large value with optional unit beside it. -#}
 {%- if not hide_state -%}
 <text

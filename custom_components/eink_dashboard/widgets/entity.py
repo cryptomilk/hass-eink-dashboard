@@ -36,6 +36,9 @@ def _build_entity_context(
             ``entity`` (HA entity ID, required),
             ``name`` (display name override),
             ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
+            ``hide_icon`` (suppress the icon; default ``False``),
+            ``hide_name`` (suppress the entity name text; default
+            ``False``),
             ``attribute`` (attribute key to show as value instead
             of state),
             ``unit`` (unit string override),

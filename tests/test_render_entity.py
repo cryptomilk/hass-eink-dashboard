@@ -372,6 +372,73 @@ class TestRenderEntity:
         img = render_to_image(widgets, self._config())
         assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
 
+    def test_entity_hide_name_suppresses_name(self) -> None:
+        # hide_name=True must leave the name text area (left portion
+        # of the header row) white — the name is not rendered.
+        h = 112
+        header_h = round(h * 0.40)
+        m = _compute_metrics(header_h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+                "hide_name": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_all_white(img, m.padding, 0, 200, header_h)
+
+    def test_entity_hide_name_value_still_visible(self) -> None:
+        # hide_name=True must not affect the info section — the state
+        # value keeps rendering below the (now empty) header row.
+        h = 112
+        header_h = round(h * 0.40)
+        m = _compute_metrics(header_h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+                "hide_name": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_has_dark_pixels(img, m.padding, header_h, 350, h)
+
+    def test_entity_hide_name_icon_still_visible(self) -> None:
+        # hide_name=True must not affect icon rendering — the icon
+        # circle keeps drawing in the header row's right portion.
+        h = 224
+        _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "binary_sensor.motion",
+                "hide_name": True,
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        assert_has_gray_pixels(
+            img,
+            rx1,
+            ry1,
+            rx2,
+            ry2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
+        )
+
     # ── Content tests ─────────────────────────────────
 
     def test_entity_draws_name_and_value(self) -> None:

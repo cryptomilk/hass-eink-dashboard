@@ -56,6 +56,9 @@ def _build_sensor_context(
             the info section; default ``False``),
             ``bold_value`` (render the value text in bold; default
             ``False``),
+            ``hide_icon`` (suppress the icon; default ``False``),
+            ``hide_name`` (suppress the entity name text; default
+            ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``grayscale_levels``.

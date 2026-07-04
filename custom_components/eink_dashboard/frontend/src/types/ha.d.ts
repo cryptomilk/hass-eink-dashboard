@@ -647,6 +647,8 @@ export interface EntityWidget extends WidgetBase {
   icon?: string;
   /** When true, suppresses the icon circle and letter fallback. */
   hide_icon?: boolean;
+  /** When true, suppresses the entity name text in the header row. */
+  hide_name?: boolean;
   /**
    * Attribute key to display as the value instead of the entity
    * state.  When set, automatic unit resolution is suppressed.
@@ -688,6 +690,8 @@ export interface SensorWidget extends WidgetBase {
   name?: string;
   /** MDI icon name override (e.g. ``"mdi:thermometer"``). */
   icon?: string;
+  /** When true, suppresses the icon circle and letter fallback. */
+  hide_icon?: boolean;
   /**
    * Enable a history sparkline below the entity info.
    * ``"line"`` renders a polyline graph; ``""`` or absent means no graph.
@@ -726,6 +730,8 @@ export interface SensorWidget extends WidgetBase {
    * section.  The header row (name and icon) is still rendered.
    */
   hide_state?: boolean;
+  /** When true, suppresses the entity name text in the header row. */
+  hide_name?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
   /**
