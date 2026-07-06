@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 from typing import Any, cast
 
 from ..const import (
@@ -66,6 +67,11 @@ _SHADE_VALUES: dict[str, int] = {
     "medium": COLOR_MEDIUM_GRAY,
     "light": COLOR_LIGHT_GRAY,
 }
+
+# Maximum data points kept from attribute sources.  Exceeding this
+# triggers stride-based downsampling to cap render cost.  Typical
+# forecasts (48-96 entries) are never affected.
+_MAX_ATTRIBUTE_POINTS: int = 500
 
 
 def _rgb_hex_to_grayscale(
@@ -1083,20 +1089,122 @@ def _extract_entity_points(
         list(state.get("history", [])) if isinstance(state, dict) else []
     )
     if raw_hist:
-        t_latest = max(float(str(e.get("lu", 0))) for e in raw_hist)
-        cutoff = t_latest - hours_to_show * 3600
-        raw_hist = [e for e in raw_hist if float(str(e.get("lu", 0))) > cutoff]
+        t_latest = max(
+            (
+                float(str(e.get("lu", 0)))
+                for e in raw_hist
+                if math.isfinite(float(str(e.get("lu", 0))))
+            ),
+            default=None,
+        )
+        if t_latest is None:
+            raw_hist = []
+        else:
+            cutoff = t_latest - hours_to_show * 3600
+            raw_hist = [
+                e
+                for e in raw_hist
+                if math.isfinite(float(str(e.get("lu", 0))))
+                and float(str(e.get("lu", 0))) > cutoff
+            ]
     numeric: list[tuple[float, float]] = []
     for entry in raw_hist:
         s = entry.get("s", "")
         lu = entry.get("lu", 0.0)
         try:
             val = float(str(s))
-            numeric.append((float(str(lu)), val))
+            ts = float(str(lu))
         except (ValueError, TypeError):
             continue
+        if not math.isfinite(val) or not math.isfinite(ts):
+            continue
+        numeric.append((ts, val))
     if len(numeric) >= 2:
         return _aggregate_history(numeric, points_per_hour, aggregate_func)
+    return []
+
+
+def _parse_attribute_timestamp(value: object) -> float | None:
+    """Parse a timestamp field from an attribute time-series entry.
+
+    Accepts either a Unix timestamp (int/float, or a numeric string)
+    or an ISO 8601 string (e.g. ``"2026-07-01T04:00:00+00:00"``).
+
+    Args:
+        value: Raw timestamp value from the attribute entry.
+
+    Returns:
+        Unix timestamp in seconds, or ``None`` if unparseable.
+    """
+    try:
+        result = float(str(value))
+        if not math.isfinite(result):
+            return None
+        return result
+    except (ValueError, TypeError):
+        pass
+    try:
+        return datetime.datetime.fromisoformat(str(value)).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_attribute_points(
+    desc: dict[str, object],
+    states_dict: dict[str, Any],
+) -> list[tuple[float, float]]:
+    """Extract time-series data from an entity attribute.
+
+    Reads a list of dicts from ``states_dict[entity]["attributes"]
+    [attribute]``, pulling the timestamp and value out of each entry
+    via the descriptor's configured key names. Used for forward-
+    looking forecast data (solar production, energy prices, etc.)
+    that is not available through the recorder.
+
+    Args:
+        desc: Entity descriptor dict from ``_normalize_entities()``,
+            with ``attribute``, ``attribute_timestamp_key``, and
+            ``attribute_value_key`` keys.
+        states_dict: States dict from the display config.
+
+    Returns:
+        Sorted oldest-to-newest list of ``(timestamp, value)`` pairs,
+        or an empty list when the attribute is missing or fewer than
+        two numeric entries survive parsing.
+    """
+    eid = str(desc["entity"])
+    attribute = str(desc.get("attribute", ""))
+    ts_key = str(desc.get("attribute_timestamp_key", "timestamp"))
+    value_key = str(desc.get("attribute_value_key", ""))
+    state = states_dict.get(eid, {})
+    attrs = state.get("attributes", {}) if isinstance(state, dict) else {}
+    raw_list = attrs.get(attribute, []) if isinstance(attrs, dict) else []
+
+    numeric: list[tuple[float, float]] = []
+    if isinstance(raw_list, list):
+        for entry in raw_list:
+            if not isinstance(entry, dict):
+                continue
+            ts = _parse_attribute_timestamp(entry.get(ts_key))
+            if ts is None:
+                continue
+            try:
+                val = float(str(entry.get(value_key)))
+            except (ValueError, TypeError):
+                continue
+            if not math.isfinite(val):
+                continue
+            numeric.append((ts, val))
+
+    if len(numeric) >= 2:
+        numeric.sort(key=lambda p: p[0])
+        if len(numeric) > _MAX_ATTRIBUTE_POINTS:
+            stride = len(numeric) / _MAX_ATTRIBUTE_POINTS
+            numeric = [
+                numeric[round(i * stride)]
+                for i in range(_MAX_ATTRIBUTE_POINTS)
+            ]
+        return numeric
     return []
 
 
@@ -1109,7 +1217,10 @@ def _normalize_entities(
     or the multi-entity format (``entities`` list of dicts).  When
     both are present ``entities`` takes precedence.  Flat editor keys
     ``entity_2`` / ``entity_3`` are also handled for widgets saved by
-    the editor UI.
+    the editor UI.  These flat secondary-entity keys always default
+    to ``data_source="history"`` because the editor does not expose
+    attribute-source fields for them; use the ``entities`` list
+    format to configure an attribute source on a secondary entity.
 
     Args:
         widget: Widget config dict.
@@ -1118,10 +1229,14 @@ def _normalize_entities(
         List of entity descriptor dicts, each with keys ``entity``
         (str), ``name`` (str, empty when not overridden), ``y_axis``
         (``"primary"`` or ``"secondary"``), ``line_style``
-        (``"solid"``, ``"dashed"``, or ``"dotted"``), and ``dash``
-        (the SVG ``stroke-dasharray`` value, empty for solid).
-        Maximum 3 entries.  Returns an empty list when no entity
-        source is found.
+        (``"solid"``, ``"dashed"``, or ``"dotted"``), ``dash``
+        (the SVG ``stroke-dasharray`` value, empty for solid),
+        ``data_source`` (``"history"`` or ``"attribute"``),
+        ``attribute`` (str, the attribute name holding a time-series
+        list when ``data_source`` is ``"attribute"``),
+        ``attribute_timestamp_key`` (str, default ``"timestamp"``),
+        and ``attribute_value_key`` (str).  Maximum 3 entries.
+        Returns an empty list when no entity source is found.
     """
     _STYLE_MAP: dict[str, int] = {"solid": 0, "dashed": 1, "dotted": 2}
     raw: list[dict[str, object]] = []
@@ -1142,7 +1257,19 @@ def _normalize_entities(
     else:
         eid = str(widget.get("entity", ""))
         if eid:
-            raw.append({"entity": eid})
+            raw.append(
+                {
+                    "entity": eid,
+                    "data_source": str(widget.get("data_source", "history")),
+                    "attribute": str(widget.get("attribute", "")),
+                    "attribute_timestamp_key": str(
+                        widget.get("attribute_timestamp_key", "timestamp")
+                    ),
+                    "attribute_value_key": str(
+                        widget.get("attribute_value_key", "")
+                    ),
+                }
+            )
         for suffix in ("_2", "_3"):
             eid2 = str(widget.get(f"entity{suffix}", ""))
             if eid2:
@@ -1169,6 +1296,14 @@ def _normalize_entities(
                 "y_axis": str(item.get("y_axis", "primary")),
                 "line_style": style_name,
                 "dash": _DASH_PATTERNS[idx],
+                "data_source": str(item.get("data_source", "history")),
+                "attribute": str(item.get("attribute", "")),
+                "attribute_timestamp_key": str(
+                    item.get("attribute_timestamp_key", "timestamp")
+                ),
+                "attribute_value_key": str(
+                    item.get("attribute_value_key", "")
+                ),
             }
         )
     return result
@@ -1358,18 +1493,27 @@ def _build_graph_context(
     gy1 = header_h + margin
     gy2 = svg_h - margin
 
-    # --- Per-entity history extraction ---
+    # --- Per-entity data extraction ---
+    # Entities with data_source="attribute" read a forecast-style
+    # time-series list from a named entity attribute instead of the
+    # recorder's state history.
     states_dict: dict[str, object] = config.get("states", {})
-    per_entity_points: list[list[tuple[float, float]]] = [
-        _extract_entity_points(
-            desc,
-            states_dict,
-            hours_to_show,
-            points_per_hour,
-            aggregate_func,
-        )
-        for desc in entity_descs
-    ]
+    per_entity_points: list[list[tuple[float, float]]] = []
+    for desc in entity_descs:
+        if str(desc.get("data_source", "history")) == "attribute":
+            per_entity_points.append(
+                _extract_attribute_points(desc, states_dict)
+            )
+        else:
+            per_entity_points.append(
+                _extract_entity_points(
+                    desc,
+                    states_dict,
+                    hours_to_show,
+                    points_per_hour,
+                    aggregate_func,
+                )
+            )
 
     # --- Y bounds per axis ---
     primary_values: list[float] = []

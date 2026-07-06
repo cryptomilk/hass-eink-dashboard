@@ -900,6 +900,31 @@ export interface GraphEntityConfig {
    * ``"dotted"`` (3rd).
    */
   line_style?: "solid" | "dashed" | "dotted";
+  /**
+   * Where this entity's time-series data comes from.  ``"history"``
+   * (default) reads from the HA recorder (backward-looking actual
+   * values).  ``"attribute"`` reads from a named entity attribute
+   * containing a list of timestamped data points, useful for
+   * forward-looking forecasts (solar production, energy prices).
+   */
+  data_source?: "history" | "attribute";
+  /**
+   * Entity attribute name holding the time-series list.  Required
+   * when {@link data_source} is ``"attribute"``.  Example:
+   * ``"timeseries"``, ``"forecast"``.
+   */
+  attribute?: string;
+  /**
+   * Key for the timestamp in each attribute list entry.  Accepts
+   * ISO 8601 strings or Unix timestamps.  Default: ``"timestamp"``.
+   */
+  attribute_timestamp_key?: string;
+  /**
+   * Key for the numeric value in each attribute list entry.
+   * Required when {@link data_source} is ``"attribute"``.  Example:
+   * ``"w"`` for watts, ``"price"`` for energy price.
+   */
+  attribute_value_key?: string;
 }
 
 /**
@@ -928,6 +953,28 @@ export interface GraphWidget extends WidgetBase {
   icon?: string;
   /** Unit string override shown next to the current state value. */
   unit?: string;
+  /**
+   * Data source for the primary entity.  ``"history"`` (default)
+   * reads from the recorder; ``"attribute"`` reads from a named
+   * entity attribute containing a time-series list (e.g. a solar
+   * or price forecast).
+   */
+  data_source?: "history" | "attribute";
+  /**
+   * Entity attribute name holding the time-series list.  Required
+   * when {@link data_source} is ``"attribute"``.
+   */
+  attribute?: string;
+  /**
+   * Key for the timestamp in each attribute list entry.
+   * Default: ``"timestamp"``.
+   */
+  attribute_timestamp_key?: string;
+  /**
+   * Key for the numeric value in each attribute list entry.
+   * Required when {@link data_source} is ``"attribute"``.
+   */
+  attribute_value_key?: string;
   /** History window in hours. Default: 24. */
   hours_to_show?: number;
   /**

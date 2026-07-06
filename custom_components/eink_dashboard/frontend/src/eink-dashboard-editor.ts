@@ -1246,6 +1246,37 @@ export const SCHEMAS: Record<
         { name: "icon", selector: { icon: {} } },
         { name: "unit", selector: { text: {} } },
         {
+          name: "data_source",
+          default: "history",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "history", label: "History (recorder)" },
+                { value: "attribute", label: "Attribute (forecast)" },
+              ],
+            },
+          },
+        },
+        { name: "attribute", selector: { text: {} } },
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "attribute_timestamp_key",
+              selector: { text: {} },
+            },
+            {
+              name: "attribute_value_key",
+              selector: { text: {} },
+            },
+          ],
+        },
+        // hours_to_show, points_per_hour, and aggregate_func only
+        // apply to data_source="history"; ha-form has no field-level
+        // conditional visibility to hide them for "attribute" mode.
+        {
           type: "grid",
           name: "",
           schema: [
@@ -1487,6 +1518,9 @@ export const LABELS: Record<string, string> = {
   temperature_entity: "Temperature sensor",
   humidity_entity: "Humidity sensor",
   graph: "Graph type",
+  data_source: "Data source",
+  attribute_timestamp_key: "Timestamp key",
+  attribute_value_key: "Value key",
   hours_to_show: "Hours to show",
   detail: "Detail",
   limits_min: "Y-axis minimum",

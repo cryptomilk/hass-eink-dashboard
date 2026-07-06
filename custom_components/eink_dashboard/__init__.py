@@ -372,18 +372,22 @@ async def _fetch_history(
         if needs_history:
             # Collect all entity IDs from the entities list,
             # single entity= key, and flat editor keys entity_2/3.
+            # Entities configured with data_source="attribute" read
+            # a forecast-style attribute instead, so they are
+            # skipped here to avoid an unnecessary recorder query.
             eids: list[str] = []
             entities_list = w.get("entities")
             if isinstance(entities_list, list):
                 for e in entities_list:
                     if isinstance(e, dict):
                         eid = str(e.get("entity", ""))
-                        if eid:
+                        if eid and e.get("data_source") != "attribute":
                             eids.append(eid)
             if not eids:
-                eid = str(w.get("entity", ""))
-                if eid:
-                    eids.append(eid)
+                if w.get("data_source") != "attribute":
+                    eid = str(w.get("entity", ""))
+                    if eid:
+                        eids.append(eid)
                 for suffix in ("_2", "_3"):
                     eid2 = str(w.get(f"entity{suffix}", ""))
                     if eid2:

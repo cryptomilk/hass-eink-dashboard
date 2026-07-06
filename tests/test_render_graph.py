@@ -92,6 +92,17 @@ _NARROW_HISTORY = [
     {"s": "20.5", "lu": 1747699200.0},
 ]
 
+# Attribute-based forecast data: a solar production forecast stored
+# as a list under the "timeseries" attribute, ISO 8601 timestamps
+# with UTC offset, "w" holding the numeric wattage value.
+_FORECAST_TIMESERIES = [
+    {"timestamp": "2026-07-01T04:00:00+00:00", "w": 100.0},
+    {"timestamp": "2026-07-01T04:15:00+00:00", "w": 250.0},
+    {"timestamp": "2026-07-01T04:30:00+00:00", "w": 400.0},
+    {"timestamp": "2026-07-01T04:45:00+00:00", "w": 600.0},
+    {"timestamp": "2026-07-01T05:00:00+00:00", "w": 800.0},
+]
+
 MOCK_GRAPH_STATES: dict[str, dict[str, object]] = {
     "sensor.temperature": {
         "state": "22.5",
@@ -128,6 +139,14 @@ MOCK_GRAPH_STATES: dict[str, dict[str, object]] = {
             {"s": "1015.0", "lu": 1747699200.0},
         ],
     },
+    "sensor.solar_forecast": {
+        "state": "800.0",
+        "attributes": {
+            "friendly_name": "Solar Forecast",
+            "unit_of_measurement": "W",
+            "timeseries": _FORECAST_TIMESERIES,
+        },
+    },
 }
 
 
@@ -146,6 +165,12 @@ class TestRenderGraph:
 
     Phase 4 adds bar chart mode (graph="bar") with grouped multi-entity
     bars, distinct fill shades, and <rect> legend swatches.
+
+    Phase 5 adds color thresholds for line and bar modes.
+
+    Phase 6 adds an attribute-based data source, letting entities
+    read a time-series list from a named attribute (e.g. a solar or
+    price forecast) instead of the recorder's state history.
     """
 
     _DEFAULTS: ClassVar[dict[str, object]] = {
@@ -544,6 +569,61 @@ class TestRenderGraph:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == 200
+
+    def test_graph_history_nan_inf_filtered(self) -> None:
+        # History entries with NaN or Infinity state values are
+        # silently dropped; valid entries still render a polyline.
+        history = [
+            {"s": "nan", "lu": 1747620000.0},
+            {"s": "inf", "lu": 1747623600.0},
+            {"s": "-inf", "lu": 1747627200.0},
+            {"s": "20.0", "lu": 1747634400.0},
+            {"s": "22.5", "lu": 1747656000.0},
+            {"s": "21.0", "lu": 1747699200.0},
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                "state": "21.0",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+                "history": history,
+            }
+        }
+        svg = render_widget_svg(
+            self._base_widget(smoothing=False),
+            self._config(states=states),
+        )
+        assert "<polyline" in svg
+
+    def test_graph_history_nan_timestamp_filtered(self) -> None:
+        # History entries with NaN/inf in the lu (timestamp) field are
+        # dropped without corrupting the time-window computation.
+        history = [
+            {"s": "20.0", "lu": "nan"},
+            {"s": "21.0", "lu": float("inf")},
+            {"s": "22.5", "lu": 1747620000.0},
+            {"s": "23.0", "lu": 1747645200.0},
+            {"s": "22.0", "lu": 1747699200.0},
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                "state": "22.0",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+                "history": history,
+            }
+        }
+        svg = render_widget_svg(
+            self._base_widget(smoothing=False),
+            self._config(states=states),
+        )
+        assert "<polyline" in svg
 
     # ── Phase 2: Smoothing tests ───────────────────────────────────────
 
@@ -1812,6 +1892,279 @@ class TestRenderGraph:
             self._threshold_config(),
         )
         assert svg_list_only == svg_both
+
+    # ── Phase 6: Attribute data source ────────────────────────────────
+
+    def _attribute_widget(self, **overrides: object) -> dict[str, object]:
+        """Return a graph widget reading sensor.solar_forecast."""
+        w: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entity": "sensor.solar_forecast",
+            "data_source": "attribute",
+            "attribute": "timeseries",
+            "attribute_value_key": "w",
+            "smoothing": False,
+        }
+        w.update(overrides)
+        return w
+
+    def test_graph_attribute_source_renders_polyline(self) -> None:
+        # data_source="attribute" reads the named attribute list and
+        # renders a polyline from its (timestamp, value) entries.
+        svg = render_widget_svg(self._attribute_widget(), self._config())
+        assert "<polyline" in svg
+
+    def test_graph_attribute_source_missing_attribute_no_polyline(
+        self,
+    ) -> None:
+        # When the configured attribute is absent from entity state,
+        # no polyline is rendered and the SVG remains valid.
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "0.0",
+                "attributes": {"friendly_name": "Solar Forecast"},
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<svg" in svg
+        assert "<polyline" not in svg
+
+    def test_graph_attribute_source_non_numeric_filtered(self) -> None:
+        # Non-numeric values in the attribute list are skipped; a
+        # graph still renders when at least 2 numeric entries survive.
+        mixed = [
+            {"timestamp": "2026-07-01T04:00:00+00:00", "w": "unknown"},
+            {"timestamp": "2026-07-01T04:15:00+00:00", "w": 250.0},
+            {"timestamp": "2026-07-01T04:30:00+00:00", "w": None},
+            {"timestamp": "2026-07-01T04:45:00+00:00", "w": 600.0},
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "600.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": mixed,
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<polyline" in svg
+
+    def test_graph_attribute_source_fewer_than_two_points_no_graph(
+        self,
+    ) -> None:
+        # A single valid data point is insufficient to draw a line;
+        # no polyline is rendered.
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "100.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": [
+                        {
+                            "timestamp": "2026-07-01T04:00:00+00:00",
+                            "w": 100.0,
+                        },
+                    ],
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<polyline" not in svg
+
+    def test_graph_attribute_source_unix_timestamps(self) -> None:
+        # Unix timestamp floats (instead of ISO 8601 strings) are
+        # parsed correctly and produce a polyline.
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "800.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": [
+                        {"timestamp": 1747620000.0, "w": 100.0},
+                        {"timestamp": 1747623600.0, "w": 400.0},
+                        {"timestamp": 1747627200.0, "w": 800.0},
+                    ],
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<polyline" in svg
+
+    def test_graph_attribute_source_custom_keys(self) -> None:
+        # Custom attribute_timestamp_key and attribute_value_key
+        # read from differently-named fields in the attribute list.
+        states: dict[str, dict[str, object]] = {
+            "sensor.price_forecast": {
+                "state": "0.30",
+                "attributes": {
+                    "friendly_name": "Price Forecast",
+                    "prices": [
+                        {"time": "2026-07-01T04:00:00+00:00", "p": 0.10},
+                        {"time": "2026-07-01T05:00:00+00:00", "p": 0.30},
+                    ],
+                },
+            }
+        }
+        widget = self._attribute_widget(
+            entity="sensor.price_forecast",
+            attribute="prices",
+            attribute_timestamp_key="time",
+            attribute_value_key="p",
+        )
+        svg = render_widget_svg(widget, self._config(states=states))
+        assert "<polyline" in svg
+
+    def test_graph_attribute_default_data_source_is_history(self) -> None:
+        # Omitting data_source defaults to "history" — an entity
+        # exposing only an attribute-based timeseries (no recorder
+        # history) produces no polyline under the default source.
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "800.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": _FORECAST_TIMESERIES,
+                },
+            }
+        }
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entity": "sensor.solar_forecast",
+            "attribute": "timeseries",
+            "attribute_value_key": "w",
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config(states=states))
+        assert "<polyline" not in svg
+
+    def test_graph_attribute_source_mixed_with_history(self) -> None:
+        # One entity reads recorder history, the other reads an
+        # attribute-based forecast; both series render as separate
+        # polylines on the same graph.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.solar_forecast",
+                    "data_source": "attribute",
+                    "attribute": "timeseries",
+                    "attribute_value_key": "w",
+                },
+            ],
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert svg.count("<polyline") == 2
+
+    def test_graph_attribute_source_bar_mode(self) -> None:
+        # Attribute-sourced data also works in bar chart mode.
+        widget = self._attribute_widget(graph="bar")
+        svg = render_widget_svg(widget, self._config())
+        assert "<rect" in svg
+
+    def test_graph_attribute_source_extrema(self) -> None:
+        # show_extrema works with attribute-sourced data, displaying
+        # min/max value labels below the graph.
+        widget = self._attribute_widget(show_extrema=True)
+        svg = render_widget_svg(widget, self._config())
+        assert "Min:" in svg
+        assert "Max:" in svg
+
+    def test_graph_attribute_source_nan_inf_filtered(self) -> None:
+        # Entries with NaN/Infinity in timestamp or value are
+        # silently dropped; a graph still renders from the remaining
+        # valid points.
+        mixed = [
+            {"timestamp": "2026-07-01T04:00:00+00:00", "w": float("nan")},
+            {"timestamp": "nan", "w": 250.0},
+            {"timestamp": "2026-07-01T04:15:00+00:00", "w": float("inf")},
+            {"timestamp": "inf", "w": 300.0},
+            {"timestamp": "2026-07-01T04:30:00+00:00", "w": 400.0},
+            {"timestamp": "2026-07-01T04:45:00+00:00", "w": 600.0},
+            {"timestamp": "2026-07-01T05:00:00+00:00", "w": float("-inf")},
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "600.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": mixed,
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<polyline" in svg
+
+    def test_graph_attribute_source_non_list_attribute_no_graph(
+        self,
+    ) -> None:
+        # When the attribute value is not a list (e.g. an int, dict,
+        # or string), no polyline is rendered.
+        for bad_value in (42, {"nested": "dict"}, "just a string"):
+            states: dict[str, dict[str, object]] = {
+                "sensor.solar_forecast": {
+                    "state": "0.0",
+                    "attributes": {
+                        "friendly_name": "Solar Forecast",
+                        "timeseries": bad_value,
+                    },
+                }
+            }
+            svg = render_widget_svg(
+                self._attribute_widget(), self._config(states=states)
+            )
+            assert "<svg" in svg
+            assert "<polyline" not in svg
+
+    def test_graph_attribute_source_non_dict_entries_filtered(
+        self,
+    ) -> None:
+        # List entries that are not dicts (plain strings, ints, None)
+        # are skipped; valid dicts still render.
+        mixed = [
+            "just a string",
+            42,
+            None,
+            {"timestamp": "2026-07-01T04:00:00+00:00", "w": 400.0},
+            {"timestamp": "2026-07-01T04:15:00+00:00", "w": 600.0},
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.solar_forecast": {
+                "state": "600.0",
+                "attributes": {
+                    "friendly_name": "Solar Forecast",
+                    "timeseries": mixed,
+                },
+            }
+        }
+        svg = render_widget_svg(
+            self._attribute_widget(), self._config(states=states)
+        )
+        assert "<polyline" in svg
 
     # ── Unit tests for threshold helper functions ──────────────────────
 
