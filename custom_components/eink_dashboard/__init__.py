@@ -408,6 +408,7 @@ async def _fetch_history(
         _LOGGER.debug("_fetch_history: recorder not loaded, skipping history")
         return
 
+    from homeassistant.components.recorder import get_instance
     from homeassistant.components.recorder.history import (
         get_significant_states,
     )
@@ -416,7 +417,7 @@ async def _fetch_history(
     for entity_id, hours in sensor_entities.items():
         start_time = now - timedelta(hours=hours)
         try:
-            result = await hass.async_add_executor_job(
+            result = await get_instance(hass).async_add_executor_job(
                 partial(
                     get_significant_states,
                     hass,
