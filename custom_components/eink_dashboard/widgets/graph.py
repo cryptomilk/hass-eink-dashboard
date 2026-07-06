@@ -206,6 +206,7 @@ def _threshold_gradient_stops(
     y_range = y_max - y_min
 
     def _offset(val: float) -> str:
+        """Convert a data value to an SVG gradient offset percentage."""
         # High value → small offset (near top of SVG gradient).
         pct = (y_max - val) / y_range * 100.0
         pct = max(0.0, min(100.0, pct))
