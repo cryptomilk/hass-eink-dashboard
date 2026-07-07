@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-07
+
+### Added
+
+- **Color e-ink palette support**: displays with a `color_scheme`
+  configured (BWR, BWY, BWRY, BWGBRY) are now rendered and dithered in
+  RGB instead of grayscale.
+- **Seeed reTerminal E1002** device preset (800×480, Spectra 6-color /
+  BWGBRY).
+- **`dither_algorithm`** display setting: choose between
+  Floyd-Steinberg, Atkinson, Stucki, and Burkes dithering, powered by
+  the new `epaper-dithering` library (replaces Pillow's built-in
+  Floyd-Steinberg quantization).
+- **`measured_palette`** display setting: use a photographically
+  calibrated color/gray palette from `epaper-dithering` instead of the
+  idealized default.
+- **`exposure`** and **`saturation`** display settings, replacing
+  `sharpness` and `contrast` as pre-dithering image adjustments.
+- **`hide_name`** option on the Entity and Sensor widgets to show only
+  the value with no name label.
+- **`bold_value`** option on the Entity, Sensor, Entities, Tile,
+  Gauge, Graph, Device Battery, Waste Schedule, and Calendar widgets.
+- **Attribute-based data source** for the Graph widget: plot a
+  time-series list from an entity attribute (e.g. solar production or
+  price forecasts) instead of only recorder state history.
+
+### Changed
+
+- Display settings: `grayscale_levels`, and the new `exposure` /
+  `saturation` sliders are now grouped under a collapsed "Advanced"
+  section in the config flow.
+- Entity, Sensor, and Entities widgets: the state value is now the
+  dominant, black, bold-weight element and the name/label is smaller
+  and gray, matching at-a-glance e-ink dashboard priorities.
+- Tile, Waste Schedule, and Calendar widgets: values render in solid
+  black and names in gray (previously the reverse).
+
+### Fixed
+
+- Seeed reTerminal E1001/E1003 presets no longer double-dither:
+  `optimize` defaults to off for these devices since HA Core's
+  OpenDisplay integration already dithers before sending over BLE; the
+  Display Settings UI now explains why the toggle is disabled.
+- Graph widget history fetches now go through the recorder's own
+  executor, eliminating repeated "detected blocking call" warnings
+  from Home Assistant.
+
+### Removed
+
+- `sharpness` and `contrast` display settings, superseded by
+  `exposure` and `saturation` (existing configs are migrated
+  automatically).
+
 ## [0.5.0] - 2026-06-30
 
 ### Added
@@ -183,6 +236,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.6.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.3.0...v0.4.0
