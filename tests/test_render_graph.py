@@ -369,12 +369,12 @@ class TestRenderGraph:
         assert "<svg" in svg
 
     def test_graph_2level_fill_still_renders(self) -> None:
-        # On 2-level displays (grayscale_levels=2), the fill element
+        # On 2-level displays (display_levels=2), the fill element
         # is still included in the SVG; dithering happens at the
         # optimize stage, not the render stage.
         svg = render_widget_svg(
             self._base_widget(smoothing=False),
-            self._config(grayscale_levels=2),
+            self._config(display_levels=2),
         )
         assert "<polygon" in svg
 
@@ -744,16 +744,16 @@ class TestRenderGraph:
         # contains <line> elements for horizontal grid lines.
         svg = render_widget_svg(
             self._base_widget(show_labels=True),
-            self._config(grayscale_levels=16),
+            self._config(display_levels=16),
         )
         assert "<line" in svg
 
     def test_graph_grid_lines_absent_2level(self) -> None:
-        # On 2-level displays (grayscale_levels=2), grid lines are
+        # On 2-level displays (display_levels=2), grid lines are
         # suppressed (fine gray lines cannot be rendered on B&W).
         svg = render_widget_svg(
             self._base_widget(show_labels=True),
-            self._config(grayscale_levels=2),
+            self._config(display_levels=2),
         )
         assert "<line" not in svg
 
@@ -767,7 +767,7 @@ class TestRenderGraph:
         expected_color = color_to_hex(COLOR_LIGHT_GRAY)
         svg = render_widget_svg(
             self._base_widget(show_labels=True),
-            self._config(grayscale_levels=16),
+            self._config(display_levels=16),
         )
         assert expected_color in svg
 
@@ -1107,7 +1107,7 @@ class TestRenderGraph:
         # samples (at least one per legend entry).
         svg = render_widget_svg(
             self._multi_widget(smoothing=False),
-            self._config(grayscale_levels=2),
+            self._config(display_levels=2),
         )
         # On 2-level display, grid lines are absent so any <line>
         # must come from legend samples.
@@ -1491,7 +1491,7 @@ class TestRenderGraph:
         # samples.  With bar mode, no <line> elements should appear.
         svg = render_widget_svg(
             self._bar_multi_widget(),
-            self._config(grayscale_levels=2),
+            self._config(display_levels=2),
         )
         # Legend entity names appear.
         assert "Living Room" in svg
@@ -1708,7 +1708,7 @@ class TestRenderGraph:
         # entirely: no <linearGradient> appears even when configured.
         svg = render_widget_svg(
             self._threshold_widget(),
-            self._threshold_config(grayscale_levels=2),
+            self._threshold_config(display_levels=2),
         )
         assert "<linearGradient" not in svg
 
@@ -1723,7 +1723,7 @@ class TestRenderGraph:
         black_hex = color_to_hex(COLOR_BLACK)
         svg = render_widget_svg(
             self._threshold_widget(),
-            self._threshold_config(grayscale_levels=2),
+            self._threshold_config(display_levels=2),
         )
         # Gradient URL must not appear for stroke; black must be present.
         assert "thresh-stroke" not in svg
@@ -1741,7 +1741,7 @@ class TestRenderGraph:
         black_hex = color_to_hex(COLOR_BLACK)
         svg = render_widget_svg(
             self._threshold_widget(graph="bar"),
-            self._threshold_config(grayscale_levels=2),
+            self._threshold_config(display_levels=2),
         )
         # All bar fills should be black (entity-level), not per-bar.
         assert black_hex in svg
@@ -2391,7 +2391,7 @@ class TestRenderGraph:
             {"value": 200, "shade": "dark"},
         ]
         stops = _threshold_gradient_stops(
-            thresholds, "smooth", y_min=0.0, y_max=100.0, grayscale_levels=16
+            thresholds, "smooth", y_min=0.0, y_max=100.0, display_levels=16
         )
         # Both stops must still be present; offsets are clamped.
         assert len(stops) == 2

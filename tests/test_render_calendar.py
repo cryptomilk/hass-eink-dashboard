@@ -266,7 +266,7 @@ class TestRenderCalendar:
     _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 400,
         "height": 300,
-        "grayscale_levels": 16,
+        "display_levels": 16,
         "time_format": "24",
         "states": MOCK_CALENDAR_STATES,
     }
@@ -662,7 +662,7 @@ class TestRenderCalendar:
         )
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+            svg = render_widget_svg(w, self._config(display_levels=2))
         expected = m.border * 3
         assert f'stroke-width="{expected}"' in svg, (
             f"2-level stroke-width should be {expected}"
@@ -675,7 +675,7 @@ class TestRenderCalendar:
         w = self._widget(h=2 * DEFAULT_ROW_H, max_events=2)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+            svg = render_widget_svg(w, self._config(display_levels=2))
         expected = m.divider * 3
         assert f'stroke-width="{expected}"' in svg, (
             f"2-level divider stroke-width should be {expected}"

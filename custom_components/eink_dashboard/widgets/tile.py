@@ -80,7 +80,7 @@ def _build_tile_context(
             black card, white text/icon — as an e-ink "needs
             attention" signal), ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``height``,
-            ``states``, and ``grayscale_levels``.
+            ``states``, and ``display_levels``.
 
     Returns:
         Template context dict consumed by ``tile.svg.j2``.
@@ -111,7 +111,7 @@ def _build_tile_context(
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     state = states.get(entity_id) if entity_id else None
     if state is None:
@@ -129,7 +129,7 @@ def _build_tile_context(
     svg_h = _widget_dim(widget, "h", _auto_row_height("", 1))
     row_h = svg_h
     m = _compute_metrics(row_h)
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     # Zero lpad/rpad when card_container already insets that
     # side.
     lpad = m.padding if x_off == 0 else 0
@@ -178,14 +178,14 @@ def _build_tile_context(
             entity_id,
         )
         icon_outline, icon_no_circle = _resolve_icon_style(
-            icon_style, state_val, grayscale_levels
+            icon_style, state_val, display_levels
         )
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)
     # Widen the outline stroke on 2-level displays to avoid
     # dithering.
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
 
     # Inverted "needs attention" signal: same condition format and
     # evaluator as `visibility`, but drives a solid black card with

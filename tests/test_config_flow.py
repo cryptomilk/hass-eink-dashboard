@@ -110,7 +110,7 @@ class TestEinkDashboardConfigFlow:
         assert opts["height"] == 1024
         assert opts["rotation"] == 0
         assert opts["optimize"] is True
-        assert opts["grayscale_levels"] == 16
+        assert opts["display_levels"] == 16
         assert opts["dither_algorithm"] == "floyd_steinberg"
         assert opts["update_interval"] == 60
         assert opts["webhook_urls"] == []
@@ -177,7 +177,7 @@ class TestEinkDashboardConfigFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         opts = result["options"]
         assert opts["optimize"] is False
-        assert opts["grayscale_levels"] == 4
+        assert opts["display_levels"] == 4
         # Native landscape device in landscape orientation: no rotation.
         assert opts["width"] == 800
         assert opts["height"] == 480
@@ -201,7 +201,7 @@ class TestEinkDashboardConfigFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         opts = result["options"]
         assert opts["optimize"] is False
-        assert opts["grayscale_levels"] == 16
+        assert opts["display_levels"] == 16
         assert opts["width"] == 1404
         assert opts["height"] == 1872
         assert opts["rotation"] == 0
@@ -294,7 +294,7 @@ class TestEinkDashboardConfigFlow:
         assert flow._data["width"] == 800
         assert flow._data["height"] == 480
         assert flow._data["rotation"] == 0
-        assert flow._data["grayscale_levels"] == 2
+        assert flow._data["display_levels"] == 2
 
     async def test_trmnl_portrait_rotation(self, hass: HomeAssistant) -> None:
         # TRMNL in portrait orientation swaps dimensions and sets
@@ -724,7 +724,7 @@ class TestEinkDashboardOptionsFlow:
                 "optimize": True,
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
-                    "grayscale_levels": "2",
+                    "display_levels": "2",
                     "exposure": "1.5",
                     "saturation": "0.8",
                 },
@@ -733,7 +733,7 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"]["optimize"] is True
-        assert result["data"]["grayscale_levels"] == 2
+        assert result["data"]["display_levels"] == 2
         assert result["data"]["exposure"] == 1.5
         assert result["data"]["saturation"] == 0.8
 
@@ -741,35 +741,35 @@ class TestEinkDashboardOptionsFlow:
         self,
         hass: HomeAssistant,
     ) -> None:
-        # When grayscale_levels==256 is saved in opts, exposure/saturation
+        # When display_levels==256 is saved in opts, exposure/saturation
         # are excluded from the schema because dither_image() is not
         # called on the 256-level passthrough path. Submitting those keys
         # raises vol.Invalid.
         flow = await _make_options_flow(
-            hass, {"update_interval": 60, "grayscale_levels": 256}
+            hass, {"update_interval": 60, "display_levels": 256}
         )
         with pytest.raises(vol.Invalid):
             await flow.async_step_display_settings(
                 {
                     "update_interval": 60,
                     "advanced_section": {
-                        "grayscale_levels": "256",
+                        "display_levels": "256",
                         "exposure": "1.5",
                     },
                 }
             )
 
-    async def test_display_settings_rejects_invalid_grayscale_levels(
+    async def test_display_settings_rejects_invalid_display_levels(
         self,
         hass: HomeAssistant,
     ) -> None:
-        # An invalid grayscale_levels value raises vol.Invalid.
+        # An invalid display_levels value raises vol.Invalid.
         flow = await _make_options_flow(hass, {"update_interval": 60})
         with pytest.raises(vol.Invalid):
             await flow.async_step_display_settings(
                 {
                     "update_interval": 60,
-                    "advanced_section": {"grayscale_levels": 7},
+                    "advanced_section": {"display_levels": 7},
                 }
             )
 
@@ -840,7 +840,7 @@ class TestEinkDashboardOptionsFlow:
                 "optimize": True,
                 "advanced_section": {
                     "dither_algorithm": "atkinson",
-                    "grayscale_levels": "16",
+                    "display_levels": "16",
                     "exposure": "1.0",
                     "saturation": "1.0",
                 },
@@ -876,7 +876,7 @@ class TestEinkDashboardOptionsFlow:
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
                     "measured_palette": "spectra_7_3_6color",
-                    "grayscale_levels": "16",
+                    "display_levels": "16",
                     "exposure": "1.0",
                     "saturation": "1.0",
                 },
@@ -936,7 +936,7 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 1448
         assert result["data"]["rotation"] == 0
         assert result["data"]["optimize"] is True
-        assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["display_levels"] == 16
         assert result["data"]["dither_algorithm"] == "floyd_steinberg"
         assert result["data"]["webhook_urls"] == []
 
@@ -1453,7 +1453,7 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 800
         assert result["data"]["rotation"] == 0
         assert result["data"]["optimize"] is False
-        assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["display_levels"] == 16
         assert result["data"]["webhook_urls"] == []
 
     async def test_options_custom_resolution_preserves_area(
@@ -1524,7 +1524,7 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["height"] == 1448
         assert result["data"]["rotation"] == 0
         assert result["data"]["optimize"] is True
-        assert result["data"]["grayscale_levels"] == 16
+        assert result["data"]["display_levels"] == 16
 
     async def test_device_settings_custom_stays_custom_skips_resolution(
         self,
@@ -1654,7 +1654,8 @@ class TestMigrateEntry:
         self, hass: HomeAssistant
     ) -> None:
         # Migration from minor_version<2 removes sharpness/contrast and
-        # adds exposure/saturation with their defaults.
+        # adds exposure/saturation with their defaults. The entry then
+        # cascades through the 2->3 migration too, ending at 3.
         from custom_components.eink_dashboard import async_migrate_entry
 
         entry = MockConfigEntry(
@@ -1673,7 +1674,7 @@ class TestMigrateEntry:
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        assert entry.minor_version == 2
+        assert entry.minor_version == 3
         assert "sharpness" not in entry.options
         assert "contrast" not in entry.options
         assert entry.options["exposure"] == 1.0
@@ -1692,7 +1693,7 @@ class TestMigrateEntry:
             options={
                 "update_interval": 120,
                 "optimize": True,
-                "grayscale_levels": 4,
+                "display_levels": 4,
                 "sharpness": 1.0,
                 "contrast": 1.0,
             },
@@ -1703,13 +1704,13 @@ class TestMigrateEntry:
 
         assert entry.options["update_interval"] == 120
         assert entry.options["optimize"] is True
-        assert entry.options["grayscale_levels"] == 4
+        assert entry.options["display_levels"] == 4
 
-    async def test_migration_skipped_when_already_at_minor_version_2(
-        self,
-        hass: HomeAssistant,
+    async def test_migration_renames_grayscale_levels(
+        self, hass: HomeAssistant
     ) -> None:
-        # Entries already at minor_version=2 are not migrated again.
+        # Migration from minor_version<3 renames the stored
+        # grayscale_levels option key to display_levels.
         from custom_components.eink_dashboard import async_migrate_entry
 
         entry = MockConfigEntry(
@@ -1720,6 +1721,34 @@ class TestMigrateEntry:
                 "update_interval": 60,
                 "exposure": 1.0,
                 "saturation": 1.0,
+                "grayscale_levels": 4,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        assert entry.minor_version == 3
+        assert "grayscale_levels" not in entry.options
+        assert entry.options["display_levels"] == 4
+
+    async def test_migration_skipped_when_already_at_minor_version_3(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # Entries already at minor_version=3 are not migrated again.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            minor_version=3,
+            entry_id="test-entry",
+            options={
+                "update_interval": 60,
+                "exposure": 1.0,
+                "saturation": 1.0,
+                "display_levels": 16,
             },
         )
         entry.add_to_hass(hass)

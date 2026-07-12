@@ -48,9 +48,9 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    DEFAULT_DISPLAY_LEVELS,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
-    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
@@ -230,7 +230,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
     """Multi-step config flow for creating a new dashboard entry."""
 
     VERSION = 1
-    MINOR_VERSION = 2
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         """Initialise flow state."""
@@ -293,7 +293,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "height": height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
-                    "grayscale_levels": preset.grayscale_levels,
+                    "display_levels": preset.display_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
                     "measured_palette": preset.measured_palette,
@@ -337,7 +337,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     {
                         "rotation": rotation,
                         "optimize": preset.optimize,
-                        "grayscale_levels": preset.grayscale_levels,
+                        "display_levels": preset.display_levels,
                         "dither_algorithm": preset.dither_algorithm,
                         "color_scheme": preset.color_scheme,
                         "measured_palette": preset.measured_palette,
@@ -354,7 +354,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     "height": final_height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
-                    "grayscale_levels": preset.grayscale_levels,
+                    "display_levels": preset.display_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
                     "measured_palette": preset.measured_palette,
@@ -390,7 +390,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                     {
                         "rotation": 0,
                         "optimize": DEFAULT_OPTIMIZE,
-                        "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                        "display_levels": DEFAULT_DISPLAY_LEVELS,
                         "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                         "color_scheme": None,
                         "measured_palette": DEFAULT_MEASURED_PALETTE,
@@ -513,7 +513,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
 
         Args:
             extra: Display-specific keys (width, height,
-                rotation, optimize, grayscale_levels, and
+                rotation, optimize, display_levels, and
                 optionally screen_portion) merged after
                 ``self._data``.
 
@@ -774,7 +774,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                             "height": fh,
                             "rotation": rot,
                             "optimize": preset.optimize,
-                            "grayscale_levels": preset.grayscale_levels,
+                            "display_levels": preset.display_levels,
                             "dither_algorithm": preset.dither_algorithm,
                             "color_scheme": preset.color_scheme,
                             "measured_palette": preset.measured_palette,
@@ -792,7 +792,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "height": height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
-                    "grayscale_levels": preset.grayscale_levels,
+                    "display_levels": preset.display_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
                     "measured_palette": preset.measured_palette,
@@ -855,7 +855,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "height": final_height,
                     "rotation": rotation,
                     "optimize": preset.optimize,
-                    "grayscale_levels": preset.grayscale_levels,
+                    "display_levels": preset.display_levels,
                     "dither_algorithm": preset.dither_algorithm,
                     "color_scheme": preset.color_scheme,
                     "measured_palette": preset.measured_palette,
@@ -885,7 +885,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     "height": validated["height"],
                     "rotation": 0,
                     "optimize": DEFAULT_OPTIMIZE,
-                    "grayscale_levels": DEFAULT_GRAYSCALE_LEVELS,
+                    "display_levels": DEFAULT_DISPLAY_LEVELS,
                     "dither_algorithm": DEFAULT_DITHER_ALGORITHM,
                     "color_scheme": None,
                     "measured_palette": DEFAULT_MEASURED_PALETTE,
@@ -984,9 +984,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update refresh interval, optimize, and image quality settings."""
         opts = self.config_entry.options
-        grayscale_levels = opts.get(
-            "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
-        )
+        display_levels = opts.get("display_levels", DEFAULT_DISPLAY_LEVELS)
         # exposure/saturation are only forwarded to dither_image(), which
         # is never called on the 256-level passthrough path, so those
         # controls serve no purpose there.
@@ -1018,14 +1016,14 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 )
             ),
             vol.Optional(
-                "grayscale_levels",
-                default=grayscale_levels,
+                "display_levels",
+                default=display_levels,
             ): vol.All(
                 vol.Coerce(int),
                 vol.In([2, 4, 16, 256]),
             ),
         }
-        if grayscale_levels != 256:
+        if display_levels != 256:
             advanced_fields[
                 vol.Optional(
                     "exposure",

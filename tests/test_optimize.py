@@ -57,21 +57,21 @@ class TestOptimizeEnabled:
     def test_quantize_16_colors(self) -> None:
         img = _gradient()
         result = optimize_for_eink(
-            img, {"optimize": True, "grayscale_levels": 16}
+            img, {"optimize": True, "display_levels": 16}
         )
         assert len(set(result.get_flattened_data())) <= 16
 
     def test_quantize_4_colors(self) -> None:
         img = _gradient()
         result = optimize_for_eink(
-            img, {"optimize": True, "grayscale_levels": 4}
+            img, {"optimize": True, "display_levels": 4}
         )
         assert len(set(result.get_flattened_data())) <= 4
 
     def test_quantize_2_colors(self) -> None:
         img = _gradient()
         result = optimize_for_eink(
-            img, {"optimize": True, "grayscale_levels": 2}
+            img, {"optimize": True, "display_levels": 2}
         )
         assert result.mode == "1"
         assert len(set(result.get_flattened_data())) <= 2
@@ -83,7 +83,7 @@ class TestOptimizeEnabled:
         draw = ImageDraw.Draw(img)
         draw.rectangle((10, 10, 190, 90), fill=0)
         result = optimize_for_eink(
-            img, {"optimize": True, "grayscale_levels": 2}
+            img, {"optimize": True, "display_levels": 2}
         )
         assert result.mode == "1"
         dark = sum(1 for b in result.convert("L").tobytes() if b == 0)
@@ -95,7 +95,7 @@ class TestOptimizeEnabled:
         assert len(set(img.get_flattened_data())) == 256
         result = optimize_for_eink(
             img,
-            {"optimize": True, "grayscale_levels": 256},
+            {"optimize": True, "display_levels": 256},
         )
         assert result.mode == "L"
         assert len(set(result.get_flattened_data())) == 256
@@ -108,7 +108,7 @@ class TestOptimizeEnabled:
                 img.putpixel((x, y), 100 + x)
         result = optimize_for_eink(
             img,
-            {"optimize": True, "grayscale_levels": 256},
+            {"optimize": True, "display_levels": 256},
         )
         data = list(result.get_flattened_data())
         assert min(data) <= 5
@@ -133,7 +133,7 @@ class TestExposureSaturation:
 
     def test_default_exposure_saturation_passed(self) -> None:
         # When not configured, dither_image receives the defaults (1.0/1.0).
-        mock = self._run_with_mock({"optimize": True, "grayscale_levels": 16})
+        mock = self._run_with_mock({"optimize": True, "display_levels": 16})
         mock.assert_called_once()
         assert mock.call_args[1]["exposure"] == 1.0
         assert mock.call_args[1]["saturation"] == 1.0
@@ -141,7 +141,7 @@ class TestExposureSaturation:
     def test_custom_exposure_passed(self) -> None:
         # A custom exposure value is forwarded to dither_image.
         mock = self._run_with_mock(
-            {"optimize": True, "grayscale_levels": 16, "exposure": 1.5}
+            {"optimize": True, "display_levels": 16, "exposure": 1.5}
         )
         mock.assert_called_once()
         assert mock.call_args[1]["exposure"] == 1.5
@@ -149,7 +149,7 @@ class TestExposureSaturation:
     def test_custom_saturation_passed(self) -> None:
         # A custom saturation value is forwarded to dither_image.
         mock = self._run_with_mock(
-            {"optimize": True, "grayscale_levels": 16, "saturation": 0.5}
+            {"optimize": True, "display_levels": 16, "saturation": 0.5}
         )
         mock.assert_called_once()
         assert mock.call_args[1]["saturation"] == 0.5
@@ -180,7 +180,7 @@ class TestExposureSaturation:
         assert mock.call_args[1]["saturation"] == 0.8
 
     def test_grayscale_256_skips_dither_image(self) -> None:
-        # grayscale_levels=256 is the passthrough path: dither_image() is
+        # display_levels=256 is the passthrough path: dither_image() is
         # never called, so exposure/saturation have no effect.
         img = _gradient()
         mock = MagicMock()
@@ -192,7 +192,7 @@ class TestExposureSaturation:
                 img,
                 {
                     "optimize": True,
-                    "grayscale_levels": 256,
+                    "display_levels": 256,
                     "exposure": 1.5,
                     "saturation": 0.5,
                 },
@@ -220,7 +220,7 @@ class TestDitherAlgorithmSelection:
         # Config without dither_algorithm defaults to Floyd-Steinberg.
         from epaper_dithering import DitherMode
 
-        mock = self._run_with_mock({"optimize": True, "grayscale_levels": 16})
+        mock = self._run_with_mock({"optimize": True, "display_levels": 16})
         mock.assert_called_once()
         assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
 
@@ -231,7 +231,7 @@ class TestDitherAlgorithmSelection:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "dither_algorithm": "floyd_steinberg",
             }
         )
@@ -245,7 +245,7 @@ class TestDitherAlgorithmSelection:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "dither_algorithm": "atkinson",
             }
         )
@@ -259,7 +259,7 @@ class TestDitherAlgorithmSelection:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "dither_algorithm": "stucki",
             }
         )
@@ -273,7 +273,7 @@ class TestDitherAlgorithmSelection:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "dither_algorithm": "burkes",
             }
         )
@@ -289,7 +289,7 @@ class TestDitherAlgorithmSelection:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "dither_algorithm": "nonexistent_algo",
             }
         )
@@ -358,7 +358,7 @@ class TestOptimizeIntegration:
             "width": 200,
             "height": 100,
             "optimize": True,
-            "grayscale_levels": 4,
+            "display_levels": 4,
         }
         widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
@@ -375,7 +375,7 @@ class TestOptimizeIntegration:
             "width": 200,
             "height": 100,
             "optimize": True,
-            "grayscale_levels": 2,
+            "display_levels": 2,
         }
         widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
@@ -474,10 +474,10 @@ class TestMeasuredPaletteDithering:
         [
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "measured_palette": "auto",
             },
-            {"optimize": True, "grayscale_levels": 16},
+            {"optimize": True, "display_levels": 16},
         ],
         ids=["explicit-auto", "absent-key"],
     )
@@ -525,7 +525,7 @@ class TestMeasuredPaletteDithering:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 2,
+                "display_levels": 2,
                 "measured_palette": "mono_4_26",
             },
             return_colors=2,
@@ -543,7 +543,7 @@ class TestMeasuredPaletteDithering:
         mock = self._run_with_mock(
             {
                 "optimize": True,
-                "grayscale_levels": 16,
+                "display_levels": 16,
                 "measured_palette": "nonexistent_palette",
             }
         )
@@ -564,14 +564,14 @@ class TestMeasuredPaletteDithering:
         assert result.mode == "RGB"
 
     def test_measured_palette_produces_mono_output(self) -> None:
-        # End-to-end: measured MONO palette with grayscale_levels=2 still
+        # End-to-end: measured MONO palette with display_levels=2 still
         # produces mode "1" (binary) output, not "L".
         img = _gradient()
         result = optimize_for_eink(
             img,
             {
                 "optimize": True,
-                "grayscale_levels": 2,
+                "display_levels": 2,
                 "measured_palette": "mono_4_26",
             },
         )

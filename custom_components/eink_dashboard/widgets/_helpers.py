@@ -157,7 +157,7 @@ def _fmt(value: str, config: DisplayConfig) -> str:
 def _card_insets(
     m: WidgetMetrics,
     card_style: str,
-    grayscale_levels: int,
+    display_levels: int,
 ) -> tuple[int, int, int]:
     """Return (x_off, r_inset, bar_width) for a card container.
 
@@ -171,7 +171,7 @@ def _card_insets(
         m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
         card_style: One of ``"border"``, ``"left_bar"``, or
             ``"none"`` (or any other value treated as ``"none"``).
-        grayscale_levels: Display grayscale depth; passed to
+        display_levels: Display grayscale depth; passed to
             ``_left_bar_width`` to widen the bar on 2-level
             displays.
 
@@ -185,7 +185,7 @@ def _card_insets(
     if card_style == "border":
         return m.padding, m.padding, 0
     if card_style == "left_bar":
-        bar_w = _left_bar_width(m, grayscale_levels)
+        bar_w = _left_bar_width(m, display_levels)
         return bar_w + m.padding, 0, bar_w
     return 0, 0, 0
 
@@ -193,7 +193,7 @@ def _card_insets(
 def _resolve_icon_style(
     icon_style: str | None,
     state_val: str = "",
-    grayscale_levels: int = 16,
+    display_levels: int = 16,
 ) -> tuple[bool, bool]:
     """Resolve icon circle style to outline/no-circle flags.
 
@@ -210,7 +210,7 @@ def _resolve_icon_style(
         state_val: Entity state string used for active
             detection when ``icon_style`` is ``None``.
             Defaults to ``""`` (treated as inactive).
-        grayscale_levels: Display grayscale depth.  Values
+        display_levels: Display grayscale depth.  Values
             of 2 or fewer force ``"outlined"`` regardless
             of state.
 
@@ -222,7 +222,7 @@ def _resolve_icon_style(
         is_active = state_val in _ACTIVE_STATES
         resolved = (
             "outlined"
-            if grayscale_levels <= 2
+            if display_levels <= 2
             else ("filled" if is_active else "outlined")
         )
     else:
@@ -399,7 +399,7 @@ def _entity_info_context(
             ``hide_name``, ``icon_style``, ``card_style``,
             ``bold_value``.
         config: Display config with ``states`` and
-            ``grayscale_levels``.
+            ``display_levels``.
         section_h: Height of the entity info section in pixels.
             Entity widget passes ``svg_h``; Sensor widget passes
             ``entity_h`` (svg_h minus graph_h).
@@ -430,7 +430,7 @@ def _entity_info_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     value_bold: bool = widget.get("bold_value", False)
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     state = states.get(entity_id) if entity_id else None
     if state is None:
@@ -451,7 +451,7 @@ def _entity_info_context(
     icon_dia = round(header_h * 0.82)
     icon_inner = icon_dia * 70 // 100
     letter_font_sz = icon_dia * 5 // 10
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
@@ -498,10 +498,10 @@ def _entity_info_context(
             entity_id,
         )
         icon_outline, icon_no_circle = _resolve_icon_style(
-            icon_style, state_val, grayscale_levels
+            icon_style, state_val, display_levels
         )
     # Widen outline stroke on 2-level displays to avoid dithering.
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
     icon_fill = color_to_hex(COLOR_GRAY)
     icon_color = (
         colors["hex_black"]

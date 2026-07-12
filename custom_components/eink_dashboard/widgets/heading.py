@@ -91,7 +91,7 @@ def _build_heading_context(
             dicts),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
-            ``grayscale_levels``.
+            ``display_levels``.
 
     Returns:
         Template context dict consumed by ``heading.svg.j2``.
@@ -116,10 +116,10 @@ def _build_heading_context(
     raw_badges = widget.get("badges", [])
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     m = _compute_metrics(svg_h)
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     # Zero lpad/rpad when card_container already insets that side.
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
@@ -134,11 +134,11 @@ def _build_heading_context(
 
     # Icon resolution: glyph size depends on circle style.
     icon_outline, icon_no_circle = _resolve_icon_style(
-        icon_style, grayscale_levels=grayscale_levels
+        icon_style, display_levels=display_levels
     )
     # Widen the outline stroke on 2-level displays to avoid
     # dithering.
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
     glyph_sz = max(10, font_sz) if icon_no_circle else m.icon_inner
     icon_svg, _ = _resolve_icon_svg(
         icon_override,

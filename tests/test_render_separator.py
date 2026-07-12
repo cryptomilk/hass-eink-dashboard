@@ -108,8 +108,8 @@ class TestRenderSeparator:
         assert pixel(img, 50, PADDING + 82) == 255
 
     def test_separator_bar_2level_widens(self) -> None:
-        # grayscale_levels=2 widens a bar to ~10-12px.
-        config = {**self._CONFIG, "grayscale_levels": 2}
+        # display_levels=2 widens a bar to ~10-12px.
+        config = {**self._CONFIG, "display_levels": 2}
         widgets = [
             {"type": "separator", "x": PADDING, "y": 50, "style": "bar"}
         ]
@@ -121,7 +121,7 @@ class TestRenderSeparator:
 
     def test_separator_line_ignores_2level(self) -> None:
         # style="line" stays 2px even on 2-level displays.
-        config = {**self._CONFIG, "grayscale_levels": 2}
+        config = {**self._CONFIG, "display_levels": 2}
         widgets = [{"type": "separator", "x": PADDING, "y": 50}]
         img = render_to_image(widgets, config)
         assert pixel(img, 100, 52) == 255

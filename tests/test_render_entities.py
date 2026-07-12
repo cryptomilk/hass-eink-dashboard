@@ -724,7 +724,7 @@ class TestRenderEntities:
         )
 
     def test_entities_2level_always_outlined(self) -> None:
-        # On a 2-level display (grayscale_levels=2) the auto-switch
+        # On a 2-level display (display_levels=2) the auto-switch
         # forces outlined even for an active entity (state "on");
         # top ring has no gray fill.
         m = _compute_metrics(80)
@@ -738,7 +738,7 @@ class TestRenderEntities:
                 "entities": ["binary_sensor.motion"],
             }
         ]
-        img = render_to_image(widgets, self._config(grayscale_levels=2))
+        img = render_to_image(widgets, self._config(display_levels=2))
         rx1, ry1, rx2, ry2 = _icon_ring_region(
             80, m, stroke_inset=m.border * 3 // 2
         )
@@ -767,7 +767,7 @@ class TestRenderEntities:
                 "sensor.humidity",
             ],
         }
-        svg = render_widget_svg(w, self._config(grayscale_levels=2))
+        svg = render_widget_svg(w, self._config(display_levels=2))
         expected_sw = m.divider * 3
         assert f'stroke-width="{expected_sw}"' in svg, (
             f"2-level divider stroke-width should be {expected_sw}"

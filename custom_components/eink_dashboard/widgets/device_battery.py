@@ -57,7 +57,7 @@ def _build_device_battery_context(
             ``card_style``, ``color``, ``bold_value`` (render the
             percentage label in bold; default ``False``).
         config: Display config with ``device_battery_level``
-            (int 0–100) and ``grayscale_levels``.
+            (int 0–100) and ``display_levels``.
 
     Returns:
         Template context dict consumed by
@@ -87,7 +87,7 @@ def _build_device_battery_context(
     pct = max(0, min(100, int(level)))
     layout = widget.get("layout", "icon")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
     color: int = widget.get("color", COLOR_BLACK)
     value_bold: bool = widget.get("bold_value", False)
     # Force black below 20% for visual emphasis.
@@ -98,7 +98,7 @@ def _build_device_battery_context(
     label = f"{pct}%"
     m = _compute_metrics(svg_h)
 
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     # Soft-pad when the card provides no inset on that side,
     # consistent with tile/heading/entities/waste_schedule/weather.
     lpad = m.padding if x_off == 0 else 0

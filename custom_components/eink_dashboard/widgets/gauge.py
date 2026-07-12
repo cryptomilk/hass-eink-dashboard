@@ -203,7 +203,7 @@ def _build_gauge_context(
             of medium weight; default ``False``),
             ``card_style``, ``segments``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
-            ``grayscale_levels``.
+            ``display_levels``.
 
     Returns:
         Template context dict consumed by ``gauge.svg.j2``.
@@ -220,7 +220,7 @@ def _build_gauge_context(
 
     entity_id: str = widget.get("entity", "")
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
     card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
     gauge_type: str = widget.get("gauge_type", "standard")
     header_position: str = widget.get("header_position", "bottom")
@@ -285,7 +285,7 @@ def _build_gauge_context(
     # Use DEFAULT_ROW_H for consistent border proportions across
     # widget sizes (gauge has no natural row_h concept).
     m = _compute_metrics(DEFAULT_ROW_H)
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
 
     # --- Gauge geometry ---
     # Name label: height proportional to the total widget height.
@@ -460,7 +460,7 @@ def _build_gauge_context(
         "h": h,
         "has_entity": True,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "display_levels": display_levels,
         "bar_width": bar_width,
         "x_off": x_off,
         "r_inset": r_inset,

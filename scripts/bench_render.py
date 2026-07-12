@@ -435,7 +435,7 @@ def _build_config(
     return {
         "width": preset.width,
         "height": preset.height,
-        "grayscale_levels": preset.grayscale_levels,
+        "display_levels": preset.display_levels,
         "optimize": preset.optimize,
         "states": states,
         **extra,
@@ -681,7 +681,7 @@ def main() -> None:
     peak_rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     _report(
         f"{args.device} ({preset.width}x{preset.height},"
-        f" {preset.grayscale_levels}-level)"
+        f" {preset.display_levels}-level)"
         f" | {label}"
         f" | {args.iterations} iter",
         results,

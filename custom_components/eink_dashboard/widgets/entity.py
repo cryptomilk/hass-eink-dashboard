@@ -39,7 +39,7 @@ def _build_entity_context(
     based on entity state when ``icon_style`` is omitted:
 
     - ``"filled"`` — gray-filled circle (default for active states
-      when ``grayscale_levels > 2``).
+      when ``display_levels > 2``).
     - ``"outlined"`` — white circle with black stroke (default for
       inactive states and all 2-level displays).
     - ``"none"`` — no circle; icon glyph rendered without
@@ -62,7 +62,7 @@ def _build_entity_context(
             default ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
-            ``grayscale_levels``.
+            ``display_levels``.
 
     Returns:
         Template context dict consumed by ``entity.svg.j2``.

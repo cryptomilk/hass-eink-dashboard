@@ -114,7 +114,7 @@ the context dict with `**_color_context()` so templates can use
   `"left_bar"` → `(bar_w + m.padding, 0)`;
   `"none"` → `(0, 0)`.
   Content starts at `x_off`; content width = `w - x_off - right_inset`.
-  Always pass `grayscale_levels` from config.
+  Always pass `display_levels` from config.
 - **`card_row`** expects all sizes from `WidgetMetrics` fields plus
   `icon_svg` (pre-built SVG string, empty string for letter fallback)
   and `letter` (single uppercase char, empty string when icon_svg is
@@ -179,7 +179,7 @@ white).
     card_style=card_style,
     radius=m.radius, border=m.border,
     padding=m.padding, left_bar=m.left_bar,
-    grayscale_levels=grayscale_levels) -%}
+    display_levels=display_levels) -%}
 {%- for row in rows -%}
 {{ card_row(
     x=x_off, y=row.y,
@@ -266,7 +266,7 @@ def _build_{widget_type}_context(
     Args:
         widget: Widget config dict with x, w, h, entities,
             card_style, title.
-        config: DisplayConfig with states and grayscale_levels.
+        config: DisplayConfig with states and display_levels.
 
     Returns:
         Template context dict.
@@ -279,7 +279,7 @@ def _build_{widget_type}_context(
     )
     entities = widget.get("entities", [])
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     n = len(entities)
     if n == 0:
@@ -294,7 +294,7 @@ def _build_{widget_type}_context(
     row_h = h // n
     m = _compute_metrics(row_h)
     x_off, r_inset, bar_width = _card_insets(
-        m, card_style, grayscale_levels
+        m, card_style, display_levels
     )
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
@@ -341,7 +341,7 @@ def _build_{widget_type}_context(
         "w": w,
         "h": h,
         "card_style": card_style,
-        "grayscale_levels": grayscale_levels,
+        "display_levels": display_levels,
         "rows": rows,
         "row_h": row_h,
         "lpad": lpad,
@@ -535,7 +535,7 @@ behavior.
   ```python
   # Widen the outline stroke on 2-level displays.
   icon_stroke_w = (
-      m.border * 3 if grayscale_levels <= 2 else m.border
+      m.border * 3 if display_levels <= 2 else m.border
   )
   ```
 

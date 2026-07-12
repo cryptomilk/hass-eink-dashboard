@@ -180,7 +180,7 @@ def _build_weather_context(
             ``forecast_days``, ``card_style``,
             ``temperature_entity``, ``humidity_entity``.
         config: Display config with ``width``, ``height``,
-            ``states``, ``grayscale_levels``.
+            ``states``, ``display_levels``.
 
     Returns:
         Template context dict consumed by ``weather.svg.j2``.
@@ -220,7 +220,7 @@ def _build_weather_context(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     scale = font_size / FONT_SIZE_WEATHER
 
@@ -324,7 +324,7 @@ def _build_weather_context(
     # configured.
     svg_h = _widget_dim(widget, "h", total_h)
 
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     # Soft-pad when the card provides no inset on that side,
     # consistent with tile/heading/entities/waste_schedule.
     lpad = m.padding if x_off == 0 else 0

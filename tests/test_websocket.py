@@ -249,10 +249,10 @@ class TestWsRenderWidget:
         assert "sensor.temp" in config["states"]
         assert config["states"]["sensor.temp"]["state"] == "21.5"
 
-    async def test_config_includes_grayscale_levels(
+    async def test_config_includes_display_levels(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
     ) -> None:
-        # grayscale_levels comes from entry.options, not the device preset.
+        # display_levels comes from entry.options, not the device preset.
         widget = {"type": "separator"}
         client, entry = await _setup_entry(
             hass,
@@ -262,7 +262,7 @@ class TestWsRenderWidget:
                 "device_model": "kindle_pw",
                 "width": 758,
                 "height": 1024,
-                "grayscale_levels": 4,
+                "display_levels": 4,
             },
         )
 
@@ -270,7 +270,7 @@ class TestWsRenderWidget:
             await _send_render_widget(client, entry.entry_id, 0)
 
         _, config = mock_render.call_args.args
-        assert config["grayscale_levels"] == 4
+        assert config["display_levels"] == 4
 
     async def test_config_includes_battery_level(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
@@ -538,7 +538,7 @@ class TestWsRenderWidgets:
                 return_value={
                     "width": 758,
                     "height": 1024,
-                    "grayscale_levels": 2,
+                    "display_levels": 2,
                     "states": {},
                 },
             ) as mock_cfg,

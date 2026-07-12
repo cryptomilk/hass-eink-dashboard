@@ -31,7 +31,7 @@ DEFAULT_HEIGHT = 1024
 DEFAULT_UPDATE_INTERVAL = 60
 DEFAULT_GRAYSCALE_DEPTH = 8
 DEFAULT_OPTIMIZE = False
-DEFAULT_GRAYSCALE_LEVELS = 16
+DEFAULT_DISPLAY_LEVELS = 16
 DEFAULT_DITHER_ALGORITHM = "floyd_steinberg"
 DEFAULT_MEASURED_PALETTE = "auto"
 DEFAULT_EXPOSURE = 1.0
@@ -83,7 +83,7 @@ class DevicePreset:
     label: str
     width: int
     height: int
-    grayscale_levels: int
+    display_levels: int
     optimize: bool
     manufacturer: str
     native_landscape: bool = False
@@ -96,7 +96,7 @@ class DevicePreset:
     measured_palette: str = DEFAULT_MEASURED_PALETTE
     """Measured palette key for photographically calibrated dithering.
     ``"auto"`` means use the idealized ``ColorScheme`` derived from
-    ``color_scheme`` or ``grayscale_levels``.  Non-auto values match
+    ``color_scheme`` or ``display_levels``.  Non-auto values match
     keys in ``optimize._MEASURED_PALETTES``."""
 
 

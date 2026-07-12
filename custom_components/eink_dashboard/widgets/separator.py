@@ -39,7 +39,7 @@ def _build_separator_context(
     pre-computed here so the template needs no conditionals.
 
     The ``"bar"`` style widens to 10 px on 2-level displays
-    (``grayscale_levels <= 2``) so the dithered dot pattern reads
+    (``display_levels <= 2``) so the dithered dot pattern reads
     clearly as a separator.
 
     Args:
@@ -52,7 +52,7 @@ def _build_separator_context(
             span), ``x`` (default ``PADDING``),
             ``y`` (default 0).
         config: Display config with ``width``, ``height``, and
-            optional ``grayscale_levels`` (default 16).
+            optional ``display_levels`` (default 16).
 
     Returns:
         Dict consumed by ``separator.svg.j2``: ``w``, ``h``,
@@ -62,7 +62,7 @@ def _build_separator_context(
     y = widget.get("y", 0)
     direction = widget.get("direction", "horizontal")
     style = widget.get("style", "line")
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     svg_w = _widget_dim(widget, "w", config["width"] - x)
     svg_h = _widget_dim(widget, "h", config["height"] - y)
@@ -71,7 +71,7 @@ def _build_separator_context(
         color: int = COLOR_GRAY
         # Widen bar on 2-level displays so the dithered dot
         # pattern reads clearly as a separator.
-        thickness = 10 if grayscale_levels <= 2 else 6
+        thickness = 10 if display_levels <= 2 else 6
     else:
         color = COLOR_BLACK
         thickness = 2

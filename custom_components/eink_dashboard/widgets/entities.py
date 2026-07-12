@@ -85,7 +85,7 @@ def _build_entities_context(
             state value in bold; default ``False``), ``card_style``,
             ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
-            ``grayscale_levels``.
+            ``display_levels``.
 
     Returns:
         Template context dict consumed by ``entities.svg.j2``.
@@ -106,7 +106,7 @@ def _build_entities_context(
     value_bold: bool = widget.get("bold_value", False)
     entity_configs: list = widget.get("entities", [])
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
     colors = _color_context()
 
     # --- Classify rows ---
@@ -197,15 +197,15 @@ def _build_entities_context(
     section_h = max(1, round(row_h * 0.6))
 
     m = _compute_metrics(row_h)
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
     # Widen outline stroke on 2-level displays to avoid
     # dithering.
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
     # Widen divider lines on 2-level displays (same rationale).
-    divider_stroke_w = m.divider * 3 if grayscale_levels <= 2 else m.divider
+    divider_stroke_w = m.divider * 3 if display_levels <= 2 else m.divider
     icon_fill = color_to_hex(COLOR_GRAY)
     # Section label font ~46% of row height (matches chip label
     # ratio).
@@ -270,7 +270,7 @@ def _build_entities_context(
             )
 
             icon_outline, icon_no_circle = _resolve_icon_style(
-                icon_style, state_val, grayscale_levels
+                icon_style, state_val, display_levels
             )
 
             # Auto-divider: draw after this entity row only

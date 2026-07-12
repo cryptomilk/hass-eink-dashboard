@@ -350,7 +350,7 @@ class TestRenderTile:
         )
 
     def test_tile_2level_always_outlined(self) -> None:
-        # On a 2-level display (grayscale_levels=2) the auto-switch
+        # On a 2-level display (display_levels=2) the auto-switch
         # forces "outlined" even for an active entity (state "on"),
         # so the top ring above the icon glyph has no gray fill.
         m = _compute_metrics(80)
@@ -364,7 +364,7 @@ class TestRenderTile:
                 "entity": "binary_sensor.motion",
             }
         ]
-        img = render_to_image(widgets, self._config(grayscale_levels=2))
+        img = render_to_image(widgets, self._config(display_levels=2))
         cy = 80 // 2
         r = m.icon_dia // 2
         cx = m.padding + r

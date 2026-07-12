@@ -306,7 +306,7 @@ def _right_icon_ring_region(
     w: int,
     h: int,
     card_style: str = "none",
-    grayscale_levels: int = 16,
+    display_levels: int = 16,
 ) -> tuple[int, int, int, int, int, int]:
     """Return the icon ring region for right-aligned icon style tests.
 
@@ -323,7 +323,7 @@ def _right_icon_ring_region(
         h: Total widget height in pixels; header_h (40%) is computed
             internally.
         card_style: Card decoration style string.
-        grayscale_levels: Display grayscale depth.
+        display_levels: Display grayscale depth.
 
     Returns:
         Six-tuple (icon_cx, icon_cy, ring_x1, ring_y1, ring_x2,
@@ -331,7 +331,7 @@ def _right_icon_ring_region(
     """
     header_h = round(h * 0.40)
     m = _compute_metrics(header_h)
-    _, r_inset, _ = _card_insets(m, card_style, grayscale_levels)
+    _, r_inset, _ = _card_insets(m, card_style, display_levels)
     rpad = m.padding if r_inset == 0 else 0
     # Mirror the enlarged icon ratios from _entity_info_context().
     icon_dia = round(header_h * 0.82)
@@ -341,7 +341,7 @@ def _right_icon_ring_region(
     icon_cy = header_h // 2
     # Mirror the context builder's icon_stroke_w so the ring region
     # starts past the inner edge of a widened stroke on 2-level.
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
     ring_y1 = icon_cy - icon_r + icon_stroke_w // 2 + 3
     ring_y2 = icon_cy - icon_inner // 2 - 1
     ring_x1 = icon_cx - icon_r // 2 + 3

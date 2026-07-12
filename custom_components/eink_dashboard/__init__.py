@@ -40,8 +40,8 @@ if TYPE_CHECKING:
 
 from .battery import resolve_battery_level
 from .const import (
+    DEFAULT_DISPLAY_LEVELS,
     DEFAULT_EXPOSURE,
-    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_HEIGHT,
     DEFAULT_SATURATION,
     DEFAULT_WIDTH,
@@ -238,7 +238,7 @@ async def _build_display_config(
         entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
 
     Returns:
-        Dict with ``width``, ``height``, ``grayscale_levels``,
+        Dict with ``width``, ``height``, ``display_levels``,
         ``number_format``, ``language``, ``first_weekday``,
         ``date_format``, ``time_format``, ``states``, and (when
         battery data is available) ``device_battery_level`` and
@@ -267,8 +267,8 @@ async def _build_display_config(
     config: dict[str, Any] = {
         "width": entry.options.get("width", DEFAULT_WIDTH),
         "height": entry.options.get("height", DEFAULT_HEIGHT),
-        "grayscale_levels": entry.options.get(
-            "grayscale_levels", DEFAULT_GRAYSCALE_LEVELS
+        "display_levels": entry.options.get(
+            "display_levels", DEFAULT_DISPLAY_LEVELS
         ),
         "color_scheme": entry.options.get("color_scheme"),
         "number_format": number_format,
@@ -731,6 +731,10 @@ async def async_migrate_entry(
     in epaper-dithering; ``contrast`` is superseded by ``exposure``.
     Both new keys default to 1.0 (no change).
 
+    Version 1.2 → 1.3: rename ``grayscale_levels`` to
+    ``display_levels`` so the option name also fits future color
+    e-ink displays.
+
     Args:
         hass: Home Assistant instance.
         config_entry: The config entry to migrate.
@@ -753,6 +757,21 @@ async def async_migrate_entry(
             config_entry,
             options=new_options,
             minor_version=2,
+        )
+
+    if config_entry.minor_version == 2:
+        _LOGGER.debug(
+            "Migrating %s from minor version %d to 3",
+            config_entry.entry_id,
+            config_entry.minor_version,
+        )
+        new_options = dict(config_entry.options)
+        if "grayscale_levels" in new_options:
+            new_options["display_levels"] = new_options.pop("grayscale_levels")
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=new_options,
+            minor_version=3,
         )
 
     return True
