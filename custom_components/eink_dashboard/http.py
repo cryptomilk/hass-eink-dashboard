@@ -74,7 +74,7 @@ class EinkLayoutView(HomeAssistantView):
                 "display": {
                     "width": width,
                     "height": height,
-                    "grayscale_levels": preset.grayscale_levels,
+                    "display_levels": preset.display_levels,
                 },
                 "device": {
                     "name": entry.title,

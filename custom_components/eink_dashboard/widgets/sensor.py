@@ -75,7 +75,7 @@ def _build_sensor_context(
             ``False``),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
-            ``grayscale_levels``.
+            ``display_levels``.
 
     Returns:
         Template context dict consumed by ``sensor.svg.j2``.
@@ -105,7 +105,7 @@ def _build_sensor_context(
                 limits["min"] = lmin
             if lmax is not None:
                 limits["max"] = lmax
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     has_graph = graph == "line"
     hide_fill: bool = widget.get("hide_fill", False)
@@ -142,7 +142,7 @@ def _build_sensor_context(
     # displays.
     graph_stroke_w = (
         DEFAULT_METRICS.border * 2
-        if grayscale_levels <= 2
+        if display_levels <= 2
         else DEFAULT_METRICS.border
     )
 

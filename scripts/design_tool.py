@@ -338,7 +338,7 @@ _HTML_TEMPLATE = """\
 <div class="info">
   Widget: <b>{widget_type}</b> |
   Device: <b>{device_name}</b>
-  ({width}&times;{height}, {grayscale_levels}-level) |
+  ({width}&times;{height}, {display_levels}-level) |
   Port: {port}
 </div>
 <div id="error"></div>
@@ -957,7 +957,7 @@ class _DesignHandler(BaseHTTPRequestHandler):
             device_name=st.preset.label,
             width=st.preset.width,
             height=st.preset.height,
-            grayscale_levels=st.preset.grayscale_levels,
+            display_levels=st.preset.display_levels,
             port=st.port,
             initial_data=initial,
         )
@@ -1442,7 +1442,7 @@ def main() -> None:
         preset.label,
         preset.width,
         preset.height,
-        preset.grayscale_levels,
+        preset.display_levels,
     )
     _logger.info("Press Ctrl+C to stop.")
 

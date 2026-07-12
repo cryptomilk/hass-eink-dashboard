@@ -454,7 +454,7 @@ class TestEinkDashboardImage:
                 "width": 200,
                 "height": 100,
                 "optimize": True,
-                "grayscale_levels": 4,
+                "display_levels": 4,
                 "exposure": 1.5,
                 "saturation": 0.8,
             }
@@ -467,7 +467,7 @@ class TestEinkDashboardImage:
             await entity._async_refresh(None)
             config = mock_render.call_args[0][1]
             assert config["optimize"] is True
-            assert config["grayscale_levels"] == 4
+            assert config["display_levels"] == 4
             assert config["exposure"] == 1.5
             assert config["saturation"] == 0.8
 

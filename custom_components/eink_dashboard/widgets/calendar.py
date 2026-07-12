@@ -70,7 +70,7 @@ def _build_calendar_context(
             ``card_style`` (``"border"``, ``"left_bar"``,
             or ``"none"``), ``x``, ``w``, ``h``.
         config: Display config with ``states``,
-            ``grayscale_levels``, and ``time_format``.
+            ``display_levels``, and ``time_format``.
 
     Returns:
         Template context dict consumed by
@@ -97,7 +97,7 @@ def _build_calendar_context(
     value_bold: bool = widget.get("bold_value", False)
     time_format: str = config.get("time_format", "24")
     states = config.get("states", {})
-    grayscale_levels = config.get("grayscale_levels", 16)
+    display_levels = config.get("display_levels", 16)
 
     empty_ctx: dict[str, object] = {
         "w": svg_w,
@@ -136,9 +136,9 @@ def _build_calendar_context(
     row_h = content_h // num_rows
 
     m = _compute_metrics(row_h)
-    icon_stroke_w = m.border * 3 if grayscale_levels <= 2 else m.border
-    divider_stroke_w = m.divider * 3 if grayscale_levels <= 2 else m.divider
-    x_off, r_inset, bar_width = _card_insets(m, card_style, grayscale_levels)
+    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    divider_stroke_w = m.divider * 3 if display_levels <= 2 else m.divider
+    x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 

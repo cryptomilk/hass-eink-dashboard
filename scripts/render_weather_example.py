@@ -102,7 +102,7 @@ RENDERS = [
         {
             "width": 800,
             "height": 480,
-            "grayscale_levels": 2,
+            "display_levels": 2,
             "states": WEATHER_STATE,
         },
     ),
@@ -111,7 +111,7 @@ RENDERS = [
         {
             "width": 758,
             "height": 1024,
-            "grayscale_levels": 16,
+            "display_levels": 16,
             "states": WEATHER_STATE,
         },
     ),
@@ -127,5 +127,5 @@ for filename, config in RENDERS:
     out = output_dir / filename
     out.write_bytes(png)
     w, h = config["width"], config["height"]
-    lvls = config["grayscale_levels"]
+    lvls = config["display_levels"]
     print(f"{out}  ({w}x{h}, {lvls}-level, {len(png)} bytes)")

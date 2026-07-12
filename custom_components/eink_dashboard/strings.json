@@ -155,14 +155,14 @@
             "data": {
               "dither_algorithm": "Dither algorithm",
               "measured_palette": "Measured palette",
-              "grayscale_levels": "Grayscale levels",
+              "display_levels": "Display levels",
               "exposure": "Exposure",
               "saturation": "Saturation"
             },
             "data_description": {
               "dither_algorithm": "Algorithm used for error-diffusion dithering",
               "measured_palette": "Photographically calibrated palette for your specific display model. Auto uses the idealized palette.",
-              "grayscale_levels": "Number of grayscale shades (fewer = higher contrast, more banding)",
+              "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
               "exposure": "1.0 = unchanged, higher = brighter (0.0–10.0)",
               "saturation": "1.0 = unchanged, 0.0 = grayscale, higher = more vivid (0.0–10.0)"
             }

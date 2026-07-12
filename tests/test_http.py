@@ -454,7 +454,7 @@ class TestEinkLayoutView:
         assert body["display"] == {
             "width": 758,
             "height": 1024,
-            "grayscale_levels": 16,
+            "display_levels": 16,
         }
         assert body["device"]["name"] == "Test Dashboard"
         assert body["device"]["model"] == "kindle_pw"

@@ -116,10 +116,10 @@ class TestRenderSensor:
         self,
         h: int,
         card_style: str = "none",
-        grayscale_levels: int = 16,
+        display_levels: int = 16,
     ) -> tuple[int, int, int, int, int, int]:
         """Delegate to module-level _right_icon_ring_region."""
-        return _right_icon_ring_region(400, h, card_style, grayscale_levels)
+        return _right_icon_ring_region(400, h, card_style, display_levels)
 
     # ── Structural tests ──────────────────────────────
 
@@ -346,10 +346,10 @@ class TestRenderSensor:
         )
 
     def test_sensor_2level_always_outlined(self) -> None:
-        # On 2-level displays (grayscale_levels=2), active entity is
+        # On 2-level displays (display_levels=2), active entity is
         # forced to outlined style regardless of state.
         h = 224
-        _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h, grayscale_levels=2)
+        _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h, display_levels=2)
         widgets = [
             {
                 "type": "sensor",
@@ -360,7 +360,7 @@ class TestRenderSensor:
                 "entity": "binary_sensor.motion",
             }
         ]
-        img = render_to_image(widgets, self._config(grayscale_levels=2))
+        img = render_to_image(widgets, self._config(display_levels=2))
         found_gray = False
         for y in range(ry1, ry2):
             for x in range(rx1, rx2):
@@ -718,7 +718,7 @@ class TestRenderSensor:
         assert "<svg" in svg
 
     def test_sensor_graph_8bit_fill(self) -> None:
-        # At grayscale_levels=16 (8-bit), a light-gray filled area
+        # At display_levels=16 (8-bit), a light-gray filled area
         # appears below the polyline.  Checked via fill color rather
         # than a specific SVG element name (<polygon> or <path>).
         widget = {
@@ -734,14 +734,14 @@ class TestRenderSensor:
             widget,
             self._config(
                 states=MOCK_SENSOR_WITH_HISTORY,
-                grayscale_levels=16,
+                display_levels=16,
             ),
         )
         fill_hex = color_to_hex(COLOR_LIGHT_GRAY)
         assert fill_hex in svg
 
     def test_sensor_graph_2level_fill_present(self) -> None:
-        # At grayscale_levels=2 the fill polygon is rendered; Floyd-Steinberg
+        # At display_levels=2 the fill polygon is rendered; Floyd-Steinberg
         # dithering in the optimize pipeline converts it to a dot pattern.
         widget = {
             "type": "sensor",
@@ -756,7 +756,7 @@ class TestRenderSensor:
             widget,
             self._config(
                 states=MOCK_SENSOR_WITH_HISTORY,
-                grayscale_levels=2,
+                display_levels=2,
             ),
         )
         fill_hex = color_to_hex(COLOR_LIGHT_GRAY)
@@ -784,7 +784,7 @@ class TestRenderSensor:
             widget,
             self._config(
                 states=MOCK_SENSOR_WITH_HISTORY,
-                grayscale_levels=2,
+                display_levels=2,
             ),
         )
         expected_sw = m.border * 2

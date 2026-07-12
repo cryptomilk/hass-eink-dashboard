@@ -562,7 +562,7 @@ class TestResolveIconStyle:
         # Omitting state_val uses the default "" which is not an
         # active state, so auto-resolves to outlined on multi-level.
         icon_outline, icon_no_circle = _resolve_icon_style(
-            None, grayscale_levels=16
+            None, display_levels=16
         )
         assert icon_outline
         assert not icon_no_circle

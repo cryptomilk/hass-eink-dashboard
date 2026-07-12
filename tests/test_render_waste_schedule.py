@@ -250,7 +250,7 @@ class TestRenderWasteSchedule:
         w = self._widget(entries=entries, h=DEFAULT_ROW_H)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+            svg = render_widget_svg(w, self._config(display_levels=2))
         expected_sw = m.border * 3
         assert f'stroke-width="{expected_sw}"' in svg, (
             f"2-level icon stroke-width should be {expected_sw}"
@@ -264,7 +264,7 @@ class TestRenderWasteSchedule:
         w = self._widget(h=3 * DEFAULT_ROW_H)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config(grayscale_levels=2))
+            svg = render_widget_svg(w, self._config(display_levels=2))
         expected_sw = m.divider * 3
         assert f'stroke-width="{expected_sw}"' in svg, (
             f"2-level divider stroke-width should be {expected_sw}"

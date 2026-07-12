@@ -35,16 +35,16 @@ from epaper_dithering import (
 from PIL import Image, ImageOps
 
 from .const import (
+    DEFAULT_DISPLAY_LEVELS,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
-    DEFAULT_GRAYSCALE_LEVELS,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_SATURATION,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-# Maps grayscale_levels config values to epaper-dithering color schemes.
+# Maps display_levels config values to epaper-dithering color schemes.
 _GRAYSCALE_SCHEMES: dict[int, ColorScheme] = {
     2: ColorScheme.MONO,
     4: ColorScheme.GRAYSCALE_4,
@@ -115,12 +115,12 @@ def optimize_for_eink(
             (bool, required to enable the pipeline), ``exposure``
             (float, default 1.0; linear-RGB brightness multiplier
             applied inside ``dither_image()``; no effect when
-            ``grayscale_levels`` is 256), ``saturation``
+            ``display_levels`` is 256), ``saturation``
             (float, default 1.0; OKLab chroma multiplier applied
             inside ``dither_image()``; no effect when
-            ``grayscale_levels`` is 256), ``color_scheme`` (str, one
+            ``display_levels`` is 256), ``color_scheme`` (str, one
             of ``"bwr"``, ``"bwy"``, ``"bwry"``, ``"bwgbry"``; ``None``
-            or absent means grayscale), ``grayscale_levels`` (int,
+            or absent means grayscale), ``display_levels`` (int,
             one of 2/4/16/256, default 16; ignored when
             ``color_scheme`` is set; 256 means passthrough (only
             autocontrast is applied); 8 is reserved for future
@@ -133,18 +133,18 @@ def optimize_for_eink(
             its calibrated ``ColorPalette`` is passed to
             ``dither_image()`` instead of the idealized
             ``ColorScheme``. The output mode (``"1"`` / ``"L"`` /
-            ``"RGB"``) is derived from ``grayscale_levels`` /
+            ``"RGB"``) is derived from ``display_levels`` /
             ``color_scheme`` regardless of palette type.
 
     Returns:
         Processed PIL image. Mode is ``"RGB"`` for color schemes,
-        ``"1"`` when ``grayscale_levels`` maps to
+        ``"1"`` when ``display_levels`` maps to
         ``ColorScheme.MONO``, ``"L"`` for all other grayscale
         schemes.
 
     Raises:
         ValueError: If ``color_scheme`` is set but not in
-            ``_COLOR_SCHEMES``, or if ``grayscale_levels`` is less
+            ``_COLOR_SCHEMES``, or if ``display_levels`` is less
             than 256 but not in ``_GRAYSCALE_SCHEMES``.
     """
     if not config.get("optimize", False):
@@ -208,12 +208,12 @@ def optimize_for_eink(
         return img.convert("RGB")
 
     # Grayscale path: quantise to the configured number of levels.
-    colors = config.get("grayscale_levels", DEFAULT_GRAYSCALE_LEVELS)
+    colors = config.get("display_levels", DEFAULT_DISPLAY_LEVELS)
     if colors < 256:
         scheme = _GRAYSCALE_SCHEMES.get(colors)
         if scheme is None:
             raise ValueError(
-                f"Unsupported grayscale_levels value {colors!r}; "
+                f"Unsupported display_levels value {colors!r}; "
                 f"expected one of {sorted(_GRAYSCALE_SCHEMES)}."
             )
         if measured_palette is not None and len(measured_palette.colors) > 2:
@@ -236,9 +236,9 @@ def optimize_for_eink(
             exposure=exposure,
             saturation=saturation,
         )
-        # Output mode is derived from grayscale_levels, not the palette
+        # Output mode is derived from display_levels, not the palette
         # type, so MONO_4_26 (a measured palette for a 2-color display)
-        # still produces mode "1" when grayscale_levels == 2.
+        # still produces mode "1" when display_levels == 2.
         img = (
             img.convert("1")
             if scheme is ColorScheme.MONO

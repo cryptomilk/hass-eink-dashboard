@@ -108,11 +108,11 @@ export interface DisplayConfig {
   /** Canvas height in pixels. */
   height: number;
   /**
-   * Number of discrete gray levels the display supports.
+   * Number of discrete levels the display supports.
    * 2 = black-and-white only; 16 = full grayscale.
    * Used to widen dividers and borders for low-depth displays.
    */
-  grayscale_levels?: number;
+  display_levels?: number;
 }
 
 /** Static device metadata returned by the `eink_dashboard/layout` WebSocket command. */

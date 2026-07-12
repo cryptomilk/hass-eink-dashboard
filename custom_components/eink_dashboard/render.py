@@ -468,7 +468,7 @@ def _compute_metrics(row_h: int) -> WidgetMetrics:
 DEFAULT_METRICS: WidgetMetrics = _compute_metrics(DEFAULT_ROW_H)
 
 
-def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
+def _left_bar_width(m: WidgetMetrics, display_levels: int) -> int:
     """Return the rendered width of a left_bar card decoration.
 
     On 2-level displays (TRMNL) the bar is tripled so the
@@ -476,13 +476,13 @@ def _left_bar_width(m: WidgetMetrics, grayscale_levels: int) -> int:
 
     Args:
         m: Proportional metrics from ``_compute_metrics``.
-        grayscale_levels: Quantisation level count from the
+        display_levels: Quantisation level count from the
             display config.
 
     Returns:
         Bar width in pixels.
     """
-    if grayscale_levels <= 2:
+    if display_levels <= 2:
         return max(10, m.left_bar * 3)
     return m.left_bar
 

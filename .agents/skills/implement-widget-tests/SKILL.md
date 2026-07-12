@@ -354,9 +354,9 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 #   "none"     -> (0, 0)
 # Content width (cw):
 #   cw = w - x_off - right_inset
-# _card_insets(m, card_style, grayscale_levels) returns
+# _card_insets(m, card_style, display_levels) returns
 # (x_off, r_inset, bar_width). Derive lpad/rpad from the result:
-#   x_off, r_inset, _ = _card_insets(m, card_style, grayscale_levels)
+#   x_off, r_inset, _ = _card_insets(m, card_style, display_levels)
 #   lpad = m.padding if x_off == 0 else 0
 #   rpad = m.padding if r_inset == 0 else 0
 # Icon circle left arc lands at x_off + lpad, NOT x_off + m.padding.
@@ -379,9 +379,9 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
    bounding box of non-white pixels.
 
 4. **2-level display tests**: When the widget uses gray elements
-   (dividers, bars, left_bar), test the `grayscale_levels=2` path
+   (dividers, bars, left_bar), test the `display_levels=2` path
    that widens them. Pass it via config:
-   `config = {**self._CONFIG, "grayscale_levels": 2}`.
+   `config = {**self._CONFIG, "display_levels": 2}`.
 
 5. **Test each `card_style` variant**: For card-style widgets, test
    all three styles (`"border"`, `"left_bar"`, `"none"`) in separate
@@ -395,7 +395,7 @@ m = _compute_metrics(56)  # row_h = widget h / number of rows
 
    ```python
    icon_stroke_w = (
-       m.border * 3 if grayscale_levels <= 2 else m.border
+       m.border * 3 if display_levels <= 2 else m.border
    )
    ring_y1 = icon_cy - icon_r + icon_stroke_w // 2 + 3
    ring_y2 = icon_cy - m.icon_inner // 2 - 1

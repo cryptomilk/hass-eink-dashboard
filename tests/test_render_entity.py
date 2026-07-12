@@ -179,10 +179,10 @@ class TestRenderEntity:
     # enough icon circle to measure the ring region reliably.
 
     def _icon_ring(
-        self, h: int, card_style: str = "none", grayscale_levels: int = 16
+        self, h: int, card_style: str = "none", display_levels: int = 16
     ) -> tuple[int, int, int, int, int, int]:
         """Delegate to module-level _right_icon_ring_region."""
-        return _right_icon_ring_region(400, h, card_style, grayscale_levels)
+        return _right_icon_ring_region(400, h, card_style, display_levels)
 
     def test_entity_icon_circle_gray_fill_active(self) -> None:
         # An active entity (state "on") without explicit icon_style
@@ -320,10 +320,10 @@ class TestRenderEntity:
         )
 
     def test_entity_2level_always_outlined(self) -> None:
-        # On a 2-level display (grayscale_levels=2), the auto-switch
+        # On a 2-level display (display_levels=2), the auto-switch
         # forces "outlined" even for an active entity (state "on").
         h = 224
-        _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h, grayscale_levels=2)
+        _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h, display_levels=2)
         widgets = [
             {
                 "type": "entity",
@@ -334,7 +334,7 @@ class TestRenderEntity:
                 "entity": "binary_sensor.motion",
             }
         ]
-        img = render_to_image(widgets, self._config(grayscale_levels=2))
+        img = render_to_image(widgets, self._config(display_levels=2))
         found_gray = False
         for y in range(ry1, ry2):
             for x in range(rx1, rx2):
