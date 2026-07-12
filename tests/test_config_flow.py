@@ -692,8 +692,9 @@ class TestEinkDashboardOptionsFlow:
     async def test_display_settings_saves_values(
         self, hass: HomeAssistant
     ) -> None:
-        # Submitting update_interval with defaults in advanced_section
-        # merges all values into the stored options.
+        # Submitting update_interval merges all values into the stored
+        # options. advanced_section is absent from the schema because
+        # optimize is off, so it must not be submitted.
         flow = await _make_options_flow(
             hass,
             {
@@ -704,7 +705,7 @@ class TestEinkDashboardOptionsFlow:
             },
         )
         result = await flow.async_step_display_settings(
-            {"update_interval": 120, "advanced_section": {}}
+            {"update_interval": 120}
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -716,15 +717,18 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Submitting optimize settings via the advanced_section persists
-        # them.
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        # them. advanced_section is only present in the schema once
+        # optimize is already enabled in the stored options.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
         result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
                 "optimize": True,
+                "display_levels": 2,
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
-                    "display_levels": "2",
                     "exposure": "1.5",
                     "saturation": "0.8",
                 },
@@ -742,20 +746,24 @@ class TestEinkDashboardOptionsFlow:
         hass: HomeAssistant,
     ) -> None:
         # When display_levels==256 is saved in opts, exposure/saturation
-        # are excluded from the schema because dither_image() is not
-        # called on the 256-level passthrough path. Submitting those keys
-        # raises vol.Invalid.
+        # are excluded from the advanced_section schema because
+        # dither_image() is not called on the 256-level passthrough
+        # path. Submitting those keys raises vol.Invalid.
         flow = await _make_options_flow(
-            hass, {"update_interval": 60, "display_levels": 256}
+            hass,
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "display_levels": 256,
+            },
         )
         with pytest.raises(vol.Invalid):
             await flow.async_step_display_settings(
                 {
                     "update_interval": 60,
-                    "advanced_section": {
-                        "display_levels": "256",
-                        "exposure": "1.5",
-                    },
+                    "optimize": True,
+                    "display_levels": 256,
+                    "advanced_section": {"exposure": "1.5"},
                 }
             )
 
@@ -767,10 +775,7 @@ class TestEinkDashboardOptionsFlow:
         flow = await _make_options_flow(hass, {"update_interval": 60})
         with pytest.raises(vol.Invalid):
             await flow.async_step_display_settings(
-                {
-                    "update_interval": 60,
-                    "advanced_section": {"display_levels": 7},
-                }
+                {"update_interval": 60, "display_levels": 7}
             )
 
     async def test_display_settings_shows_optimize_note_for_reterminal(
@@ -815,11 +820,14 @@ class TestEinkDashboardOptionsFlow:
         placeholders = result.get("description_placeholders", {})
         assert placeholders.get("optimize_note", "") == ""
 
-    async def test_display_settings_has_advanced_section(
+    async def test_display_settings_has_advanced_section_when_optimize_on(
         self, hass: HomeAssistant
     ) -> None:
-        # The display_settings form includes an advanced_section field.
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        # The advanced_section field is present once optimize is
+        # already enabled in the stored options.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
         result = await flow.async_step_display_settings(None)
 
         field_names = {
@@ -829,18 +837,106 @@ class TestEinkDashboardOptionsFlow:
         }
         assert "advanced_section" in field_names
 
-    async def test_display_settings_saves_dither_algorithm(
+    async def test_display_settings_hides_advanced_section_when_off(
         self, hass: HomeAssistant
     ) -> None:
-        # Submitting dither_algorithm via advanced_section persists it.
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        # The advanced_section is omitted from the schema when optimize
+        # is disabled, since its fields (dither/palette/exposure/
+        # saturation) have no effect until optimize is turned on.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": False}
+        )
+        result = await flow.async_step_display_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "advanced_section" not in field_names
+
+    async def test_display_settings_has_top_level_display_levels(
+        self, hass: HomeAssistant
+    ) -> None:
+        # display_levels affects widget rendering regardless of
+        # optimize, so it is a top-level field, shown even when
+        # optimize (and therefore advanced_section) is off.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": False}
+        )
+        result = await flow.async_step_display_settings(None)
+
+        field_names = {
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert "display_levels" in field_names
+
+    async def test_display_settings_saves_optimize_toggle_on(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Turning optimize on in the same submission where it was
+        # previously off must succeed even though advanced_section is
+        # absent from the schema built from the stale stored value.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": False}
+        )
         result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
                 "optimize": True,
+                "display_levels": 16,
+            }
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["optimize"] is True
+        assert "dither_algorithm" not in result["data"]
+        assert "exposure" not in result["data"]
+        assert "saturation" not in result["data"]
+
+    async def test_display_settings_preserves_advanced_when_optimize_off(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Saving with optimize off hides advanced_section from the
+        # schema, so previously-stored advanced values must survive the
+        # {**opts, **validated, **section} merge rather than being
+        # dropped or reset to defaults.
+        flow = await _make_options_flow(
+            hass,
+            {
+                "update_interval": 60,
+                "optimize": False,
+                "dither_algorithm": "atkinson",
+                "exposure": 2.0,
+                "saturation": 1.5,
+            },
+        )
+        result = await flow.async_step_display_settings(
+            {"update_interval": 120, "display_levels": 16}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["update_interval"] == 120
+        assert result["data"]["dither_algorithm"] == "atkinson"
+        assert result["data"]["exposure"] == 2.0
+        assert result["data"]["saturation"] == 1.5
+
+    async def test_display_settings_saves_dither_algorithm(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Submitting dither_algorithm via advanced_section persists it.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "display_levels": 16,
                 "advanced_section": {
                     "dither_algorithm": "atkinson",
-                    "display_levels": "16",
                     "exposure": "1.0",
                     "saturation": "1.0",
                 },
@@ -856,9 +952,15 @@ class TestEinkDashboardOptionsFlow:
     ) -> None:
         # Legacy entries without dither_algorithm default to
         # floyd_steinberg.
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
         result = await flow.async_step_display_settings(
-            {"update_interval": 60, "advanced_section": {}}
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "advanced_section": {},
+            }
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -868,15 +970,17 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Submitting measured_palette via advanced_section persists it.
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
         result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
                 "optimize": True,
+                "display_levels": 16,
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
                     "measured_palette": "spectra_7_3_6color",
-                    "display_levels": "16",
                     "exposure": "1.0",
                     "saturation": "1.0",
                 },
@@ -890,9 +994,15 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Legacy entries without measured_palette default to "auto".
-        flow = await _make_options_flow(hass, {"update_interval": 60})
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
         result = await flow.async_step_display_settings(
-            {"update_interval": 60, "advanced_section": {}}
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "advanced_section": {},
+            }
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -1637,10 +1747,7 @@ class TestEinkDashboardOptionsFlow:
 
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
-            {
-                "update_interval": 120,
-                "advanced_section": {},
-            },
+            {"update_interval": 120},
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY

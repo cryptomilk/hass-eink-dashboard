@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import voluptuous as vol
@@ -46,6 +46,9 @@ from homeassistant.helpers.selector import (
     TextSelectorConfig,
     TextSelectorType,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from .const import (
     DEFAULT_DISPLAY_LEVELS,
@@ -176,6 +179,76 @@ def _build_user_schema(
                 "update_interval", default=DEFAULT_UPDATE_INTERVAL
             ): _POSITIVE_INT,
         }
+    )
+
+
+def _build_advanced_section(
+    opts: Mapping[str, Any], display_levels: int
+) -> Any:
+    """Build the collapsed Advanced section of the display settings form.
+
+    Args:
+        opts: Currently stored config entry options, used as field
+            defaults.
+        display_levels: Currently stored display_levels value. When it
+            equals 256, exposure/saturation are omitted since they are
+            only forwarded to dither_image(), which is never called on
+            the 256-level passthrough path.
+
+    Returns:
+        A voluptuous section wrapping dither_algorithm, measured_palette,
+        and (unless display_levels == 256) exposure and saturation.
+    """
+    advanced_fields: dict = {
+        vol.Optional(
+            "dither_algorithm",
+            default=opts.get(
+                "dither_algorithm",
+                DEFAULT_DITHER_ALGORITHM,
+            ),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=_DITHER_ALGO_OPTIONS,
+                translation_key="dither_algorithm",
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
+        vol.Optional(
+            "measured_palette",
+            default=opts.get(
+                "measured_palette",
+                DEFAULT_MEASURED_PALETTE,
+            ),
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=_MEASURED_PALETTE_OPTIONS,
+                translation_key="measured_palette",
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
+    }
+    if display_levels != 256:
+        advanced_fields[
+            vol.Optional(
+                "exposure",
+                default=opts.get("exposure", DEFAULT_EXPOSURE),
+            )
+        ] = vol.All(
+            vol.Coerce(float),
+            vol.Range(min=0.0, max=10.0),
+        )
+        advanced_fields[
+            vol.Optional(
+                "saturation",
+                default=opts.get("saturation", DEFAULT_SATURATION),
+            )
+        ] = vol.All(
+            vol.Coerce(float),
+            vol.Range(min=0.0, max=10.0),
+        )
+    return flow_section(
+        vol.Schema(advanced_fields),
+        {"collapsed": True},
     )
 
 
@@ -984,37 +1057,14 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update refresh interval, optimize, and image quality settings."""
         opts = self.config_entry.options
+        optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
         display_levels = opts.get("display_levels", DEFAULT_DISPLAY_LEVELS)
-        # exposure/saturation are only forwarded to dither_image(), which
-        # is never called on the 256-level passthrough path, so those
-        # controls serve no purpose there.
-        advanced_fields: dict = {
-            vol.Optional(
-                "dither_algorithm",
-                default=opts.get(
-                    "dither_algorithm",
-                    DEFAULT_DITHER_ALGORITHM,
-                ),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=_DITHER_ALGO_OPTIONS,
-                    translation_key="dither_algorithm",
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
-            vol.Optional(
-                "measured_palette",
-                default=opts.get(
-                    "measured_palette",
-                    DEFAULT_MEASURED_PALETTE,
-                ),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=_MEASURED_PALETTE_OPTIONS,
-                    translation_key="measured_palette",
-                    mode=SelectSelectorMode.DROPDOWN,
-                )
-            ),
+        schema_fields: dict = {
+            vol.Required(
+                "update_interval",
+                default=opts.get("update_interval", DEFAULT_UPDATE_INTERVAL),
+            ): _POSITIVE_INT,
+            vol.Optional("optimize", default=optimize): bool,
             vol.Optional(
                 "display_levels",
                 default=display_levels,
@@ -1023,43 +1073,14 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 vol.In([2, 4, 16, 256]),
             ),
         }
-        if display_levels != 256:
-            advanced_fields[
-                vol.Optional(
-                    "exposure",
-                    default=opts.get("exposure", DEFAULT_EXPOSURE),
-                )
-            ] = vol.All(
-                vol.Coerce(float),
-                vol.Range(min=0.0, max=10.0),
+        # The Advanced section only affects optimize_for_eink(), which
+        # early-returns when optimize is off, so it is only shown once
+        # optimize is enabled.
+        if optimize:
+            schema_fields[vol.Required("advanced_section")] = (
+                _build_advanced_section(opts, display_levels)
             )
-            advanced_fields[
-                vol.Optional(
-                    "saturation",
-                    default=opts.get("saturation", DEFAULT_SATURATION),
-                )
-            ] = vol.All(
-                vol.Coerce(float),
-                vol.Range(min=0.0, max=10.0),
-            )
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "update_interval",
-                    default=opts.get(
-                        "update_interval", DEFAULT_UPDATE_INTERVAL
-                    ),
-                ): _POSITIVE_INT,
-                vol.Optional(
-                    "optimize",
-                    default=opts.get("optimize", DEFAULT_OPTIMIZE),
-                ): bool,
-                vol.Required("advanced_section"): flow_section(
-                    vol.Schema(advanced_fields),
-                    {"collapsed": True},
-                ),
-            }
-        )
+        schema = vol.Schema(schema_fields)
         if user_input is not None:
             validated = schema(user_input)
             section = validated.pop("advanced_section", {})
