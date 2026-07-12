@@ -528,6 +528,13 @@ export interface TileWidget extends WidgetBase {
   icon_style?: IconStyle;
   /** When true, renders the secondary state line in bold. */
   bold_value?: boolean;
+  /**
+   * HA conditions that trigger inverted rendering (black card,
+   * white text) as an e-ink attention signal. Same condition
+   * format as `visibility`. The tile renders inverted when the
+   * conditions are met.
+   */
+  invert_condition?: (Condition | LegacyCondition)[];
 }
 
 /**

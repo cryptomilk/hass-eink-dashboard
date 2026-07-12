@@ -2265,6 +2265,17 @@ class EinkDashboardEditor extends HTMLElement {
         if (!("visibility" in data) && cur.visibility) {
           data.visibility = cur.visibility;
         }
+        // Preserve invert_condition — managed by
+        // ha-card-conditions-editor, not by ha-form, so the spread
+        // would drop it. cur.invert_condition is never [] because
+        // _buildConditionsPanel deletes the key when conditions are
+        // cleared (empty array).
+        if (
+          !("invert_condition" in data)
+          && cur.invert_condition
+        ) {
+          data.invert_condition = cur.invert_condition;
+        }
         this._widgets[index] = data as unknown as Widget;
         this._fireWidgetChange();
         this._updateSummary(index);
@@ -2283,6 +2294,17 @@ class EinkDashboardEditor extends HTMLElement {
 
     if (widget.type === "waste_schedule") {
       this._buildEntriesEditor(container, index);
+    }
+
+    if (widget.type === "tile") {
+      this._buildConditionsPanel(container, index, {
+        key: "invert_condition",
+        title: "Invert",
+        icon: "mdi:invert-colors",
+        hint:
+          "Render the tile inverted (dark card, light text) when" +
+          " the conditions below are met.",
+      });
     }
 
     this._buildVisibilityEditor(container, index);
@@ -2507,17 +2529,15 @@ class EinkDashboardEditor extends HTMLElement {
     container.appendChild(section);
   }
 
-  // ── Visibility conditions editor ────────────────────────────────
+  // ── Visibility / invert conditions editor ──────────────────────
 
   /**
    * Build a visibility conditions editor using HA's built-in
    * `<ha-card-conditions-editor>` component.  Appended to every
    * widget form regardless of widget type.
    *
-   * Reads the current widget's `visibility` array, passes it to the
-   * conditions editor, and writes changes back on `value-changed`.
-   * An empty conditions array is stored as `undefined` (field
-   * removed) to avoid serialising empty arrays.
+   * Thin wrapper around `_buildConditionsPanel` for the `visibility`
+   * field — see that method for the shared behaviour.
    *
    * @param container - Parent div to append the section to.
    * @param index     - Widget index in the widget array.
@@ -2526,9 +2546,41 @@ class EinkDashboardEditor extends HTMLElement {
     container: HTMLElement,
     index: number,
   ): void {
+    this._buildConditionsPanel(container, index, {
+      key: "visibility",
+      title: "Visibility",
+      icon: "mdi:eye",
+      hint: "Show this widget only when the conditions below are met.",
+    });
+  }
+
+  /**
+   * Build a conditions editor panel using HA's built-in
+   * `<ha-card-conditions-editor>` component, backed by an arbitrary
+   * widget field (e.g. `visibility` or `invert_condition`).
+   *
+   * Reads the current widget's condition array at `opts.key`, passes
+   * it to the conditions editor, and writes changes back on
+   * `value-changed`. An empty conditions array is stored as
+   * `undefined` (field removed) to avoid serialising empty arrays.
+   *
+   * @param container - Parent div to append the section to.
+   * @param index     - Widget index in the widget array.
+   * @param opts      - Field key plus panel title/icon/hint text.
+   */
+  private _buildConditionsPanel(
+    container: HTMLElement,
+    index: number,
+    opts: {
+      key: "visibility" | "invert_condition";
+      title: string;
+      icon: string;
+      hint: string;
+    },
+  ): void {
     const panel = document.createElement("ha-expansion-panel");
     (panel as unknown as Record<string, unknown>).outlined = true;
-    // ha-form sections have internal spacing; the visibility panel
+    // ha-form sections have internal spacing; the conditions panel
     // is appended outside ha-form so it needs an explicit top gap.
     panel.style.marginTop = "8px";
 
@@ -2536,29 +2588,29 @@ class EinkDashboardEditor extends HTMLElement {
     // title in "header" slot.
     const icon = document.createElement("ha-icon");
     icon.setAttribute("slot", "leading-icon");
-    (icon as unknown as Record<string, unknown>).icon = "mdi:eye";
+    (icon as unknown as Record<string, unknown>).icon = opts.icon;
     panel.appendChild(icon);
 
     const panelHeader = document.createElement("div");
     panelHeader.setAttribute("slot", "header");
-    panelHeader.textContent = "Visibility";
+    panelHeader.textContent = opts.title;
     panel.appendChild(panelHeader);
 
     const hint = document.createElement("div");
     hint.className = "visibility-hint";
-    hint.textContent =
-      "Show this widget only when the conditions below are met.";
+    hint.textContent = opts.hint;
     panel.appendChild(hint);
 
     if (!customElements.get("ha-card-conditions-editor")) {
       console.warn(
         "eink-dashboard: ha-card-conditions-editor not registered;" +
-          " visibility editing unavailable",
+          ` ${opts.title.toLowerCase()} editing unavailable`,
       );
       const unavailable = document.createElement("div");
       unavailable.className = "visibility-hint";
       unavailable.textContent =
-        "Visibility conditions require a newer Home Assistant version.";
+        `${opts.title} conditions require a newer Home Assistant` +
+        " version.";
       panel.appendChild(unavailable);
       container.appendChild(panel);
       return;
@@ -2570,7 +2622,7 @@ class EinkDashboardEditor extends HTMLElement {
     const cur = this._widgets[index] as
       unknown as Record<string, unknown>;
     const conditions =
-      (cur.visibility as (Condition | LegacyCondition)[] | undefined)
+      (cur[opts.key] as (Condition | LegacyCondition)[] | undefined)
       ?? [];
     (editor as unknown as Record<string, unknown>).hass = this._hass;
     (editor as unknown as Record<string, unknown>).conditions =
@@ -2586,9 +2638,9 @@ class EinkDashboardEditor extends HTMLElement {
         const w = this._widgets[index] as
           unknown as Record<string, unknown>;
         if (updated.length > 0) {
-          w.visibility = updated;
+          w[opts.key] = updated;
         } else {
-          delete w.visibility;
+          delete w[opts.key];
         }
         // Write back so the Lit component re-renders immediately,
         // showing newly added condition fields without a save+reopen.

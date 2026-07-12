@@ -169,7 +169,14 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |
 
 All widgets support `x`, `y` positioning. Most support a `w` (width) override
-to constrain rendering to a sub-region of the display.
+to constrain rendering to a sub-region of the display. All widgets also
+support a `visibility` list of Lovelace conditions to show or hide the
+widget based on entity state or other conditions.
+
+The Tile widget additionally supports `invert_condition` — a list of
+conditions in the same format as `visibility`. When met, the tile renders
+inverted (solid black card, white text/icon) as a "needs attention" signal
+on e-ink.
 
 ## Device setup
 
