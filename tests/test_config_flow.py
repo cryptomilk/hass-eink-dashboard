@@ -202,8 +202,32 @@ class TestEinkDashboardConfigFlow:
         opts = result["options"]
         assert opts["optimize"] is False
         assert opts["display_levels"] == 16
+        # Panel is native landscape (OpenDisplay firmware), so portrait
+        # orientation is achieved by rotating the rendered canvas.
         assert opts["width"] == 1404
         assert opts["height"] == 1872
+        assert opts["rotation"] == 90
+
+    async def test_reterminal_e1003_landscape_creates_entry(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Native landscape device in landscape orientation (the
+        # default): no rotation, and dimensions match the panel's
+        # native landscape buffer.
+        flow = await _make_config_flow(hass)
+        result = await flow.async_step_user(
+            {
+                "name": "Office",
+                "device_model": "reterminal_e1003",
+                "orientation": "landscape",
+                "update_interval": 60,
+            }
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        opts = result["options"]
+        assert opts["width"] == 1872
+        assert opts["height"] == 1404
         assert opts["rotation"] == 0
 
     async def test_screen_portion_shows_form_for_trmnl(
@@ -1808,7 +1832,7 @@ class TestMigrateEntry:
     ) -> None:
         # Migration from minor_version<2 removes sharpness/contrast and
         # adds exposure/saturation with their defaults. The entry then
-        # cascades through the 2->3 migration too, ending at 3.
+        # cascades through the 2->3 and 3->4 migrations too, ending at 4.
         from custom_components.eink_dashboard import async_migrate_entry
 
         entry = MockConfigEntry(
@@ -1827,7 +1851,7 @@ class TestMigrateEntry:
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        assert entry.minor_version == 3
+        assert entry.minor_version == 4
         assert "sharpness" not in entry.options
         assert "contrast" not in entry.options
         assert entry.options["exposure"] == 1.0
@@ -1863,7 +1887,8 @@ class TestMigrateEntry:
         self, hass: HomeAssistant
     ) -> None:
         # Migration from minor_version<3 renames the stored
-        # grayscale_levels option key to display_levels.
+        # grayscale_levels option key to display_levels. The entry
+        # then cascades through the 3->4 migration too, ending at 4.
         from custom_components.eink_dashboard import async_migrate_entry
 
         entry = MockConfigEntry(
@@ -1882,20 +1907,112 @@ class TestMigrateEntry:
         result = await async_migrate_entry(hass, entry)
 
         assert result is True
-        assert entry.minor_version == 3
+        assert entry.minor_version == 4
         assert "grayscale_levels" not in entry.options
         assert entry.options["display_levels"] == 4
 
-    async def test_migration_skipped_when_already_at_minor_version_3(
+    async def test_migration_fixes_reterminal_e1003_landscape_rotation(
         self,
         hass: HomeAssistant,
     ) -> None:
-        # Entries already at minor_version=3 are not migrated again.
+        # Migration from minor_version<4 recomputes width/height/
+        # rotation for reterminal_e1003 entries created under the old,
+        # buggy preset. A landscape entry had a stale rotation=90
+        # baked in; the fix clears it to 0.
         from custom_components.eink_dashboard import async_migrate_entry
 
         entry = MockConfigEntry(
             domain=DOMAIN,
             minor_version=3,
+            entry_id="test-entry",
+            options={
+                "device_model": "reterminal_e1003",
+                "orientation": "landscape",
+                "width": 1872,
+                "height": 1404,
+                "rotation": 90,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        assert entry.minor_version == 4
+        assert entry.options["width"] == 1872
+        assert entry.options["height"] == 1404
+        assert entry.options["rotation"] == 0
+
+    async def test_migration_fixes_reterminal_e1003_portrait_rotation(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # A portrait reterminal_e1003 entry had a stale rotation=0
+        # baked in under the old preset; the fix sets it to 90.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            minor_version=3,
+            entry_id="test-entry",
+            options={
+                "device_model": "reterminal_e1003",
+                "orientation": "portrait",
+                "width": 1404,
+                "height": 1872,
+                "rotation": 0,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        assert entry.minor_version == 4
+        assert entry.options["width"] == 1404
+        assert entry.options["height"] == 1872
+        assert entry.options["rotation"] == 90
+
+    async def test_migration_skips_non_e1003_devices(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # Entries for other device models must not have their
+        # width/height/rotation touched by the 3->4 migration.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            minor_version=3,
+            entry_id="test-entry",
+            options={
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await async_migrate_entry(hass, entry)
+
+        assert result is True
+        assert entry.minor_version == 4
+        assert entry.options["width"] == 758
+        assert entry.options["height"] == 1024
+        assert entry.options["rotation"] == 0
+
+    async def test_migration_skipped_when_already_at_minor_version_4(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # Entries already at minor_version=4 are not migrated again.
+        from custom_components.eink_dashboard import async_migrate_entry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            minor_version=4,
             entry_id="test-entry",
             options={
                 "update_interval": 60,
