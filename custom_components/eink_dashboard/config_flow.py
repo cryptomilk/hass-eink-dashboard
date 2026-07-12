@@ -1058,7 +1058,12 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         """Update refresh interval, optimize, and image quality settings."""
         opts = self.config_entry.options
         optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
-        display_levels = opts.get("display_levels", DEFAULT_DISPLAY_LEVELS)
+        device_model = opts.get("device_model", "")
+        preset = DEVICE_PRESETS.get(device_model)
+        default_display_levels = (
+            preset.display_levels if preset else DEFAULT_DISPLAY_LEVELS
+        )
+        display_levels = opts.get("display_levels", default_display_levels)
         schema_fields: dict = {
             vol.Required(
                 "update_interval",
@@ -1087,8 +1092,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             return self.async_create_entry(
                 data={**opts, **validated, **section},
             )
-        device_model = opts.get("device_model", "")
-        preset = DEVICE_PRESETS.get(device_model)
         if preset and preset.integration_dithers:
             optimize_note = (
                 "This device's Home Assistant integration handles image"

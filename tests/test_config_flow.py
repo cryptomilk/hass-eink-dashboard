@@ -873,6 +873,52 @@ class TestEinkDashboardOptionsFlow:
         }
         assert "display_levels" in field_names
 
+    async def test_display_settings_defaults_to_device_preset_levels(
+        self, hass: HomeAssistant
+    ) -> None:
+        # When display_levels has never been saved, the field default
+        # should come from the device's preset instead of the global
+        # DEFAULT_DISPLAY_LEVELS constant, so devices like the
+        # reterminal_e1002 (256 levels) show their own capability
+        # pre-selected rather than an unrelated fallback.
+        flow = await _make_options_flow(
+            hass,
+            {
+                "update_interval": 60,
+                "device_model": "reterminal_e1002",
+            },
+        )
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["display_levels"].default() == 256
+
+    async def test_display_settings_prefers_stored_levels_over_preset(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A previously saved display_levels value always wins over the
+        # device preset's default.
+        flow = await _make_options_flow(
+            hass,
+            {
+                "update_interval": 60,
+                "device_model": "reterminal_e1002",
+                "display_levels": 16,
+            },
+        )
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["display_levels"].default() == 16
+
     async def test_display_settings_saves_optimize_toggle_on(
         self, hass: HomeAssistant
     ) -> None:
