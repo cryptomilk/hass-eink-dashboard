@@ -225,6 +225,7 @@
         "trmnl_x": "TRMNL X",
         "trmnl_rgb": "TRMNL RGB",
         "reterminal_e1001": "reTerminal E1001",
+        "reterminal_e1002": "reTerminal E1002",
         "reterminal_e1003": "reTerminal E1003",
         "custom": "Custom"
       }
