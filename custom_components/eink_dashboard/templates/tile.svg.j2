@@ -2,6 +2,11 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_entity -%}
+{%- if invert -%}
+<rect x="0" y="0" width="{{ w }}" height="{{ h }}"
+  rx="{{ m_radius }}" ry="{{ m_radius }}"
+  fill="{{ hex_black }}"/>
+{%- endif -%}
 {%- call card_container(
     x=0, y=0, w=w, h=h,
     card_style=card_style,
@@ -26,13 +31,14 @@
     icon_fill=icon_fill,
     icon_outline=icon_outline,
     icon_no_circle=icon_no_circle,
-    primary_fill=hex_gray,
-    secondary_fill=hex_black,
-    value_fill=hex_black,
+    primary_fill=hex_white if invert else hex_gray,
+    secondary_fill=hex_white if invert else hex_black,
+    value_fill=hex_white if invert else hex_black,
     secondary_bold=value_bold,
     letter=letter,
     lpad=lpad, rpad=rpad,
-    hex_black=hex_black, hex_white=hex_white) }}
+    hex_black=hex_white if invert else hex_black,
+    hex_white=hex_black if invert else hex_white) }}
 {%- endcall -%}
 {%- endif -%}
 </svg>

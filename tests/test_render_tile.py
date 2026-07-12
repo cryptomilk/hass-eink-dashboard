@@ -26,6 +26,9 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets.tile import (
+    _build_tile_context,
+)
 from tests.helpers import (
     _icon_ring_region,
     assert_all_white,
@@ -904,3 +907,269 @@ class TestRenderTile:
             DEFAULT_ROW_H,
             threshold=200,
         )
+
+    # ── Invert condition tests ────────────────────────
+
+    def test_tile_invert_condition_met(self) -> None:
+        # A state condition that matches the entity's current state
+        # inverts the tile: context has invert=True and the SVG
+        # gains a full-size black background rect plus white text.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "binary_sensor.motion",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config())
+        assert ctx["invert"] is True
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(
+            r'<rect x="0" y="0" width="400" height="80"\s*'
+            r'rx="\d+" ry="\d+"\s*fill="#000000"/>',
+            svg,
+        ), "inverted tile must draw a full-size black background rect"
+        assert 'fill="#ffffff"' in svg, (
+            "inverted tile must render text/icon in white"
+        )
+
+    def test_tile_invert_condition_not_met(self) -> None:
+        # A state condition that does not match leaves the tile
+        # un-inverted: no black background, white canvas outside
+        # content.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "binary_sensor.front_door",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.front_door",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config())
+        assert ctx["invert"] is False
+        img = render_to_image([widget], self._config())
+        assert_all_white(img, 0, 0, 3, 3)
+
+    def test_tile_invert_condition_absent(self) -> None:
+        # Omitting invert_condition entirely never inverts the tile.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "binary_sensor.motion",
+        }
+        ctx = _build_tile_context(widget, self._config())
+        assert ctx["invert"] is False
+
+    def test_tile_invert_condition_empty_list(self) -> None:
+        # invert_condition=[] must never invert, even though
+        # check_conditions([]) alone would return True — the tile
+        # widget must special-case emptiness.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "binary_sensor.motion",
+            "invert_condition": [],
+        }
+        ctx = _build_tile_context(widget, self._config())
+        assert ctx["invert"] is False
+
+    def test_tile_invert_forces_no_circle_icon(self) -> None:
+        # An active entity normally draws a filled icon circle
+        # (<circle> element).  When inverted, the icon style is
+        # forced to no-circle so the glyph draws directly on the
+        # black background.
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "binary_sensor.motion",
+        }
+        normal_svg = render_widget_svg(base, self._config())
+        assert "<circle" in normal_svg, (
+            "sanity check: active entity normally draws an icon circle"
+        )
+        inverted = {
+            **base,
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_tile_context(inverted, self._config())
+        assert ctx["icon_no_circle"] is True
+        assert ctx["icon_outline"] is False
+        inverted_svg = render_widget_svg(inverted, self._config())
+        assert "<circle" not in inverted_svg, (
+            "inverted tile must suppress the icon circle entirely"
+        )
+
+    def test_tile_invert_numeric_state_condition(self) -> None:
+        # A numeric_state condition (above: 0) inverts when the
+        # entity's state is a positive number.
+        states = {
+            **MOCK_TILE_STATES,
+            "sensor.count": {
+                "state": "2",
+                "attributes": {"friendly_name": "Count"},
+            },
+        }
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config(states=states))
+        assert ctx["invert"] is True
+
+    def test_tile_invert_numeric_state_condition_zero(self) -> None:
+        # numeric_state above=0 does not invert when the state is 0
+        # (the exclusive lower bound is not satisfied).
+        states = {
+            **MOCK_TILE_STATES,
+            "sensor.count": {
+                "state": "0",
+                "attributes": {"friendly_name": "Count"},
+            },
+        }
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config(states=states))
+        assert ctx["invert"] is False
+
+    def test_tile_invert_numeric_state_condition_non_numeric(
+        self,
+    ) -> None:
+        # numeric_state above=0 does not invert on a non-numeric
+        # state such as "unknown".
+        states = {
+            **MOCK_TILE_STATES,
+            "sensor.count": {
+                "state": "unknown",
+                "attributes": {"friendly_name": "Count"},
+            },
+        }
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config(states=states))
+        assert ctx["invert"] is False
+
+    def test_tile_invert_state_not_condition(self) -> None:
+        # state_not inverts when the entity holds a real value, not
+        # one of the excluded placeholder states.
+        states = {
+            **MOCK_TILE_STATES,
+            "sensor.status": {
+                "state": "washing",
+                "attributes": {"friendly_name": "Status"},
+            },
+        }
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.status",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "sensor.status",
+                    "state_not": ["", "unknown", "unavailable"],
+                }
+            ],
+        }
+        ctx = _build_tile_context(widget, self._config(states=states))
+        assert ctx["invert"] is True
+
+    def test_tile_invert_state_not_condition_excluded(self) -> None:
+        # state_not does not invert for excluded placeholder states:
+        # empty string and "unknown".
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.status",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "sensor.status",
+                    "state_not": ["", "unknown", "unavailable"],
+                }
+            ],
+        }
+        for excluded_state in ("", "unknown"):
+            states = {
+                **MOCK_TILE_STATES,
+                "sensor.status": {
+                    "state": excluded_state,
+                    "attributes": {"friendly_name": "Status"},
+                },
+            }
+            ctx = _build_tile_context(widget, self._config(states=states))
+            assert ctx["invert"] is False, (
+                f"state {excluded_state!r} must not invert"
+            )

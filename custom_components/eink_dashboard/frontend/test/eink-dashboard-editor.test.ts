@@ -594,3 +594,243 @@ describe("Visibility field", () => {
     expect(widget.visibility).toBeUndefined();
   });
 });
+
+// ── Invert condition panel (tile widgets) ───────────────────────────
+
+// Stub HA's <ha-card-conditions-editor> Lit component so the editor's
+// conditions panel builder takes its normal path instead of the
+// "component unavailable" fallback. Tests dispatch value-changed
+// events on this stub directly to exercise the write-back logic.
+if (!customElements.get("ha-card-conditions-editor")) {
+  customElements.define(
+    "ha-card-conditions-editor",
+    class extends HTMLElement {},
+  );
+}
+
+/**
+ * Click a widget row's expand button and wait for the resulting
+ * synchronous re-render to settle.
+ *
+ * @param editor - The editor element under test.
+ * @param index  - Widget index to expand.
+ */
+async function expandWidget(
+  editor: EinkEditorElement,
+  index: number,
+): Promise<void> {
+  const btn = editor.shadowRoot!.querySelector<HTMLButtonElement>(
+    `.widget-item[data-index="${index}"] .icon-btn.expand`,
+  );
+  btn!.click();
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+/**
+ * Find a conditions panel's `header` slot element by its title text.
+ *
+ * @param editor - The editor element under test.
+ * @param title  - Panel title to search for (e.g. "Invert").
+ * @returns The matching header div, or null if no panel has it.
+ */
+function findPanelHeader(
+  editor: EinkEditorElement,
+  title: string,
+): HTMLElement | null {
+  const headers = editor.shadowRoot!.querySelectorAll<HTMLElement>(
+    'div[slot="header"]',
+  );
+  for (const header of Array.from(headers)) {
+    if (header.textContent === title) return header;
+  }
+  return null;
+}
+
+/** Create and mount a bare editor element for DOM-level tests. */
+async function mountEditor(
+  widgets: Widget[],
+): Promise<EinkEditorElement> {
+  const editor = document.createElement(
+    "eink-dashboard-editor",
+  ) as EinkEditorElement;
+  document.body.appendChild(editor);
+  editor.setDisplay({ width: 800, height: 480 });
+  editor.setWidgets(widgets);
+  await new Promise((r) => setTimeout(r, 0));
+  return editor;
+}
+
+describe("Invert condition panel (tile widgets)", () => {
+  it("appears for tile widgets", async () => {
+    // The Invert panel is tile-specific — it must render when a
+    // tile widget row is expanded.
+    const editor = await mountEditor([
+      { type: "tile", entity: "sensor.x" },
+    ]);
+    await expandWidget(editor, 0);
+    expect(findPanelHeader(editor, "Invert")).toBeTruthy();
+  });
+
+  it("does not appear for non-tile widgets", async () => {
+    // Non-tile widgets have no invert-on-condition rendering, so the
+    // panel must be absent, while the Visibility panel still shows.
+    const editor = await mountEditor([
+      { type: "separator" },
+    ]);
+    await expandWidget(editor, 0);
+    expect(findPanelHeader(editor, "Invert")).toBeNull();
+    expect(findPanelHeader(editor, "Visibility")).toBeTruthy();
+  });
+
+  it("visibility panel still appears alongside Invert for tiles", async () => {
+    // Widget forms append both panels for tiles: Invert first, then
+    // Visibility (order also matches the source instructions).
+    const editor = await mountEditor([
+      { type: "tile", entity: "sensor.x" },
+    ]);
+    await expandWidget(editor, 0);
+    expect(findPanelHeader(editor, "Invert")).toBeTruthy();
+    expect(findPanelHeader(editor, "Visibility")).toBeTruthy();
+  });
+
+  it(
+    "value-changed on the invert editor writes invert_condition",
+    async () => {
+      // Simulates the user adding a condition in the conditions
+      // editor: the panel must write it to widget.invert_condition.
+      const editor = await mountEditor([
+        { type: "tile", entity: "sensor.x" },
+      ]);
+      await expandWidget(editor, 0);
+
+      const header = findPanelHeader(editor, "Invert")!;
+      const panel = header.parentElement!;
+      const conditionsEditor = panel.querySelector(
+        "ha-card-conditions-editor",
+      )!;
+
+      let received: Widget[] | undefined;
+      editor.addEventListener(
+        "widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener,
+      );
+
+      const condition: StateCondition = {
+        condition: "state",
+        entity: "sensor.test",
+        state: "on",
+      };
+      conditionsEditor.dispatchEvent(
+        new CustomEvent("value-changed", {
+          detail: { value: [condition] },
+        }),
+      );
+
+      expect(received).toBeDefined();
+      expect(received![0].invert_condition).toEqual([condition]);
+    },
+  );
+
+  it(
+    "clearing invert conditions to an empty array deletes the key",
+    async () => {
+      // An empty conditions array must not be serialised — the key
+      // is removed entirely, mirroring the visibility field.
+      const condition: StateCondition = {
+        condition: "state",
+        entity: "sensor.test",
+        state: "on",
+      };
+      const editor = await mountEditor([
+        {
+          type: "tile",
+          entity: "sensor.x",
+          invert_condition: [condition],
+        },
+      ]);
+      await expandWidget(editor, 0);
+
+      const header = findPanelHeader(editor, "Invert")!;
+      const panel = header.parentElement!;
+      const conditionsEditor = panel.querySelector(
+        "ha-card-conditions-editor",
+      )!;
+
+      let received: Widget[] | undefined;
+      editor.addEventListener(
+        "widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener,
+      );
+
+      conditionsEditor.dispatchEvent(
+        new CustomEvent("value-changed", {
+          detail: { value: [] },
+        }),
+      );
+
+      expect(received).toBeDefined();
+      expect(received![0].invert_condition).toBeUndefined();
+      expect("invert_condition" in received![0]).toBe(false);
+    },
+  );
+
+  it(
+    "ha-form edit on a tile preserves invert_condition and visibility",
+    async () => {
+      // ha-form only knows about schema fields, so its value-changed
+      // handler must explicitly re-attach invert_condition and
+      // visibility or they would be dropped by the data rebuild.
+      const invertCondition: StateCondition = {
+        condition: "state",
+        entity: "sensor.invert-source",
+        state: "on",
+      };
+      const visibilityCondition: StateCondition = {
+        condition: "state",
+        entity: "sensor.visibility-source",
+        state: "on",
+      };
+      const editor = await mountEditor([
+        {
+          type: "tile",
+          entity: "sensor.x",
+          invert_condition: [invertCondition],
+          visibility: [visibilityCondition],
+        },
+      ]);
+      await expandWidget(editor, 0);
+
+      const form = editor.shadowRoot!.querySelector(
+        '.widget-item[data-index="0"] ha-form',
+      )!;
+
+      let received: Widget[] | undefined;
+      editor.addEventListener(
+        "widget-change",
+        ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+          received = ev.detail.widgets;
+        }) as EventListener,
+      );
+
+      // Simulate ha-form emitting a rebuilt value that only contains
+      // schema-known fields — invert_condition/visibility are absent.
+      form.dispatchEvent(
+        new CustomEvent("value-changed", {
+          detail: { value: { entity: "sensor.y" } },
+        }),
+      );
+
+      expect(received).toBeDefined();
+      const widget = received![0] as Widget & {
+        invert_condition?: unknown;
+      };
+      expect(widget.entity).toBe("sensor.y");
+      expect(widget.invert_condition).toEqual([invertCondition]);
+      expect(widget.visibility).toEqual([visibilityCondition]);
+    },
+  );
+});
