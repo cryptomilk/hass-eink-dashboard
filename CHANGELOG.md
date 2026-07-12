@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   conditions are met the tile renders inverted (solid black card,
   white text/icon) as an e-ink "needs attention" signal.
 
+### Fixed
+
+- **Seeed reTerminal E1003** device preset now declares its correct
+  native landscape orientation, fixing a spurious 90° rotation that
+  produced a portrait PNG for the default landscape setup. Existing
+  dashboards are fixed automatically on upgrade via a config entry
+  migration; no manual reconfiguration is needed.
+
 ## [0.6.0] - 2026-07-07
 
 ### Added

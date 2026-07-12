@@ -81,7 +81,7 @@ Supported device presets:
 | TRMNL X | 1872 × 1404 | 16 |
 | TRMNL RGB | 2560 × 1440 | 2 (black & white) |
 | Seeed reTerminal E1001 | 800 × 480 | 4 |
-| Seeed reTerminal E1003 | 1404 × 1872 | 16 |
+| Seeed reTerminal E1003 | 1872 × 1404 | 16 |
 | Custom | user-defined | 16 |
 
 ### Step 2 -- Image delivery

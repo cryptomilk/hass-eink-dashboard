@@ -51,6 +51,7 @@ from .const import (
     NumberFormat,
     TimeFormat,
     WidgetType,
+    resolve_display,
 )
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
@@ -735,6 +736,12 @@ async def async_migrate_entry(
     ``display_levels`` so the option name also fits future color
     e-ink displays.
 
+    Version 1.3 → 1.4: recompute ``width``, ``height``, and
+    ``rotation`` for ``reterminal_e1003`` entries.  The device's
+    native orientation preset was previously wrong, so entries
+    created before the fix have a stale ``rotation`` baked in that
+    produces a 90°-rotated image.
+
     Args:
         hass: Home Assistant instance.
         config_entry: The config entry to migrate.
@@ -772,6 +779,27 @@ async def async_migrate_entry(
             config_entry,
             options=new_options,
             minor_version=3,
+        )
+
+    if config_entry.minor_version == 3:
+        _LOGGER.debug(
+            "Migrating %s from minor version %d to 4",
+            config_entry.entry_id,
+            config_entry.minor_version,
+        )
+        new_options = dict(config_entry.options)
+        if new_options.get("device_model") == "reterminal_e1003":
+            orientation = new_options.get("orientation", "landscape")
+            width, height, rotation, _preset = resolve_display(
+                "reterminal_e1003", orientation
+            )
+            new_options["width"] = width
+            new_options["height"] = height
+            new_options["rotation"] = rotation
+        hass.config_entries.async_update_entry(
+            config_entry,
+            options=new_options,
+            minor_version=4,
         )
 
     return True
