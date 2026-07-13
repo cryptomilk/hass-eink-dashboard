@@ -717,8 +717,8 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Submitting update_interval merges all values into the stored
-        # options. advanced_section is absent from the schema because
-        # optimize is off, so it must not be submitted.
+        # options. advanced_section is optional, so omitting it from
+        # the submission is fine.
         flow = await _make_options_flow(
             hass,
             {
@@ -741,7 +741,8 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Submitting optimize settings via the advanced_section persists
-        # them. advanced_section is only present in the schema once
+        # them. The eink-only fields (dither_algorithm, exposure,
+        # saturation) are only present in the section's schema once
         # optimize is already enabled in the stored options.
         flow = await _make_options_flow(
             hass, {"update_interval": 60, "optimize": True}
@@ -807,10 +808,14 @@ class TestEinkDashboardOptionsFlow:
         hass: HomeAssistant,
         tmp_path,
     ) -> None:
-        # A valid existing directory path is stored as font_dir.
+        # A valid existing directory path submitted via the Advanced
+        # section is stored as a top-level font_dir option.
         flow = await _make_options_flow(hass, {"update_interval": 60})
         result = await flow.async_step_display_settings(
-            {"update_interval": 60, "font_dir": str(tmp_path)}
+            {
+                "update_interval": 60,
+                "advanced_section": {"font_dir": str(tmp_path)},
+            }
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -823,7 +828,10 @@ class TestEinkDashboardOptionsFlow:
         # Leaving font_dir empty is accepted; no directory is required.
         flow = await _make_options_flow(hass, {"update_interval": 60})
         result = await flow.async_step_display_settings(
-            {"update_interval": 60, "font_dir": ""}
+            {
+                "update_interval": 60,
+                "advanced_section": {"font_dir": ""},
+            }
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -834,18 +842,66 @@ class TestEinkDashboardOptionsFlow:
         hass: HomeAssistant,
     ) -> None:
         # A font_dir path that does not exist on disk returns the form
-        # again with a font_dir_not_found error instead of saving.
+        # again with a base-level font_dir_not_found error instead of
+        # saving. The error is reported as "base" (not "font_dir")
+        # because HA's section renderer does not forward field-level
+        # errors into nested section forms.
         flow = await _make_options_flow(hass, {"update_interval": 60})
         result = await flow.async_step_display_settings(
             {
                 "update_interval": 60,
-                "font_dir": "/no/such/directory/at/all",
+                "advanced_section": {"font_dir": "/no/such/directory/at/all"},
             }
         )
 
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "display_settings"
-        assert result["errors"] == {"font_dir": "font_dir_not_found"}
+        assert result["errors"] == {"base": "font_dir_not_found"}
+
+    async def test_display_settings_saves_use_system_fonts_on(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Enabling use_system_fonts persists it as a top-level option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "use_system_fonts": True}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["use_system_fonts"] is True
+
+    async def test_display_settings_default_use_system_fonts_is_false(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Omitting use_system_fonts on a fresh entry defaults to False
+        # so rendering stays reproducible across environments.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["use_system_fonts"].default() is False
+
+    async def test_display_settings_use_system_fonts_before_font_dir(
+        self, hass: HomeAssistant
+    ) -> None:
+        # use_system_fonts is a top-level field shown above the
+        # Advanced section (where font_dir now lives), so it appears
+        # earlier in the form.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        field_order = [
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        ]
+        assert field_order.index("use_system_fonts") < field_order.index(
+            "advanced_section"
+        )
 
     async def test_display_settings_shows_optimize_note_for_reterminal(
         self,
@@ -892,37 +948,53 @@ class TestEinkDashboardOptionsFlow:
     async def test_display_settings_has_advanced_section_when_optimize_on(
         self, hass: HomeAssistant
     ) -> None:
-        # The advanced_section field is present once optimize is
-        # already enabled in the stored options.
+        # The advanced_section's eink-only fields (dither_algorithm
+        # etc.) join font_dir once optimize is already enabled in the
+        # stored options.
         flow = await _make_options_flow(
             hass, {"update_interval": 60, "optimize": True}
         )
         result = await flow.async_step_display_settings(None)
 
-        field_names = {
-            k.schema
-            for k in result["data_schema"].schema
+        top_level = {
+            k.schema: v
+            for k, v in result["data_schema"].schema.items()
             if hasattr(k, "schema")
         }
-        assert "advanced_section" in field_names
+        assert "advanced_section" in top_level
+        section_field_names = {
+            k.schema
+            for k in top_level["advanced_section"].schema.schema
+            if hasattr(k, "schema")
+        }
+        assert "dither_algorithm" in section_field_names
+        assert "font_dir" in section_field_names
 
-    async def test_display_settings_hides_advanced_section_when_off(
+    async def test_display_settings_hides_eink_fields_when_off(
         self, hass: HomeAssistant
     ) -> None:
-        # The advanced_section is omitted from the schema when optimize
-        # is disabled, since its fields (dither/palette/exposure/
-        # saturation) have no effect until optimize is turned on.
+        # The advanced_section is always present (font_dir lives there
+        # and is unrelated to optimize), but its eink-only fields
+        # (dither/palette/exposure/saturation) are omitted when
+        # optimize is disabled, since they have no effect until
+        # optimize is turned on.
         flow = await _make_options_flow(
             hass, {"update_interval": 60, "optimize": False}
         )
         result = await flow.async_step_display_settings(None)
 
-        field_names = {
-            k.schema
-            for k in result["data_schema"].schema
+        top_level = {
+            k.schema: v
+            for k, v in result["data_schema"].schema.items()
             if hasattr(k, "schema")
         }
-        assert "advanced_section" not in field_names
+        assert "advanced_section" in top_level
+        section_field_names = {
+            k.schema
+            for k in top_level["advanced_section"].schema.schema
+            if hasattr(k, "schema")
+        }
+        assert section_field_names == {"font_dir"}
 
     async def test_display_settings_has_top_level_display_levels(
         self, hass: HomeAssistant
@@ -992,8 +1064,9 @@ class TestEinkDashboardOptionsFlow:
         self, hass: HomeAssistant
     ) -> None:
         # Turning optimize on in the same submission where it was
-        # previously off must succeed even though advanced_section is
-        # absent from the schema built from the stale stored value.
+        # previously off must succeed even though the eink-only
+        # fields are absent from the schema built from the stale
+        # stored value (only font_dir was available to submit).
         flow = await _make_options_flow(
             hass, {"update_interval": 60, "optimize": False}
         )
@@ -1014,10 +1087,10 @@ class TestEinkDashboardOptionsFlow:
     async def test_display_settings_preserves_advanced_when_optimize_off(
         self, hass: HomeAssistant
     ) -> None:
-        # Saving with optimize off hides advanced_section from the
-        # schema, so previously-stored advanced values must survive the
-        # {**opts, **validated, **section} merge rather than being
-        # dropped or reset to defaults.
+        # Saving with optimize off omits the eink-only fields from the
+        # advanced_section schema, so previously-stored advanced
+        # values must survive the {**opts, **validated, **section}
+        # merge rather than being dropped or reset to defaults.
         flow = await _make_options_flow(
             hass,
             {

@@ -36,7 +36,14 @@ from typing import Any
 from PIL import Image, ImageFont
 
 from .conditions import check_conditions
-from .const import DEFAULT_ROW_H, PADDING, DisplayConfig, NumberFormat, Widget
+from .const import (
+    DEFAULT_ROW_H,
+    DEFAULT_USE_SYSTEM_FONTS,
+    PADDING,
+    DisplayConfig,
+    NumberFormat,
+    Widget,
+)
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
@@ -743,8 +750,9 @@ def render_dashboard(
             ``"type"`` key matching a registered SVG renderer.
         config: Display config with ``width``, ``height``, ``rotation``,
             entity ``states``, and optionally ``font_dir`` (a directory
-            of extra font files for resvg to fall back to).  Defaults
-            to 600×800 if dimensions are absent.
+            of extra font files for resvg to fall back to) and
+            ``use_system_fonts`` (also load fonts installed on the
+            host).  Defaults to 600×800 if dimensions are absent.
 
     Returns:
         PNG image bytes ready for delivery to the e-ink display.
@@ -755,6 +763,7 @@ def render_dashboard(
 
     font_dir = config.get("font_dir")
     extra_font_dirs = [font_dir] if font_dir else None
+    use_system_fonts = config.get("use_system_fonts", DEFAULT_USE_SYSTEM_FONTS)
 
     # Use an RGB canvas for color e-ink displays so per-widget SVGs
     # are composited in full colour before colour dithering.
@@ -799,7 +808,11 @@ def render_dashboard(
             wy,
         )
         svg = render_widget_svg(widget, config)
-        png = _svg_to_png(svg, extra_font_dirs=extra_font_dirs)
+        png = _svg_to_png(
+            svg,
+            extra_font_dirs=extra_font_dirs,
+            use_system_fonts=use_system_fonts,
+        )
         wimg = Image.open(io.BytesIO(png))
         # Use alpha channel as mask so transparent widget areas
         # do not overwrite the canvas or previously-rendered

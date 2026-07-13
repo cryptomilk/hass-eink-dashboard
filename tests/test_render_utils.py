@@ -111,13 +111,20 @@ class TestRenderDashboard:
         seen: list[list[str] | None] = []
         original = render_module._svg_to_png
 
-        def spy(svg, width=None, height=None, extra_font_dirs=None):
+        def spy(
+            svg,
+            width=None,
+            height=None,
+            extra_font_dirs=None,
+            use_system_fonts=False,
+        ):
             seen.append(extra_font_dirs)
             return original(
                 svg,
                 width=width,
                 height=height,
                 extra_font_dirs=extra_font_dirs,
+                use_system_fonts=use_system_fonts,
             )
 
         monkeypatch.setattr(render_module, "_svg_to_png", spy)
@@ -141,13 +148,20 @@ class TestRenderDashboard:
         seen: list[list[str] | None] = []
         original = render_module._svg_to_png
 
-        def spy(svg, width=None, height=None, extra_font_dirs=None):
+        def spy(
+            svg,
+            width=None,
+            height=None,
+            extra_font_dirs=None,
+            use_system_fonts=False,
+        ):
             seen.append(extra_font_dirs)
             return original(
                 svg,
                 width=width,
                 height=height,
                 extra_font_dirs=extra_font_dirs,
+                use_system_fonts=use_system_fonts,
             )
 
         monkeypatch.setattr(render_module, "_svg_to_png", spy)
@@ -155,6 +169,74 @@ class TestRenderDashboard:
         widgets = [{"type": "heading", "heading": "Hi", "x": 0, "y": 0}]
         render_to_image(widgets, config)
         assert seen == [None]
+
+    def test_use_system_fonts_passed_to_svg_to_png(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A configured use_system_fonts=True is forwarded to
+        # _svg_to_png() so resvg also loads host-installed fonts.
+        import custom_components.eink_dashboard.render as render_module
+
+        seen: list[bool] = []
+        original = render_module._svg_to_png
+
+        def spy(
+            svg,
+            width=None,
+            height=None,
+            extra_font_dirs=None,
+            use_system_fonts=False,
+        ):
+            seen.append(use_system_fonts)
+            return original(
+                svg,
+                width=width,
+                height=height,
+                extra_font_dirs=extra_font_dirs,
+                use_system_fonts=use_system_fonts,
+            )
+
+        monkeypatch.setattr(render_module, "_svg_to_png", spy)
+        config = {
+            "width": 100,
+            "height": 100,
+            "use_system_fonts": True,
+        }
+        widgets = [{"type": "heading", "heading": "Hi", "x": 0, "y": 0}]
+        render_to_image(widgets, config)
+        assert seen == [True]
+
+    def test_no_use_system_fonts_defaults_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Without use_system_fonts configured, it defaults to False so
+        # rendering stays reproducible across environments.
+        import custom_components.eink_dashboard.render as render_module
+
+        seen: list[bool] = []
+        original = render_module._svg_to_png
+
+        def spy(
+            svg,
+            width=None,
+            height=None,
+            extra_font_dirs=None,
+            use_system_fonts=False,
+        ):
+            seen.append(use_system_fonts)
+            return original(
+                svg,
+                width=width,
+                height=height,
+                extra_font_dirs=extra_font_dirs,
+                use_system_fonts=use_system_fonts,
+            )
+
+        monkeypatch.setattr(render_module, "_svg_to_png", spy)
+        config = {"width": 100, "height": 100}
+        widgets = [{"type": "heading", "heading": "Hi", "x": 0, "y": 0}]
+        render_to_image(widgets, config)
+        assert seen == [False]
 
 
 class TestVisibilityConditions:

@@ -89,6 +89,54 @@ def test_svg_to_png_no_extra_font_dirs_still_works():
     assert result[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_svg_to_png_use_system_fonts_produces_valid_png():
+    """Verify use_system_fonts=True still rasterises a valid PNG."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
+        '<rect width="200" height="80" fill="white"/>'
+        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        "</svg>"
+    )
+    result = _svg_to_png(svg, 200, 80, use_system_fonts=True)
+    assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_svg_to_png_default_skips_system_fonts(monkeypatch):
+    """Verify the default (use_system_fonts=False) requests
+    skip_system_fonts=True from resvg.
+    """
+    calls = []
+
+    def fake_svg_to_bytes(**kwargs):
+        calls.append(kwargs)
+        return b"\x89PNG\r\n\x1a\n"
+
+    monkeypatch.setattr(
+        "custom_components.eink_dashboard.svg_render.resvg_py.svg_to_bytes",
+        fake_svg_to_bytes,
+    )
+    _svg_to_png("<svg/>", 10, 10)
+    assert calls[0]["skip_system_fonts"] is True
+
+
+def test_svg_to_png_use_system_fonts_disables_skip(monkeypatch):
+    """Verify use_system_fonts=True requests skip_system_fonts=False
+    from resvg.
+    """
+    calls = []
+
+    def fake_svg_to_bytes(**kwargs):
+        calls.append(kwargs)
+        return b"\x89PNG\r\n\x1a\n"
+
+    monkeypatch.setattr(
+        "custom_components.eink_dashboard.svg_render.resvg_py.svg_to_bytes",
+        fake_svg_to_bytes,
+    )
+    _svg_to_png("<svg/>", 10, 10, use_system_fonts=True)
+    assert calls[0]["skip_system_fonts"] is False
+
+
 def test_jinja_env_loads_template(tmp_path):
     """Verify _jinja_env loads templates from the templates directory."""
     # Write a temporary template into the templates directory and clean up
