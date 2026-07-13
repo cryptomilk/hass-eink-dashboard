@@ -802,6 +802,51 @@ class TestEinkDashboardOptionsFlow:
                 {"update_interval": 60, "display_levels": 7}
             )
 
+    async def test_display_settings_saves_font_dir(
+        self,
+        hass: HomeAssistant,
+        tmp_path,
+    ) -> None:
+        # A valid existing directory path is stored as font_dir.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "font_dir": str(tmp_path)}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["font_dir"] == str(tmp_path)
+
+    async def test_display_settings_empty_font_dir(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # Leaving font_dir empty is accepted; no directory is required.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "font_dir": ""}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["font_dir"] == ""
+
+    async def test_display_settings_rejects_missing_font_dir(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # A font_dir path that does not exist on disk returns the form
+        # again with a font_dir_not_found error instead of saving.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "font_dir": "/no/such/directory/at/all",
+            }
+        )
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "display_settings"
+        assert result["errors"] == {"font_dir": "font_dir_not_found"}
+
     async def test_display_settings_shows_optimize_note_for_reterminal(
         self,
         hass: HomeAssistant,

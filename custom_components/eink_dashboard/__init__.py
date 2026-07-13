@@ -240,11 +240,11 @@ async def _build_display_config(
 
     Returns:
         Dict with ``width``, ``height``, ``display_levels``,
-        ``number_format``, ``language``, ``first_weekday``,
-        ``date_format``, ``time_format``, ``states``, and (when
-        battery data is available) ``device_battery_level`` and
-        ``device_battery_charging`` keys suitable for
-        ``render_widget_svg()``.
+        ``font_dir``, ``number_format``, ``language``,
+        ``first_weekday``, ``date_format``, ``time_format``,
+        ``states``, and (when battery data is available)
+        ``device_battery_level`` and ``device_battery_charging``
+        keys suitable for ``render_widget_svg()``.
     """
     entry_data = hass.data[DOMAIN][entry_id]
     entry = entry_data["entry"]
@@ -272,6 +272,7 @@ async def _build_display_config(
             "display_levels", DEFAULT_DISPLAY_LEVELS
         ),
         "color_scheme": entry.options.get("color_scheme"),
+        "font_dir": entry.options.get("font_dir", ""),
         "number_format": number_format,
         "language": language,
         "first_weekday": first_weekday,

@@ -262,6 +262,7 @@ class EinkDashboardImage(ImageEntity):
                         "measured_palette", DEFAULT_MEASURED_PALETTE
                     ),
                     "color_scheme": self._entry.options.get("color_scheme"),
+                    "font_dir": self._entry.options.get("font_dir", ""),
                     "number_format": number_format,
                     "language": language,
                     "first_weekday": first_weekday,

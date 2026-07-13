@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -1077,6 +1078,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 vol.Coerce(int),
                 vol.In([2, 4, 16, 256]),
             ),
+            vol.Optional(
+                "font_dir",
+                description={"suggested_value": opts.get("font_dir", "")},
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
         }
         # The Advanced section only affects optimize_for_eink(), which
         # early-returns when optimize is off, so it is only shown once
@@ -1086,12 +1091,6 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 _build_advanced_section(opts, display_levels)
             )
         schema = vol.Schema(schema_fields)
-        if user_input is not None:
-            validated = schema(user_input)
-            section = validated.pop("advanced_section", {})
-            return self.async_create_entry(
-                data={**opts, **validated, **section},
-            )
         if preset and preset.integration_dithers:
             optimize_note = (
                 "This device's Home Assistant integration handles image"
@@ -1100,6 +1099,22 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             )
         else:
             optimize_note = ""
+        if user_input is not None:
+            validated = schema(user_input)
+            font_dir = validated.get("font_dir", "")
+            if font_dir and not await self.hass.async_add_executor_job(
+                os.path.isdir, font_dir
+            ):
+                return self.async_show_form(
+                    step_id="display_settings",
+                    data_schema=schema,
+                    errors={"font_dir": "font_dir_not_found"},
+                    description_placeholders={"optimize_note": optimize_note},
+                )
+            section = validated.pop("advanced_section", {})
+            return self.async_create_entry(
+                data={**opts, **validated, **section},
+            )
         return self.async_show_form(
             step_id="display_settings",
             data_schema=schema,

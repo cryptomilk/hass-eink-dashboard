@@ -64,6 +64,31 @@ def test_svg_to_png_produces_valid_png():
     assert len(result) > 0
 
 
+def test_svg_to_png_extra_font_dirs_accepted(tmp_path):
+    """Verify _svg_to_png() accepts an extra_font_dirs argument."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
+        '<rect width="200" height="80" fill="white"/>'
+        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        "</svg>"
+    )
+    result = _svg_to_png(svg, 200, 80, extra_font_dirs=[str(tmp_path)])
+    assert result[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(result) > 0
+
+
+def test_svg_to_png_no_extra_font_dirs_still_works():
+    """Verify extra_font_dirs=None (the default) keeps working."""
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
+        '<rect width="200" height="80" fill="white"/>'
+        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        "</svg>"
+    )
+    result = _svg_to_png(svg, 200, 80, extra_font_dirs=None)
+    assert result[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def test_jinja_env_loads_template(tmp_path):
     """Verify _jinja_env loads templates from the templates directory."""
     # Write a temporary template into the templates directory and clean up

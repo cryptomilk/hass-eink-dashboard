@@ -742,8 +742,9 @@ def render_dashboard(
         widget_list: Widget configuration dicts.  Each must have a
             ``"type"`` key matching a registered SVG renderer.
         config: Display config with ``width``, ``height``, ``rotation``,
-            and entity ``states``.  Defaults to 600×800 if dimensions
-            are absent.
+            entity ``states``, and optionally ``font_dir`` (a directory
+            of extra font files for resvg to fall back to).  Defaults
+            to 600×800 if dimensions are absent.
 
     Returns:
         PNG image bytes ready for delivery to the e-ink display.
@@ -751,6 +752,9 @@ def render_dashboard(
     config = {"width": 600, "height": 800, **config}
     w = config["width"]
     h = config["height"]
+
+    font_dir = config.get("font_dir")
+    extra_font_dirs = [font_dir] if font_dir else None
 
     # Use an RGB canvas for color e-ink displays so per-widget SVGs
     # are composited in full colour before colour dithering.
@@ -795,7 +799,7 @@ def render_dashboard(
             wy,
         )
         svg = render_widget_svg(widget, config)
-        png = _svg_to_png(svg)
+        png = _svg_to_png(svg, extra_font_dirs=extra_font_dirs)
         wimg = Image.open(io.BytesIO(png))
         # Use alpha channel as mask so transparent widget areas
         # do not overwrite the canvas or previously-rendered
