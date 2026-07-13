@@ -1097,10 +1097,13 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             vol.Optional("optimize", default=optimize): bool,
             vol.Optional(
                 "display_levels",
-                default=display_levels,
-            ): vol.All(
-                vol.Coerce(int),
-                vol.In([2, 4, 16, 256]),
+                default=str(display_levels),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=["2", "4", "16", "256"],
+                    translation_key="display_levels",
+                    mode=SelectSelectorMode.LIST,
+                )
             ),
             vol.Optional(
                 "use_system_fonts",
@@ -1124,6 +1127,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             optimize_note = ""
         if user_input is not None:
             validated = schema(user_input)
+            validated["display_levels"] = int(validated["display_levels"])
             section = validated.get("advanced_section", {})
             font_dir = section.get("font_dir", "")
             if font_dir and not await self.hass.async_add_executor_job(

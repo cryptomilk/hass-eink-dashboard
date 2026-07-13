@@ -199,6 +199,14 @@
     }
   },
   "selector": {
+    "display_levels": {
+      "options": {
+        "2": "2",
+        "4": "4",
+        "16": "16",
+        "256": "256"
+      }
+    },
     "dither_algorithm": {
       "options": {
         "floyd_steinberg": "Floyd-Steinberg (recommended)",
