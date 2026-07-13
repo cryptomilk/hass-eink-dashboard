@@ -145,11 +145,13 @@
         "data": {
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",
-          "display_levels": "Display levels"
+          "display_levels": "Display levels",
+          "font_dir": "Custom font directory"
         },
         "data_description": {
           "optimize": "Apply autocontrast and quantization for e-ink displays",
-          "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)"
+          "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
+          "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled Roboto font does not cover, such as Hebrew, Arabic, or CJK. Leave empty to use only the bundled font."
         },
         "sections": {
           "advanced_section": {
@@ -190,7 +192,8 @@
     },
     "error": {
       "already_configured": "This webhook URL is already configured.",
-      "invalid_url": "Please enter a valid http or https URL."
+      "invalid_url": "Please enter a valid http or https URL.",
+      "font_dir_not_found": "Directory not found. Please enter a valid path to an existing directory."
     }
   },
   "selector": {

@@ -100,6 +100,62 @@ class TestRenderDashboard:
         img = render_to_image(widgets, config)
         assert img.size == (100, 100)
 
+    def test_font_dir_passed_to_svg_to_png(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:
+        # A configured font_dir is forwarded to _svg_to_png() as
+        # extra_font_dirs so resvg can fall back to it for glyphs
+        # missing from the bundled Roboto font.
+        import custom_components.eink_dashboard.render as render_module
+
+        seen: list[list[str] | None] = []
+        original = render_module._svg_to_png
+
+        def spy(svg, width=None, height=None, extra_font_dirs=None):
+            seen.append(extra_font_dirs)
+            return original(
+                svg,
+                width=width,
+                height=height,
+                extra_font_dirs=extra_font_dirs,
+            )
+
+        monkeypatch.setattr(render_module, "_svg_to_png", spy)
+        font_dir = str(tmp_path)
+        config = {
+            "width": 100,
+            "height": 100,
+            "font_dir": font_dir,
+        }
+        widgets = [{"type": "heading", "heading": "Hi", "x": 0, "y": 0}]
+        render_to_image(widgets, config)
+        assert seen == [[font_dir]]
+
+    def test_no_font_dir_passes_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Without a configured font_dir, extra_font_dirs is None so
+        # only the bundled Roboto directory is used.
+        import custom_components.eink_dashboard.render as render_module
+
+        seen: list[list[str] | None] = []
+        original = render_module._svg_to_png
+
+        def spy(svg, width=None, height=None, extra_font_dirs=None):
+            seen.append(extra_font_dirs)
+            return original(
+                svg,
+                width=width,
+                height=height,
+                extra_font_dirs=extra_font_dirs,
+            )
+
+        monkeypatch.setattr(render_module, "_svg_to_png", spy)
+        config = {"width": 100, "height": 100}
+        widgets = [{"type": "heading", "heading": "Hi", "x": 0, "y": 0}]
+        render_to_image(widgets, config)
+        assert seen == [None]
+
 
 class TestVisibilityConditions:
     # Verify that widget visibility conditions are evaluated during

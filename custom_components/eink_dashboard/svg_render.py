@@ -19,7 +19,10 @@ rasterisation helper that converts SVG strings to PNG bytes via resvg.
 
 The font directory is passed explicitly to resvg with system fonts
 disabled so rendering is identical across HA OS, Docker, and dev
-machines regardless of installed system fonts.
+machines regardless of installed system fonts.  An optional
+user-configured directory (``config["font_dir"]``) can be added
+alongside the bundled fonts to cover scripts Roboto lacks glyphs
+for.
 
 Icon SVG files are inlined as ``<path>`` elements via Jinja2 filters
 (``mdi_svg``, ``weather_svg``).  Path data is cached so file I/O
@@ -92,12 +95,19 @@ def _svg_to_png(
     svg: str,
     width: int | None = None,
     height: int | None = None,
+    extra_font_dirs: list[str] | None = None,
 ) -> bytes:
     """Rasterise an SVG string to PNG bytes via resvg.
 
     Uses ``skip_system_fonts=True`` so rendering is identical across
     HA OS, Docker, and dev machines.  Only fonts shipped in the
-    ``fonts/`` directory are available to the renderer.
+    ``fonts/`` directory, plus any directories in ``extra_font_dirs``,
+    are available to the renderer.  All templates share the single
+    ``font-family="Roboto"`` declaration; when a character has no
+    glyph in Roboto, resvg falls back to searching every other font
+    loaded into its fontdb, so a user-supplied font covering a script
+    Roboto lacks (e.g. Hebrew) is picked up automatically without any
+    template changes.
 
     When ``width`` or ``height`` is ``None``, resvg uses the SVG
     document's intrinsic dimension.  There are two usage modes:
@@ -111,16 +121,22 @@ def _svg_to_png(
             SVG's intrinsic width.
         height: Output height in pixels, or ``None`` to use the
             SVG's intrinsic height.
+        extra_font_dirs: Additional directories to search for font
+            files, appended after the bundled Roboto directory.
+            ``None`` or empty means no extra directories.
 
     Returns:
         PNG image as raw bytes.
     """
+    font_dirs = [str(_FONTS_DIR)]
+    if extra_font_dirs:
+        font_dirs.extend(extra_font_dirs)
     return bytes(
         resvg_py.svg_to_bytes(
             svg_string=svg,
             width=width,
             height=height,
-            font_dirs=[str(_FONTS_DIR)],
+            font_dirs=font_dirs,
             skip_system_fonts=True,
         )
     )
