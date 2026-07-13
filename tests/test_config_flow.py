@@ -751,7 +751,7 @@ class TestEinkDashboardOptionsFlow:
             {
                 "update_interval": 60,
                 "optimize": True,
-                "display_levels": 2,
+                "display_levels": "2",
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
                     "exposure": "1.5",
@@ -1036,7 +1036,7 @@ class TestEinkDashboardOptionsFlow:
             for k in result["data_schema"].schema
             if hasattr(k, "schema")
         }
-        assert markers["display_levels"].default() == 256
+        assert markers["display_levels"].default() == "256"
 
     async def test_display_settings_prefers_stored_levels_over_preset(
         self, hass: HomeAssistant
@@ -1058,7 +1058,7 @@ class TestEinkDashboardOptionsFlow:
             for k in result["data_schema"].schema
             if hasattr(k, "schema")
         }
-        assert markers["display_levels"].default() == 16
+        assert markers["display_levels"].default() == "16"
 
     async def test_display_settings_saves_optimize_toggle_on(
         self, hass: HomeAssistant
@@ -1074,7 +1074,7 @@ class TestEinkDashboardOptionsFlow:
             {
                 "update_interval": 60,
                 "optimize": True,
-                "display_levels": 16,
+                "display_levels": "16",
             }
         )
 
@@ -1102,7 +1102,7 @@ class TestEinkDashboardOptionsFlow:
             },
         )
         result = await flow.async_step_display_settings(
-            {"update_interval": 120, "display_levels": 16}
+            {"update_interval": 120, "display_levels": "16"}
         )
 
         assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -1122,7 +1122,7 @@ class TestEinkDashboardOptionsFlow:
             {
                 "update_interval": 60,
                 "optimize": True,
-                "display_levels": 16,
+                "display_levels": "16",
                 "advanced_section": {
                     "dither_algorithm": "atkinson",
                     "exposure": "1.0",
@@ -1165,7 +1165,7 @@ class TestEinkDashboardOptionsFlow:
             {
                 "update_interval": 60,
                 "optimize": True,
-                "display_levels": 16,
+                "display_levels": "16",
                 "advanced_section": {
                     "dither_algorithm": "floyd_steinberg",
                     "measured_palette": "spectra_7_3_6color",
