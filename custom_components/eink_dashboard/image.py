@@ -58,6 +58,7 @@ from .const import (
     DEFAULT_OPTIMIZE,
     DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_USE_SYSTEM_FONTS,
     DEFAULT_WIDTH,
     DOMAIN,
     WidgetType,
@@ -263,6 +264,9 @@ class EinkDashboardImage(ImageEntity):
                     ),
                     "color_scheme": self._entry.options.get("color_scheme"),
                     "font_dir": self._entry.options.get("font_dir", ""),
+                    "use_system_fonts": self._entry.options.get(
+                        "use_system_fonts", DEFAULT_USE_SYSTEM_FONTS
+                    ),
                     "number_format": number_format,
                     "language": language,
                     "first_weekday": first_weekday,

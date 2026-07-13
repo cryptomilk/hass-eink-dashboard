@@ -60,6 +60,7 @@ from .const import (
     DEFAULT_OPTIMIZE,
     DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_USE_SYSTEM_FONTS,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
@@ -184,9 +185,15 @@ def _build_user_schema(
 
 
 def _build_advanced_section(
-    opts: Mapping[str, Any], display_levels: int
+    opts: Mapping[str, Any], display_levels: int, optimize: bool
 ) -> Any:
     """Build the collapsed Advanced section of the display settings form.
+
+    ``font_dir`` is always present since it is unrelated to e-ink
+    optimization. The remaining fields (dither_algorithm,
+    measured_palette, exposure, saturation) only affect
+    ``optimize_for_eink()``, which early-returns when optimize is off,
+    so they are omitted from the section until optimize is enabled.
 
     Args:
         opts: Currently stored config entry options, used as field
@@ -195,58 +202,69 @@ def _build_advanced_section(
             equals 256, exposure/saturation are omitted since they are
             only forwarded to dither_image(), which is never called on
             the 256-level passthrough path.
+        optimize: Whether e-ink optimization is currently enabled.
 
     Returns:
-        A voluptuous section wrapping dither_algorithm, measured_palette,
-        and (unless display_levels == 256) exposure and saturation.
+        A voluptuous section wrapping font_dir and, once optimize is
+        enabled, dither_algorithm, measured_palette, and (unless
+        display_levels == 256) exposure and saturation.
     """
     advanced_fields: dict = {
         vol.Optional(
-            "dither_algorithm",
-            default=opts.get(
+            "font_dir",
+            description={"suggested_value": opts.get("font_dir", "")},
+        ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+    }
+    if optimize:
+        advanced_fields[
+            vol.Optional(
                 "dither_algorithm",
-                DEFAULT_DITHER_ALGORITHM,
-            ),
-        ): SelectSelector(
+                default=opts.get(
+                    "dither_algorithm",
+                    DEFAULT_DITHER_ALGORITHM,
+                ),
+            )
+        ] = SelectSelector(
             SelectSelectorConfig(
                 options=_DITHER_ALGO_OPTIONS,
                 translation_key="dither_algorithm",
                 mode=SelectSelectorMode.DROPDOWN,
             )
-        ),
-        vol.Optional(
-            "measured_palette",
-            default=opts.get(
+        )
+        advanced_fields[
+            vol.Optional(
                 "measured_palette",
-                DEFAULT_MEASURED_PALETTE,
-            ),
-        ): SelectSelector(
+                default=opts.get(
+                    "measured_palette",
+                    DEFAULT_MEASURED_PALETTE,
+                ),
+            )
+        ] = SelectSelector(
             SelectSelectorConfig(
                 options=_MEASURED_PALETTE_OPTIONS,
                 translation_key="measured_palette",
                 mode=SelectSelectorMode.DROPDOWN,
             )
-        ),
-    }
-    if display_levels != 256:
-        advanced_fields[
-            vol.Optional(
-                "exposure",
-                default=opts.get("exposure", DEFAULT_EXPOSURE),
-            )
-        ] = vol.All(
-            vol.Coerce(float),
-            vol.Range(min=0.0, max=10.0),
         )
-        advanced_fields[
-            vol.Optional(
-                "saturation",
-                default=opts.get("saturation", DEFAULT_SATURATION),
+        if display_levels != 256:
+            advanced_fields[
+                vol.Optional(
+                    "exposure",
+                    default=opts.get("exposure", DEFAULT_EXPOSURE),
+                )
+            ] = vol.All(
+                vol.Coerce(float),
+                vol.Range(min=0.0, max=10.0),
             )
-        ] = vol.All(
-            vol.Coerce(float),
-            vol.Range(min=0.0, max=10.0),
-        )
+            advanced_fields[
+                vol.Optional(
+                    "saturation",
+                    default=opts.get("saturation", DEFAULT_SATURATION),
+                )
+            ] = vol.All(
+                vol.Coerce(float),
+                vol.Range(min=0.0, max=10.0),
+            )
     return flow_section(
         vol.Schema(advanced_fields),
         {"collapsed": True},
@@ -1056,7 +1074,13 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     async def async_step_display_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Update refresh interval, optimize, and image quality settings."""
+        """Update refresh interval, optimize, and image quality settings.
+
+        Also collects ``use_system_fonts`` (top-level, off by default)
+        and, via the Advanced section, ``font_dir`` — both add glyph
+        fallback fonts for scripts the bundled Roboto font does not
+        cover, such as Hebrew, Arabic, or CJK. See docs/fonts.md.
+        """
         opts = self.config_entry.options
         optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
         device_model = opts.get("device_model", "")
@@ -1079,17 +1103,16 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 vol.In([2, 4, 16, 256]),
             ),
             vol.Optional(
-                "font_dir",
-                description={"suggested_value": opts.get("font_dir", "")},
-            ): TextSelector(TextSelectorConfig(type=TextSelectorType.TEXT)),
+                "use_system_fonts",
+                default=opts.get("use_system_fonts", DEFAULT_USE_SYSTEM_FONTS),
+            ): bool,
+            # font_dir lives in the Advanced section (built below) since
+            # it is a power-user field; the section itself is always
+            # present so font support does not depend on optimize.
+            vol.Optional("advanced_section"): _build_advanced_section(
+                opts, display_levels, optimize
+            ),
         }
-        # The Advanced section only affects optimize_for_eink(), which
-        # early-returns when optimize is off, so it is only shown once
-        # optimize is enabled.
-        if optimize:
-            schema_fields[vol.Required("advanced_section")] = (
-                _build_advanced_section(opts, display_levels)
-            )
         schema = vol.Schema(schema_fields)
         if preset and preset.integration_dithers:
             optimize_note = (
@@ -1101,14 +1124,15 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             optimize_note = ""
         if user_input is not None:
             validated = schema(user_input)
-            font_dir = validated.get("font_dir", "")
+            section = validated.get("advanced_section", {})
+            font_dir = section.get("font_dir", "")
             if font_dir and not await self.hass.async_add_executor_job(
                 os.path.isdir, font_dir
             ):
                 return self.async_show_form(
                     step_id="display_settings",
                     data_schema=schema,
-                    errors={"font_dir": "font_dir_not_found"},
+                    errors={"base": "font_dir_not_found"},
                     description_placeholders={"optimize_note": optimize_note},
                 )
             section = validated.pop("advanced_section", {})

@@ -103,7 +103,8 @@ After setup, click **Configure** on the integration entry to:
 
 - **Device settings** - change device model, orientation, or area
 - **Display settings** - update interval, e-ink optimization toggle,
-  grayscale levels, sharpness, contrast
+  grayscale levels, sharpness, contrast, and [font settings](docs/fonts.md)
+  for non-Latin scripts (Hebrew, Arabic, CJK, ...)
 - **Add / remove push target** - manage TRMNL webhook URLs
 - **Copy card YAML** - get the Lovelace card snippet for this device
 - **Copy dashboard YAML** - get a full dashboard YAML with cards for all

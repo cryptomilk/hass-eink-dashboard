@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Lovelace condition dicts, same format as `visibility`. When the
   conditions are met the tile renders inverted (solid black card,
   white text/icon) as an e-ink "needs attention" signal.
+- **`font_dir`** display setting: point at a directory of custom font
+  files (e.g. for non-Latin scripts) to use instead of the bundled
+  Roboto fonts.
+- **`use_system_fonts`** display setting: opt into resvg's system
+  font fallback instead of sourcing a font file via `font_dir`. Off
+  by default to preserve reproducible rendering across HA OS, Docker,
+  and dev machines. See `docs/fonts.md`.
 
 ### Fixed
 

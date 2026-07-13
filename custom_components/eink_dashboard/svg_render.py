@@ -96,18 +96,22 @@ def _svg_to_png(
     width: int | None = None,
     height: int | None = None,
     extra_font_dirs: list[str] | None = None,
+    use_system_fonts: bool = False,
 ) -> bytes:
     """Rasterise an SVG string to PNG bytes via resvg.
 
-    Uses ``skip_system_fonts=True`` so rendering is identical across
-    HA OS, Docker, and dev machines.  Only fonts shipped in the
+    Defaults to ``skip_system_fonts=True`` so rendering is identical
+    across HA OS, Docker, and dev machines.  Only fonts shipped in the
     ``fonts/`` directory, plus any directories in ``extra_font_dirs``,
     are available to the renderer.  All templates share the single
     ``font-family="Roboto"`` declaration; when a character has no
     glyph in Roboto, resvg falls back to searching every other font
     loaded into its fontdb, so a user-supplied font covering a script
     Roboto lacks (e.g. Hebrew) is picked up automatically without any
-    template changes.
+    template changes.  Setting ``use_system_fonts=True`` additionally
+    loads fonts already installed on the host, trading the
+    reproducibility guarantee for convenience on hosts that already
+    have broad script coverage installed.
 
     When ``width`` or ``height`` is ``None``, resvg uses the SVG
     document's intrinsic dimension.  There are two usage modes:
@@ -124,6 +128,9 @@ def _svg_to_png(
         extra_font_dirs: Additional directories to search for font
             files, appended after the bundled Roboto directory.
             ``None`` or empty means no extra directories.
+        use_system_fonts: When ``True``, also load fonts installed on
+            the host system.  Defaults to ``False`` for reproducible
+            rendering across environments.
 
     Returns:
         PNG image as raw bytes.
@@ -137,7 +144,7 @@ def _svg_to_png(
             width=width,
             height=height,
             font_dirs=font_dirs,
-            skip_system_fonts=True,
+            skip_system_fonts=not use_system_fonts,
         )
     )
 

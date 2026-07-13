@@ -146,23 +146,25 @@
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",
           "display_levels": "Display levels",
-          "font_dir": "Custom font directory"
+          "use_system_fonts": "Use system fonts"
         },
         "data_description": {
           "optimize": "Apply autocontrast and quantization for e-ink displays",
           "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
-          "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled Roboto font does not cover, such as Hebrew, Arabic, or CJK. Leave empty to use only the bundled font."
+          "use_system_fonts": "Also use fonts already installed on this Home Assistant host as a fallback for characters the bundled font and custom font directory do not cover. Off by default so dashboards render identically across HA OS, Docker, and other machines; enabling it can make text look different depending on what is installed on the host."
         },
         "sections": {
           "advanced_section": {
             "name": "Advanced",
             "data": {
+              "font_dir": "Custom font directory",
               "dither_algorithm": "Dither algorithm",
               "measured_palette": "Measured palette",
               "exposure": "Exposure",
               "saturation": "Saturation"
             },
             "data_description": {
+              "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled Roboto font does not cover, such as Hebrew, Arabic, or CJK. The directory must be reachable by Home Assistant (mount it into the container on HA OS or Docker). Leave empty to use only the bundled font.",
               "dither_algorithm": "Algorithm used for error-diffusion dithering",
               "measured_palette": "Photographically calibrated palette for your specific display model. Auto uses the idealized palette.",
               "exposure": "1.0 = unchanged, higher = brighter (0.0–10.0)",
