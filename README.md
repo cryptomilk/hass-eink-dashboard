@@ -16,7 +16,8 @@ headless browser or other server component required running.
 - **WYSIWYG Lovelace editor** - drag, resize, and configure widgets on a
   server-rendered SVG preview that matches your device's exact pixel dimensions
 - **Pull and push delivery** - devices can fetch the image on their own
-  schedule (Kindle, OpenDisplay) or have HA push it via webhook (TRMNL)
+  schedule (Kindle), or have HA push it via webhook (TRMNL) or an automation
+  (OpenDisplay)
 - **E-ink optimization** - optional post-processing pipeline: autocontrast,
   sharpness, contrast adjustment, and grayscale quantization (2/4/16/256
   levels with Floyd-Steinberg dithering)
@@ -239,15 +240,16 @@ You can add multiple TRMNL webhook targets per dashboard entry via
 
 ### OpenDisplay
 
-[OpenDisplay](https://opendisplay.org/) fetches images from Home Assistant's
-Media Browser. The integration registers a **Media Source** platform that
-exposes each dashboard entry as a media item, so OpenDisplay can pull the
-latest rendered PNG without any additional configuration.
+[OpenDisplay](https://opendisplay.org/) devices cannot fetch images
+themselves - Home Assistant must push (upload) the rendered PNG to them via
+an automation. The integration registers a **Media Source** platform that
+exposes each dashboard entry as a media item
+(`media-source://eink_dashboard/<entry_id>`), which you pass to the
+`opendisplay.upload_image` service.
 
-In the OpenDisplay app, point it at your Home Assistant instance and select
-the dashboard entry from the Media Browser. OpenDisplay will refresh the image
-on its own schedule, respecting the ETag so it only re-renders the display
-when the image has actually changed.
+See [Setting up OpenDisplay for image push](docs/opendisplay.md) for the
+full automation, including how to detect when a battery-powered display
+wakes up so the push arrives while it's reachable.
 
 ## License
 
