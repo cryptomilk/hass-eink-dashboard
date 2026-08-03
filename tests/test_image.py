@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.template import TemplateError
 from PIL import Image
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -142,6 +143,68 @@ class TestEinkDashboardImage:
         img = _png_from_bytes(result)
         assert img.size == (200, 100)
         assert img.mode == "L"
+
+    async def test_refresh_enriches_entity_icons(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # _async_refresh must resolve icons.json-derived icons before
+        # rendering, so widgets referencing entities without an
+        # explicit "icon" attribute (e.g. moon phase) still get one.
+        entity, _entry = make_entity()
+
+        with patch.object(
+            EinkDashboardImage,
+            "_async_enrich_entity_icons",
+            AsyncMock(),
+        ) as mock_enrich:
+            await entity._async_refresh(None)
+
+        mock_enrich.assert_called_once()
+
+    async def test_refresh_wires_resolved_icon_into_render_config(
+        self, make_entity: Callable[..., Any], hass: HomeAssistant
+    ) -> None:
+        # End-to-end check that an icon resolved from icons.json by
+        # the real _enrich_entity_icons codepath actually reaches the
+        # states dict passed to render_dashboard, not just that the
+        # wrapper method was called.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_1",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        hass.states.async_set("sensor.phase", "full_moon")
+        entity, _entry = make_entity()
+        moon_icons = {
+            "moon": {
+                "sensor": {
+                    "phase": {
+                        "default": "mdi:weather-night",
+                        "state": {"full_moon": "mdi:moon-full"},
+                    }
+                }
+            }
+        }
+
+        with (
+            patch(
+                "custom_components.eink_dashboard.async_get_icons",
+                AsyncMock(return_value=moon_icons),
+            ),
+            patch(
+                "custom_components.eink_dashboard.image.render_dashboard",
+                return_value=b"fake-png-bytes",
+            ) as mock_render,
+        ):
+            await entity._async_refresh(None)
+
+        _widgets, config = mock_render.call_args.args
+        assert (
+            config["states"]["sensor.phase"]["attributes"]["icon"]
+            == "mdi:moon-full"
+        )
 
     async def test_refresh_updates_timestamp(
         self, make_entity: Callable[..., Any]
