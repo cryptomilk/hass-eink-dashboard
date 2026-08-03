@@ -31,6 +31,8 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.icon import async_get_icons
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -260,6 +262,7 @@ async def _build_display_config(
             # existing nested values.
             "attributes": dict(state.attributes),
         }
+    await _enrich_entity_icons(hass, states)
     (
         number_format,
         language,
@@ -294,6 +297,77 @@ async def _build_display_config(
         config["device_battery_level"] = level
         config["device_battery_charging"] = is_charging
     return config
+
+
+async def _enrich_entity_icons(
+    hass: HomeAssistant,
+    states: dict[str, Any],
+) -> None:
+    """Inject icons.json-derived icons into entities lacking one.
+
+    Modern HA integrations (e.g. ``moon``) define state-dependent
+    icons in an ``icons.json`` file rather than setting them on the
+    entity, so ``state.attributes`` never carries an ``icon`` key for
+    them.  The HA frontend resolves these client-side; this dashboard
+    has no equivalent, so such entities would otherwise fall back to
+    a plain letter icon.  This mirrors that resolution server-side by
+    reading each entity's registry entry (for its integration platform
+    and translation key) and looking up the matching icon definition.
+
+    Only entities missing ``attributes["icon"]`` are touched, so user
+    or integration-set icons are never overridden.  Failures to load
+    icon definitions are logged and otherwise ignored so a broken or
+    unloaded integration cannot break rendering.
+
+    Args:
+        hass: Home Assistant instance.
+        states: Mutable states dict built by ``_build_display_config``
+            or ``EinkDashboardImage._build_states``.
+    """
+    registry = er.async_get(hass)
+    candidates: dict[str, er.RegistryEntry] = {}
+    platforms: set[str] = set()
+    for entity_id, data in states.items():
+        if data["attributes"].get("icon"):
+            continue
+        entry = registry.async_get(entity_id)
+        if entry is None or entry.translation_key is None:
+            continue
+        candidates[entity_id] = entry
+        platforms.add(entry.platform)
+
+    if not candidates:
+        return
+
+    icons: dict[str, Any] = {}
+    for platform in platforms:
+        try:
+            icons.update(await async_get_icons(hass, "entity", {platform}))
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Could not load icons.json for %s", platform)
+
+    for entity_id, entry in candidates.items():
+        domain = entity_id.split(".", 1)[0]
+        platform_icons = icons.get(entry.platform)
+        if not isinstance(platform_icons, dict):
+            continue
+        domain_icons = platform_icons.get(domain)
+        if not isinstance(domain_icons, dict):
+            continue
+        definition = domain_icons.get(entry.translation_key)
+        if not isinstance(definition, dict):
+            continue
+        state_icons = definition.get("state")
+        state_icon = (
+            state_icons.get(states[entity_id]["state"])
+            if isinstance(state_icons, dict)
+            else None
+        )
+        icon = (
+            state_icon if state_icon is not None else definition.get("default")
+        )
+        if icon:
+            states[entity_id]["attributes"]["icon"] = icon
 
 
 async def _fetch_forecasts(

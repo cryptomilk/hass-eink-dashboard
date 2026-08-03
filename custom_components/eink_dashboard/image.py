@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 from . import (
     _async_get_locale,
+    _enrich_entity_icons,
     _fetch_calendar_events,
     _fetch_forecasts,
     _fetch_history,
@@ -235,6 +236,7 @@ class EinkDashboardImage(ImageEntity):
         try:
             async with self._refresh_lock:
                 states = self._build_states()
+                await self._async_enrich_entity_icons(states)
                 await self._async_fetch_forecasts(states)
                 await self._async_fetch_history(states)
                 await self._async_fetch_calendar_events(states)
@@ -368,6 +370,18 @@ class EinkDashboardImage(ImageEntity):
             await asyncio.gather(
                 *(async_push_image(*args) for args in push_targets)
             )
+
+    async def _async_enrich_entity_icons(self, states: dict[str, Any]) -> None:
+        """Inject icons.json-derived icons into entities lacking one.
+
+        Delegates to the module-level ``_enrich_entity_icons`` so the
+        logic is shared with the WebSocket preview handlers.
+
+        Args:
+            states: Mutable states dict; resolved icons are injected
+                in-place into each entity's ``attributes``.
+        """
+        await _enrich_entity_icons(self.hass, states)
 
     async def _async_fetch_forecasts(self, states: dict[str, Any]) -> None:
         """Fetch daily forecasts for weather widgets and inject into states.

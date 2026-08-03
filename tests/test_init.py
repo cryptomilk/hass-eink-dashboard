@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -22,11 +22,13 @@ from homeassistant.components.frontend import (
     DATA_EXTRA_MODULE_URL,
     UrlManager,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard import (
     _async_get_locale,
+    _enrich_entity_icons,
     async_setup,
     async_setup_entry,
     async_unload_entry,
@@ -646,3 +648,229 @@ class TestAsyncGetLocale:
         assert fw == "language"
         assert df == "language"
         assert tf == "language"
+
+
+_ICONS_JSON_TARGET = "custom_components.eink_dashboard.async_get_icons"
+
+_MOON_ICONS = {
+    "moon": {
+        "sensor": {
+            "phase": {
+                "default": "mdi:weather-night",
+                "state": {"full_moon": "mdi:moon-full"},
+            }
+        }
+    }
+}
+
+
+class TestEnrichEntityIcons:
+    async def test_state_icon_resolved_from_icons_json(
+        self, hass: HomeAssistant
+    ) -> None:
+        # An entity with no "icon" attribute but a registry entry
+        # carrying a translation_key gets its icon resolved from the
+        # matching icons.json state mapping.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_1",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        states = {"sensor.phase": {"state": "full_moon", "attributes": {}}}
+        with patch(_ICONS_JSON_TARGET, AsyncMock(return_value=_MOON_ICONS)):
+            await _enrich_entity_icons(hass, states)
+
+        assert states["sensor.phase"]["attributes"]["icon"] == "mdi:moon-full"
+
+    async def test_default_icon_used_when_no_state_match(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A state value absent from the icons.json "state" map falls
+        # back to the "default" icon.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_2",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        states = {
+            "sensor.phase": {
+                "state": "waxing_crescent",
+                "attributes": {},
+            }
+        }
+        with patch(_ICONS_JSON_TARGET, AsyncMock(return_value=_MOON_ICONS)):
+            await _enrich_entity_icons(hass, states)
+
+        assert (
+            states["sensor.phase"]["attributes"]["icon"] == "mdi:weather-night"
+        )
+
+    async def test_existing_icon_not_overridden(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Entities that already carry an icon attribute are left
+        # untouched and never queried against icons.json.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_3",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        states = {
+            "sensor.phase": {
+                "state": "full_moon",
+                "attributes": {"icon": "mdi:custom-icon"},
+            }
+        }
+        with patch(_ICONS_JSON_TARGET, AsyncMock()) as mock_icons:
+            await _enrich_entity_icons(hass, states)
+
+        mock_icons.assert_not_called()
+        assert (
+            states["sensor.phase"]["attributes"]["icon"] == "mdi:custom-icon"
+        )
+
+    async def test_entity_without_registry_entry_skipped(
+        self, hass: HomeAssistant
+    ) -> None:
+        # An entity_id with no matching registry entry (e.g. a
+        # template or YAML-defined entity) is skipped without error.
+        states = {
+            "sensor.not_in_registry": {
+                "state": "on",
+                "attributes": {},
+            }
+        }
+        with patch(_ICONS_JSON_TARGET, AsyncMock()) as mock_icons:
+            await _enrich_entity_icons(hass, states)
+
+        mock_icons.assert_not_called()
+        assert "icon" not in states["sensor.not_in_registry"]["attributes"]
+
+    async def test_entity_without_translation_key_skipped(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A registry entry with no translation_key has no icons.json
+        # entry to look up, so it is skipped.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_4",
+            suggested_object_id="no_key",
+        )
+        states = {"sensor.no_key": {"state": "full_moon", "attributes": {}}}
+        with patch(_ICONS_JSON_TARGET, AsyncMock()) as mock_icons:
+            await _enrich_entity_icons(hass, states)
+
+        mock_icons.assert_not_called()
+        assert "icon" not in states["sensor.no_key"]["attributes"]
+
+    async def test_async_get_icons_failure_handled_gracefully(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A broken or unloaded integration must not break rendering.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_5",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        states = {"sensor.phase": {"state": "full_moon", "attributes": {}}}
+        with patch(
+            _ICONS_JSON_TARGET,
+            AsyncMock(side_effect=Exception("integration not found")),
+        ):
+            await _enrich_entity_icons(hass, states)
+
+        assert "icon" not in states["sensor.phase"]["attributes"]
+
+    async def test_deduplicates_platforms(self, hass: HomeAssistant) -> None:
+        # Two entities on the same platform trigger only one
+        # async_get_icons call for that platform (platforms are
+        # deduplicated via a set before fetching).
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_6",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_7",
+            suggested_object_id="phase_2",
+            translation_key="phase",
+        )
+        states = {
+            "sensor.phase": {"state": "full_moon", "attributes": {}},
+            "sensor.phase_2": {
+                "state": "waxing_crescent",
+                "attributes": {},
+            },
+        }
+        with patch(
+            _ICONS_JSON_TARGET, AsyncMock(return_value=_MOON_ICONS)
+        ) as mock_icons:
+            await _enrich_entity_icons(hass, states)
+
+        mock_icons.assert_called_once()
+        assert states["sensor.phase"]["attributes"]["icon"] == "mdi:moon-full"
+        assert (
+            states["sensor.phase_2"]["attributes"]["icon"]
+            == "mdi:weather-night"
+        )
+
+    async def test_bad_platform_does_not_poison_good_platform(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A stale registry entry pointing at an uninstalled or
+        # broken integration must not prevent icon resolution for
+        # entities on other, healthy platforms fetched in the same
+        # call to _enrich_entity_icons.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_8",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "sun",
+            "unique_9",
+            suggested_object_id="solar_elevation",
+            translation_key="solar_elevation",
+        )
+        states = {
+            "sensor.phase": {"state": "full_moon", "attributes": {}},
+            "sensor.solar_elevation": {
+                "state": "42",
+                "attributes": {},
+            },
+        }
+
+        async def _fake_async_get_icons(
+            hass: HomeAssistant,
+            category: str,
+            integrations: set[str],
+        ) -> dict[str, Any]:
+            (platform,) = integrations
+            if platform == "sun":
+                raise Exception("integration not found")
+            return _MOON_ICONS
+
+        with patch(
+            _ICONS_JSON_TARGET,
+            AsyncMock(side_effect=_fake_async_get_icons),
+        ):
+            await _enrich_entity_icons(hass, states)
+
+        assert states["sensor.phase"]["attributes"]["icon"] == "mdi:moon-full"
+        assert "icon" not in states["sensor.solar_elevation"]["attributes"]

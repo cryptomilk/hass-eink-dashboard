@@ -24,6 +24,7 @@ from homeassistant.components.frontend import (
     DATA_EXTRA_MODULE_URL,
     UrlManager,
 )
+from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -248,6 +249,50 @@ class TestWsRenderWidget:
         _, config = mock_render.call_args.args
         assert "sensor.temp" in config["states"]
         assert config["states"]["sensor.temp"]["state"] == "21.5"
+
+    async def test_config_enriches_icons_json_entities(
+        self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
+    ) -> None:
+        # Entities relying on icons.json state-dependent icons (e.g.
+        # moon phase) get their "icon" attribute resolved before the
+        # preview is rendered, same as the scheduled image render.
+        er.async_get(hass).async_get_or_create(
+            "sensor",
+            "moon",
+            "unique_1",
+            suggested_object_id="phase",
+            translation_key="phase",
+        )
+        hass.states.async_set("sensor.phase", "full_moon")
+        widget = {"type": "separator"}
+        client, entry = await _setup_entry(
+            hass, hass_ws_client, widgets=[widget]
+        )
+
+        moon_icons = {
+            "moon": {
+                "sensor": {
+                    "phase": {
+                        "default": "mdi:weather-night",
+                        "state": {"full_moon": "mdi:moon-full"},
+                    }
+                }
+            }
+        }
+        with (
+            patch(_RENDER_SVG_TARGET, return_value="<svg/>") as mock_render,
+            patch(
+                "custom_components.eink_dashboard.async_get_icons",
+                AsyncMock(return_value=moon_icons),
+            ),
+        ):
+            await _send_render_widget(client, entry.entry_id, 0)
+
+        _, config = mock_render.call_args.args
+        assert (
+            config["states"]["sensor.phase"]["attributes"]["icon"]
+            == "mdi:moon-full"
+        )
 
     async def test_config_includes_display_levels(
         self, hass: HomeAssistant, hass_ws_client: WebSocketGenerator
