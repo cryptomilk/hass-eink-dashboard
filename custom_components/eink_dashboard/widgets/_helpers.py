@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from typing import TYPE_CHECKING
 
@@ -377,6 +378,104 @@ def _auto_row_height(
     return svg_h
 
 
+@dataclass(frozen=True, slots=True)
+class EntityTextGeometry:
+    """Computed font sizes and positions for entity name/value/unit text.
+
+    Attributes:
+        name_font_sz: Font size for the entity name label.
+        name_x: X coordinate for the name text anchor.
+        name_y: Y coordinate for the name text anchor.
+        value_font_sz: Font size for the state value.
+        value_x: X coordinate for the value text anchor.
+        value_y: Y coordinate for the value text anchor.
+        unit_font_sz: Font size for the unit label.
+        unit_x: X coordinate for the unit text anchor.
+        unit_y: Y coordinate for the unit text anchor.
+    """
+
+    name_font_sz: int
+    name_x: int
+    name_y: int
+    value_font_sz: int
+    value_x: int
+    value_y: int
+    unit_font_sz: int
+    unit_x: int
+    unit_y: int
+
+
+def _entity_text_geometry(
+    m: WidgetMetrics,
+    header_h: int,
+    info_h: int,
+    section_h: int,
+    x_off: int,
+    lpad: int,
+    *,
+    value_text: str,
+    unit_text: str,
+    value_bold: bool,
+) -> EntityTextGeometry:
+    """Compute name/value/unit font sizes and positions.
+
+    Isolated from icon resolution and card-inset computation so the
+    text layout math can be swapped independently (e.g. when the
+    Entity widget's element layout changes) without touching the
+    rest of ``_entity_info_context()``.
+
+    Args:
+        m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
+        header_h: Height of the header row in pixels.
+        info_h: Height of the info section in pixels.
+        section_h: Total height of the header + info sections.
+        x_off: Left content inset (card border/bar width).
+        lpad: Additional left padding when ``x_off`` is 0.
+        value_text: Rendered value string, used to measure the
+            value's on-screen width so the unit can be placed
+            immediately to its right.
+        unit_text: Rendered unit string. Empty string means no
+            unit is shown, and ``unit_x`` falls back to
+            ``value_x``.
+        value_bold: Whether the value is rendered in bold, which
+            changes the font used for measuring ``value_text``.
+
+    Returns:
+        ``EntityTextGeometry`` with font sizes and positions for
+        the name, value, and unit text elements.
+    """
+    from ..render import _load_font
+
+    name_font_sz = max(10, round(header_h * 0.32))
+    name_x = x_off + lpad
+    name_y = header_h // 2
+
+    value_font_sz = max(10, round(section_h * 0.38))
+    value_x = x_off + lpad
+    value_y = header_h + round(info_h * 0.65)
+
+    unit_font_sz = m.font_secondary
+    unit_x = value_x
+    if unit_text:
+        value_font = _load_font(
+            value_font_sz, medium=not value_bold, bold=value_bold
+        )
+        text_w = round(value_font.getlength(value_text))
+        unit_x = value_x + text_w + m.inner_gap // 2
+
+    return EntityTextGeometry(
+        name_font_sz=name_font_sz,
+        name_x=name_x,
+        name_y=name_y,
+        value_font_sz=value_font_sz,
+        value_x=value_x,
+        value_y=value_y,
+        unit_font_sz=unit_font_sz,
+        unit_x=unit_x,
+        unit_y=value_y,
+    )
+
+
 def _entity_info_context(
     widget: Widget,
     config: DisplayConfig,
@@ -415,10 +514,7 @@ def _entity_info_context(
         section value/unit, card style, metrics, and colors.
         Returns ``None`` when the entity is missing from states.
     """
-    from ..render import (
-        _compute_metrics,
-        _load_font,
-    )
+    from ..render import _compute_metrics
 
     entity_id: str = widget.get("entity", "")
     name_override = widget.get("name")
@@ -519,28 +615,20 @@ def _entity_info_context(
     icon_glyph_x = icon_cx - icon_inner // 2
     icon_glyph_y = icon_cy - icon_inner // 2
 
-    # Name: left-aligned in header row, vertically centered. Kept
-    # small relative to the value below — the value is what users
-    # scan for at a glance, so it gets visual priority.
-    name_font_sz = max(10, round(header_h * 0.32))
-    name_x = x_off + lpad
-    name_y = header_h // 2
-
-    # Value: left-aligned, baseline at ~65% of the info section so
-    # the value and unit share an alphabetic baseline (HA style).
-    value_font_sz = max(10, round(section_h * 0.38))
-    value_x = x_off + lpad
-    value_y = header_h + round(info_h * 0.65)
-
-    # Unit: positioned to the right of the value text.
-    unit_font_sz = m.font_secondary
-    unit_x = value_x
-    if unit_text:
-        value_font = _load_font(
-            value_font_sz, medium=not value_bold, bold=value_bold
-        )
-        text_w = round(value_font.getlength(value_text))
-        unit_x = value_x + text_w + m.inner_gap // 2
+    # Name left-aligned in header row, value left-aligned with baseline
+    # at ~65% of the info section, unit positioned right of the value.
+    # See _entity_text_geometry() for the exact ratios.
+    geo = _entity_text_geometry(
+        m,
+        header_h,
+        info_h,
+        section_h,
+        x_off,
+        lpad,
+        value_text=value_text,
+        unit_text=unit_text,
+        value_bold=value_bold,
+    )
 
     return {
         "w": svg_w,
@@ -567,17 +655,17 @@ def _entity_info_context(
         # Header row text.
         "hide_name": hide_name,
         "name_text": name_text,
-        "name_x": name_x,
-        "name_y": name_y,
-        "name_font_sz": name_font_sz,
+        "name_x": geo.name_x,
+        "name_y": geo.name_y,
+        "name_font_sz": geo.name_font_sz,
         # Info section.
         "value_text": value_text,
-        "value_x": value_x,
-        "value_y": value_y,
-        "value_font_sz": value_font_sz,
+        "value_x": geo.value_x,
+        "value_y": geo.value_y,
+        "value_font_sz": geo.value_font_sz,
         "value_bold": value_bold,
         "unit_text": unit_text,
-        "unit_x": unit_x,
-        "unit_y": value_y,
-        "unit_font_sz": unit_font_sz,
+        "unit_x": geo.unit_x,
+        "unit_y": geo.unit_y,
+        "unit_font_sz": geo.unit_font_sz,
     }
