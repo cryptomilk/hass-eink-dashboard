@@ -757,6 +757,30 @@ export const SCHEMAS: Record<
         },
         { name: "attribute", selector: { text: {} } },
         { name: "unit", selector: { text: {} } },
+        {
+          name: "name_position",
+          default: "bottom",
+          selector: {
+            select: {
+              options: [
+                { value: "bottom", label: "Bottom" },
+                { value: "top", label: "Top" },
+              ],
+            },
+          },
+        },
+        {
+          name: "name_align",
+          default: "left",
+          selector: {
+            select: {
+              options: [
+                { value: "left", label: "Left" },
+                { value: "right", label: "Right" },
+              ],
+            },
+          },
+        },
       ],
     },
     {
@@ -1533,6 +1557,8 @@ export const LABELS: Record<string, string> = {
   gauge_type: "Gauge type",
   needle: "Needle mode",
   header_position: "Name position",
+  name_position: "Name position",
+  name_align: "Name alignment",
   show_unit: "Show unit",
   decimals: "Decimal places",
   points_per_hour: "Points per hour",
@@ -2296,13 +2322,13 @@ class EinkDashboardEditor extends HTMLElement {
       this._buildEntriesEditor(container, index);
     }
 
-    if (widget.type === "tile") {
+    if (widget.type === "tile" || widget.type === "entity") {
       this._buildConditionsPanel(container, index, {
         key: "invert_condition",
         title: "Invert",
         icon: "mdi:invert-colors",
         hint:
-          "Render the tile inverted (dark card, light text) when" +
+          "Render the widget inverted (dark card, light text) when" +
           " the conditions below are met.",
       });
     }

@@ -1,35 +1,44 @@
+{#- Forked from sensor.svg.j2, which keeps the pre-redesign
+    header+icon+graph layout that this template used to share.
+    Layout changes here (icon/value/unit/name geometry) do not
+    apply to sensor.svg.j2, and vice versa. -#}
 {%- from "_macros.svg.j2" import card_container, icon_circle -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_entity -%}
+{%- if invert -%}
+<rect x="0" y="0" width="{{ w }}" height="{{ h }}"
+  rx="{{ m_radius }}" ry="{{ m_radius }}"
+  fill="{{ hex_black }}"/>
+{%- endif -%}
 {%- call card_container(
     x=0, y=0, w=w, h=h,
     card_style=card_style,
     radius=m_radius, border=m_border,
     bar_width=bar_width,
-    border_color=hex_black,
+    border_color=hex_white if invert else hex_black,
     bar_color=hex_gray) -%}
-{#- Header row: icon right-aligned, name on the left. -#}
+{#- Icon: left-aligned, vertically centered against the full
+    widget height. -#}
 {%- if icon_svg or letter -%}
+{#- The icon is a decorative/secondary element next to the black
+    value text, so its outline stroke and glyph render gray (like
+    the name label) instead of black when not filled/inverted. The
+    inverted "needs attention" signal is unaffected: white on the
+    solid black card, same as value/unit/name. -#}
+{%- set icon_ring_stroke = hex_white if invert else hex_gray -%}
+{%- set icon_circle_fill = hex_black if invert else hex_white -%}
+{%- set icon_color = hex_white if invert
+    else (hex_gray if (icon_outline or icon_no_circle) else hex_white) -%}
 {{- icon_circle(icon_cx, icon_cy, icon_r,
     icon_glyph_x, icon_glyph_y,
     icon_stroke_w, icon_fill, icon_color,
-    hex_black, hex_white,
+    icon_ring_stroke, icon_circle_fill,
     icon_svg=icon_svg,
     icon_outline=icon_outline, icon_no_circle=icon_no_circle,
     letter=letter, letter_font_sz=letter_font_sz) -}}
 {%- endif -%}
-{%- if not hide_name -%}
-<text
-  x="{{ name_x }}" y="{{ name_y }}"
-  font-family="Roboto"
-  font-weight="500"
-  font-size="{{ name_font_sz }}"
-  dominant-baseline="central"
-  fill="{{ hex_gray }}">{{ name_text }}</text>
-{%- endif -%}
-{#- Info section: large value with optional unit beside it. -#}
-{%- if not hide_state -%}
+{#- Value + unit: black, positioned right of the icon. -#}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
@@ -38,27 +47,26 @@
 {%- endif %}
   font-size="{{ value_font_sz }}"
   dominant-baseline="auto"
-  fill="{{ hex_black }}">{{ value_text }}</text>
+  fill="{{ hex_white if invert else hex_black }}">{{ value_text }}</text>
 {%- if unit_text -%}
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
   font-family="Roboto"
   font-size="{{ unit_font_sz }}"
   dominant-baseline="auto"
-  fill="{{ hex_gray }}">{{ unit_text }}</text>
+  fill="{{ hex_white if invert else hex_black }}">{{ unit_text }}</text>
 {%- endif -%}
-{%- endif -%}
-{#- Graph section: sparkline history chart below the info section. -#}
-{%- if has_graph and polyline_points -%}
-{%- if fill_points -%}
-<polygon points="{{ fill_points }}"
-  fill="{{ hex_light_gray }}" stroke="none"/>
-{%- endif -%}
-<polyline points="{{ polyline_points }}"
-  fill="none"
-  stroke="{{ hex_black }}"
-  stroke-width="{{ graph_stroke_w }}"
-  stroke-linejoin="round"/>
+{#- Name: gray, above or below the value+unit line, left- or
+    right-aligned per name_align. -#}
+{%- if not hide_name -%}
+<text
+  x="{{ name_x }}" y="{{ name_y }}"
+  font-family="Roboto"
+  font-weight="500"
+  font-size="{{ name_font_sz }}"
+  text-anchor="{{ name_anchor }}"
+  dominant-baseline="central"
+  fill="{{ hex_white if invert else hex_gray }}">{{ name_text }}</text>
 {%- endif -%}
 {%- endcall -%}
 {%- endif -%}
