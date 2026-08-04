@@ -240,6 +240,35 @@ def assert_has_gray_pixels(
     ), f"no gray pixels ({low}–{high}) in ({x1},{y1})–({x2},{y2})"
 
 
+def assert_no_gray_pixels(
+    img: Image.Image,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    low: int = 100,
+    high: int = 140,
+) -> None:
+    """Assert that no pixel in the region is gray.
+
+    A pixel value strictly between ``low`` and ``high`` counts as gray.
+
+    Args:
+        img: A grayscale ("L" mode) PIL image.
+        x1: Left edge of the region.
+        y1: Top edge of the region.
+        x2: Right edge of the region.
+        y2: Bottom edge of the region.
+        low: Lower bound (exclusive) for gray range.
+        high: Upper bound (exclusive) for gray range.
+    """
+    assert not any(
+        low < pixel(img, x, y) < high
+        for y in range(y1, y2)
+        for x in range(x1, x2)
+    ), f"unexpected gray pixels ({low}–{high}) in ({x1},{y1})–({x2},{y2})"
+
+
 def assert_vertically_centered(
     img: Image.Image,
     icon_region: tuple[int, int, int, int],
