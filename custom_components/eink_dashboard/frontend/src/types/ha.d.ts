@@ -689,6 +689,20 @@ export interface EntityWidget extends WidgetBase {
   icon_style?: IconStyle;
   /** When true, renders the state value in bold. */
   bold_value?: boolean;
+  /**
+   * Position of the name relative to the value+unit line.
+   * Defaults to `"bottom"`.
+   */
+  name_position?: "top" | "bottom";
+  /** Text alignment of the name. Defaults to `"left"`. */
+  name_align?: "left" | "right";
+  /**
+   * HA conditions that trigger inverted rendering (black card,
+   * white text) as an e-ink attention signal. Same condition
+   * format as `visibility`. The entity renders inverted when the
+   * conditions are met.
+   */
+  invert_condition?: (Condition | LegacyCondition)[];
 }
 
 /** Y-axis range limits for the sensor sparkline graph. */

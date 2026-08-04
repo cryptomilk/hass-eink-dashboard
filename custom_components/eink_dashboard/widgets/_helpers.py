@@ -420,9 +420,9 @@ def _entity_text_geometry(
     """Compute name/value/unit font sizes and positions.
 
     Isolated from icon resolution and card-inset computation so the
-    text layout math can be swapped independently (e.g. when the
-    Entity widget's element layout changes) without touching the
-    rest of ``_entity_info_context()``.
+    text layout math can be swapped independently without touching
+    the rest of ``_entity_info_context()``, the header+info layout
+    shared by the Sensor and Graph widget builders.
 
     Args:
         m: ``WidgetMetrics`` dataclass from ``_compute_metrics``.
@@ -488,7 +488,7 @@ def _entity_info_context(
     """Build shared icon/name/value/unit context for entity-like widgets.
 
     Handles the common header + info section layout shared by the
-    Entity and Sensor widget builders.  Returns ``None`` when the
+    Sensor and Graph widget builders.  Returns ``None`` when the
     entity is missing from the state dict; callers emit a white-canvas
     fallback in that case.
 
@@ -500,14 +500,13 @@ def _entity_info_context(
         config: Display config with ``states`` and
             ``display_levels``.
         section_h: Height of the entity info section in pixels.
-            Entity widget passes ``svg_h``; Sensor widget passes
-            ``entity_h`` (svg_h minus graph_h).
+            Sensor widget passes ``entity_h`` (svg_h minus
+            graph_h); Graph widget passes ``header_h``.
         svg_w: Full widget width in pixels.
         svg_h: Full widget height in pixels.
         attribute: Optional HA attribute key.  When set, the
             attribute value is shown instead of the entity state,
             and automatic ``unit_of_measurement`` is suppressed.
-            Only the Entity widget passes a non-None value here.
 
     Returns:
         Template context dict with icon geometry, header text, info

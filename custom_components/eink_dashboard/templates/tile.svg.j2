@@ -12,7 +12,8 @@
     card_style=card_style,
     radius=m_radius, border=m_border,
     bar_width=bar_width,
-    border_color=hex_black, bar_color=hex_gray) -%}
+    border_color=hex_white if invert else hex_black,
+    bar_color=hex_gray) -%}
 {#- tile has no right-aligned value slot; the state line is
     rendered as the macro's secondary text, so bold_value
     maps to secondary_bold below. #}

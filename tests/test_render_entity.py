@@ -31,7 +31,6 @@ from custom_components.eink_dashboard.widgets.entity import (
     _build_entity_context,
 )
 from tests.helpers import (
-    _icon_ring_region,
     assert_all_white,
     assert_card_border,
     assert_has_dark_pixels,
@@ -147,19 +146,21 @@ def _content_x_range(w: int, h: int) -> tuple[int, int]:
 
     Args:
         w: Widget width in pixels.
-        h: Widget height in pixels (also the metrics row height —
-            the redesigned Entity widget has no separate header
-            band, so metrics derive from the full widget height).
+        h: Widget height in pixels. Card framing (padding) derives
+            from the full widget height, but the icon itself derives
+            from a single-row-equivalent height (h // 2) so it stays
+            proportionate to the value/unit/name text next to it.
 
     Returns:
         (text_x0, text_x1): left edge of the text column and right
         content edge of the widget.
     """
     m = _compute_metrics(h)
+    m_icon = _compute_metrics(h // 2)
     x_off, r_inset, _ = _card_insets(m, "none", 16)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
-    text_x0 = x_off + lpad + m.icon_dia + m.inner_gap
+    text_x0 = x_off + lpad + m_icon.icon_dia + m_icon.inner_gap
     text_x1 = w - r_inset - rpad
     return text_x0, text_x1
 
@@ -272,15 +273,45 @@ class TestRenderEntity:
     def _icon_ring(
         self, h: int, display_levels: int = 16
     ) -> tuple[int, int, int, int, int, int]:
-        """Left-aligned icon ring region (icon moved to the left)."""
+        """Left-aligned icon ring region (icon moved to the left).
+
+        The icon's diameter/border derive from a single-row-
+        equivalent height (h // 2), matching the production
+        geometry in ``_build_entity_context`` — the icon stays
+        proportionate to the value/unit/name text next to it rather
+        than scaling with the full (2-row-tall) widget height. Card
+        padding (used for the icon's x position) still derives from
+        the full height, since that's a property of the card frame,
+        not the icon.
+        """
         m = _compute_metrics(h)
-        stroke_inset = m.border * 3 // 2 if display_levels <= 2 else 0
-        icon_r = m.icon_dia // 2
+        m_icon = _compute_metrics(h // 2)
+        icon_r = m_icon.icon_dia // 2
+        icon_stroke_w = (
+            m_icon.border * 3 if display_levels <= 2 else m_icon.border
+        )
+        # Checks a window extending +-icon_r//2 from the circle's
+        # horizontal center. The circle's own curve dips measurably
+        # below the top by the edge of that window -- a geometric
+        # property of the circle, independent of stroke width.
+        # Compensate by extending the vertical inset by that dip
+        # amount, plus half the actual stroke width, so the checked
+        # band clears both the curve and the ring stroke.
+        dx_max = icon_r // 2
+        dip = icon_r - round((icon_r**2 - dx_max**2) ** 0.5)
+        stroke_inset = dip + icon_stroke_w // 2 + 2
+        # icon_cx uses the card's own padding (m), not m_icon --
+        # the icon's *position* is a property of the card frame,
+        # only its diameter/border derive from the row-equivalent
+        # height. Inlined rather than delegating to the shared
+        # _icon_ring_region() helper, which assumes a single metrics
+        # object drives both position and size.
         icon_cx = m.padding + icon_r
         icon_cy = h // 2
-        ring_x1, ring_y1, ring_x2, ring_y2 = _icon_ring_region(
-            h, m, stroke_inset=stroke_inset
-        )
+        ring_y1 = icon_cy - icon_r + stroke_inset
+        ring_y2 = icon_cy - m_icon.icon_inner // 2 - 1
+        ring_x1 = icon_cx - icon_r // 2 + 3
+        ring_x2 = icon_cx + icon_r // 2 - 3
         return icon_cx, icon_cy, ring_x1, ring_y1, ring_x2, ring_y2
 
     def test_entity_icon_circle_gray_fill_active(self) -> None:
@@ -625,14 +656,17 @@ class TestRenderEntity:
         ]
         img = render_to_image(widgets, self._config())
         value_bbox = _band_bbox(img, text_x0, 0, text_x1, h, 0, 60)
-        # min_pixels is raised so a stray anti-aliased edge pixel from
-        # the black value text (which anti-aliases through the whole
-        # tone range) can't be mistaken for gray name content and
-        # skew the measured name bbox.
-        name_bbox = _band_bbox(
-            img, text_x0, 0, text_x1, h, 100, 140, min_pixels=200
-        )
         assert value_bbox is not None
+        # Search for the name band strictly below the value's own
+        # bounding box, skipping one extra row. Black text
+        # anti-aliases through every gray tone along its own outline
+        # (not just its edges), so searching starting exactly at the
+        # value's bottom edge picks up stray gray-band hits from the
+        # value glyph itself; the +1 margin clears that row and
+        # isolates genuine name content instead.
+        name_bbox = _band_bbox(
+            img, text_x0, value_bbox[3] + 1, text_x1, h, 100, 140
+        )
         assert name_bbox is not None
         value_h = value_bbox[3] - value_bbox[1]
         name_h = name_bbox[3] - name_bbox[1]
@@ -1223,6 +1257,34 @@ class TestRenderEntity:
         inverted_svg = render_widget_svg(inverted, self._config())
         assert "<circle" not in inverted_svg, (
             "inverted entity must suppress the icon circle entirely"
+        )
+
+    def test_entity_invert_with_border_uses_white_stroke(self) -> None:
+        # When inverted, the card border stroke must switch to white
+        # so it stays visible against the solid black card
+        # background — a black stroke would vanish against the
+        # black fill.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.motion",
+            "card_style": "border",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion",
+                    "state": "on",
+                }
+            ],
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'stroke="#ffffff"' in svg, (
+            "inverted entity with card_style=border must render a "
+            "white border stroke, not a black one that vanishes "
+            "against the black card background"
         )
 
     def test_entity_invert_numeric_state_condition(self) -> None:
