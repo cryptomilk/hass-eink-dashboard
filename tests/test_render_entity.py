@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
@@ -31,17 +31,20 @@ from custom_components.eink_dashboard.widgets.entity import (
     _build_entity_context,
 )
 from tests.helpers import (
-    _right_icon_ring_region,
+    _icon_ring_region,
     assert_all_white,
     assert_card_border,
     assert_has_dark_pixels,
     assert_has_gray_pixels,
+    assert_no_gray_pixels,
     assert_scales_proportionally,
     content_bbox,
     make_config,
-    pixel,
     render_to_image,
 )
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 MOCK_ENTITY_STATES = {
     "sensor.temperature": {
@@ -74,13 +77,99 @@ MOCK_ENTITY_STATES = {
             "friendly_name": "Plain",
         },
     },
+    # For invert_condition numeric_state tests.
+    "sensor.count": {
+        "state": "2",
+        "attributes": {"friendly_name": "Count"},
+    },
+    # For invert_condition state_not tests.
+    "sensor.status": {
+        "state": "washing",
+        "attributes": {"friendly_name": "Status"},
+    },
 }
 
 
+def _band_bbox(
+    img: Image.Image,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    low: int,
+    high: int,
+    *,
+    min_pixels: int = 20,
+) -> tuple[int, int, int, int] | None:
+    """Return the bbox of pixels within [low, high] in a region.
+
+    Unlike ``content_bbox`` (any non-white pixel), this isolates a
+    specific tone band so gray name text can be distinguished from
+    black value/unit text even when both appear in the same region.
+    A minimum pixel count is required before trusting a match —
+    anti-aliased edges of black text blend through every gray tone
+    for a pixel or two, so a handful of stray hits within the band
+    are noise, not genuine gray content.
+
+    Args:
+        img: A grayscale ("L" mode) PIL image.
+        x1: Left edge of the region.
+        y1: Top edge of the region.
+        x2: Right edge of the region.
+        y2: Bottom edge of the region.
+        low: Lower bound (exclusive) of the tone band.
+        high: Upper bound (exclusive) of the tone band.
+        min_pixels: Minimum number of matching pixels required for
+            the match to count as real content rather than
+            anti-aliasing noise.
+
+    Returns:
+        (left, top, right, bottom) of matching content in absolute
+        image coordinates, or None if fewer than ``min_pixels`` pixels
+        in the region fall within the band.
+    """
+    crop = img.crop((x1, y1, x2, y2))
+    mask = crop.point(lambda p: 255 if low < p < high else 0)
+    if sum(1 for v in mask.get_flattened_data() if v == 255) < min_pixels:
+        return None
+    bbox = mask.getbbox()
+    if bbox is None:
+        return None
+    return (x1 + bbox[0], y1 + bbox[1], x1 + bbox[2], y1 + bbox[3])
+
+
+def _content_x_range(w: int, h: int) -> tuple[int, int]:
+    """Left/right x-bounds of the text column right of the icon.
+
+    Mirrors the geometry the new left-aligned Entity layout is
+    expected to use: icon column at the left content edge, text
+    column starting after the icon + inner gap.
+
+    Args:
+        w: Widget width in pixels.
+        h: Widget height in pixels (also the metrics row height —
+            the redesigned Entity widget has no separate header
+            band, so metrics derive from the full widget height).
+
+    Returns:
+        (text_x0, text_x1): left edge of the text column and right
+        content edge of the widget.
+    """
+    m = _compute_metrics(h)
+    x_off, r_inset, _ = _card_insets(m, "none", 16)
+    lpad = m.padding if x_off == 0 else 0
+    rpad = m.padding if r_inset == 0 else 0
+    text_x0 = x_off + lpad + m.icon_dia + m.inner_gap
+    text_x1 = w - r_inset - rpad
+    return text_x0, text_x1
+
+
 class TestRenderEntity:
-    # Verify rendering of the Entity widget: name and icon in a header
-    # row (name left, icon right), with the entity state value displayed
-    # in a large font in the lower info section.
+    # Verify rendering of the redesigned Entity widget: icon on the
+    # left (vertically centered against the full widget height),
+    # value+unit (both black) to the right of the icon, and the
+    # entity name (gray, smaller) positioned above or below the
+    # value+unit line per name_position/name_align.
     _DEFAULTS: ClassVar[dict[str, object]] = {
         "width": 400,
         "height": 300,
@@ -93,10 +182,11 @@ class TestRenderEntity:
     # ── Structural tests ──────────────────────────────
 
     def test_entity_card_border(self) -> None:
-        # Border style draws dark pixels on all four edges.
+        # Border style draws dark pixels on all four edges. Metrics
+        # are now derived from the full widget height (no separate
+        # header band).
         h = 112
-        # Metrics are derived from the header section height (40% of h).
-        m = _compute_metrics(round(h * 0.40))
+        m = _compute_metrics(h)
         widgets = [
             {
                 "type": "entity",
@@ -115,7 +205,7 @@ class TestRenderEntity:
         # Left_bar style draws gray pixels on the left edge;
         # the right edge should be white.
         h = 112
-        m = _compute_metrics(round(h * 0.40))
+        m = _compute_metrics(h)
         widgets = [
             {
                 "type": "entity",
@@ -175,19 +265,28 @@ class TestRenderEntity:
         assert with_none == without
 
     # ── Icon style tests ──────────────────────────────
-    # Use h=224 so the header section (40% = 90px) gives a large
-    # enough icon circle to measure the ring region reliably.
+    # Use h=224 for a large enough icon circle to measure the ring
+    # region reliably. The icon is now left-aligned and vertically
+    # centered against the full widget height.
 
     def _icon_ring(
-        self, h: int, card_style: str = "none", display_levels: int = 16
+        self, h: int, display_levels: int = 16
     ) -> tuple[int, int, int, int, int, int]:
-        """Delegate to module-level _right_icon_ring_region."""
-        return _right_icon_ring_region(400, h, card_style, display_levels)
+        """Left-aligned icon ring region (icon moved to the left)."""
+        m = _compute_metrics(h)
+        stroke_inset = m.border * 3 // 2 if display_levels <= 2 else 0
+        icon_r = m.icon_dia // 2
+        icon_cx = m.padding + icon_r
+        icon_cy = h // 2
+        ring_x1, ring_y1, ring_x2, ring_y2 = _icon_ring_region(
+            h, m, stroke_inset=stroke_inset
+        )
+        return icon_cx, icon_cy, ring_x1, ring_y1, ring_x2, ring_y2
 
     def test_entity_icon_circle_gray_fill_active(self) -> None:
         # An active entity (state "on") without explicit icon_style
-        # draws a filled gray circle in the right portion of the header.
-        # Check the ring area above the icon glyph for gray fill pixels.
+        # draws a filled gray circle on the left. Check the ring area
+        # above the icon glyph for gray fill pixels.
         h = 224
         _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h)
         widgets = [
@@ -198,6 +297,10 @@ class TestRenderEntity:
                 "w": 400,
                 "h": h,
                 "entity": "binary_sensor.motion",
+                # hide_name isolates the icon ring from the name
+                # text, which would otherwise render in the same
+                # left column and confound the gray-fill check.
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
@@ -224,18 +327,18 @@ class TestRenderEntity:
                 "w": 400,
                 "h": h,
                 "entity": "binary_sensor.front_door",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
-        found_gray = False
-        for y in range(ry1, ry2):
-            for x in range(rx1, rx2):
-                if COLOR_GRAY - 20 < pixel(img, x, y) < COLOR_GRAY + 20:
-                    found_gray = True
-                    break
-        assert not found_gray, (
-            "outlined circle should have white fill (no gray) "
-            "in the top ring above the icon glyph"
+        assert_no_gray_pixels(
+            img,
+            rx1,
+            ry1,
+            rx2,
+            ry2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
         )
 
     def test_entity_icon_style_filled_explicit(self) -> None:
@@ -252,6 +355,7 @@ class TestRenderEntity:
                 "h": h,
                 "entity": "binary_sensor.front_door",
                 "icon_style": "filled",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
@@ -279,17 +383,18 @@ class TestRenderEntity:
                 "h": h,
                 "entity": "binary_sensor.motion",
                 "icon_style": "outlined",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
-        found_gray = False
-        for y in range(ry1, ry2):
-            for x in range(rx1, rx2):
-                if COLOR_GRAY - 20 < pixel(img, x, y) < COLOR_GRAY + 20:
-                    found_gray = True
-                    break
-        assert not found_gray, (
-            "explicitly outlined circle should have white fill"
+        assert_no_gray_pixels(
+            img,
+            rx1,
+            ry1,
+            rx2,
+            ry2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
         )
 
     def test_entity_icon_style_none_no_circle(self) -> None:
@@ -306,17 +411,18 @@ class TestRenderEntity:
                 "h": h,
                 "entity": "binary_sensor.motion",
                 "icon_style": "none",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
-        found_gray = False
-        for y in range(ry1, ry2):
-            for x in range(rx1, rx2):
-                if COLOR_GRAY - 20 < pixel(img, x, y) < COLOR_GRAY + 20:
-                    found_gray = True
-                    break
-        assert not found_gray, (
-            "icon_style='none' should not draw a gray circle"
+        assert_no_gray_pixels(
+            img,
+            rx1,
+            ry1,
+            rx2,
+            ry2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
         )
 
     def test_entity_2level_always_outlined(self) -> None:
@@ -332,18 +438,18 @@ class TestRenderEntity:
                 "w": 400,
                 "h": h,
                 "entity": "binary_sensor.motion",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config(display_levels=2))
-        found_gray = False
-        for y in range(ry1, ry2):
-            for x in range(rx1, rx2):
-                if COLOR_GRAY - 20 < pixel(img, x, y) < COLOR_GRAY + 20:
-                    found_gray = True
-                    break
-        assert not found_gray, (
-            "2-level display must force outlined (no gray fill) "
-            "even for active entity"
+        assert_no_gray_pixels(
+            img,
+            rx1,
+            ry1,
+            rx2,
+            ry2,
+            low=COLOR_GRAY - 20,
+            high=COLOR_GRAY + 20,
         )
 
     def test_entity_hide_icon_suppresses_icon(self) -> None:
@@ -386,13 +492,13 @@ class TestRenderEntity:
         img = render_to_image(widgets, self._config())
         assert_all_white(img, ring_x1, ring_y1, ring_x2, ring_y2)
 
-    def test_entity_hide_name_suppresses_name(self) -> None:
-        # hide_name=True must leave the name text area (left portion
-        # of the header row) white — the name is not rendered.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
-        widgets = [
+    def test_entity_hide_icon_collapses_column(self) -> None:
+        # hide_icon=True must shift value/unit text left to the
+        # content edge, closing the gap normally reserved for the
+        # icon column.
+        h = 224
+        m = _compute_metrics(h)
+        widgets_normal = [
             {
                 "type": "entity",
                 "x": 0,
@@ -400,18 +506,30 @@ class TestRenderEntity:
                 "w": 400,
                 "h": h,
                 "entity": "sensor.temperature",
-                "hide_name": True,
             }
         ]
-        img = render_to_image(widgets, self._config())
-        assert_all_white(img, m.padding, 0, 200, header_h)
+        widgets_hidden = [{**widgets_normal[0], "hide_icon": True}]
+        img_n = render_to_image(widgets_normal, self._config())
+        img_h = render_to_image(widgets_hidden, self._config())
+        bbox_n = _band_bbox(img_n, 0, 0, 400, h, 0, 60)
+        bbox_h = _band_bbox(img_h, 0, 0, 400, h, 0, 60)
+        assert bbox_n is not None
+        assert bbox_h is not None
+        assert bbox_h[0] < bbox_n[0], (
+            "value must start further left when the icon is hidden"
+        )
+        # +3 tolerates anti-aliased glyph edge slop at the left
+        # boundary of the value text.
+        assert bbox_h[0] <= m.padding + 3, (
+            "value must start near the left content edge when the "
+            "icon column is collapsed"
+        )
 
-    def test_entity_hide_name_value_still_visible(self) -> None:
-        # hide_name=True must not affect the info section — the state
-        # value keeps rendering below the (now empty) header row.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
+    def test_entity_hide_name_omits_name_entirely(self) -> None:
+        # hide_name=True must omit the name text everywhere in the
+        # text column, while the value keeps rendering.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -424,11 +542,22 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        assert_has_dark_pixels(img, m.padding, header_h, 350, h)
+        # min_pixels is raised well above the default: black value
+        # text anti-aliases through the entire 0-255 range at its
+        # edges, so a handful of those edge pixels can land inside
+        # the gray band by chance. A high threshold ensures only
+        # genuine gray (name) content trips this assertion.
+        assert (
+            _band_bbox(img, text_x0, 0, text_x1, h, 100, 140, min_pixels=200)
+            is None
+        ), "no gray (name) content should render when hide_name=True"
+        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
+            "value must still render when hide_name=True"
+        )
 
     def test_entity_hide_name_icon_still_visible(self) -> None:
         # hide_name=True must not affect icon rendering — the icon
-        # circle keeps drawing in the header row's right portion.
+        # circle keeps drawing on the left.
         h = 224
         _, _, rx1, ry1, rx2, ry2 = self._icon_ring(h)
         widgets = [
@@ -456,11 +585,10 @@ class TestRenderEntity:
     # ── Content tests ─────────────────────────────────
 
     def test_entity_draws_name_and_value(self) -> None:
-        # The header row (top ~40%) has name text on the left, and the
-        # info section (bottom ~60%) has the large state value.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
+        # Value (black) and name (gray) both render in the text
+        # column right of the icon.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -472,18 +600,19 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Name area: left portion of the header row.
-        assert_has_dark_pixels(img, m.padding, 0, 200, header_h)
-        # Value area: info section below the header row.
-        assert_has_dark_pixels(img, m.padding, header_h, 350, h)
+        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
+            "value should render in black"
+        )
+        assert _band_bbox(img, text_x0, 0, text_x1, h, 100, 140) is not None, (
+            "name should render in gray"
+        )
 
     def test_entity_value_font_larger_than_name(self) -> None:
         # The state value is the element users scan for at a
         # glance, so it must render in a larger font than the
         # entity name -- compare rendered glyph heights.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -495,14 +624,18 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Name area: left portion of the header row.
-        name_bbox = content_bbox(img, m.padding, 0, 200, header_h)
-        # Value area: info section below the header row.
-        value_bbox = content_bbox(img, m.padding, header_h, 350, h)
-        assert name_bbox is not None
+        value_bbox = _band_bbox(img, text_x0, 0, text_x1, h, 0, 60)
+        # min_pixels is raised so a stray anti-aliased edge pixel from
+        # the black value text (which anti-aliases through the whole
+        # tone range) can't be mistaken for gray name content and
+        # skew the measured name bbox.
+        name_bbox = _band_bbox(
+            img, text_x0, 0, text_x1, h, 100, 140, min_pixels=200
+        )
         assert value_bbox is not None
-        name_h = name_bbox[3] - name_bbox[1]
+        assert name_bbox is not None
         value_h = value_bbox[3] - value_bbox[1]
+        name_h = name_bbox[3] - name_bbox[1]
         assert value_h > name_h
 
     def test_entity_bold_value_renders_bold_weight(self) -> None:
@@ -630,6 +763,79 @@ class TestRenderEntity:
             "unit= override should change rendered output"
         )
 
+    def test_entity_unit_positioned_right_of_value(self) -> None:
+        # The unit extends the black value+unit block further right
+        # than the value renders alone — proving the unit is placed
+        # immediately after the value, not elsewhere.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+        }
+        states_no_unit = {
+            **MOCK_ENTITY_STATES,
+            "sensor.temperature": {
+                "state": "22.5",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                },
+            },
+        }
+        img_with = render_to_image([base], self._config())
+        img_without = render_to_image(
+            [base], self._config(states=states_no_unit)
+        )
+        bbox_with = _band_bbox(img_with, text_x0, 0, text_x1, h, 0, 60)
+        bbox_without = _band_bbox(img_without, text_x0, 0, text_x1, h, 0, 60)
+        assert bbox_with is not None
+        assert bbox_without is not None
+        assert bbox_with[2] > bbox_without[2], (
+            "unit text should extend the value+unit block to the right"
+        )
+        # ±2 tolerates sub-pixel rounding differences between the
+        # two independently rendered images.
+        assert abs(bbox_with[0] - bbox_without[0]) <= 2, (
+            "value should start at the same x with or without a unit"
+        )
+
+    def test_entity_unit_renders_black_not_gray(self) -> None:
+        # Unit must render black (like the value), not gray. Push the
+        # name to the top so the lower half of the text column
+        # contains only value+unit, then confirm no gray pixels
+        # appear there.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+                "name_position": "top",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        lower = (text_x0, h // 2, text_x1, h)
+        # min_pixels is raised well above the default: black
+        # value+unit text anti-aliases through the entire 0-255
+        # range at its edges, so a handful of those edge pixels can
+        # land inside the gray band by chance. A high threshold
+        # ensures only genuine gray content trips this assertion.
+        assert _band_bbox(img, *lower, 100, 140, min_pixels=200) is None, (
+            "value+unit row must contain no gray pixels"
+        )
+        assert _band_bbox(img, *lower, 0, 60) is not None, (
+            "value+unit row must contain black pixels"
+        )
+
     def test_entity_attribute_display(self) -> None:
         # attribute= shows the specified attribute value instead of the
         # entity state; renders differ from the default.
@@ -688,10 +894,9 @@ class TestRenderEntity:
 
     def test_entity_attribute_unknown_no_crash(self) -> None:
         # attribute= with a nonexistent attribute key renders without
-        # crashing; name text still appears in the header row.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
+        # crashing; value text still appears in the text column.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -704,21 +909,15 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Name text still renders in the header area even when attribute
-        # is unknown (value shows "unknown" text).
-        assert_has_dark_pixels(img, m.padding, 0, 200, header_h)
+        assert_has_dark_pixels(img, text_x0, 0, text_x1, h, threshold=140)
 
     def test_entity_no_device_class_letter_fallback(self) -> None:
         # An entity without device_class renders a letter fallback in
-        # the icon area on the right side of the header row.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
-        _, r_inset, _ = _card_insets(m, "none", 16)
-        rpad = m.padding if r_inset == 0 else 0
-        icon_dia = round(header_h * 0.82)
-        icon_r = icon_dia // 2
-        icon_x1 = 400 - r_inset - rpad - icon_r * 2
+        # the icon area on the left side of the widget.
+        h = 224
+        m = _compute_metrics(h)
+        x1 = m.padding
+        x2 = m.padding + m.icon_dia
         widgets = [
             {
                 "type": "entity",
@@ -727,11 +926,11 @@ class TestRenderEntity:
                 "w": 400,
                 "h": h,
                 "entity": "sensor.no_class",
+                "hide_name": True,
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Icon area (right portion of header row) contains content.
-        assert_has_dark_pixels(img, icon_x1, 0, 400, header_h, threshold=200)
+        assert_has_dark_pixels(img, x1, 0, x2, h, threshold=200)
 
     # ── Data edge cases ───────────────────────────────
 
@@ -766,19 +965,13 @@ class TestRenderEntity:
 
     # ── Alignment tests ───────────────────────────────
 
-    def test_entity_icon_in_header_right(self) -> None:
-        # The icon appears in the right portion of the header row and
-        # contains dark pixels (circle + glyph).
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
-        _, r_inset, _ = _card_insets(m, "none", 16)
-        rpad = m.padding if r_inset == 0 else 0
-        icon_dia = round(header_h * 0.82)
-        icon_r = icon_dia // 2
-        icon_cx = 400 - r_inset - rpad - icon_r
-        icon_x1 = icon_cx - icon_r
-        icon_x2 = min(icon_cx + icon_r + 1, 400)
+    def test_entity_icon_vertically_centered_in_widget(self) -> None:
+        # The icon is vertically centered against the full widget
+        # height, not a header sub-band.
+        h = 224
+        m = _compute_metrics(h)
+        x1 = m.padding
+        x2 = m.padding + m.icon_dia
         widgets = [
             {
                 "type": "entity",
@@ -786,20 +979,24 @@ class TestRenderEntity:
                 "y": 0,
                 "w": 400,
                 "h": h,
-                "entity": "sensor.temperature",
+                "entity": "binary_sensor.motion",
             }
         ]
         img = render_to_image(widgets, self._config())
-        # Icon area on the right side of the header row has content.
-        assert_has_dark_pixels(
-            img, icon_x1, 0, icon_x2, header_h, threshold=200
+        bbox = content_bbox(img, x1, 0, x2, h)
+        assert bbox is not None
+        center = (bbox[1] + bbox[3]) / 2
+        # ±4 tolerates font-hinting vertical offset in the glyph
+        # bounding box relative to the true geometric center.
+        assert abs(center - h / 2) <= 4, (
+            f"icon vertical center {center:.1f} not centered on h/2={h / 2}"
         )
 
-    def test_entity_name_in_header_left(self) -> None:
-        # The entity name appears in the left portion of the header row.
-        h = 112
-        header_h = round(h * 0.40)
-        m = _compute_metrics(header_h)
+    def test_entity_value_right_of_icon(self) -> None:
+        # The value renders in the text column to the right of the
+        # icon column.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -811,7 +1008,353 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        assert_has_dark_pixels(img, m.padding, 0, 200, header_h)
+        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
+            "value must render right of the icon column"
+        )
+
+    def test_entity_name_align_left_default(self) -> None:
+        # Without name_align, the name is left-aligned near the
+        # start of the text column.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        name_bbox = _band_bbox(img, text_x0, 0, text_x1, h, 100, 140)
+        assert name_bbox is not None
+        # +5 tolerates anti-aliased glyph edge slop at the start of
+        # the name text.
+        assert name_bbox[0] <= text_x0 + 5, (
+            "name should be left-aligned by default"
+        )
+
+    def test_entity_name_align_right(self) -> None:
+        # name_align="right" right-aligns the name near the widget's
+        # right content edge.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
+        widgets = [
+            {
+                "type": "entity",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": h,
+                "entity": "sensor.temperature",
+                "name_align": "right",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        name_bbox = _band_bbox(img, text_x0, 0, text_x1, h, 100, 140)
+        assert name_bbox is not None
+        # -5 tolerates anti-aliased glyph edge slop at the end of
+        # the name text.
+        assert name_bbox[2] >= text_x1 - 5, (
+            "name_align='right' should right-align the name"
+        )
+
+    def test_entity_name_position_bottom_is_default(self) -> None:
+        # Omitting name_position must produce byte-identical output
+        # to name_position="bottom".
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.temperature",
+        }
+        default_render = render_dashboard([base], self._config())
+        explicit_render = render_dashboard(
+            [{**base, "name_position": "bottom"}], self._config()
+        )
+        assert default_render == explicit_render
+
+    def test_entity_name_position_top_moves_name_above_value(self) -> None:
+        # name_position="top" renders the name higher up (smaller y)
+        # than the default "bottom" placement.
+        h = 224
+        text_x0, text_x1 = _content_x_range(400, h)
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+        }
+        img_bottom = render_to_image([base], self._config())
+        img_top = render_to_image(
+            [{**base, "name_position": "top"}], self._config()
+        )
+        name_bottom = _band_bbox(img_bottom, text_x0, 0, text_x1, h, 100, 140)
+        name_top = _band_bbox(img_top, text_x0, 0, text_x1, h, 100, 140)
+        assert name_bottom is not None
+        assert name_top is not None
+        assert name_top[1] < name_bottom[1], (
+            "name_position='top' should render the name higher than "
+            "the default bottom placement"
+        )
+
+    # ── Invert condition tests ────────────────────────
+
+    def test_entity_invert_condition_met(self) -> None:
+        # A state condition that matches the entity's current state
+        # inverts the widget: context has invert=True and the SVG
+        # gains a full-size black background rect plus white text.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.motion",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is True
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(
+            r'<rect x="0" y="0" width="400" height="224"\s*'
+            r'rx="\d+" ry="\d+"\s*fill="#000000"/>',
+            svg,
+        ), "inverted entity must draw a full-size black background rect"
+        assert 'fill="#ffffff"' in svg, (
+            "inverted entity must render text/icon in white"
+        )
+
+    def test_entity_invert_condition_not_met(self) -> None:
+        # A state condition that does not match leaves the widget
+        # un-inverted: no black background, white canvas outside
+        # content.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.front_door",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.front_door",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is False
+        img = render_to_image([widget], self._config())
+        assert_all_white(img, 0, 0, 3, 3)
+
+    def test_entity_invert_condition_absent(self) -> None:
+        # Omitting invert_condition entirely never inverts the widget.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.motion",
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is False
+
+    def test_entity_invert_condition_empty_list(self) -> None:
+        # invert_condition=[] must never invert, even though
+        # check_conditions([]) alone would return True — the widget
+        # must special-case emptiness.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.motion",
+            "invert_condition": [],
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is False
+
+    def test_entity_invert_forces_no_circle_icon(self) -> None:
+        # An active entity normally draws a filled icon circle
+        # (<circle> element).  When inverted, the icon style is
+        # forced to no-circle so the glyph draws directly on the
+        # black background.
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "binary_sensor.motion",
+        }
+        normal_svg = render_widget_svg(base, self._config())
+        assert "<circle" in normal_svg, (
+            "sanity check: active entity normally draws an icon circle"
+        )
+        inverted = {
+            **base,
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "binary_sensor.motion",
+                    "state": "on",
+                }
+            ],
+        }
+        ctx = _build_entity_context(inverted, self._config())
+        assert ctx["icon_no_circle"] is True
+        assert ctx["icon_outline"] is False
+        inverted_svg = render_widget_svg(inverted, self._config())
+        assert "<circle" not in inverted_svg, (
+            "inverted entity must suppress the icon circle entirely"
+        )
+
+    def test_entity_invert_numeric_state_condition(self) -> None:
+        # A numeric_state condition (above: 0) inverts when the
+        # entity's state is a positive number.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is True
+
+    def test_entity_invert_numeric_state_condition_zero(self) -> None:
+        # numeric_state above=0 does not invert when the state is 0
+        # (the exclusive lower bound is not satisfied).
+        states = {
+            **MOCK_ENTITY_STATES,
+            "sensor.count": {
+                "state": "0",
+                "attributes": {"friendly_name": "Count"},
+            },
+        }
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config(states=states))
+        assert ctx["invert"] is False
+
+    def test_entity_invert_numeric_state_condition_non_numeric(
+        self,
+    ) -> None:
+        # numeric_state above=0 does not invert on a non-numeric
+        # state such as "unknown".
+        states = {
+            **MOCK_ENTITY_STATES,
+            "sensor.count": {
+                "state": "unknown",
+                "attributes": {"friendly_name": "Count"},
+            },
+        }
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.count",
+            "invert_condition": [
+                {
+                    "condition": "numeric_state",
+                    "entity": "sensor.count",
+                    "above": 0,
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config(states=states))
+        assert ctx["invert"] is False
+
+    def test_entity_invert_state_not_condition(self) -> None:
+        # state_not inverts when the entity holds a real value, not
+        # one of the excluded placeholder states.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.status",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "sensor.status",
+                    "state_not": ["", "unknown", "unavailable"],
+                }
+            ],
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["invert"] is True
+
+    def test_entity_invert_state_not_condition_excluded(self) -> None:
+        # state_not does not invert for excluded placeholder states:
+        # empty string, "unknown", and "unavailable".
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.status",
+            "invert_condition": [
+                {
+                    "condition": "state",
+                    "entity": "sensor.status",
+                    "state_not": ["", "unknown", "unavailable"],
+                }
+            ],
+        }
+        for excluded_state in ("", "unknown", "unavailable"):
+            states = {
+                **MOCK_ENTITY_STATES,
+                "sensor.status": {
+                    "state": excluded_state,
+                    "attributes": {"friendly_name": "Status"},
+                },
+            }
+            ctx = _build_entity_context(widget, self._config(states=states))
+            assert ctx["invert"] is False, (
+                f"state {excluded_state!r} must not invert"
+            )
 
     # ── Scaling tests ─────────────────────────────────
 
