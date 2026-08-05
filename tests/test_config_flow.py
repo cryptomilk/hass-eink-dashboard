@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 import pytest
 import voluptuous as vol
+import yaml  # via homeassistant -> pyyaml
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
@@ -1897,6 +1898,73 @@ class TestEinkDashboardOptionsFlow:
         assert "aaa111" in yaml
         assert "bbb222" in yaml
         assert "eink-dashboard-card" in yaml
+        assert "type: sections" in yaml
+
+    async def test_copy_dashboard_yaml_groups_similar_sizes_together(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Entries with similar card sizes share one grid section and
+        # get no explicit grid_options, since the default sizing
+        # already fits them side by side. _make_options_flow's own
+        # backing entry (default 758x1024) is also included in the
+        # entries list and contributes to the baseline calculation.
+        flow = await _make_options_flow(hass, {"webhook_urls": []})
+        entry_a = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="kindle_pw",
+            options={"width": 758, "height": 1024},
+        )
+        entry_a.add_to_hass(hass)
+        entry_b = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="kindle_pw4",
+            options={"width": 1072, "height": 1448},
+        )
+        entry_b.add_to_hass(hass)
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        yaml = result["description_placeholders"]["yaml"]
+        assert yaml.count("type: grid") == 1
+        assert "grid_options" not in yaml
+
+    async def test_copy_dashboard_yaml_isolates_oversized_entry(
+        self, hass: HomeAssistant
+    ) -> None:
+        # An entry much larger than the others (e.g. a landscape
+        # reTerminal E1003 next to portrait Kindles) gets its own
+        # full-width grid section instead of sharing a row.
+        # _make_options_flow's own backing entry (default 758x1024)
+        # is also included in the entries list and contributes to
+        # the median baseline, making this a 4-entry median.
+        flow = await _make_options_flow(hass, {"webhook_urls": []})
+        entry_a = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="kindle_pw",
+            options={"width": 758, "height": 1024},
+        )
+        entry_a.add_to_hass(hass)
+        entry_b = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="kindle_oasis",
+            options={"width": 1264, "height": 1680},
+        )
+        entry_b.add_to_hass(hass)
+        entry_huge = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="reterminal_e1003",
+            options={"width": 1872, "height": 1404},
+        )
+        entry_huge.add_to_hass(hass)
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        yaml = result["description_placeholders"]["yaml"]
+        assert yaml.count("type: grid") == 2
+        assert yaml.count("grid_options") == 1
+        assert yaml.count("columns: full") == 1
+        sections = yaml.split("type: grid")[1:]
+        huge_section = next(s for s in sections if "reterminal_e1003" in s)
+        assert "kindle_pw" not in huge_section
+        assert "kindle_oasis" not in huge_section
 
     async def test_copy_dashboard_yaml_submit_returns_to_init(
         self, hass: HomeAssistant
@@ -1907,6 +1975,116 @@ class TestEinkDashboardOptionsFlow:
 
         assert result["type"] is FlowResultType.MENU
         assert result["step_id"] == "init"
+
+    async def test_copy_dashboard_yaml_parses_to_valid_structure(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Generated YAML is syntactically valid and matches the
+        # expected Lovelace sections-view structure: a shared grid
+        # for normal-sized entries and a full-width grid per
+        # oversized entry, each holding the right card config.
+        # _make_options_flow's own backing entry (default
+        # 758x1024) is also included in the entries list.
+        flow = await _make_options_flow(hass, {"webhook_urls": []})
+        entry_a = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="kindle_pw",
+            options={"width": 758, "height": 1024},
+        )
+        entry_a.add_to_hass(hass)
+        entry_huge = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="reterminal_e1003",
+            options={"width": 1872, "height": 1404},
+        )
+        entry_huge.add_to_hass(hass)
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        raw = result["description_placeholders"]["yaml"]
+        doc = yaml.safe_load(raw)
+        view = doc["views"][0]
+        assert view["type"] == "sections"
+        assert view["max_columns"] == 10
+        assert view["title"] == "E-Ink Dashboards"
+        assert "path" not in view
+        sections = view["sections"]
+        assert len(sections) == 2
+
+        normal_section = sections[0]
+        assert normal_section["type"] == "grid"
+        assert normal_section["column_span"] == 10
+        assert len(normal_section["cards"]) == 2
+        assert all(
+            c["type"] == "custom:eink-dashboard-card"
+            for c in normal_section["cards"]
+        )
+
+        large_section = sections[1]
+        assert large_section["type"] == "grid"
+        assert len(large_section["cards"]) == 1
+        large_card = large_section["cards"][0]
+        assert large_card["config_entry"] == "reterminal_e1003"
+        assert large_card["grid_options"] == {"columns": "full"}
+
+    async def test_copy_dashboard_yaml_isolates_multiple_oversized(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Two entries much larger than the normals each get their
+        # own full-width grid section rather than sharing one.
+        # _make_options_flow's own backing entry (default
+        # 758x1024) is also included in the entries list.
+        flow = await _make_options_flow(hass, {"webhook_urls": []})
+        for entry_id in ("normal_a", "normal_b"):
+            entry = MockConfigEntry(
+                domain=DOMAIN,
+                entry_id=entry_id,
+                options={"width": 758, "height": 1024},
+            )
+            entry.add_to_hass(hass)
+        for entry_id, width, height in (
+            ("large_a", 1872, 1404),
+            ("large_b", 2560, 1600),
+        ):
+            entry = MockConfigEntry(
+                domain=DOMAIN,
+                entry_id=entry_id,
+                options={"width": width, "height": height},
+            )
+            entry.add_to_hass(hass)
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        raw = result["description_placeholders"]["yaml"]
+        assert raw.count("type: grid") == 3
+        assert raw.count("grid_options") == 2
+        assert raw.count("columns: full") == 2
+
+    async def test_copy_dashboard_yaml_exact_threshold_is_normal(
+        self, hass: HomeAssistant
+    ) -> None:
+        # An entry at exactly 1.5x the baseline stays in the normal
+        # group, since _split_large_entries uses a strict > compare.
+        # _make_options_flow's own backing entry (default
+        # 758x1024) is also included in the entries list.
+        flow = await _make_options_flow(hass, {"webhook_urls": []})
+        entry_anchor = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="anchor",
+            options={"width": 758, "height": 1024},
+        )
+        entry_anchor.add_to_hass(hass)
+        # Exactly 1.5x the 758x1024 baseline: 758*1.5=1137,
+        # 1024*1.5=1536.
+        entry_boundary = MockConfigEntry(
+            domain=DOMAIN,
+            entry_id="boundary",
+            options={"width": 1137, "height": 1536},
+        )
+        entry_boundary.add_to_hass(hass)
+        result = await flow.async_step_copy_dashboard_yaml(None)
+
+        raw = result["description_placeholders"]["yaml"]
+        assert raw.count("type: grid") == 1
+        assert "grid_options" not in raw
 
     async def test_display_settings_persists_entry_options(
         self, hass: HomeAssistant
