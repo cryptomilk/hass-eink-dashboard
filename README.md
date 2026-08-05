@@ -109,7 +109,9 @@ After setup, click **Configure** on the integration entry to:
 - **Add / remove push target** - manage TRMNL webhook URLs
 - **Copy card YAML** - get the Lovelace card snippet for this device
 - **Copy dashboard YAML** - get a full dashboard YAML with cards for all
-  configured devices
+  configured devices, using a `sections` layout that gives any
+  disproportionately large display (e.g. a landscape reTerminal E1003) its
+  own row instead of squeezing it in next to smaller cards
 
 ## Dashboard setup
 

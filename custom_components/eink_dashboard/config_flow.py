@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import statistics
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -316,6 +317,137 @@ def _screen_portion_options(
         ),
         SelectOptionDict(value="custom", label="Custom"),
     ]
+
+
+# An entry's width or height exceeding this ratio versus the baseline
+# marks it as "large" for _split_large_entries. Chosen so a landscape
+# reTerminal E1003 (1872x1404) next to a portrait Kindle Paperwhite
+# (758x1024) is isolated, while a Kindle Paperwhite 4 (1072x1448)
+# stays grouped with a Kindle Paperwhite.
+_LARGE_SIZE_RATIO = 1.5
+
+
+def _entry_dimensions(entry: ConfigEntry) -> tuple[int, int]:
+    """Return an entry's stored card dimensions.
+
+    Args:
+        entry: A config entry for the ``eink_dashboard`` domain.
+
+    Returns:
+        A (width, height) tuple, falling back to the default canvas
+        size if the entry has not stored dimensions yet. Each value
+        is clamped to a minimum of 1 to guard against hand-edited
+        storage containing zero, which would otherwise cause a
+        division by zero in ``_split_large_entries``.
+    """
+    return (
+        max(entry.options.get("width", DEFAULT_WIDTH), 1),
+        max(entry.options.get("height", DEFAULT_HEIGHT), 1),
+    )
+
+
+def _split_large_entries(
+    entries: list[ConfigEntry],
+) -> tuple[list[ConfigEntry], list[ConfigEntry]]:
+    """Split entries into normal-sized and oversized groups.
+
+    An entry is "large" when its width or height exceeds
+    ``_LARGE_SIZE_RATIO`` times the baseline for that dimension, so
+    generated dashboard YAML can give it its own full-width section
+    instead of squeezing it into a shared row. The baseline is the
+    median width/height across all entries, or the minimum when
+    there are fewer than three entries (a median is meaningless
+    with so few samples and would flag the larger of just two
+    entries as an outlier).
+
+    Args:
+        entries: Config entries for the ``eink_dashboard`` domain.
+
+    Returns:
+        A tuple of (normal-sized entries, large entries), each
+        preserving the input order.
+    """
+    dims = [_entry_dimensions(e) for e in entries]
+    if len(entries) >= 3:
+        baseline_w = statistics.median(w for w, _ in dims)
+        baseline_h = statistics.median(h for _, h in dims)
+    else:
+        baseline_w = min((w for w, _ in dims), default=DEFAULT_WIDTH)
+        baseline_h = min((h for _, h in dims), default=DEFAULT_HEIGHT)
+
+    normal: list[ConfigEntry] = []
+    large: list[ConfigEntry] = []
+    for entry, (width, height) in zip(entries, dims, strict=True):
+        ratio = max(width / baseline_w, height / baseline_h)
+        (large if ratio > _LARGE_SIZE_RATIO else normal).append(entry)
+    return normal, large
+
+
+def _grid_section(
+    entries: list[ConfigEntry],
+    full_width: bool = False,
+) -> str:
+    """Build one ``type: grid`` section block for the dashboard YAML.
+
+    Args:
+        entries: Config entries whose cards appear in this section.
+        full_width: When ``True``, each card gets
+            ``grid_options: columns: full`` so it spans the entire
+            view width instead of sharing the row.
+
+    Returns:
+        A YAML string fragment for a single sections-view grid.
+    """
+    # entry_id is always an HA-generated hex/ULID string, so it
+    # never needs YAML escaping here.
+    suffix = (
+        "\n            grid_options:\n              columns: full"
+        if full_width
+        else ""
+    )
+    cards = "\n".join(
+        "          - type: custom:eink-dashboard-card\n"
+        f"            config_entry: {e.entry_id}{suffix}"
+        for e in entries
+    )
+    return (
+        f"      - type: grid\n        cards:\n{cards}\n        column_span: 10"
+    )
+
+
+def _build_dashboard_yaml(entries: list[ConfigEntry]) -> str:
+    """Build a Lovelace ``sections`` view YAML for all given entries.
+
+    Normal-sized entries share one grid section so they lay out side
+    by side; entries much larger than the rest (see
+    ``_split_large_entries``) each get their own full-width section.
+
+    Args:
+        entries: Config entries for the ``eink_dashboard`` domain.
+            The caller (``async_step_copy_dashboard_yaml``) always
+            passes at least one entry, since the options flow's own
+            config entry is always part of the domain's entries.
+
+    Returns:
+        A YAML string for a full Lovelace dashboard view.
+    """
+    normal, large = _split_large_entries(entries)
+
+    sections = []
+    if normal:
+        sections.append(_grid_section(normal))
+    sections.extend(_grid_section([e], full_width=True) for e in large)
+
+    sections_yaml = "\n".join(sections)
+    return (
+        "views:\n"
+        "  - type: sections\n"
+        "    max_columns: 10\n"
+        "    sections:\n"
+        f"{sections_yaml}\n"
+        "    title: E-Ink Dashboards\n"
+        "    cards: []"
+    )
 
 
 class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -671,12 +803,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         if user_input is not None:
             return await self.async_step_init()
         entries = self.hass.config_entries.async_entries(DOMAIN)
-        cards = "\n".join(
-            f"      - type: custom:eink-dashboard-card\n"
-            f"        config_entry: {e.entry_id}"
-            for e in entries
-        )
-        yaml = f"views:\n  - title: E-Ink Dashboards\n    cards:\n{cards}"
+        yaml = _build_dashboard_yaml(entries)
         return self.async_show_form(
             step_id="copy_dashboard_yaml",
             data_schema=vol.Schema({}),
