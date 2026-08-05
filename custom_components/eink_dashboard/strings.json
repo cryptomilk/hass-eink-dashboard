@@ -75,11 +75,11 @@
       },
       "copy_card_yaml": {
         "title": "Card YAML",
-        "description": "Add this card to your Lovelace dashboard:\n\n```yaml\n{yaml}\n```"
+        "description": "Paste this into an **existing** dashboard's visual editor (Edit dashboard → Add Card → Manual). It will NOT work in the Raw configuration editor — use **Copy dashboard YAML** for that instead:\n\n```yaml\n{yaml}\n```"
       },
       "copy_dashboard_yaml": {
         "title": "Dashboard YAML",
-        "description": "Create a new dashboard with this YAML:\n\n```yaml\n{yaml}\n```"
+        "description": "Paste this into the Raw configuration editor of a **new** dashboard (Edit dashboard → Raw configuration editor):\n\n```yaml\n{yaml}\n```"
       },
       "device_settings": {
         "title": "Device Settings",

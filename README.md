@@ -123,8 +123,9 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 2. Open the new dashboard, click the three-dot menu -> **Edit dashboard** ->
    **Raw configuration editor**.
 
-3. Paste the YAML. You can get it from the integration's **Configure** menu
-   (**Copy card YAML** or **Copy dashboard YAML**), or write it manually:
+3. Paste the YAML. Get it from the integration's **Configure** menu using
+   **Copy dashboard YAML** (this is the one that includes the `views:`
+   wrapper required by the Raw configuration editor), or write it manually:
 
    ```yaml
    views:
@@ -135,9 +136,14 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
    ```
 
    The `config_entry` field selects which display to edit. Find the entry ID
-   in the integration URL or use the **Copy card YAML** option. If you only
-   have one E-Ink Dashboard entry, you can omit `config_entry` and the card
-   will auto-discover it.
+   in the integration URL, or use **Copy dashboard YAML** to fill it in
+   automatically. If you only have one E-Ink Dashboard entry, you can omit
+   `config_entry` and the card will auto-discover it.
+
+   > **Note:** The **Copy card YAML** option produces a bare card snippet
+   > (no `views:` wrapper) for adding this card to an *existing* dashboard
+   > via the visual editor's **Add Card** dialog — pasting it into the Raw
+   > configuration editor will fail with "Configuration error".
 
 4. Save. The card shows a live server-rendered SVG preview at the exact pixel
    dimensions of your device.
