@@ -389,6 +389,46 @@ function boldValueSelector(): HaFormSchema {
 }
 
 /**
+ * Name position dropdown selector (above or below the value).
+ *
+ * @returns A single ha-form schema entry.
+ */
+function namePositionSelector(): HaFormSchema {
+  return {
+    name: "name_position",
+    default: "bottom",
+    selector: {
+      select: {
+        options: [
+          { value: "bottom", label: "Bottom" },
+          { value: "top", label: "Top" },
+        ],
+      },
+    },
+  };
+}
+
+/**
+ * Name alignment dropdown selector.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function nameAlignSelector(): HaFormSchema {
+  return {
+    name: "name_align",
+    default: "left",
+    selector: {
+      select: {
+        options: [
+          { value: "left", label: "Left" },
+          { value: "right", label: "Right" },
+        ],
+      },
+    },
+  };
+}
+
+/**
  * Icon style dropdown selector.
  *
  * @param defaultStyle - Default icon style value. Defaults to
@@ -757,30 +797,6 @@ export const SCHEMAS: Record<
         },
         { name: "attribute", selector: { text: {} } },
         { name: "unit", selector: { text: {} } },
-        {
-          name: "name_position",
-          default: "bottom",
-          selector: {
-            select: {
-              options: [
-                { value: "bottom", label: "Bottom" },
-                { value: "top", label: "Top" },
-              ],
-            },
-          },
-        },
-        {
-          name: "name_align",
-          default: "left",
-          selector: {
-            select: {
-              options: [
-                { value: "left", label: "Left" },
-                { value: "right", label: "Right" },
-              ],
-            },
-          },
-        },
       ],
     },
     {
@@ -797,7 +813,13 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector(),
+        boldValueSelector(),
+        namePositionSelector(),
+        nameAlignSelector(),
+      ],
     },
   ],
 
