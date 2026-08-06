@@ -80,10 +80,21 @@ def _build_heading_context(
     Badges are resolved right-to-left from the right edge; any badge
     that would overlap the heading text is silently omitted.
 
+    ``heading_align`` controls the heading text's horizontal anchor:
+
+    - ``"left"`` — text starts at the icon-derived left edge
+      (default).
+    - ``"right"`` — text ends at the space left of any placed
+      badges, or the right content edge when there are none.  The
+      icon, if present, stays left-anchored.  If the text is too
+      wide to fit in that space, its left edge is clamped to the
+      icon-derived left edge instead of drawing over the icon.
+
     Args:
         widget: Widget config dict.  Recognised keys:
             ``heading`` (display text, default ``""``),
             ``heading_style`` (``"title"`` / ``"subtitle"``),
+            ``heading_align`` (``"left"`` / ``"right"``),
             ``icon`` (MDI icon name, e.g. ``"mdi:home"``),
             ``icon_style`` (``"none"`` / ``"filled"`` /
             ``"outlined"``),
@@ -111,6 +122,7 @@ def _build_heading_context(
     svg_h = _widget_dim(widget, "h", DEFAULT_ROW_H)
     heading_text: str = widget.get("heading", "")
     heading_style: str = widget.get("heading_style", "title")
+    heading_align: str = widget.get("heading_align", "left")
     icon_override = widget.get("icon")
     icon_style: str = widget.get("icon_style", "none")
     raw_badges = widget.get("badges", [])
@@ -160,7 +172,7 @@ def _build_heading_context(
             # edge.
             icon_glyph_x = content_left
             icon_glyph_y = svg_h // 2 - glyph_sz // 2
-            text_x = content_left + glyph_sz + m.inner_gap
+            min_text_x = content_left + glyph_sz + m.inner_gap
         else:
             # Circle style: glyph is centred inside the circle.
             r = m.icon_dia // 2
@@ -170,9 +182,9 @@ def _build_heading_context(
             icon_fill = color_to_hex(COLOR_GRAY)
             icon_glyph_x = icon_cx - glyph_sz // 2
             icon_glyph_y = icon_cy - glyph_sz // 2
-            text_x = content_left + m.icon_dia + m.inner_gap
+            min_text_x = content_left + m.icon_dia + m.inner_gap
     else:
-        text_x = content_left
+        min_text_x = content_left
 
     text_y = svg_h // 2
 
@@ -235,12 +247,15 @@ def _build_heading_context(
     # Position badges right-to-left.  Once a badge cannot fit
     # (its left edge would overlap the heading text), it and
     # all remaining badges to its left in config order are
-    # dropped.
+    # dropped.  The overlap boundary is always the icon-derived
+    # left edge (``min_text_x``), regardless of ``heading_align``,
+    # since that is where left-aligned text starts and where
+    # right-aligned text is clamped to below.
     badge_right = svg_w - r_inset - rpad
     rendered_badges: list[dict[str, object]] = []
     for bd in reversed(badge_data):
         new_right = badge_right - bd.total_w
-        if new_right < text_x + m.inner_gap:
+        if new_right < min_text_x + m.inner_gap:
             break
         badge_cy = svg_h // 2
         rendered_badges.insert(
@@ -256,6 +271,23 @@ def _build_heading_context(
             },
         )
         badge_right = new_right - m.inner_gap
+
+    # Right alignment anchors the text to the space left of any
+    # placed badges (or the right content edge when there are none),
+    # rather than the icon-derived left edge.  If the heading text is
+    # wide enough that anchoring it there would push its left edge
+    # past ``min_text_x``, clamp the anchor so the text never draws
+    # over the icon — matching the left-aligned case, where text
+    # simply grows rightward from ``min_text_x`` instead.
+    text_x = min_text_x
+    text_anchor = "start"
+    if heading_align == "right":
+        text_anchor = "end"
+        text_x = badge_right
+        if heading_text:
+            heading_font = _load_font(font_sz, medium=is_title)
+            text_w = round(heading_font.getlength(heading_text))
+            text_x = max(text_x - text_w, min_text_x) + text_w
 
     has_content = bool(heading_text) or bool(icon_svg) or bool(rendered_badges)
 
@@ -294,6 +326,7 @@ def _build_heading_context(
         "text_fill": text_fill,
         "text_x": text_x,
         "text_y": text_y,
+        "text_anchor": text_anchor,
         # Badges (pre-positioned, empty list when none fit).
         "badges": rendered_badges,
         "badge_font_sz": badge_font_sz,

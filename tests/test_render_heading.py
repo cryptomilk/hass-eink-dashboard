@@ -527,6 +527,172 @@ class TestRenderHeading:
         without = render_dashboard([base], self._config())
         assert with_none == without
 
+    # ── Alignment tests ───────────────────────────────
+
+    def test_heading_align_left_is_default(self) -> None:
+        # Omitting heading_align produces byte-identical output to
+        # heading_align="left".
+        base = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "Section",
+        }
+        with_left = render_dashboard(
+            [{**base, "heading_align": "left"}], self._config()
+        )
+        without = render_dashboard([base], self._config())
+        assert with_left == without
+
+    def test_heading_align_right_changes_output(self) -> None:
+        # heading_align="right" changes the rendered output relative
+        # to the default left alignment.
+        base = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "Monday",
+        }
+        left = render_dashboard([base], self._config())
+        right = render_dashboard(
+            [{**base, "heading_align": "right"}], self._config()
+        )
+        assert left != right, (
+            "heading_align='right' should change rendered output"
+        )
+
+    def test_heading_align_right_text_near_right_edge(self) -> None:
+        # Right-aligned text has its rightmost ink near the right
+        # content edge of the widget.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "Mon",
+                "heading_align": "right",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        right_edge = 400 - m.padding
+        bb = content_bbox(img, 0, 0, 400, 56)
+        assert bb is not None, "right-aligned heading should draw content"
+        assert bb[2] >= right_edge - 5, (
+            "heading_align='right' should place text near right edge"
+        )
+
+    def test_heading_align_right_with_icon(self) -> None:
+        # With an icon present, the icon stays left-anchored while
+        # the text anchors to the right edge.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "Mon",
+                "icon": "mdi:home",
+                "heading_align": "right",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Icon draws dark pixels on the left.
+        assert_has_dark_pixels(
+            img, m.padding, 4, m.padding + 30, 52, threshold=200
+        )
+        # Text draws dark pixels near the right edge.
+        right_edge = 400 - m.padding
+        bb = content_bbox(img, 100, 0, 400, 56)
+        assert bb is not None
+        assert bb[2] >= right_edge - 5, (
+            "right-aligned text should reach the right edge"
+        )
+
+    def test_heading_align_right_long_text_clamps_to_icon(self) -> None:
+        # A heading too wide to fit between the icon and the right
+        # edge must not draw over the icon; its left edge clamps to
+        # the icon-derived boundary instead of extending further
+        # left, as it would with an unbounded right anchor.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "A Really Very Long Heading Text That Overflows",
+                "icon": "mdi:home",
+                "heading_align": "right",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Icon still draws dark pixels on the left.
+        assert_has_dark_pixels(
+            img, m.padding, 4, m.padding + 30, 52, threshold=200
+        )
+        # The gap between the icon and the text's clamped left edge
+        # stays white — text does not creep left over the icon.
+        glyph_sz = max(10, m.font_primary)
+        icon_right = m.padding + glyph_sz
+        min_text_x = icon_right + m.inner_gap
+        assert_all_white(img, icon_right, 0, min_text_x, 56)
+
+    def test_heading_align_right_with_badges(self) -> None:
+        # With badges present, right-aligned text anchors to the left
+        # of the badge area rather than the widget edge — badges
+        # change where the text lands.
+        base = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "A",
+            "heading_align": "right",
+            "badges": ["sensor.temperature"],
+        }
+        without_badges = render_dashboard(
+            [{**base, "badges": []}], self._config()
+        )
+        with_badges = render_dashboard([base], self._config())
+        assert without_badges != with_badges, (
+            "badges should shift right-aligned text anchor leftward"
+        )
+
+    def test_heading_align_right_with_card_border(self) -> None:
+        # With card_style="border", right-aligned text respects the
+        # border's right inset rather than the widget's raw edge.
+        m = _compute_metrics(56)
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 56,
+                "heading": "Mon",
+                "heading_align": "right",
+                "card_style": "border",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        right_edge = 400 - m.padding
+        bb = content_bbox(img, m.padding, 4, 400 - m.padding, 52)
+        assert bb is not None
+        assert bb[2] >= right_edge - 5, (
+            "right-aligned text should respect border inset"
+        )
+
     # ── Badge tests ───────────────────────────────────
 
     def test_heading_badges_change_output(self) -> None:

@@ -585,6 +585,15 @@ export interface HeadingWidget extends WidgetBase {
    * - ``"subtitle"`` — smaller Roboto Regular in gray.
    */
   heading_style?: "title" | "subtitle";
+  /**
+   * Horizontal text alignment.
+   * - ``"left"`` — text starts at the icon-derived left edge
+   *   (default).
+   * - ``"right"`` — text ends at the space left of any badges, or
+   *   the right content edge when there are none.  The icon, if
+   *   present, stays left-anchored.
+   */
+  heading_align?: "left" | "right";
   /** MDI icon name rendered to the left of the text (e.g. "mdi:home"). */
   icon?: string;
   /**

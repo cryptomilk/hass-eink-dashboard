@@ -69,6 +69,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       h: 56,
       heading: "",
       heading_style: "title",
+      heading_align: "left",
       icon_style: "none",
       card_style: DEFAULT_CARD_STYLE,
     },
@@ -416,6 +417,26 @@ function namePositionSelector(): HaFormSchema {
 function nameAlignSelector(): HaFormSchema {
   return {
     name: "name_align",
+    default: "left",
+    selector: {
+      select: {
+        options: [
+          { value: "left", label: "Left" },
+          { value: "right", label: "Right" },
+        ],
+      },
+    },
+  };
+}
+
+/**
+ * Heading text alignment dropdown selector.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function headingAlignSelector(): HaFormSchema {
+  return {
+    name: "heading_align",
     default: "left",
     selector: {
       select: {
@@ -903,7 +924,11 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector("none")],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector("none"),
+        headingAlignSelector(),
+      ],
     },
   ],
 
@@ -1553,6 +1578,7 @@ export const LABELS: Record<string, string> = {
   unit: "Unit",
   heading: "Heading",
   heading_style: "Heading style",
+  heading_align: "Heading alignment",
   badges: "Badges",
   card_style: "Card style",
   icon_style: "Icon style",
