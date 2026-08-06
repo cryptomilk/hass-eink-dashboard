@@ -1052,6 +1052,11 @@ export interface GraphWidget extends WidgetBase {
    */
   show_state?: boolean;
   /**
+   * Override the header value/unit font size in pixels.
+   * Auto-derived from the header row height when omitted.
+   */
+  state_font_size?: number;
+  /**
    * Show the entity name in the header row.
    * Default: ``true``.
    */

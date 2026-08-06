@@ -1435,6 +1435,12 @@ export const SCHEMAS: Record<
           selector: { boolean: {} },
         },
         {
+          name: "state_font_size",
+          selector: {
+            number: { min: 8, max: 72, mode: "box" },
+          },
+        },
+        {
           name: "show_name",
           default: true,
           selector: { boolean: {} },
@@ -1637,6 +1643,7 @@ export const LABELS: Record<string, string> = {
   secondary_lower_bound: "Secondary Y-axis lower bound",
   show_fill: "Show fill",
   show_state: "Show state",
+  state_font_size: "State font size",
   show_name: "Show name",
   show_icon: "Show icon",
   show_legend: "Show legend",
