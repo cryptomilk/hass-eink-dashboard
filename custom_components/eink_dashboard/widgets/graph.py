@@ -697,6 +697,52 @@ def _fix_header_layout(
     return x_off + lpad, svg_w - r_inset - rpad
 
 
+def _resolve_start_cutoff(
+    start_time_str: str, now: datetime.datetime
+) -> float | None:
+    """Resolve a ``start_time`` config string to today's Unix timestamp.
+
+    ``now`` is treated as local time: HA sets the system timezone to
+    match its configured timezone, so local time is the correct frame
+    of reference for server-side rendering (see the same assumption
+    in ``conditions.py``'s time-condition evaluation).
+
+    Args:
+        start_time_str: Time-of-day string parseable by
+            ``datetime.time.fromisoformat`` (e.g. ``"00:00"``), or
+            empty to disable the fixed start time.
+        now: Current local datetime; only its date is used, so tests
+            can pass a fixed value for deterministic results.
+
+    Returns:
+        Unix timestamp for ``now``'s date at the given time, or
+        ``None`` when ``start_time_str`` is empty or unparsable. If
+        the resolved timestamp is still in the future relative to
+        ``now``, it is returned as-is (the graph will show no data
+        until that time is reached later today) and a warning is
+        logged.
+    """
+    if not start_time_str:
+        return None
+    try:
+        parsed = datetime.time.fromisoformat(start_time_str)
+    except ValueError:
+        _LOGGER.warning(
+            "Graph widget 'start_time' %r is not a valid HH:MM time; "
+            "ignoring it",
+            start_time_str,
+        )
+        return None
+    cutoff = datetime.datetime.combine(now.date(), parsed)
+    if cutoff > now:
+        _LOGGER.warning(
+            "Graph widget 'start_time' %s has not occurred yet "
+            "today; the graph will show no data until then",
+            start_time_str,
+        )
+    return cutoff.timestamp()
+
+
 def _combined_state_text(
     entity_descs: list[dict[str, object]],
     states: dict[str, Any],
@@ -1207,19 +1253,26 @@ def _extract_entity_points(
     hours_to_show: int,
     points_per_hour: float,
     aggregate_func: str,
+    start_cutoff: float | None = None,
 ) -> list[tuple[float, float]]:
     """Extract and aggregate history data for one entity descriptor.
 
     Reads the entity's raw history from ``states_dict``, filters to
-    the ``hours_to_show`` time window, strips non-numeric entries, and
-    buckets the result via ``_aggregate_history``.
+    the ``hours_to_show`` time window (or ``start_cutoff`` when
+    given), strips non-numeric entries, and buckets the result via
+    ``_aggregate_history``.
 
     Args:
         desc: Entity descriptor dict from ``_normalize_entities()``.
         states_dict: States dict from the display config.
-        hours_to_show: History window in hours.
+        hours_to_show: History window in hours.  Ignored when
+            ``start_cutoff`` is not ``None``.
         points_per_hour: Target data density for bucketing.
         aggregate_func: Bucket reduction function name.
+        start_cutoff: Optional fixed Unix timestamp cutoff (from the
+            widget's ``start_time`` setting).  When given, only
+            history entries at or after this timestamp are kept,
+            replacing the rolling ``hours_to_show`` window entirely.
 
     Returns:
         Sorted oldest-to-newest list of ``(timestamp, value)`` pairs,
@@ -1232,24 +1285,32 @@ def _extract_entity_points(
         list(state.get("history", [])) if isinstance(state, dict) else []
     )
     if raw_hist:
-        t_latest = max(
-            (
-                float(str(e.get("lu", 0)))
-                for e in raw_hist
-                if math.isfinite(float(str(e.get("lu", 0))))
-            ),
-            default=None,
-        )
-        if t_latest is None:
-            raw_hist = []
-        else:
-            cutoff = t_latest - hours_to_show * 3600
+        if start_cutoff is not None:
             raw_hist = [
                 e
                 for e in raw_hist
                 if math.isfinite(float(str(e.get("lu", 0))))
-                and float(str(e.get("lu", 0))) > cutoff
+                and float(str(e.get("lu", 0))) >= start_cutoff
             ]
+        else:
+            t_latest = max(
+                (
+                    float(str(e.get("lu", 0)))
+                    for e in raw_hist
+                    if math.isfinite(float(str(e.get("lu", 0))))
+                ),
+                default=None,
+            )
+            if t_latest is None:
+                raw_hist = []
+            else:
+                cutoff = t_latest - hours_to_show * 3600
+                raw_hist = [
+                    e
+                    for e in raw_hist
+                    if math.isfinite(float(str(e.get("lu", 0))))
+                    and float(str(e.get("lu", 0))) > cutoff
+                ]
     numeric: list[tuple[float, float]] = []
     for entry in raw_hist:
         s = entry.get("s", "")
@@ -1487,7 +1548,14 @@ def _build_graph_context(
             ``name`` (display name override),
             ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
             ``unit`` (unit string override),
-            ``hours_to_show`` (history window in hours; default 24),
+            ``hours_to_show`` (history window in hours; default 24;
+            ignored when ``start_time`` is set),
+            ``start_time`` (time-of-day string, e.g. ``"00:00"``,
+            parseable by ``datetime.time.fromisoformat``; when set,
+            the graph shows data from this time today onward instead
+            of a rolling ``hours_to_show`` window; empty/unparsable
+            values are ignored; if the time has not occurred yet
+            today, the graph shows no data until it does),
             ``points_per_hour`` (data points per hour; default 0.5,
             giving one point per 2-hour bucket),
             ``aggregate_func`` (``"avg"``, ``"min"``, ``"max"``,
@@ -1558,6 +1626,9 @@ def _build_graph_context(
     svg_w = _widget_dim(widget, "w", config["width"] - x)
 
     hours_to_show: int = int(float(widget.get("hours_to_show", 24)))
+    start_cutoff = _resolve_start_cutoff(
+        str(widget.get("start_time", "")), datetime.datetime.now()
+    )
     points_per_hour: float = float(widget.get("points_per_hour", 0.5))
     aggregate_func: str = str(widget.get("aggregate_func", "avg"))
     group_by: str = str(widget.get("group_by", "interval"))
@@ -1696,6 +1767,7 @@ def _build_graph_context(
                     hours_to_show,
                     points_per_hour,
                     aggregate_func,
+                    start_cutoff,
                 )
             )
 
