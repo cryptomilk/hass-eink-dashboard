@@ -510,6 +510,59 @@ class TestRenderGraph:
         )
         assert svg_full != svg_short
 
+    def test_graph_start_time_filters_out_earlier_points(self) -> None:
+        # start_time anchors the window to a fixed time today,
+        # overriding hours_to_show entirely: points before the fixed
+        # start time are excluded, raising the auto-computed Y-axis
+        # minimum from 10.0 (all points) to 20.0 (only points at/after
+        # the start time).  History timestamps are built relative to
+        # datetime.now() so the test is deterministic regardless of
+        # when it runs.
+        import datetime as dt
+
+        now = dt.datetime.now()
+        midday = now.replace(hour=12, minute=0, second=0, microsecond=0)
+        history = [
+            {
+                "s": "10.0",
+                "lu": (midday - dt.timedelta(hours=2)).timestamp(),
+            },
+            {
+                "s": "15.0",
+                "lu": (midday - dt.timedelta(hours=1)).timestamp(),
+            },
+            {
+                "s": "20.0",
+                "lu": (midday + dt.timedelta(hours=1)).timestamp(),
+            },
+            {
+                "s": "25.0",
+                "lu": (midday + dt.timedelta(hours=2)).timestamp(),
+            },
+        ]
+        states: dict[str, dict[str, object]] = {
+            "sensor.temperature": {
+                **MOCK_GRAPH_STATES["sensor.temperature"],
+                "history": history,
+            }
+        }
+        common = {
+            "hours_to_show": 48,
+            "points_per_hour": 2,
+            "smoothing": False,
+            "show_labels": True,
+        }
+        svg_no_start = render_widget_svg(
+            self._base_widget(**common), self._config(states=states)
+        )
+        svg_with_start = render_widget_svg(
+            self._base_widget(**common, start_time="12:00"),
+            self._config(states=states),
+        )
+        assert "10.0" in svg_no_start
+        assert "10.0" not in svg_with_start
+        assert "20.0" in svg_with_start
+
     def test_graph_aggregate_avg_accepted(self) -> None:
         # aggregate_func="avg" is accepted without error and produces a
         # graph element.
@@ -2876,3 +2929,118 @@ class TestRenderGraph:
             fill_val = int(fill_hex[1:3], 16)
             # Fill is lighter (higher value) than stroke.
             assert fill_val >= stroke_val
+
+    # ── _resolve_start_cutoff unit tests ───────────────────────────────
+
+    def test_resolve_start_cutoff_empty_string_is_none(self) -> None:
+        # An empty start_time string disables the fixed start time.
+        import datetime as dt
+
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_start_cutoff,
+        )
+
+        now = dt.datetime(2026, 6, 11, 15, 0)
+        assert _resolve_start_cutoff("", now) is None
+
+    def test_resolve_start_cutoff_invalid_string_is_none(self) -> None:
+        # An unparsable start_time string is ignored rather than
+        # raising, degrading gracefully to "no fixed start time".
+        import datetime as dt
+
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_start_cutoff,
+        )
+
+        result = _resolve_start_cutoff(
+            "not-a-time", dt.datetime(2026, 6, 11, 15, 0)
+        )
+        assert result is None
+
+    def test_resolve_start_cutoff_combines_today_with_time(self) -> None:
+        # A valid "HH:MM" string is combined with now's date to
+        # produce today's timestamp at that time.
+        import datetime as dt
+
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_start_cutoff,
+        )
+
+        now = dt.datetime(2026, 6, 11, 15, 0)
+        result = _resolve_start_cutoff("06:30", now)
+        expected = dt.datetime(2026, 6, 11, 6, 30).timestamp()
+        assert result == expected
+
+    def test_resolve_start_cutoff_invalid_string_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # An unparsable start_time string logs a warning so a typo in
+        # the widget config isn't silently invisible.
+        import datetime as dt
+        import logging
+
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_start_cutoff,
+        )
+
+        with caplog.at_level(logging.WARNING):
+            _resolve_start_cutoff(
+                "not-a-time", dt.datetime(2026, 6, 11, 15, 0)
+            )
+        assert "not a valid" in caplog.text
+
+    def test_resolve_start_cutoff_future_time_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # When start_time has not occurred yet today, the timestamp
+        # is still returned as-is (the graph anchors to today's date
+        # only; it does not roll back to yesterday), but a warning is
+        # logged since the graph will show no data until then.
+        import datetime as dt
+        import logging
+
+        from custom_components.eink_dashboard.widgets.graph import (
+            _resolve_start_cutoff,
+        )
+
+        now = dt.datetime(2026, 6, 11, 8, 0)
+        with caplog.at_level(logging.WARNING):
+            result = _resolve_start_cutoff("18:00", now)
+        expected = dt.datetime(2026, 6, 11, 18, 0).timestamp()
+        assert result == expected
+        assert "has not occurred yet today" in caplog.text
+
+    def test_extract_entity_points_start_cutoff_is_inclusive(self) -> None:
+        # A history entry exactly at start_cutoff is kept, matching
+        # the widget docstring's "from this time today onward"
+        # (inclusive) wording.  Points are spaced an hour apart with
+        # points_per_hour=1 so each lands in its own bucket and the
+        # aggregated value is unchanged, making it safe to assert on
+        # the returned values directly.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _extract_entity_points,
+        )
+
+        cutoff = 0.0
+        desc = {"entity": "sensor.temperature"}
+        states_dict = {
+            "sensor.temperature": {
+                "history": [
+                    {"s": "1.0", "lu": cutoff - 3600},
+                    {"s": "2.0", "lu": cutoff},
+                    {"s": "3.0", "lu": cutoff + 3600},
+                ]
+            }
+        }
+        points = _extract_entity_points(
+            desc,
+            states_dict,
+            hours_to_show=24,
+            points_per_hour=1,
+            aggregate_func="avg",
+            start_cutoff=cutoff,
+        )
+        values = [v for _, v in points]
+        assert 1.0 not in values
+        assert 2.0 in values
+        assert 3.0 in values

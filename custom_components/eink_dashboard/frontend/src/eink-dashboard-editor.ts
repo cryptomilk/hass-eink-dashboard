@@ -1373,6 +1373,10 @@ export const SCHEMAS: Record<
           ],
         },
         {
+          name: "start_time",
+          selector: { time: {} },
+        },
+        {
           name: "aggregate_func",
           default: "avg",
           selector: {
@@ -1619,6 +1623,7 @@ export const LABELS: Record<string, string> = {
   attribute_timestamp_key: "Timestamp key",
   attribute_value_key: "Value key",
   hours_to_show: "Hours to show",
+  start_time: "Start time",
   detail: "Detail",
   limits_min: "Y-axis minimum",
   limits_max: "Y-axis maximum",

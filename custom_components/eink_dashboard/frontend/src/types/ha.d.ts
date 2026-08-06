@@ -1005,8 +1005,19 @@ export interface GraphWidget extends WidgetBase {
    * Required when {@link data_source} is ``"attribute"``.
    */
   attribute_value_key?: string;
-  /** History window in hours. Default: 24. */
+  /**
+   * History window in hours.  Default: 24.  Ignored when
+   * ``start_time`` is set.
+   */
   hours_to_show?: number;
+  /**
+   * Time-of-day string in ``"HH:MM"`` format (e.g. ``"00:00"``) that
+   * anchors the graph window to a fixed time today instead of a
+   * rolling ``hours_to_show`` window.  Empty/unparsable values are
+   * ignored.  If the time has not occurred yet today, the graph
+   * shows no data until it does.
+   */
+  start_time?: string;
   /**
    * Number of data points per hour retained after bucketing.
    * Each hour is split into ``1 / points_per_hour`` fixed-width
