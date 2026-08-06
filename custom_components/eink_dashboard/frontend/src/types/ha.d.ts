@@ -1032,6 +1032,16 @@ export interface GraphWidget extends WidgetBase {
    */
   lower_bound?: number;
   /**
+   * Fixed secondary Y-axis upper bound.  Auto-computed from
+   * secondary-axis entity data when omitted.
+   */
+  secondary_upper_bound?: number;
+  /**
+   * Fixed secondary Y-axis lower bound.  Auto-computed from
+   * secondary-axis entity data when omitted.
+   */
+  secondary_lower_bound?: number;
+  /**
    * Draw a light-gray filled polygon below the line.
    * Default: ``true``.
    */

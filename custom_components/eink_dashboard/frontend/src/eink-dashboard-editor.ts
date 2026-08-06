@@ -1411,6 +1411,20 @@ export const SCHEMAS: Record<
           ],
         },
         {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "secondary_lower_bound",
+              selector: { number: { mode: "box" } },
+            },
+            {
+              name: "secondary_upper_bound",
+              selector: { number: { mode: "box" } },
+            },
+          ],
+        },
+        {
           name: "show_fill",
           default: true,
           selector: { boolean: {} },
@@ -1614,6 +1628,8 @@ export const LABELS: Record<string, string> = {
   line_width: "Line width",
   upper_bound: "Y-axis upper bound",
   lower_bound: "Y-axis lower bound",
+  secondary_upper_bound: "Secondary Y-axis upper bound",
+  secondary_lower_bound: "Secondary Y-axis lower bound",
   show_fill: "Show fill",
   show_state: "Show state",
   show_name: "Show name",

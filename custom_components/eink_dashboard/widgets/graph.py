@@ -1426,6 +1426,10 @@ def _build_graph_context(
             ``min_bound_range`` (minimum Y-axis range; if the
             auto-computed range is smaller, it is expanded
             symmetrically around the midpoint),
+            ``secondary_upper_bound`` (optional fixed upper bound
+            for the secondary Y-axis; auto-computed when omitted),
+            ``secondary_lower_bound`` (optional fixed lower bound
+            for the secondary Y-axis; auto-computed when omitted),
             ``smoothing`` (midpoint Q-curve path smoothing;
             default ``True``),
             ``show_fill`` (draw light-gray fill below the first
@@ -1473,6 +1477,8 @@ def _build_graph_context(
     upper_bound = widget.get("upper_bound")
     lower_bound = widget.get("lower_bound")
     min_bound_range = widget.get("min_bound_range")
+    secondary_upper_bound = widget.get("secondary_upper_bound")
+    secondary_lower_bound = widget.get("secondary_lower_bound")
     smoothing: bool = bool(widget.get("smoothing", True))
     show_fill: bool = bool(widget.get("show_fill", True))
     show_labels: bool = bool(widget.get("show_labels", True))
@@ -1602,7 +1608,15 @@ def _build_graph_context(
         else (0.0, 1.0)
     )
     sec_y_min, sec_y_max = (
-        _y_bounds(secondary_values, None, None, None)
+        # min_bound_range has no secondary_min_bound_range
+        # counterpart — only explicit min/max overrides are
+        # exposed for the secondary axis, so this is always None.
+        _y_bounds(
+            secondary_values,
+            secondary_lower_bound,
+            secondary_upper_bound,
+            None,
+        )
         if has_secondary
         else (0.0, 1.0)
     )
