@@ -135,6 +135,19 @@ loads `fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
 `medium=True`, or `Roboto-Bold.ttf` when `bold=True`; `bold` takes
 precedence over `medium`), falling back to PIL's built-in default.
 
+**Localization**: Weekday/month abbreviations (`_weekday_abbrev`,
+`_month_abbrev` in `render.py`) use `babel.dates.format_date` against
+CLDR data, falling back from the full locale to its primary subtag
+to English on `UnknownLocaleError`/`ValueError`. Relative date
+phrases ("today"/"tomorrow"/"in N days") use a curated
+`_RELATIVE_DAY_PHRASES` dict in `render.py` (via
+`_relative_day_phrases()`/`_format_relative_date()`), limited to
+languages with grammatically simple, invariant substitution; other
+languages fall back to English. Requires the `babel` package
+(listed in both `pyproject.toml` and `manifest.json`'s
+`requirements` — the latter is what a real HA install reads at
+runtime, so both must be kept in sync when adding a dependency).
+
 **Rendering**: Widget SVGs are rendered server-side by `svg_render.py`
 and fetched by the Lovelace card via the `eink_dashboard/render_widgets`
 WebSocket command. There is no client-side canvas renderer. When
