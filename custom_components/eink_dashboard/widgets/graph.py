@@ -604,6 +604,12 @@ def _fix_header_layout(
     ``_compute_metrics(header_h)`` so they match the standard row
     height proportions used by the tile and heading widgets.
 
+    ``ctx["value_text"]`` is truncated in place to fit between
+    ``value_x`` and the icon (or the right card inset, when the icon
+    is hidden), so callers that set an unusually long value string
+    — e.g. the multi-entity combined state text — must do so before
+    calling this function.
+
     Returns ``(gx1, gx2)`` — the left and right graph area edges
     computed from card insets, decoupled from icon geometry.
 
@@ -650,23 +656,6 @@ def _fix_header_layout(
         name_w = round(nf.getlength(name_text_str))
         ctx["value_x"] = cast("int", ctx["name_x"]) + name_w + m_hdr.inner_gap
 
-    value_text_str = str(ctx.get("value_text", ""))
-    unit_text_str = str(ctx.get("unit_text", ""))
-    value_x = cast("int", ctx["value_x"])
-    ctx["unit_x"] = value_x
-    if unit_text_str and value_text_str:
-        value_bold = bool(ctx["value_bold"])
-        vf = _load_font(
-            value_unit_font_sz,
-            medium=not value_bold,
-            bold=value_bold,
-        )
-        ctx["unit_x"] = (
-            value_x
-            + round(vf.getlength(value_text_str))
-            + m_hdr.inner_gap // 2
-        )
-
     icon_r = m_hdr.icon_dia // 2
     icon_cx = svg_w - r_inset - rpad - icon_r
     icon_cy = r_inset + icon_r if r_inset else header_h // 2
@@ -677,7 +666,88 @@ def _fix_header_layout(
     ctx["icon_glyph_y"] = icon_cy - m_hdr.icon_inner // 2
     ctx["letter_font_sz"] = m_hdr.font_letter
 
+    # Value text must not run into the icon (or the right card inset
+    # when the icon is hidden) — the multi-entity header's combined
+    # state string can be much longer than a single entity's value.
+    icon_shown = bool(ctx.get("icon_svg")) or bool(ctx.get("letter"))
+    right_bound = (
+        icon_cx - icon_r - m_hdr.inner_gap
+        if icon_shown
+        else svg_w - r_inset - rpad
+    )
+    value_text_str = str(ctx.get("value_text", ""))
+    unit_text_str = str(ctx.get("unit_text", ""))
+    value_x = cast("int", ctx["value_x"])
+    value_bold = bool(ctx["value_bold"])
+    vf = _load_font(value_unit_font_sz, medium=not value_bold, bold=value_bold)
+    if value_text_str:
+        value_text_str = _truncate_to_width(
+            value_text_str, vf, max(0, right_bound - value_x)
+        )
+        ctx["value_text"] = value_text_str
+
+    ctx["unit_x"] = value_x
+    if unit_text_str and value_text_str:
+        ctx["unit_x"] = (
+            value_x
+            + round(vf.getlength(value_text_str))
+            + m_hdr.inner_gap // 2
+        )
+
     return x_off + lpad, svg_w - r_inset - rpad
+
+
+def _combined_state_text(
+    entity_descs: list[dict[str, object]],
+    states: dict[str, Any],
+    config: DisplayConfig,
+    show_state: bool,
+    widget: Widget,
+) -> str | None:
+    """Build a " / "-joined state string for multi-entity headers.
+
+    Args:
+        entity_descs: Normalized entity descriptor list from
+            ``_normalize_entities()``.
+        states: States dict for resolving entity state and unit.
+        config: Display config used for locale-aware number
+            formatting via ``_fmt``.
+        show_state: Widget's ``show_state`` setting; ``False``
+            short-circuits to ``None`` without touching ``states``.
+        widget: Widget config dict, consulted for the ``unit``
+            override key. When set, it replaces every entity's
+            auto-detected ``unit_of_measurement``, matching the
+            single-entity behaviour in ``_entity_info_context``.
+
+    Returns:
+        The joined string of every entity with a usable (non-empty,
+        known) state, or ``None`` when ``show_state`` is ``False``,
+        only one entity is configured, or no entity has a usable
+        state.
+    """
+    if not show_state or len(entity_descs) <= 1:
+        return None
+    unit_override = widget.get("unit")
+    parts: list[str] = []
+    for desc in entity_descs:
+        eid = str(desc["entity"])
+        st = states.get(eid, {})
+        if not isinstance(st, dict):
+            continue
+        state_val = str(st.get("state", ""))
+        if not state_val or state_val in ("unknown", "unavailable"):
+            continue
+        attrs = st.get("attributes", {})
+        unit = (
+            str(attrs.get("unit_of_measurement", ""))
+            if isinstance(attrs, dict)
+            else ""
+        )
+        if unit_override is not None:
+            unit = str(unit_override)
+        formatted = _fmt(state_val, config)
+        parts.append(f"{formatted}{unit}" if unit else formatted)
+    return " / ".join(parts) if parts else None
 
 
 def _truncate_to_width(text: str, font: Any, max_w: float) -> str:
@@ -1448,7 +1518,9 @@ def _build_graph_context(
             ``show_extrema`` (show min/max values with timestamps
             below the graph; default ``False``),
             ``show_state`` (show current entity value in the
-            header; default ``True``),
+            header; default ``True``; when multiple entities are
+            configured, every entity with a currently known state
+            is shown concatenated with ``" / "``),
             ``show_name`` (show entity name in the header; default
             ``True``),
             ``show_icon`` (show icon in the header; default
@@ -1569,6 +1641,20 @@ def _build_graph_context(
             "has_entity": False,
             **_color_context(),
         }
+
+    # --- Multi-entity state display ---
+    # Header normally shows only the first entity's state; when
+    # multiple entities are configured, concatenate every entity
+    # with a usable state with " / " so all of them are visible.
+    # This must run before _fix_header_layout() so the (possibly
+    # much longer) combined text goes through its icon-overlap
+    # truncation, not the original single-entity value.
+    combined_state = _combined_state_text(
+        entity_descs, config.get("states", {}), config, show_state, widget
+    )
+    if combined_state is not None:
+        ctx["value_text"] = combined_state
+        ctx["unit_text"] = ""
 
     state_font_size = widget.get("state_font_size")
     state_font_sz = (

@@ -563,6 +563,90 @@ class TestRenderGraph:
         )
         assert default_svg != no_state_svg
 
+    def test_graph_multi_entity_header_shows_all_states(self) -> None:
+        # With show_state (default True) and more than one entity
+        # configured, the header shows every entity's current state
+        # concatenated with " / ", not just the first entity's.
+        # (Humidity's raw "8.41" is capped to 1 decimal by _fmt,
+        # matching the single-value formatting used elsewhere.)
+        svg = render_widget_svg(self._multi_widget(), self._config())
+        assert "22.5°C / 8.4%" in svg
+
+    def test_graph_multi_entity_show_state_false_hides_all_states(
+        self,
+    ) -> None:
+        # show_state=False still suppresses every entity's state in
+        # multi-entity mode, not just the first.
+        svg = render_widget_svg(
+            self._multi_widget(show_state=False), self._config()
+        )
+        assert "22.5" not in svg
+        assert "8.4%" not in svg
+
+    def test_graph_multi_entity_combined_state_truncates_before_icon(
+        self,
+    ) -> None:
+        # With three entities on a moderately narrow widget, the
+        # combined state string is longer than the space available
+        # before the header icon and must be truncated with an
+        # ellipsis rather than overflowing past the icon.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        widget = self._multi_widget(
+            w=300,
+            entities=[
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity"},
+                {"entity": "sensor.pressure"},
+            ],
+        )
+        ctx = _build_graph_context(widget, self._config(width=300))
+        value_text = str(ctx["value_text"])
+        assert value_text.endswith("…")
+        assert "1,013.0hPa" not in value_text
+        # Truncated text must still end before the icon's left edge.
+        from custom_components.eink_dashboard.render import _load_font
+
+        font = _load_font(
+            int(ctx["value_font_sz"]),  # type: ignore[arg-type]
+            bold=bool(ctx["value_bold"]),
+        )
+        text_end = int(ctx["value_x"]) + round(font.getlength(value_text))
+        assert text_end <= int(ctx["icon_cx"]) - int(ctx["icon_r"])
+
+    def test_graph_multi_entity_unit_override_applies_to_all_entities(
+        self,
+    ) -> None:
+        # widget-level unit= overrides every entity's auto-detected
+        # unit in the combined header text, matching the
+        # single-entity override behaviour.
+        svg = render_widget_svg(self._multi_widget(unit="X"), self._config())
+        assert "22.5X / 8.4X" in svg
+
+    def test_graph_multi_entity_single_usable_state_shown(self) -> None:
+        # When only one of several configured entities has a usable
+        # state, the header must show that entity's real value
+        # instead of falling back to a differently-selected entity's
+        # raw "unknown"/"unavailable" state string.
+        states = {
+            **MOCK_GRAPH_STATES,
+            "sensor.offline": {
+                "state": "unknown",
+                "attributes": {"friendly_name": "Offline Sensor"},
+            },
+        }
+        widget = self._multi_widget(
+            entities=[
+                {"entity": "sensor.offline"},
+                {"entity": "sensor.temperature"},
+            ]
+        )
+        svg = render_widget_svg(widget, self._config(states=states))
+        assert "22.5°C" in svg
+        assert "unknown" not in svg
+
     def test_graph_show_name_false(self) -> None:
         # show_name=False suppresses the entity name in the header;
         # output differs from the default.
