@@ -1037,6 +1037,60 @@ class TestRenderGraph:
         # Secondary axis: humidity range.
         assert "65.0" in svg
 
+    def test_graph_secondary_y_axis_explicit_bounds(self) -> None:
+        # secondary_lower_bound/secondary_upper_bound override the
+        # auto-computed secondary axis range (65.0-70.0 for humidity)
+        # with fixed values, changing the rendered axis labels.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+            "show_labels": True,
+            "secondary_lower_bound": 0,
+            "secondary_upper_bound": 100,
+        }
+        svg = render_widget_svg(widget, self._config())
+        # Check the rendered label text elements directly, not just
+        # substring presence, so a coincidental numeric match
+        # elsewhere in the SVG can't produce a false pass.
+        assert ">0.0</text>" in svg
+        assert ">100.0</text>" in svg
+        assert ">65.0</text>" not in svg
+
+    def test_graph_secondary_y_axis_single_bound_override(self) -> None:
+        # Setting only secondary_lower_bound leaves the upper bound
+        # auto-computed from the humidity data (max 70.0), so the
+        # two bounds are resolved independently.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+            "show_labels": True,
+            "secondary_lower_bound": 0,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert ">0.0</text>" in svg
+        assert ">70.0</text>" in svg
+        assert ">65.0</text>" not in svg
+
     def test_graph_secondary_y_axis_changes_output(self) -> None:
         # A secondary-axis entity shifts gx2 inward to make room for
         # right-side labels, producing different SVG output.
@@ -1555,6 +1609,37 @@ class TestRenderGraph:
         )
         svg_bounded = render_widget_svg(
             self._base_widget(graph="bar", upper_bound=30.0, lower_bound=0.0),
+            self._config(),
+        )
+        assert svg_auto != svg_bounded
+
+    def test_graph_bar_secondary_bound_override_affects_rendering(
+        self,
+    ) -> None:
+        # secondary_lower_bound/secondary_upper_bound also apply in
+        # bar mode, changing the secondary-axis entity's bar heights.
+        widget_base: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "graph": "bar",
+            "entities": [
+                {"entity": "sensor.temperature"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+        }
+        svg_auto = render_widget_svg(widget_base, self._config())
+        svg_bounded = render_widget_svg(
+            {
+                **widget_base,
+                "secondary_lower_bound": 0,
+                "secondary_upper_bound": 100,
+            },
             self._config(),
         )
         assert svg_auto != svg_bounded
