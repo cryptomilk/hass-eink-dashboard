@@ -1444,6 +1444,9 @@ def _build_graph_context(
             ``True``),
             ``show_icon`` (show icon in the header; default
             ``True``),
+            ``show_legend`` (show the legend below the graph for
+            multi-entity widgets; default ``True``; has no effect
+            for single-entity widgets, which never show a legend),
             ``graph`` (chart type: ``"line"`` (default) for a line
             graph with polyline/path elements, or ``"bar"`` for a
             bar chart with ``<rect>`` elements; in bar mode
@@ -1486,6 +1489,7 @@ def _build_graph_context(
     show_state: bool = bool(widget.get("show_state", True))
     show_name: bool = bool(widget.get("show_name", True))
     show_icon: bool = bool(widget.get("show_icon", True))
+    show_legend: bool = bool(widget.get("show_legend", True))
     display_levels = config.get("display_levels", 16)
     # "line" (default) renders polyline/path; "bar" renders <rect>
     # elements.  smoothing and show_fill are ignored in bar mode.
@@ -1643,6 +1647,10 @@ def _build_graph_context(
     all_points: list[tuple[float, float]] = [
         p for ep in per_entity_points for p in ep
     ]
+    # Single source of truth for "is there any data to draw" — reused
+    # for the legend-geometry gate, the final show_legend flag, and
+    # has_graph, so the three can never desync from one another.
+    has_any_data = bool(all_points)
     # Use primary-axis points for label/extrema (first primary entity
     # that has data).
     primary_points: list[tuple[float, float]] = []
@@ -1727,7 +1735,7 @@ def _build_graph_context(
     multi_entity = len(entity_descs) > 1
     legend_y = gy2
     legend_entries: list[dict[str, object]] = []
-    if multi_entity and all_points:
+    if multi_entity and has_any_data and show_legend:
         graph_h_leg = gy2 - gy1
         bar_fills_legend = _BAR_FILL_COLORS if is_bar else None
         gy2, legend_y, legend_entries = _legend_geometry(
@@ -1758,10 +1766,16 @@ def _build_graph_context(
             thresholds=active_thresholds,
             display_levels=display_levels,
         )
-        has_any_data = any(bool(s["has_data"]) for s in series)
+        # has_data per entity mirrors bool(ep), so this is always
+        # equal to the has_any_data computed above from all_points;
+        # reuse that single value rather than recomputing it here.
     else:
         # Line mode: delegate to helper to keep complexity in bounds.
-        series, has_any_data = _line_series(
+        # has_any_data is set exactly when any entity has points,
+        # so the returned value is always equal to the has_any_data
+        # computed above from all_points; discard it and reuse the
+        # single earlier value instead.
+        series, _ = _line_series(
             per_entity_points,
             entity_descs,
             prim_y_min,
@@ -1823,7 +1837,7 @@ def _build_graph_context(
         "y2_min_label_y": y2_min_label_y,
         "y2_max_label_y": y2_max_label_y,
         # Legend.
-        "show_legend": multi_entity and has_any_data,
+        "show_legend": multi_entity and has_any_data and show_legend,
         "legend_y": legend_y,
         "legend_entries": legend_entries,
         # Bar chart mode flag consumed by the template.
