@@ -1161,6 +1161,166 @@ class TestRenderGraph:
         svg = render_widget_svg(widget, self._config())
         assert svg.count("Flat Key Override") == 2
 
+    def test_graph_legend_long_names_do_not_overlap(self) -> None:
+        # Entity names too long to fit side by side within the graph
+        # width are truncated with an ellipsis instead of overflowing
+        # and overlapping each other.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {
+                    "entity": "sensor.temperature",
+                    "name": "A Very Long Entity Name That Overflows",
+                },
+                {
+                    "entity": "sensor.humidity",
+                    "name": "Another Very Long Entity Name Overflowing",
+                },
+            ],
+        }
+        svg = render_widget_svg(widget, self._config())
+        # The header always shows the first entity's full name
+        # untruncated, so it appears exactly once there; the legend
+        # copy must be truncated rather than duplicating it in full.
+        assert svg.count("A Very Long Entity Name That Overflows") == 1
+        assert "…" in svg
+
+    def test_legend_geometry_truncates_names_to_fit_available_width(
+        self,
+    ) -> None:
+        # Direct unit test of _legend_geometry: with a narrow graph
+        # area and long names, each entry is truncated so that no
+        # entry's rendered text extends past the next entry's start
+        # (or, for the last entry, past the right edge).
+        from custom_components.eink_dashboard.render import _load_font
+        from custom_components.eink_dashboard.widgets.graph import (
+            _legend_geometry,
+        )
+
+        entity_descs: list[dict[str, object]] = [
+            {
+                "entity": "sensor.a",
+                "name": "A Very Long Entity Name That Overflows",
+                "dash": "",
+            },
+            {
+                "entity": "sensor.b",
+                "name": "Another Very Long Entity Name Overflowing",
+                "dash": "4,2",
+            },
+        ]
+        gx1, gx2 = 24, 376
+        _, _, entries = _legend_geometry(
+            entity_descs,
+            {},
+            gx1,
+            gx2,
+            gy2=280,
+            label_font_sz=13,
+            graph_h=200,
+        )
+        assert len(entries) == 2
+        for entry in entries:
+            assert str(entry["name"]).endswith("…")
+        font = _load_font(int(entries[0]["font_sz"]))
+        for i, entry in enumerate(entries):
+            text_end = entry["text_x"] + font.getlength(str(entry["name"]))
+            boundary = (
+                entries[i + 1]["line_x1"] if i + 1 < len(entries) else gx2
+            )
+            assert text_end <= boundary
+
+    def test_legend_geometry_uneven_names_keep_short_one_full(self) -> None:
+        # When only one entity's name is long, the fair-share
+        # redistribution should let the short name through untruncated
+        # instead of shrinking both entries by an equal amount.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _legend_geometry,
+        )
+
+        entity_descs: list[dict[str, object]] = [
+            {"entity": "sensor.a", "name": "A", "dash": ""},
+            {
+                "entity": "sensor.b",
+                "name": "A Very Long Entity Name That Overflows Badly",
+                "dash": "4,2",
+            },
+        ]
+        gx1, gx2 = 24, 300
+        _, _, entries = _legend_geometry(
+            entity_descs,
+            {},
+            gx1,
+            gx2,
+            gy2=280,
+            label_font_sz=13,
+            graph_h=200,
+        )
+        assert entries[0]["name"] == "A"
+        assert str(entries[1]["name"]).endswith("…")
+
+    def test_truncate_to_width_returns_empty_when_ellipsis_does_not_fit(
+        self,
+    ) -> None:
+        # If the available width is narrower than even a bare
+        # ellipsis, truncation must not return text that still
+        # overflows; it should give up and return an empty string.
+        from custom_components.eink_dashboard.render import _load_font
+        from custom_components.eink_dashboard.widgets.graph import (
+            _truncate_to_width,
+        )
+
+        font = _load_font(13)
+        assert _truncate_to_width("Some Long Name", font, 0) == ""
+
+    def test_legend_geometry_narrow_width_ellipsis_does_not_fit(
+        self,
+    ) -> None:
+        # Regression guard for a per-entry text budget narrower than
+        # the ellipsis glyph itself: names must fall back to an empty
+        # string rather than an ellipsis wider than its budget, so
+        # entries still stay within the graph's right edge.
+        from custom_components.eink_dashboard.render import _load_font
+        from custom_components.eink_dashboard.widgets.graph import (
+            _legend_geometry,
+        )
+
+        entity_descs: list[dict[str, object]] = [
+            {
+                "entity": "sensor.a",
+                "name": "A Very Long Entity Name That Overflows",
+                "dash": "",
+            },
+            {
+                "entity": "sensor.b",
+                "name": "Another Very Long Entity Name Overflowing",
+                "dash": "4,2",
+            },
+        ]
+        gx1, gx2 = 24, 120
+        _, _, entries = _legend_geometry(
+            entity_descs,
+            {},
+            gx1,
+            gx2,
+            gy2=280,
+            label_font_sz=13,
+            graph_h=200,
+        )
+        assert len(entries) == 2
+        assert all(entry["name"] == "" for entry in entries)
+        font = _load_font(int(entries[0]["font_sz"]))
+        for i, entry in enumerate(entries):
+            text_end = entry["text_x"] + font.getlength(str(entry["name"]))
+            boundary = (
+                entries[i + 1]["line_x1"] if i + 1 < len(entries) else gx2
+            )
+            assert text_end <= boundary
+
     # ── Phase 3: Header test ──────────────────────────────────────────
 
     def test_graph_multi_entity_header_shows_first_entity(

@@ -671,10 +671,43 @@ def _fix_header_layout(
     return x_off + lpad, svg_w - r_inset - rpad
 
 
+def _truncate_to_width(text: str, font: Any, max_w: float) -> str:
+    """Truncate ``text`` with a trailing ellipsis to fit ``max_w``.
+
+    Widths are rounded before comparison so the fit check matches
+    the rounding ``_legend_geometry`` applies when it measures the
+    returned string for layout.
+
+    Args:
+        text: Candidate string.
+        font: A loaded PIL font used to measure text width.
+        max_w: Maximum allowed pixel width.
+
+    Returns:
+        ``text`` unchanged if it already fits; otherwise the longest
+        prefix of ``text`` plus ``"…"`` that fits within ``max_w``.
+        Returns an empty string if even a bare ``"…"`` does not fit.
+    """
+    if round(font.getlength(text)) <= max_w:
+        return text
+    ellipsis = "…"
+    if round(font.getlength(ellipsis)) > max_w:
+        return ""
+    lo, hi = 0, len(text)
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if round(font.getlength(text[:mid] + ellipsis)) <= max_w:
+            lo = mid
+        else:
+            hi = mid - 1
+    return text[:lo] + ellipsis
+
+
 def _legend_geometry(
     entity_descs: list[dict[str, object]],
     states: dict[str, Any],
     gx1: int,
+    gx2: int,
     gy2: int,
     label_font_sz: int,
     graph_h: int,
@@ -686,13 +719,23 @@ def _legend_geometry(
     line graphs, each entry shows a short dash-pattern line sample;
     for bar charts, a small filled rectangle swatch in the entity's
     fill color is shown instead.  The legend is placed at ``gy2``
-    and that boundary is shifted upward to reserve space.
+    and that boundary is shifted upward to reserve space.  When
+    entity names are long enough that entries would overflow the
+    graph width (and overlap each other), names are truncated with
+    an ellipsis to fit.  Each entry's fair share is an equal split
+    of the available width; entries whose name already fits that
+    share keep it in full, and the width they don't use is handed
+    to the remaining (over-budget) entries before those are
+    truncated, so one long name doesn't needlessly shrink short
+    ones.
 
     Args:
         entity_descs: Normalized entity descriptor list from
             ``_normalize_entities()``.
         states: States dict for resolving entity friendly names.
         gx1: Left edge of the graph area.
+        gx2: Right edge of the graph area, used to cap total legend
+            width and truncate names that would otherwise overflow.
         gy2: Current bottom edge of the graph area (shifted up).
         label_font_sz: Font size from axis labels; 0 triggers the
             same fallback formula as ``_label_geometry``.
@@ -722,13 +765,8 @@ def _legend_geometry(
     legend_y = gy2
     new_gy2 = gy2 - legend_h
 
-    entries: list[dict[str, object]] = []
-    x = gx1
-    # Centre each swatch/line sample and text label vertically
-    # within the legend band.
-    entry_mid_y = legend_y + legend_h // 2
-    swatch_h = max(4, font_sz // 2)
-    for i, desc in enumerate(entity_descs):
+    names: list[str] = []
+    for desc in entity_descs:
         eid = str(desc["entity"])
         name_override = str(desc.get("name", ""))
         if name_override:
@@ -741,6 +779,35 @@ def _legend_geometry(
                 if isinstance(attrs, dict)
                 else eid
             )
+        names.append(name)
+
+    text_widths = [round(legend_font.getlength(n)) for n in names]
+    entry_w = [line_sample_w + gap + tw + gap * 2 for tw in text_widths]
+    avail_w = max(0, gx2 - gx1)
+    if entity_descs and sum(entry_w) > avail_w:
+        even_share = avail_w / len(entity_descs)
+        fits = [w <= even_share for w in entry_w]
+        spare_w = avail_w - sum(
+            w for w, f in zip(entry_w, fits, strict=True) if f
+        )
+        overflow_n = len(fits) - sum(fits)
+        over_share = spare_w / overflow_n if overflow_n else 0.0
+        max_text_w = max(0.0, over_share - line_sample_w - gap * 3)
+        names = [
+            n if fits[i] else _truncate_to_width(n, legend_font, max_text_w)
+            for i, n in enumerate(names)
+        ]
+        text_widths = [round(legend_font.getlength(n)) for n in names]
+
+    entries: list[dict[str, object]] = []
+    x = gx1
+    # Centre each swatch/line sample and text label vertically
+    # within the legend band.
+    entry_mid_y = legend_y + legend_h // 2
+    swatch_h = max(4, font_sz // 2)
+    for i, (desc, name, text_w) in enumerate(
+        zip(entity_descs, names, text_widths, strict=True)
+    ):
         fill = bar_fills[i % len(bar_fills)] if bar_fills else ""
         entries.append(
             {
@@ -759,7 +826,6 @@ def _legend_geometry(
                 "font_sz": font_sz,
             }
         )
-        text_w = round(legend_font.getlength(name))
         x += line_sample_w + gap + text_w + gap * 2
     return new_gy2, legend_y, entries
 
@@ -1654,6 +1720,7 @@ def _build_graph_context(
             entity_descs,
             states_dict,
             gx1,
+            gx2,
             gy2,
             label_font_sz,
             graph_h_leg,
