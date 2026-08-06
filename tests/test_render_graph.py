@@ -272,6 +272,49 @@ class TestRenderGraph:
         svg = render_widget_svg(self._base_widget(), self._config())
         assert 'font-weight="bold"' not in svg
 
+    def test_graph_state_font_size_override(self) -> None:
+        # state_font_size overrides the auto-derived value/unit font
+        # size in the context passed to the template. Asserted
+        # directly on the context dict rather than string-scanning
+        # the SVG, since font-size="N" also appears on unrelated
+        # elements (name, axis labels, extrema, legend).
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx = _build_graph_context(
+            self._base_widget(state_font_size=24), self._config()
+        )
+        assert ctx["value_font_sz"] == 24
+        assert ctx["unit_font_sz"] == 24
+
+    def test_graph_state_font_size_default_uses_auto_metrics(self) -> None:
+        # Without state_font_size, value/unit font size falls back to
+        # the auto-derived _compute_metrics(header_h).font_secondary.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx = _build_graph_context(self._base_widget(), self._config())
+        expected = _compute_metrics(DEFAULT_ROW_H).font_secondary
+        assert ctx["value_font_sz"] == expected
+        assert ctx["unit_font_sz"] == expected
+
+    def test_graph_state_font_size_recomputes_unit_x(self) -> None:
+        # unit_x must shift with the overridden font size so the unit
+        # text stays glued to the resized value text instead of
+        # overlapping or leaving a stale gap sized for the default
+        # font.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx_default = _build_graph_context(self._base_widget(), self._config())
+        ctx_large = _build_graph_context(
+            self._base_widget(state_font_size=48), self._config()
+        )
+        assert ctx_large["unit_x"] > ctx_default["unit_x"]
+
     def test_graph_fill_shown_by_default(self) -> None:
         # With show_fill not set (default true) and smoothing off,
         # SVG contains a <polygon> fill area below the line.

@@ -593,6 +593,8 @@ def _fix_header_layout(
     header_h: int,
     svg_w: int,
     display_levels: int,
+    *,
+    state_font_sz: int | None = None,
 ) -> tuple[int, int]:
     """Override header layout fields in the context from _entity_info_context.
 
@@ -613,6 +615,10 @@ def _fix_header_layout(
         header_h: Pixel height of the header row.
         svg_w: Full widget width.
         display_levels: Display grayscale depth.
+        state_font_sz: Optional override for the value/unit font
+            size in pixels, from the widget's ``state_font_size``
+            config key. Falls back to ``m_hdr.font_secondary`` when
+            omitted.
 
     Returns:
         ``(gx1, gx2)`` — left and right graph area pixel edges.
@@ -624,12 +630,15 @@ def _fix_header_layout(
     x_off, r_inset, _bar_w = _card_insets(m_hdr, card_style, display_levels)
     lpad = m_hdr.padding if x_off == 0 else 0
     rpad = m_hdr.padding if r_inset == 0 else 0
+    value_unit_font_sz = (
+        state_font_sz if state_font_sz is not None else m_hdr.font_secondary
+    )
 
     ctx["name_font_sz"] = m_hdr.font_primary
     ctx["name_y"] = header_h // 2
-    ctx["value_font_sz"] = m_hdr.font_secondary
+    ctx["value_font_sz"] = value_unit_font_sz
     ctx["value_y"] = header_h // 2
-    ctx["unit_font_sz"] = m_hdr.font_secondary
+    ctx["unit_font_sz"] = value_unit_font_sz
     ctx["unit_y"] = header_h // 2
 
     # When the name is shown, value_x must be shifted right past the
@@ -648,7 +657,7 @@ def _fix_header_layout(
     if unit_text_str and value_text_str:
         value_bold = bool(ctx["value_bold"])
         vf = _load_font(
-            m_hdr.font_secondary,
+            value_unit_font_sz,
             medium=not value_bold,
             bold=value_bold,
         )
@@ -1447,6 +1456,10 @@ def _build_graph_context(
             ``show_legend`` (show the legend below the graph for
             multi-entity widgets; default ``True``; has no effect
             for single-entity widgets, which never show a legend),
+            ``state_font_size`` (override the header value/unit font
+            size in pixels; defaults to
+            ``_compute_metrics(header_h).font_secondary`` when
+            omitted),
             ``graph`` (chart type: ``"line"`` (default) for a line
             graph with polyline/path elements, or ``"bar"`` for a
             bar chart with ``<rect>`` elements; in bar mode
@@ -1557,8 +1570,18 @@ def _build_graph_context(
             **_color_context(),
         }
 
+    state_font_size = widget.get("state_font_size")
+    state_font_sz = (
+        int(float(state_font_size)) if state_font_size is not None else None
+    )
     gx1, gx2 = _fix_header_layout(
-        ctx, widget, config, header_h, svg_w, display_levels
+        ctx,
+        widget,
+        config,
+        header_h,
+        svg_w,
+        display_levels,
+        state_font_sz=state_font_sz,
     )
 
     # Stroke width: user-configured, widened on 2-level displays.
