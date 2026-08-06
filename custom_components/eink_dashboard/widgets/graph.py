@@ -1250,7 +1250,7 @@ def _normalize_entities(
             _LOGGER.warning(
                 "Graph widget 'entities' list has no valid items "
                 "(each item must be a dict with an 'entity' key); "
-                "falling back to single-entity mode"
+                "widget will render without a graph"
             )
     else:
         eid = str(widget.get("entity", ""))
@@ -1258,6 +1258,7 @@ def _normalize_entities(
             raw.append(
                 {
                     "entity": eid,
+                    "name": str(widget.get("name") or ""),
                     "data_source": str(widget.get("data_source", "history")),
                     "attribute": str(widget.get("attribute", "")),
                     "attribute_timestamp_key": str(
@@ -1274,7 +1275,7 @@ def _normalize_entities(
                 raw.append(
                     {
                         "entity": eid2,
-                        "name": str(widget.get(f"name{suffix}", "")),
+                        "name": str(widget.get(f"name{suffix}") or ""),
                         "y_axis": str(
                             widget.get(f"y_axis{suffix}", "primary")
                         ),
@@ -1290,7 +1291,7 @@ def _normalize_entities(
         result.append(
             {
                 "entity": str(item.get("entity", "")),
-                "name": str(item.get("name", "")),
+                "name": str(item.get("name") or ""),
                 "y_axis": str(item.get("y_axis", "primary")),
                 "line_style": style_name,
                 "dash": _DASH_PATTERNS[idx],
