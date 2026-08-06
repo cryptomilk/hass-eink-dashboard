@@ -1062,6 +1062,12 @@ export interface GraphWidget extends WidgetBase {
    */
   show_icon?: boolean;
   /**
+   * Show the legend below the graph for multi-entity widgets.
+   * Has no effect on single-entity widgets, which never show a
+   * legend.  Default: ``true``.
+   */
+  show_legend?: boolean;
+  /**
    * Enable midpoint Q-curve path smoothing for the graph line.
    * When true, each data point becomes a quadratic Bezier control
    * point and the curve passes through midpoints between consecutive

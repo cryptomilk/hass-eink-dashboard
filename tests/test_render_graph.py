@@ -1156,6 +1156,49 @@ class TestRenderGraph:
         svg = render_widget_svg(self._base_widget(), self._config())
         assert "Humidity" not in svg
 
+    def test_graph_legend_hidden_when_show_legend_false(self) -> None:
+        # show_legend=False suppresses the legend for a multi-entity
+        # widget even though axis labels remain visible.
+        svg = render_widget_svg(
+            self._multi_widget(show_legend=False, show_labels=True),
+            self._config(),
+        )
+        assert "Humidity" not in svg
+        # Axis labels (from the temperature history range) still
+        # appear since show_labels is independent of show_legend.
+        assert "20.0" in svg
+
+    def test_graph_legend_shown_when_show_legend_true(self) -> None:
+        # Same widget as test_graph_legend_shown_for_multi_entity but
+        # with show_legend passed explicitly rather than relying on
+        # the default, confirming the explicit-True branch of
+        # bool(widget.get("show_legend", True)) behaves like the
+        # default.
+        svg = render_widget_svg(
+            self._multi_widget(show_legend=True), self._config()
+        )
+        assert "Humidity" in svg
+
+    def test_graph_legend_false_reclaims_vertical_space(self) -> None:
+        # Hiding the legend must not just omit its text — the graph
+        # area itself should grow to reclaim the freed vertical space
+        # rather than leaving it as unused whitespace.  Verified
+        # directly against the context builder's gy2 (graph area
+        # bottom edge) rather than via SVG string comparison, since
+        # the latter would trivially differ due to the missing legend
+        # text alone.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx_with_legend = _build_graph_context(
+            self._multi_widget(show_legend=True), self._config()
+        )
+        ctx_without_legend = _build_graph_context(
+            self._multi_widget(show_legend=False), self._config()
+        )
+        assert ctx_without_legend["gy2"] > ctx_with_legend["gy2"]
+
     def test_graph_legend_has_line_sample_elements(self) -> None:
         # Legend entries include <line> elements as dash-pattern
         # samples (at least one per legend entry).
@@ -1738,6 +1781,14 @@ class TestRenderGraph:
         # Single-entity bar mode does not show a legend; the second
         # entity's name must not appear.
         svg = render_widget_svg(self._base_widget(graph="bar"), self._config())
+        assert "Humidity" not in svg
+
+    def test_graph_bar_legend_hidden_when_show_legend_false(self) -> None:
+        # show_legend=False suppresses the legend in bar mode too,
+        # not just line mode.
+        svg = render_widget_svg(
+            self._bar_multi_widget(show_legend=False), self._config()
+        )
         assert "Humidity" not in svg
 
     def test_graph_bar_legend_uses_rect_swatches(self) -> None:

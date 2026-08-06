@@ -1445,6 +1445,11 @@ export const SCHEMAS: Record<
           selector: { boolean: {} },
         },
         {
+          name: "show_legend",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
           name: "smoothing",
           default: true,
           selector: { boolean: {} },
@@ -1634,6 +1639,7 @@ export const LABELS: Record<string, string> = {
   show_state: "Show state",
   show_name: "Show name",
   show_icon: "Show icon",
+  show_legend: "Show legend",
   smoothing: "Smoothing",
   show_labels: "Show labels",
   show_extrema: "Show extrema",
