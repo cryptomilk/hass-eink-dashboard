@@ -99,6 +99,29 @@ class TestWasteDateHelpers:
     def test_format_negative_returns_raw(self) -> None:
         assert _format_relative_date(-1, "2026-05-01") == "2026-05-01"
 
+    def test_format_today_german(self) -> None:
+        # German language translates "today" to "heute".
+        result = _format_relative_date(0, "2026-05-02", language="de")
+        assert result == "heute"
+
+    def test_format_tomorrow_german(self) -> None:
+        # German language translates "tomorrow" to "morgen".
+        result = _format_relative_date(1, "2026-05-03", language="de")
+        assert result == "morgen"
+
+    def test_format_in_n_days_german(self) -> None:
+        # German language translates "in N days" to "in N Tagen".
+        result = _format_relative_date(3, "2026-05-05", language="de")
+        assert result == "in 3 Tagen"
+
+    def test_format_unsupported_language_falls_back_to_english(
+        self,
+    ) -> None:
+        # A language without a curated translation falls back to
+        # the English phrasing rather than raising.
+        result = _format_relative_date(0, "2026-05-02", language="ja")
+        assert result == "today"
+
 
 class TestRenderWasteSchedule:
     # Verify rendering of redesigned waste_schedule widgets
@@ -780,3 +803,26 @@ class TestRenderWasteSchedule:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == explicit_h
+
+    # ── Language tests ─────────────────────────────────
+
+    def test_language_de_translates_relative_dates(self) -> None:
+        # config["language"] = "de" translates the row date values
+        # from "tomorrow"/"in N days" to German.  MOCK_WASTE_
+        # SCHEDULE_STATES puts Restmuell at _TODAY+1 ("morgen") and
+        # Biotonne at _TODAY+2 ("in 2 Tagen").
+        w = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config(language="de"))
+        assert ">morgen<" in svg
+        assert ">in 2 Tagen<" in svg
+
+    def test_language_defaults_to_english(self) -> None:
+        # Without a language override, dates stay in English.
+        # Restmuell falls on _TODAY+1 ("tomorrow").
+        w = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert ">tomorrow<" in svg

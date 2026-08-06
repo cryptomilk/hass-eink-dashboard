@@ -728,3 +728,34 @@ class TestWeatherSensorOverrides:
             "expected fallback humidity chip with weather entity value "
             f"'58%', got detail_items: {ctx['detail_items']}"
         )
+
+
+class TestWeatherForecastLanguage:
+    _CONFIG: ClassVar[dict[str, object]] = {
+        "width": 600,
+        "height": 400,
+        "states": MOCK_WEATHER_STATE,
+    }
+    _WIDGET: ClassVar[dict[str, object]] = {
+        "type": "weather",
+        "entity": "weather.home",
+        "x": PADDING,
+        "y": 0,
+        "forecast_days": 3,
+    }
+
+    def test_default_language_uses_english_day_labels(self) -> None:
+        # Without a language override, forecast day labels stay in
+        # English abbreviations ("Sat", "Sun", "Mon").
+        ctx = _build_weather_context(self._WIDGET, self._CONFIG)
+        labels = [e["label"] for e in ctx["forecast_entries"]]
+        assert labels == ["Sat", "Sun", "Mon"]
+
+    def test_german_language_localizes_day_labels(self) -> None:
+        # config["language"] = "de" localizes forecast day labels
+        # to German CLDR weekday abbreviations.
+        ctx = _build_weather_context(
+            self._WIDGET, {**self._CONFIG, "language": "de"}
+        )
+        labels = [e["label"] for e in ctx["forecast_entries"]]
+        assert labels == ["Sa.", "So.", "Mo."]

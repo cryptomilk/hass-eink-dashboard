@@ -33,6 +33,8 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from babel import UnknownLocaleError
+from babel.dates import format_date
 from PIL import Image, ImageFont
 
 from .conditions import check_conditions
@@ -494,22 +496,70 @@ def _left_bar_width(m: WidgetMetrics, display_levels: int) -> int:
     return m.left_bar
 
 
-_DAY_ABBREV = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+def _babel_format_date(d: date, fmt: str, language: str) -> str:
+    """Format a date with babel, falling back gracefully on bad locales.
 
-_MONTH_ABBREV = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-]
+    Tries *language* verbatim first, then just its primary subtag
+    (e.g. ``"de"`` from ``"de-XX"``) if that differs, then finally
+    English.  Both ``UnknownLocaleError`` (a well-formed tag with no
+    CLDR data) and ``ValueError`` (a malformed tag, e.g. ``"123"``)
+    are treated as "try the next fallback" rather than propagating.
+
+    Args:
+        d: Date to format.
+        fmt: Babel format pattern (e.g. ``"EEE"``, ``"MMM"``).
+        language: BCP 47 language code (e.g. ``"de"``, ``"fr-CA"``).
+
+    Returns:
+        The formatted date string, using the closest locale babel
+        could resolve.
+    """
+    try:
+        return format_date(d, format=fmt, locale=language.replace("-", "_"))
+    except (UnknownLocaleError, ValueError):
+        pass
+    primary = language.split("-")[0]
+    if primary != language:
+        try:
+            return format_date(d, format=fmt, locale=primary)
+        except (UnknownLocaleError, ValueError):
+            pass
+    return format_date(d, format=fmt, locale="en")
+
+
+def _weekday_abbrev(d: date, language: str) -> str:
+    """Return a locale-appropriate abbreviated weekday name.
+
+    Uses babel's CLDR data so that weather forecast and calendar
+    day labels follow the display language instead of always
+    being English (see issue #75).  BCP 47 hyphens are converted
+    to babel's underscore-separated locale identifiers.
+
+    Args:
+        d: Date whose weekday to format.
+        language: BCP 47 language code (e.g. ``"de"``, ``"fr-CA"``).
+
+    Returns:
+        Abbreviated weekday name (e.g. ``"Sat"``, ``"Sa."``), or
+        the English abbreviation if *language* is not a locale
+        babel recognises.
+    """
+    return _babel_format_date(d, "EEE", language)
+
+
+def _month_abbrev(d: date, language: str) -> str:
+    """Return a locale-appropriate abbreviated month name.
+
+    Args:
+        d: Date whose month to format.
+        language: BCP 47 language code (e.g. ``"de"``, ``"fr-CA"``).
+
+    Returns:
+        Abbreviated month name (e.g. ``"Jun"``, ``"Mai"``), or the
+        English abbreviation if *language* is not a locale babel
+        recognises.
+    """
+    return _babel_format_date(d, "MMM", language)
 
 
 _PROBLEM_DEVICE_CLASSES = {
@@ -572,7 +622,46 @@ def _parse_days_until(raw: str, today: date) -> int | None:
         return None
 
 
-def _format_relative_date(days: int | None, raw: str) -> str:
+# Curated "today"/"tomorrow"/"in {n} days" translations, limited to
+# languages where the phrasing is a grammatically simple, invariant
+# substitution.  Languages with complex plural/case rules for
+# numbers (e.g. Slavic, Baltic, Arabic) are intentionally omitted
+# rather than risk shipping incorrect grammar; they fall back to
+# English via _relative_day_phrases().
+_RELATIVE_DAY_PHRASES: dict[str, tuple[str, str, str]] = {
+    "en": ("today", "tomorrow", "in {n} days"),
+    "de": ("heute", "morgen", "in {n} Tagen"),
+    "fr": ("aujourd'hui", "demain", "dans {n} jours"),
+    "es": ("hoy", "mañana", "en {n} días"),
+    "it": ("oggi", "domani", "tra {n} giorni"),
+    "nl": ("vandaag", "morgen", "over {n} dagen"),
+    "pt": ("hoje", "amanhã", "em {n} dias"),
+    "da": ("i dag", "i morgen", "om {n} dage"),
+    "sv": ("idag", "imorgon", "om {n} dagar"),
+    "nb": ("i dag", "i morgen", "om {n} dager"),
+}
+
+
+def _relative_day_phrases(language: str) -> tuple[str, str, str]:
+    """Look up the (today, tomorrow, in-N-days) phrases for a language.
+
+    Args:
+        language: BCP 47 language code (e.g. ``"de"``, ``"fr-CA"``).
+            Only the primary subtag is used for lookup.
+
+    Returns:
+        A ``(today, tomorrow, in_n_days_template)`` tuple, where
+        ``in_n_days_template`` contains a ``{n}`` placeholder.
+        Falls back to the English tuple when *language* has no
+        curated translation.
+    """
+    lang = language.split("-")[0].lower()
+    return _RELATIVE_DAY_PHRASES.get(lang, _RELATIVE_DAY_PHRASES["en"])
+
+
+def _format_relative_date(
+    days: int | None, raw: str, language: str = "en"
+) -> str:
     """Format a day offset as a human-readable relative label.
 
     Converts a numeric day offset into the friendly string shown as
@@ -587,18 +676,23 @@ def _format_relative_date(days: int | None, raw: str) -> str:
             through to *raw*.
         raw: Original attribute value string, returned unchanged
             when *days* cannot be formatted as a relative label.
+        language: BCP 47 language code used to translate the
+            phrase (see ``_RELATIVE_DAY_PHRASES``).  Defaults to
+            English.
 
     Returns:
-        ``"today"``, ``"tomorrow"``, ``"in N days"`` for non-negative
-        offsets, or *raw* unchanged for ``None`` / negative *days*.
+        ``"today"``, ``"tomorrow"``, ``"in N days"`` (or their
+        translation) for non-negative offsets, or *raw* unchanged
+        for ``None`` / negative *days*.
     """
     if days is None or days < 0:
         return raw
+    today_phrase, tomorrow_phrase, in_n_days = _relative_day_phrases(language)
     if days == 0:
-        return "today"
+        return today_phrase
     if days == 1:
-        return "tomorrow"
-    return f"in {days} days"
+        return tomorrow_phrase
+    return in_n_days.format(n=days)
 
 
 def _parse_calendar_dt(
@@ -644,6 +738,7 @@ def _format_calendar_label(
     all_day: bool,
     today: date,
     time_format: str = "24",
+    language: str = "en",
 ) -> str:
     """Format a calendar event start time as a right-aligned label.
 
@@ -661,6 +756,9 @@ def _format_calendar_label(
         today: Reference date used to compute relative labels.
         time_format: ``"24"`` for 24-hour clock (e.g. ``"14:00"``),
             ``"12"`` for 12-hour with AM/PM (e.g. ``"2:00 PM"``).
+        language: BCP 47 language code used to translate the
+            relative label and localize the weekday/month
+            abbreviations. Defaults to English.
 
     Returns:
         A label such as ``"Today"``, ``"Today 14:00"``,
@@ -668,14 +766,15 @@ def _format_calendar_label(
     """
     event_date, hm = _parse_calendar_dt(start)
     delta = (event_date - today).days
+    today_phrase, tomorrow_phrase, _ = _relative_day_phrases(language)
     if delta == 0:
-        day_label = "Today"
+        day_label = today_phrase[:1].upper() + today_phrase[1:]
     elif delta == 1:
-        day_label = "Tomorrow"
+        day_label = tomorrow_phrase[:1].upper() + tomorrow_phrase[1:]
     elif 2 <= delta < 7:
-        day_label = _DAY_ABBREV[event_date.weekday()]
+        day_label = _weekday_abbrev(event_date, language)
     else:
-        month = _MONTH_ABBREV[event_date.month - 1]
+        month = _month_abbrev(event_date, language)
         day_label = f"{month} {event_date.day}"
 
     if all_day or hm is None:
