@@ -1149,6 +1149,18 @@ class TestRenderGraph:
         svg = render_widget_svg(widget, self._config())
         assert "Temp Override" in svg
 
+    def test_graph_legend_flat_key_first_entity_name_override(
+        self,
+    ) -> None:
+        # A name= override on the flat-key primary entity (entity=,
+        # not entities=[...]) must also appear in the legend, not
+        # just the header.
+        widget = self._base_widget(
+            name="Flat Key Override", entity_2="sensor.humidity"
+        )
+        svg = render_widget_svg(widget, self._config())
+        assert svg.count("Flat Key Override") == 2
+
     # ── Phase 3: Header test ──────────────────────────────────────────
 
     def test_graph_multi_entity_header_shows_first_entity(
