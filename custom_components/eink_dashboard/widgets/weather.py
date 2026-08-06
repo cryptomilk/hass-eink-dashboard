@@ -191,10 +191,10 @@ def _build_weather_context(
     # svg_render.py at module level; if svg_render.py imported
     # render.py at module level the initialisation would fail.
     from ..render import (
-        _DAY_ABBREV,
         _compute_metrics,
         _fmt_temp,
         _load_font,
+        _weekday_abbrev,
         format_number,
     )
 
@@ -505,9 +505,9 @@ def _build_weather_context(
             cx = content_left + col_width * col_i + col_width // 2
             dt_str = day.get("datetime")
             if dt_str:
-                day_label = _DAY_ABBREV[
-                    datetime.fromisoformat(dt_str).weekday()
-                ]
+                day_label = _weekday_abbrev(
+                    datetime.fromisoformat(dt_str).date(), lang
+                )
             else:
                 day_label = ""
 

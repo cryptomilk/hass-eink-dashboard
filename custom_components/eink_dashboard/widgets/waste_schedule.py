@@ -78,7 +78,7 @@ def _build_waste_schedule_context(
             ``False``),
             ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
-            state dict) and ``display_levels``.
+            state dict), ``display_levels``, and ``language``.
 
     Returns:
         Template context dict consumed by
@@ -104,6 +104,7 @@ def _build_waste_schedule_context(
     title: str = widget.get("title", "")
     show_all: bool = bool(widget.get("show_all", False))
     value_bold: bool = widget.get("bold_value", False)
+    language: str = config.get("language", "en")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
@@ -182,7 +183,7 @@ def _build_waste_schedule_context(
 
     rows: list[dict[str, object]] = []
     for i, (label, raw, days) in enumerate(visible):
-        date_str = _format_relative_date(days, raw)
+        date_str = _format_relative_date(days, raw, language)
         # Date text is always black; urgency is conveyed by the
         # icon fill/outline instead.
         date_fill = color_to_hex(COLOR_BLACK)

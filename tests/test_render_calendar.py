@@ -230,6 +230,47 @@ class TestCalendarHelpers:
         )
         assert label == "Tomorrow 0:00"
 
+    def test_format_label_today_german(self) -> None:
+        # language="de" translates "Today" to "Heute".
+        label = _format_calendar_label(
+            "2026-06-11",
+            all_day=True,
+            today=dt.date(2026, 6, 11),
+            language="de",
+        )
+        assert label == "Heute"
+
+    def test_format_label_tomorrow_german(self) -> None:
+        # language="de" translates "Tomorrow" to "Morgen".
+        label = _format_calendar_label(
+            "2026-06-12T10:00:00",
+            all_day=False,
+            today=dt.date(2026, 6, 11),
+            language="de",
+        )
+        assert label == "Morgen 10:00"
+
+    def test_format_label_within_week_german(self) -> None:
+        # language="de" localizes the weekday abbreviation.
+        # 2026-06-14 is a Sunday ("So." in German CLDR).
+        label = _format_calendar_label(
+            "2026-06-14T09:00:00",
+            all_day=False,
+            today=dt.date(2026, 6, 11),
+            language="de",
+        )
+        assert label == "So. 9:00"
+
+    def test_format_label_beyond_week_german(self) -> None:
+        # language="de" localizes the month abbreviation.
+        label = _format_calendar_label(
+            "2026-06-22",
+            all_day=True,
+            today=dt.date(2026, 6, 11),
+            language="de",
+        )
+        assert label == "Juni 22"
+
     def test_is_event_now_timed_during(self) -> None:
         # A timed event is "now" when current time is within its window.
         now = dt.datetime(2026, 6, 11, 10, 30)
@@ -552,6 +593,24 @@ class TestRenderCalendar:
             svg = render_widget_svg(w, self._config())
         # Future event starts at 14:00.
         assert "14:00" in svg
+
+    def test_calendar_language_de_translates_label(self) -> None:
+        # config["language"] = "de" translates the "Tomorrow" label
+        # on calendar.family's first event (2026-06-12, one day
+        # after _TODAY) to "Morgen".
+        w = self._widget(entity="calendar.family", max_events=1)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config(language="de"))
+        assert "Morgen 10:00" in svg
+
+    def test_calendar_language_defaults_to_english(self) -> None:
+        # Without a language override, the label stays in English.
+        w = self._widget(entity="calendar.family", max_events=1)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert "Tomorrow 10:00" in svg
 
     def test_calendar_title_shown(self) -> None:
         # When title is set, title text appears in the SVG output.

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import dataclasses
+from datetime import date
 from typing import ClassVar
 
 import pytest
@@ -29,6 +30,8 @@ from custom_components.eink_dashboard.render import (
     WidgetMetrics,
     _compute_metrics,
     _load_font,
+    _month_abbrev,
+    _weekday_abbrev,
     format_number,
     resolve_number_format,
 )
@@ -578,6 +581,63 @@ class TestResolveNumberFormat:
     def test_none_returned_as_is(self) -> None:
         # "none" format disables number formatting entirely.
         assert resolve_number_format("none", "en") == NumberFormat.NONE
+
+
+class TestWeekdayAbbrev:
+    _SATURDAY = date(2026, 5, 2)
+
+    def test_english_returns_english_abbrev(self) -> None:
+        # Baseline: "en" gives the same abbreviation as before.
+        assert _weekday_abbrev(self._SATURDAY, "en") == "Sat"
+
+    def test_german_returns_localized_abbrev(self) -> None:
+        # German CLDR abbreviation for Saturday is "Sa.".
+        assert _weekday_abbrev(self._SATURDAY, "de") == "Sa."
+
+    def test_regional_subtag_resolves(self) -> None:
+        # "de-CH" (BCP 47 hyphen form) resolves via babel's
+        # underscore-separated locale identifiers.
+        assert _weekday_abbrev(self._SATURDAY, "de-CH") == "Sa."
+
+    def test_unknown_language_falls_back_to_english(self) -> None:
+        # A language babel doesn't recognise falls back to English
+        # rather than raising.
+        assert _weekday_abbrev(self._SATURDAY, "xx-YY") == "Sat"
+
+    def test_malformed_language_falls_back_to_english(self) -> None:
+        # A malformed tag makes babel raise ValueError (not
+        # UnknownLocaleError); this must also fall back to English
+        # rather than propagating the exception.
+        assert _weekday_abbrev(self._SATURDAY, "123") == "Sat"
+
+    def test_unknown_region_falls_back_to_primary_language(self) -> None:
+        # "de-XX" has an unrecognised region, but the primary
+        # subtag "de" is still usable and should be preferred over
+        # falling straight through to English.
+        assert _weekday_abbrev(self._SATURDAY, "de-XX") == "Sa."
+
+
+class TestMonthAbbrev:
+    _MAY = date(2026, 5, 2)
+
+    def test_english_returns_english_abbrev(self) -> None:
+        # Baseline: "en" gives the same abbreviation as before.
+        assert _month_abbrev(self._MAY, "en") == "May"
+
+    def test_german_returns_localized_abbrev(self) -> None:
+        # German CLDR abbreviation for May is "Mai".
+        assert _month_abbrev(self._MAY, "de") == "Mai"
+
+    def test_unknown_language_falls_back_to_english(self) -> None:
+        # A language babel doesn't recognise falls back to English
+        # rather than raising.
+        assert _month_abbrev(self._MAY, "xx-YY") == "May"
+
+    def test_malformed_language_falls_back_to_english(self) -> None:
+        # A malformed tag makes babel raise ValueError (not
+        # UnknownLocaleError); this must also fall back to English
+        # rather than propagating the exception.
+        assert _month_abbrev(self._MAY, "123") == "May"
 
 
 class TestFormatNumber:

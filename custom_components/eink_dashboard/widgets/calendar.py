@@ -70,7 +70,7 @@ def _build_calendar_context(
             ``card_style`` (``"border"``, ``"left_bar"``,
             or ``"none"``), ``x``, ``w``, ``h``.
         config: Display config with ``states``,
-            ``display_levels``, and ``time_format``.
+            ``display_levels``, ``time_format``, and ``language``.
 
     Returns:
         Template context dict consumed by
@@ -96,6 +96,7 @@ def _build_calendar_context(
     title: str = widget.get("title", "")
     value_bold: bool = widget.get("bold_value", False)
     time_format: str = config.get("time_format", "24")
+    language: str = config.get("language", "en")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
@@ -152,7 +153,9 @@ def _build_calendar_context(
         summary = str(event.get("summary", ""))
         all_day = bool(event.get("all_day", False))
 
-        label = _format_calendar_label(start, all_day, today, time_format)
+        label = _format_calendar_label(
+            start, all_day, today, time_format, language
+        )
         is_now = _is_event_now(start, end, now)
         start_date, _ = _parse_calendar_dt(start)
         is_today = start_date == today
