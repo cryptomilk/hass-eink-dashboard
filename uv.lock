@@ -1046,7 +1046,7 @@ wheels = [
 
 [[package]]
 name = "hass-eink-dashboard"
-version = "0.6.0"
+version = "0.7.0"
 source = { virtual = "." }
 dependencies = [
     { name = "babel" },
