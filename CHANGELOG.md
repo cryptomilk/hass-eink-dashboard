@@ -5,21 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-08-08
 
 ### Added
 
-- **`invert_condition`** option on the Tile widget: a list of
-  Lovelace condition dicts, same format as `visibility`. When the
-  conditions are met the tile renders inverted (solid black card,
-  white text/icon) as an e-ink "needs attention" signal.
-- **`font_dir`** display setting: point at a directory of custom font
-  files (e.g. for non-Latin scripts) to use instead of the bundled
-  Roboto fonts.
-- **`use_system_fonts`** display setting: opt into resvg's system
-  font fallback instead of sourcing a font file via `font_dir`. Off
-  by default to preserve reproducible rendering across HA OS, Docker,
-  and dev machines. See `docs/fonts.md`.
+- **`invert_condition`** option on the Tile and Entity widgets: a
+  list of Lovelace condition dicts, same format as `visibility`.
+  When the conditions are met the widget renders inverted (solid
+  black card, white text/icon) as an e-ink "needs attention" signal.
+- **`font_dir`** and **`use_system_fonts`** display settings: use a
+  directory of custom font files, or resvg's own system font
+  fallback, to render scripts the bundled Roboto font doesn't cover
+  (e.g. Hebrew, Arabic, CJK).
+- **Localized forecast/calendar day labels**: weekday, month, and
+  relative-date ("today"/"tomorrow"/"in N days") labels in the
+  Weather forecast and Waste Schedule/Calendar widgets now follow
+  the display's configured language instead of always English.
+- **Graph widget**: `start_time` to anchor the window to a fixed
+  time of day, `state_font_size` to control header text size,
+  `show_legend` to hide the per-entity legend independently, and
+  `secondary_upper_bound`/`secondary_lower_bound` to pin the
+  secondary Y-axis range. Multi-entity headers now show every
+  entity's state instead of only the first.
+- **`heading_align`** option on the Heading widget to right-align
+  the title.
+- **Config flow**: the "Copy dashboard YAML" export now isolates
+  oversized displays into their own full-width Lovelace section
+  instead of squeezing them into a row with much smaller displays.
+
+### Changed
+
+- **Entity widget redesigned**: icon now sits on the left with the
+  value/unit as the primary black text and a repositionable,
+  alignable gray name, matching the Tile widget's visual priority.
+- **`display_levels`** (renamed from `grayscale_levels`; existing
+  configs are migrated automatically) now affects widget rendering
+  independent of e-ink optimization, and moved out of the collapsed
+  "Advanced" section to a top-level Display Settings field.
 
 ### Fixed
 
@@ -28,6 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   produced a portrait PNG for the default landscape setup. Existing
   dashboards are fixed automatically on upgrade via a config entry
   migration; no manual reconfiguration is needed.
+- Entity icons defined via `icons.json` (e.g. the `moon`
+  integration's state-dependent icons) are now resolved instead of
+  falling back to a plain letter.
+- Graph widget legend: a name override on the primary entity is no
+  longer dropped, and long names are truncated instead of
+  overlapping adjacent entries.
 
 ## [0.6.0] - 2026-07-07
 
@@ -260,6 +288,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.7.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.0...v0.4.1
