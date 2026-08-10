@@ -180,7 +180,7 @@ def _temp_gradient_stops(values: list[float]) -> list[dict[str, str]]:
     Each value maps to an evenly-spaced offset (``"0.00%"`` for the
     first entry, ``"100.00%"`` for the last) and a color from
     ``_temp_to_rgb()``.  Mirrors the ``{"offset": ..., "color":
-    ...}`` shape ``graph.py``'s ``_threshold_gradient_stops()``
+    ...}`` shape ``graph/colors.py``'s ``_threshold_gradient_stops()``
     returns, so templates can loop over either the same way.
 
     Args:
