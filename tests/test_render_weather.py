@@ -646,6 +646,32 @@ class TestRenderWeather:
         )
         assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
 
+    def test_weather_current_mode_hides_forecast(self) -> None:
+        # mode="current" must hide the separator + forecast strip
+        # entirely, keeping only the icon/temp block and detail row.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "forecast_days": 3,
+            "mode": "current",
+        }
+        ctx = _build_weather_context(widget, self._config())
+        assert ctx["show_current"] is True
+        assert ctx["has_forecast"] is False
+        assert ctx["forecast_entries"] == []
+
+        img = render_to_image([widget], self._config())
+        # Icon/temperature and detail row still render.
+        assert_has_dark_pixels(
+            img, PADDING, 10, PADDING + 90, 100, threshold=200
+        )
+        assert_has_dark_pixels(img, PADDING + 106, 10, 600, 70)
+        # No separator or forecast columns below the current-
+        # conditions block.
+        assert_all_white(img, 0, 130, 600, 250)
+
     def test_weather_card_style_none_has_soft_padding(self) -> None:
         # card_style="none" applies soft lpad so content is inset by
         # m.padding, consistent with tile/heading/entities.

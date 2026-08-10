@@ -166,12 +166,13 @@ describe("SCHEMAS", () => {
     expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
   });
 
-  it("weather mode field offers full and forecast options", () => {
+  it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "mode");
     expect(field?.selector?.select?.options).toEqual([
       { value: "full", label: "Full" },
       { value: "forecast", label: "Forecast only" },
+      { value: "current", label: "Current only" },
     ]);
   });
 });

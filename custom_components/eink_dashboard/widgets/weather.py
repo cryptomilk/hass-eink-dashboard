@@ -361,6 +361,7 @@ def _build_weather_context(
     # Unrecognised values intentionally fall back to full mode,
     # consistent with card_style's behaviour.
     show_current = mode != "forecast"
+    show_forecast_section = mode != "current"
     display_levels = config.get("display_levels", 16)
 
     scale = font_size / FONT_SIZE_WEATHER
@@ -396,7 +397,9 @@ def _build_weather_context(
     pressure_unit = attrs.get("pressure_unit", "hPa")
     cloud_coverage = attrs.get("cloud_coverage")
     forecast = attrs.get("forecast", [])
-    has_forecast = bool(forecast) and forecast_days > 0
+    has_forecast = (
+        show_forecast_section and bool(forecast) and forecast_days > 0
+    )
 
     # Forecast-only mode with no forecast data falls back to
     # showing current conditions instead of rendering a near-blank

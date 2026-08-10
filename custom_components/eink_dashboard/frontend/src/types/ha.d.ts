@@ -158,7 +158,7 @@ export type CardStyle = "border" | "left_bar" | "none";
 export type IconStyle = "filled" | "outlined" | "none";
 
 /** Weather widget display mode. */
-export type WeatherMode = "full" | "forecast";
+export type WeatherMode = "full" | "forecast" | "current";
 
 /** Response from the eink_dashboard/render_widgets WebSocket command. */
 export interface RenderWidgetsResponse {

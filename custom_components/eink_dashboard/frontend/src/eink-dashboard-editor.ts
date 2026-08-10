@@ -395,6 +395,7 @@ function weatherModeSelector(): HaFormSchema {
         options: [
           { value: "full", label: "Full" },
           { value: "forecast", label: "Forecast only" },
+          { value: "current", label: "Current only" },
         ],
         mode: "dropdown",
       },
