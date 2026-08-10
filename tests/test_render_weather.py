@@ -538,6 +538,114 @@ class TestRenderWeather:
         without = render_dashboard([base], self._config())
         assert with_full == without
 
+    def test_weather_forecast_mode_hides_current(self) -> None:
+        # mode="forecast" must hide the icon/temp block and detail
+        # row entirely, keeping only the forecast columns — with no
+        # divider line, since there is nothing above it to separate
+        # from.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "forecast_days": 3,
+            "mode": "forecast",
+        }
+        ctx = _build_weather_context(widget, self._config())
+        assert ctx["show_current"] is False
+        assert ctx["has_forecast"] is True
+        assert len(ctx["forecast_entries"]) == 3
+
+        img = render_to_image([widget], self._config())
+        # Forecast columns (day label, icon, hi/lo) still render.
+        assert_has_dark_pixels(img, 50, 30, 550, 140)
+        # Nothing renders above the forecast columns: the icon/temp
+        # block, detail row, and divider line that mode="full" would
+        # draw there are all gone.
+        assert_all_white(img, 0, 10, 600, 25)
+
+    def test_weather_forecast_mode_card_border(self) -> None:
+        # Border style in "forecast" mode: total_h is reduced
+        # because the icon/temp row and detail row are omitted, so
+        # current_h collapses to just the top padding, and the
+        # divider line's gap is omitted since there is nothing above
+        # it to separate from.
+        m = _compute_metrics(48)  # row_h_ref = round(48 * s) at s=1.0
+        widgets = [
+            {
+                "type": "weather",
+                "entity": "weather.home",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "card_style": "border",
+                "mode": "forecast",
+            }
+        ]
+        img = render_to_image(widgets, self._config())
+        # Top edge (inset by m.radius to avoid rounded corners)
+        assert_has_dark_pixels(img, m.radius, 0, 400 - m.radius, m.border)
+        # Left edge
+        assert_has_dark_pixels(img, 0, m.radius, m.border, 100)
+        # Right edge
+        assert_has_dark_pixels(img, 400 - m.border, m.radius, 400, 100)
+        # Bottom edge: total_h mirrors the renderer formula at
+        # s=1.0 without the current-conditions block, so current_h
+        # is just top_pad (m.padding) instead of the full row1_h +
+        # detail_h.
+        s = 1.0
+        pad = round(10 * s)
+        total_h = (
+            m.padding  # current_h in forecast mode
+            + round(8 * s)  # sep_gap (no divider line in this mode)
+            + round(88 * s)  # forecast_zone_h
+            + round(16 * s)  # precip_text_h
+            + pad  # bottom pad
+        )
+        assert_has_dark_pixels(
+            img,
+            m.radius,
+            total_h - m.border,
+            400 - m.radius,
+            total_h,
+        )
+
+    def test_weather_forecast_mode_no_data_falls_back(self) -> None:
+        # mode="forecast" with no forecast data must fall back to
+        # showing current conditions instead of rendering a
+        # near-blank sliver.
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 22,
+                    "temperature_unit": "°C",
+                    "humidity": 58,
+                    "forecast": [],
+                },
+            }
+        }
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "mode": "forecast",
+        }
+        cfg = make_config({"width": 600, "height": 300}, states=states)
+        ctx = _build_weather_context(widget, cfg)
+        # Fallback triggered: current conditions render despite the
+        # requested forecast-only mode.
+        assert ctx["show_current"] is True
+        assert ctx["has_forecast"] is False
+
+        img = render_to_image([widget], cfg)
+        # Icon and temperature still render.
+        assert_has_dark_pixels(
+            img, PADDING, 10, PADDING + 90, 100, threshold=200
+        )
+        assert_has_dark_pixels(img, PADDING + 106, 10, 300, 70)
+
     def test_weather_card_style_none_has_soft_padding(self) -> None:
         # card_style="none" applies soft lpad so content is inset by
         # m.padding, consistent with tile/heading/entities.

@@ -9,6 +9,7 @@
     bar_width=bar_width,
     border_color=hex_black, bar_color=hex_gray) -%}
 {# Row 1: condition icon, temperature, today hi/lo/precip. #}
+{%- if show_current -%}
 {%- if icon_svg -%}
 <g transform="translate({{ icon_x }}, {{ icon_y }})">{{ icon_svg }}</g>
 {%- endif -%}
@@ -58,13 +59,16 @@
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ d.text }}</text>
 {%- endfor -%}
+{%- endif -%}
 {# Separator and forecast grid. #}
 {%- if has_forecast -%}
+{%- if show_current -%}
 <line
   x1="{{ sep_x1 }}" y1="{{ sep_y }}"
   x2="{{ sep_x2 }}" y2="{{ sep_y }}"
   stroke="{{ hex_light_gray }}"
   stroke-width="{{ sep_thickness }}"/>
+{%- endif -%}
 {%- for day in forecast_entries -%}
 <text
   x="{{ day.cx }}" y="{{ day.label_y }}"

@@ -166,6 +166,142 @@ def _cap_weather_font_xl(
     return font_xl_size
 
 
+def _build_detail_items(
+    humidity: Any,
+    pressure: Any,
+    pressure_unit: str,
+    wind: Any,
+    wind_unit: str,
+    cloud_coverage: Any,
+    config: DisplayConfig,
+    content_left: int,
+    content_w: int,
+    detail_y: int,
+    detail_icon_h: int,
+    icon_gap: int,
+    font_sm: Any,
+) -> list[dict[str, object]]:
+    """Build the detail row's icon+text chips.
+
+    Lays out humidity, pressure, wind, and cloud-coverage chips
+    (whichever are present) as equal-width columns, each pairing
+    an inline icon SVG with its formatted text.
+
+    Args:
+        humidity: Humidity percentage, or None if unavailable.
+        pressure: Pressure reading, or None if unavailable.
+        pressure_unit: Unit suffix for the pressure chip.
+        wind: Wind speed, or None if unavailable.
+        wind_unit: Unit suffix for the wind chip.
+        cloud_coverage: Cloud coverage percentage, or None.
+        config: Display config, passed through to ``_fmt`` for
+            locale-aware number formatting.
+        content_left: Left edge of the content area in pixels.
+        content_w: Width of the content area in pixels.
+        detail_y: Y coordinate of the detail row's icons.
+        detail_icon_h: Detail icon height in pixels.
+        icon_gap: Gap between a detail icon and its text.
+        font_sm: PIL font used to measure detail text width.
+
+    Returns:
+        A list of per-chip context dicts with icon/text
+        positioning, ready to be rendered by the SVG template.
+    """
+    raw_details: list[tuple[str, str]] = []
+    if humidity is not None:
+        raw_details.append(("humidity", f"{_fmt(str(humidity), config)}%"))
+    if pressure is not None:
+        raw_details.append(
+            (
+                "barometer",
+                f"{_fmt(str(round(pressure)), config)}{pressure_unit}",
+            )
+        )
+    if wind is not None:
+        raw_details.append(
+            (
+                "wind",
+                f"{_fmt(str(round(wind)), config)}{wind_unit}",
+            )
+        )
+    if cloud_coverage is not None:
+        raw_details.append(
+            (
+                "cloud",
+                f"{_fmt(str(cloud_coverage), config)}%",
+            )
+        )
+
+    detail_cols = max(len(raw_details), 1)
+    col_w_detail = content_w // detail_cols
+    detail_items: list[dict[str, object]] = []
+
+    for i, (icon_name, text) in enumerate(raw_details):
+        col_cx = content_left + col_w_detail * i + col_w_detail // 2
+        text_w_i = round(font_sm.getlength(text))
+        svg_filename = _DETAIL_ICON_MAP.get(icon_name, "")
+        # Wrap in Markup so Jinja2 emits the SVG verbatim.  All
+        # icon strings added to the context must be Markup
+        # instances.
+        detail_icon_svg: markupsafe.Markup | str = ""
+        if svg_filename:
+            detail_path = (_ICONS_DIR / f"{svg_filename}.svg").resolve()
+            try:
+                detail_paths = _load_svg_paths(detail_path)
+                detail_icon_svg = markupsafe.Markup(
+                    _build_inline_svg(
+                        detail_paths,
+                        detail_icon_h,
+                        "0 0 30 30",
+                    )
+                )
+            except FileNotFoundError:
+                pass
+        has_detail_icon = bool(detail_icon_svg)
+        icon_w = detail_icon_h + icon_gap if has_detail_icon else 0
+        item_w = icon_w + text_w_i
+        item_x = col_cx - item_w // 2
+        detail_items.append(
+            {
+                "icon_svg": detail_icon_svg,
+                "icon_x": item_x,
+                "icon_y": detail_y,
+                "text_x": (
+                    item_x + detail_icon_h + icon_gap
+                    if has_detail_icon
+                    else item_x
+                ),
+                "text_y": detail_y + detail_icon_h // 2,
+                "text": text,
+            }
+        )
+    return detail_items
+
+
+def _forecast_divider_extra(
+    show_current: bool, sep_gap: int, sep_thickness: int
+) -> int:
+    """Extra height reserved for the forecast divider line.
+
+    "forecast" mode has no current-conditions block above the
+    forecast strip, so there is nothing to visually separate —
+    the divider line and its extra gap are omitted, and this
+    returns 0.
+
+    Args:
+        show_current: Whether the current-conditions block renders.
+        sep_gap: Gap size around the divider line.
+        sep_thickness: Divider line stroke thickness.
+
+    Returns:
+        The divider line thickness plus one gap, or 0 when the
+        divider is omitted.
+    """
+    if show_current:
+        return sep_thickness + sep_gap
+    return 0
+
+
 def _build_weather_context(
     widget: Widget,
     config: DisplayConfig,
@@ -221,7 +357,10 @@ def _build_weather_context(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    mode = widget.get("mode", DEFAULT_WEATHER_MODE)  # noqa: F841
+    mode = widget.get("mode", DEFAULT_WEATHER_MODE)
+    # Unrecognised values intentionally fall back to full mode,
+    # consistent with card_style's behaviour.
+    show_current = mode != "forecast"
     display_levels = config.get("display_levels", 16)
 
     scale = font_size / FONT_SIZE_WEATHER
@@ -257,6 +396,12 @@ def _build_weather_context(
     pressure_unit = attrs.get("pressure_unit", "hPa")
     cloud_coverage = attrs.get("cloud_coverage")
     forecast = attrs.get("forecast", [])
+    has_forecast = bool(forecast) and forecast_days > 0
+
+    # Forecast-only mode with no forecast data falls back to
+    # showing current conditions instead of rendering a near-blank
+    # sliver.
+    show_current = show_current or not has_forecast
 
     # Optional sensor overrides for temperature and humidity.
     # When a sensor entity is configured and present in states, its
@@ -309,17 +454,25 @@ def _build_weather_context(
 
     top_pad = m.padding
 
-    # Total card height, matching PIL's formula exactly.
-    row1_h = top_pad + max(icon_size, temp_h)
-    detail_h = detail_gap + detail_icon_h
-    has_forecast = bool(forecast) and forecast_days > 0
+    # Total card height, matching PIL's formula exactly.  In
+    # "forecast" mode row 1 and the detail row aren't drawn, so
+    # they contribute no height and the forecast section starts
+    # right after the top padding instead of a blank gap.
+    current_h = (
+        top_pad + max(icon_size, temp_h) + detail_gap + detail_icon_h
+        if show_current
+        else top_pad
+    )
+    sep_line_extra = _forecast_divider_extra(
+        show_current, sep_gap, sep_thickness
+    )
     if has_forecast:
         forecast_section_h = (
-            sep_gap + sep_thickness + sep_gap + forecast_zone_h + precip_text_h
+            sep_gap + sep_line_extra + forecast_zone_h + precip_text_h
         )
     else:
         forecast_section_h = pad
-    total_h = row1_h + detail_h + forecast_section_h + pad
+    total_h = current_h + forecast_section_h + pad
     # Default to content height so the SVG is no taller than
     # its rendered content.  Without this, the editor resize box
     # spans the full remaining canvas when no explicit h is
@@ -390,86 +543,36 @@ def _build_weather_context(
         temp_y_pil + temp_bbox[3],
     )
 
-    # Condition icon SVG.
-    try:
-        cond_icon_svg: markupsafe.Markup | str = _weather_svg_filter(
-            condition, icon_size
-        )
-    except (KeyError, FileNotFoundError):
-        cond_icon_svg = ""
-
-    # Detail row: icon + text pairs for weather attributes.
-    detail_y = row1_bottom + detail_gap
-    raw_details: list[tuple[str, str]] = []
-    if humidity is not None:
-        raw_details.append(("humidity", f"{_fmt(str(humidity), config)}%"))
-    if pressure is not None:
-        raw_details.append(
-            (
-                "barometer",
-                f"{_fmt(str(round(pressure)), config)}{pressure_unit}",
-            )
-        )
-    if wind is not None:
-        raw_details.append(
-            (
-                "wind",
-                f"{_fmt(str(round(wind)), config)}{wind_unit}",
-            )
-        )
-    if cloud_coverage is not None:
-        raw_details.append(
-            (
-                "cloud",
-                f"{_fmt(str(cloud_coverage), config)}%",
-            )
-        )
-
-    detail_cols = max(len(raw_details), 1)
-    col_w_detail = content_w // detail_cols
+    # Condition icon SVG and detail row are only needed when the
+    # current-conditions block is actually drawn.
+    cond_icon_svg: markupsafe.Markup | str = ""
     detail_items: list[dict[str, object]] = []
+    if show_current:
+        try:
+            cond_icon_svg = _weather_svg_filter(condition, icon_size)
+        except (KeyError, FileNotFoundError):
+            cond_icon_svg = ""
 
-    for i, (icon_name, text) in enumerate(raw_details):
-        col_cx = content_left + col_w_detail * i + col_w_detail // 2
-        text_w_i = round(font_sm.getlength(text))
-        svg_filename = _DETAIL_ICON_MAP.get(icon_name, "")
-        # Wrap in Markup so Jinja2 emits the SVG verbatim.  All
-        # icon strings added to the context must be Markup
-        # instances.
-        detail_icon_svg: markupsafe.Markup | str = ""
-        if svg_filename:
-            detail_path = (_ICONS_DIR / f"{svg_filename}.svg").resolve()
-            try:
-                detail_paths = _load_svg_paths(detail_path)
-                detail_icon_svg = markupsafe.Markup(
-                    _build_inline_svg(
-                        detail_paths,
-                        detail_icon_h,
-                        "0 0 30 30",
-                    )
-                )
-            except FileNotFoundError:
-                pass
-        has_detail_icon = bool(detail_icon_svg)
-        icon_w = detail_icon_h + icon_gap if has_detail_icon else 0
-        item_w = icon_w + text_w_i
-        item_x = col_cx - item_w // 2
-        detail_items.append(
-            {
-                "icon_svg": detail_icon_svg,
-                "icon_x": item_x,
-                "icon_y": detail_y,
-                "text_x": (
-                    item_x + detail_icon_h + icon_gap
-                    if has_detail_icon
-                    else item_x
-                ),
-                "text_y": detail_y + detail_icon_h // 2,
-                "text": text,
-            }
+        detail_y = row1_bottom + detail_gap
+        detail_items = _build_detail_items(
+            humidity,
+            pressure,
+            pressure_unit,
+            wind,
+            wind_unit,
+            cloud_coverage,
+            config,
+            content_left,
+            content_w,
+            detail_y,
+            detail_icon_h,
+            icon_gap,
+            font_sm,
         )
 
-    detail_bottom = detail_y + detail_icon_h
+    # In "forecast" mode the detail row isn't drawn either, so the
+    # forecast section anchors to content_top instead.
+    detail_bottom = detail_y + detail_icon_h if show_current else content_top
 
     # Forecast grid.
     forecast_entries: list[dict[str, object]] = []
@@ -485,11 +588,11 @@ def _build_weather_context(
         sep_x1 = content_left
         sep_x2 = content_left + content_width
         sep_y = separator_y
-        # sep_thickness accounts for the separator line height
-        # so forecast content starts below the stroke bottom,
-        # matching the sep_thickness term in
-        # forecast_section_h.
-        forecast_y = separator_y + sep_thickness + sep_gap
+        # sep_line_extra accounts for the separator line height so
+        # forecast content starts below the stroke bottom, matching
+        # the sep_line_extra term in forecast_section_h; it's 0 in
+        # "forecast" mode, where no divider line is drawn.
+        forecast_y = separator_y + sep_line_extra
         fc_icon_size = round(_WX_FC_ICON * scale)
 
         if forecast_days >= forecast_cols:
@@ -562,6 +665,7 @@ def _build_weather_context(
         "card_style": card_style,
         **_metrics_context(m),
         "bar_width": bar_width,
+        "show_current": show_current,
         "icon_svg": cond_icon_svg,
         "icon_x": icon_x,
         "icon_y": icon_y,

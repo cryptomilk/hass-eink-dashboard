@@ -157,6 +157,9 @@ export type CardStyle = "border" | "left_bar" | "none";
 /** Icon circle rendering mode for card-style widgets. */
 export type IconStyle = "filled" | "outlined" | "none";
 
+/** Weather widget display mode. */
+export type WeatherMode = "full" | "forecast";
+
 /** Response from the eink_dashboard/render_widgets WebSocket command. */
 export interface RenderWidgetsResponse {
   svgs: string[];
@@ -433,6 +436,12 @@ export interface WeatherWidget extends WidgetBase {
   humidity_entity?: string;
   /** Decorative frame style. */
   card_style?: CardStyle;
+  /**
+   * Display mode. "full" shows current conditions and the
+   * forecast grid; "forecast" hides the current-conditions
+   * block and shows only the forecast grid.
+   */
+  mode?: WeatherMode;
 }
 
 /** Device battery level indicator in icon or chip layout. */

@@ -23,6 +23,7 @@ import type {
   Widget,
   CardStyle,
   IconStyle,
+  WeatherMode,
   DisplayConfig,
   WidgetTypeMeta,
   Condition,
@@ -41,6 +42,9 @@ const DEFAULT_CARD_STYLE: CardStyle = "none";
 
 /** Default icon circle style for tile-style widgets. */
 const DEFAULT_ICON_STYLE: IconStyle = "filled";
+
+/** Default weather display mode. Mirrors DEFAULT_WEATHER_MODE in const.py. */
+const DEFAULT_WEATHER_MODE: WeatherMode = "full";
 
 // ── Widget type registry ─────────────────────────────────────────
 
@@ -98,6 +102,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       forecast_days: 5,
       font_size: FONT_SIZE_WEATHER,
       card_style: DEFAULT_CARD_STYLE,
+      mode: DEFAULT_WEATHER_MODE,
     },
   },
   entities: {
@@ -369,6 +374,27 @@ function cardStyleSelector(): HaFormSchema {
           { value: "border", label: "Border" },
           { value: "left_bar", label: "Left bar" },
           { value: "none", label: "None" },
+        ],
+        mode: "dropdown",
+      },
+    },
+  };
+}
+
+/**
+ * Weather display mode dropdown selector.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function weatherModeSelector(): HaFormSchema {
+  return {
+    name: "mode",
+    default: DEFAULT_WEATHER_MODE,
+    selector: {
+      select: {
+        options: [
+          { value: "full", label: "Full" },
+          { value: "forecast", label: "Forecast only" },
         ],
         mode: "dropdown",
       },
@@ -719,6 +745,7 @@ export const SCHEMAS: Record<
           name: "humidity_entity",
           selector: { entity: { domain: "sensor" } },
         },
+        weatherModeSelector(),
       ],
     },
     {
@@ -1618,6 +1645,7 @@ export const LABELS: Record<string, string> = {
   forecast_days: "Forecast days",
   temperature_entity: "Temperature sensor",
   humidity_entity: "Humidity sensor",
+  mode: "Mode",
   graph: "Graph type",
   data_source: "Data source",
   attribute_timestamp_key: "Timestamp key",

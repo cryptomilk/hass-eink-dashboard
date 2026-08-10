@@ -165,6 +165,15 @@ describe("SCHEMAS", () => {
     const field = findField(schema, "humidity_entity");
     expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
   });
+
+  it("weather mode field offers full and forecast options", () => {
+    const schema = SCHEMAS.weather(DISPLAY);
+    const field = findField(schema, "mode");
+    expect(field?.selector?.select?.options).toEqual([
+      { value: "full", label: "Full" },
+      { value: "forecast", label: "Forecast only" },
+    ]);
+  });
 });
 
 // ── LABELS ───────────────────────────────────────────────────────
@@ -187,6 +196,12 @@ describe("LABELS", () => {
       expect(typeof LABELS[name]).toBe("string");
       expect((LABELS[name] as string).length).toBeGreaterThan(0);
     }
+  });
+
+  it("covers weather mode field name", () => {
+    expect(LABELS).toHaveProperty("mode");
+    expect(typeof LABELS.mode).toBe("string");
+    expect((LABELS.mode as string).length).toBeGreaterThan(0);
   });
 });
 
