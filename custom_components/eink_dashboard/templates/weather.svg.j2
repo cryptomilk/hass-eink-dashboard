@@ -59,6 +59,16 @@
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ d.text }}</text>
 {%- endfor -%}
+{# "current" mode date string, centred below the detail row. #}
+{%- if date_text -%}
+<text
+  x="{{ date_x }}" y="{{ date_y }}"
+  font-family="Roboto"
+  font-size="{{ font_sm }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ date_text }}</text>
+{%- endif -%}
 {%- endif -%}
 {# Separator and forecast grid. #}
 {%- if has_forecast -%}

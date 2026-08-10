@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import ClassVar
+from unittest.mock import patch
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
@@ -36,6 +38,8 @@ from tests.helpers import (
     make_config,
     render_to_image,
 )
+
+_PATCH_TODAY = "custom_components.eink_dashboard.render.date"
 
 MOCK_WEATHER_STATE = {
     "weather.home": {
@@ -669,8 +673,92 @@ class TestRenderWeather:
         )
         assert_has_dark_pixels(img, PADDING + 106, 10, 600, 70)
         # No separator or forecast columns below the current-
-        # conditions block.
-        assert_all_white(img, 0, 130, 600, 250)
+        # conditions block; read the boundary from total_h since
+        # it includes the current-mode date line.
+        assert_all_white(img, 0, ctx["total_h"] + 5, 600, 300)
+
+    def test_weather_current_mode_shows_feels_like_and_date(self) -> None:
+        # mode="current" adds a "Feels like" detail chip (from
+        # apparent_temperature) and a locale-aware date string
+        # derived from forecast[0]'s date.
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 22,
+                    "temperature_unit": "°C",
+                    "apparent_temperature": 19.5,
+                    "forecast": [
+                        {
+                            "datetime": "2026-05-02T12:00:00",
+                            "temperature": 24,
+                            "templow": 16,
+                            "condition": "sunny",
+                            "precipitation": 0,
+                        },
+                    ],
+                },
+            }
+        }
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "mode": "current",
+        }
+        cfg = make_config({"width": 600, "height": 300}, states=states)
+        ctx = _build_weather_context(widget, cfg)
+
+        detail_texts = [d["text"] for d in ctx["detail_items"]]
+        assert "Feels like: 19.5°C" in detail_texts
+        assert ctx["date_text"] == "Saturday, 2026-05-02"
+
+        img = render_to_image([widget], cfg)
+        assert_has_dark_pixels(img, 0, int(ctx["date_y"]) - 10, 600, 300)
+
+    def test_weather_current_mode_hides_feels_like_when_missing(
+        self,
+    ) -> None:
+        # No apparent_temperature attribute on the entity: the
+        # feels-like chip must be omitted, but the date string
+        # (which doesn't depend on it) still renders.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "mode": "current",
+        }
+        ctx = _build_weather_context(widget, self._config())
+        detail_texts = [d["text"] for d in ctx["detail_items"]]
+        assert not any(t.startswith("Feels like") for t in detail_texts)
+        assert ctx["date_text"] == "Saturday, 2026-05-02"
+
+    def test_weather_current_mode_date_falls_back_to_today(self) -> None:
+        # With no forecast data, the date string falls back to
+        # _get_today() (mocked here) rather than forecast[0]'s date.
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 22,
+                    "temperature_unit": "°C",
+                },
+            }
+        }
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "mode": "current",
+        }
+        cfg = make_config({"width": 600, "height": 300}, states=states)
+        with patch(_PATCH_TODAY, wraps=date) as mock_date:
+            mock_date.today.return_value = date(2026, 5, 2)
+            ctx = _build_weather_context(widget, cfg)
+        assert ctx["date_text"] == "Saturday, 2026-05-02"
 
     def test_weather_card_style_none_has_soft_padding(self) -> None:
         # card_style="none" applies soft lpad so content is inset by

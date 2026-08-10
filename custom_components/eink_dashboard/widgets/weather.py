@@ -180,12 +180,15 @@ def _build_detail_items(
     detail_icon_h: int,
     icon_gap: int,
     font_sm: Any,
+    feels_like: str = "",
 ) -> list[dict[str, object]]:
     """Build the detail row's icon+text chips.
 
     Lays out humidity, pressure, wind, and cloud-coverage chips
     (whichever are present) as equal-width columns, each pairing
-    an inline icon SVG with its formatted text.
+    an inline icon SVG with its formatted text.  ``feels_like``, if
+    given, is appended as a final text-only chip (no icon exists
+    for it in ``_DETAIL_ICON_MAP``).
 
     Args:
         humidity: Humidity percentage, or None if unavailable.
@@ -202,6 +205,9 @@ def _build_detail_items(
         detail_icon_h: Detail icon height in pixels.
         icon_gap: Gap between a detail icon and its text.
         font_sm: PIL font used to measure detail text width.
+        feels_like: Pre-formatted feels-like temperature text
+            (e.g. ``"Feels like: 21.9°C"``), or empty to omit the
+            chip. Weather "current" mode only.
 
     Returns:
         A list of per-chip context dicts with icon/text
@@ -231,6 +237,8 @@ def _build_detail_items(
                 f"{_fmt(str(cloud_coverage), config)}%",
             )
         )
+    if feels_like:
+        raw_details.append(("feels_like", feels_like))
 
     detail_cols = max(len(raw_details), 1)
     col_w_detail = content_w // detail_cols
@@ -328,8 +336,10 @@ def _build_weather_context(
     # svg_render.py at module level; if svg_render.py imported
     # render.py at module level the initialisation would fail.
     from ..render import (
+        _babel_format_date,
         _compute_metrics,
         _fmt_temp,
+        _get_today,
         _load_font,
         _weekday_abbrev,
         format_number,
@@ -390,6 +400,7 @@ def _build_weather_context(
     attrs = state.get("attributes", {})
     temp = attrs.get("temperature", "--")
     temp_unit = attrs.get("temperature_unit", "°C")
+    apparent_temperature = attrs.get("apparent_temperature")
     humidity = attrs.get("humidity")
     wind = attrs.get("wind_speed")
     wind_unit = attrs.get("wind_speed_unit", "km/h")
@@ -457,12 +468,16 @@ def _build_weather_context(
 
     top_pad = m.padding
 
+    # "current" mode reserves one extra line below the detail row
+    # for the date string.
+    date_h = detail_gap + detail_icon_h if mode == "current" else 0
+
     # Total card height, matching PIL's formula exactly.  In
     # "forecast" mode row 1 and the detail row aren't drawn, so
     # they contribute no height and the forecast section starts
     # right after the top padding instead of a blank gap.
     current_h = (
-        top_pad + max(icon_size, temp_h) + detail_gap + detail_icon_h
+        top_pad + max(icon_size, temp_h) + detail_gap + detail_icon_h + date_h
         if show_current
         else top_pad
     )
@@ -556,6 +571,13 @@ def _build_weather_context(
         except (KeyError, FileNotFoundError):
             cond_icon_svg = ""
 
+        feels_like_text = ""
+        if mode == "current" and apparent_temperature is not None:
+            feels_like_text = (
+                f"Feels like: "
+                f"{_fmt_temp(apparent_temperature, nf, lang)}{temp_unit}"
+            )
+
         detail_y = row1_bottom + detail_gap
         detail_items = _build_detail_items(
             humidity,
@@ -571,11 +593,29 @@ def _build_weather_context(
             detail_icon_h,
             icon_gap,
             font_sm,
+            feels_like_text,
         )
 
     # In "forecast" mode the detail row isn't drawn either, so the
     # forecast section anchors to content_top instead.
     detail_bottom = detail_y + detail_icon_h if show_current else content_top
+
+    # Locale-aware date string, "current" mode only.  Anchored to
+    # forecast[0]'s date so it stays consistent with today's
+    # hi/lo/precip shown above; falls back to the real current
+    # date when no forecast data is available.
+    date_text = ""
+    date_x = 0
+    date_y = 0
+    if mode == "current":
+        today_date = (
+            datetime.fromisoformat(forecast[0]["datetime"]).date()
+            if forecast
+            else _get_today()
+        )
+        date_text = _babel_format_date(today_date, "EEEE, yyyy-MM-dd", lang)
+        date_x = content_left + content_w // 2
+        date_y = detail_bottom + detail_gap + detail_icon_h // 2
 
     # Forecast grid.
     forecast_entries: list[dict[str, object]] = []
@@ -688,6 +728,9 @@ def _build_weather_context(
         "precip_text": today_precip,
         "precip_y": precip_y,
         "detail_items": detail_items,
+        "date_text": date_text,
+        "date_x": date_x,
+        "date_y": date_y,
         "has_forecast": has_forecast,
         "sep_x1": sep_x1,
         "sep_x2": sep_x2,
