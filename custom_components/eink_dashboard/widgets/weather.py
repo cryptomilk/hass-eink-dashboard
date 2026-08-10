@@ -23,6 +23,7 @@ import markupsafe
 
 from ..const import (
     DEFAULT_CARD_STYLE,
+    DEFAULT_WEATHER_MODE,
     FONT_SIZE_WEATHER,
     PADDING,
     DisplayConfig,
@@ -177,7 +178,7 @@ def _build_weather_context(
     Args:
         widget: Widget config dict.  Recognised keys:
             ``entity``, ``x``, ``y``, ``w``, ``font_size``,
-            ``forecast_days``, ``card_style``,
+            ``forecast_days``, ``card_style``, ``mode``,
             ``temperature_entity``, ``humidity_entity``.
         config: Display config with ``width``, ``height``,
             ``states``, ``display_levels``.
@@ -220,6 +221,7 @@ def _build_weather_context(
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
     forecast_days = widget.get("forecast_days", 5)
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    mode = widget.get("mode", DEFAULT_WEATHER_MODE)  # noqa: F841
     display_levels = config.get("display_levels", 16)
 
     scale = font_size / FONT_SIZE_WEATHER

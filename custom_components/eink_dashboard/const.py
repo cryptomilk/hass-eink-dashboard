@@ -76,6 +76,8 @@ DEFAULT_CARD_STYLE = "none"
 # widget's scale-factor system depends on it as a ratio reference.
 FONT_SIZE_WEATHER = 32
 
+DEFAULT_WEATHER_MODE = "full"
+
 
 @dataclass(frozen=True)
 class DevicePreset:

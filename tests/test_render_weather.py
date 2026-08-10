@@ -528,6 +528,16 @@ class TestRenderWeather:
         without = render_dashboard([base], self._config())
         assert with_none == without
 
+    def test_weather_mode_full_is_default(self) -> None:
+        # Omitting mode must produce byte-identical output to
+        # mode="full" (no rendering change).
+        base = {"type": "weather", "entity": "weather.home", "x": 0, "y": 0}
+        with_full = render_dashboard(
+            [{**base, "mode": "full"}], self._config()
+        )
+        without = render_dashboard([base], self._config())
+        assert with_full == without
+
     def test_weather_card_style_none_has_soft_padding(self) -> None:
         # card_style="none" applies soft lpad so content is inset by
         # m.padding, consistent with tile/heading/entities.
