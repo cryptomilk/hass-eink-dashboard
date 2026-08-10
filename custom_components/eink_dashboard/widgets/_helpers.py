@@ -30,6 +30,7 @@ import contextlib
 import functools
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -128,6 +129,84 @@ def _color_context() -> dict[str, str]:
         "hex_gray": color_to_hex(COLOR_GRAY),
         "hex_light_gray": color_to_hex(COLOR_LIGHT_GRAY),
     }
+
+
+# Temperature (°C) -> RGB color stops, sorted ascending by
+# temperature.  Shared by the weather widget's today min/max bar
+# and (eventually) the meteogram's temperature curve, so both use
+# the same color language for the same reading.
+_TEMP_GRADIENT: list[tuple[float, tuple[int, int, int]]] = [
+    (-20, (0, 60, 98)),
+    (-10, (120, 162, 204)),
+    (0, (164, 195, 210)),
+    (10, (121, 210, 179)),
+    (20, (252, 245, 112)),
+    (30, (255, 150, 79)),
+    (40, (255, 192, 159)),
+]
+
+
+def _temp_to_rgb(temp: float) -> tuple[int, int, int]:
+    """Map a temperature to an RGB color via linear interpolation.
+
+    Temperatures outside ``_TEMP_GRADIENT``'s range clamp to the
+    nearest end color.
+
+    Args:
+        temp: Temperature in Celsius.
+
+    Returns:
+        ``(r, g, b)`` tuple, each in ``0..255``.
+    """
+    stops = _TEMP_GRADIENT
+    if temp <= stops[0][0]:
+        return stops[0][1]
+    if temp >= stops[-1][0]:
+        return stops[-1][1]
+    for (t0, c0), (t1, c1) in pairwise(stops):
+        if t0 <= temp <= t1:
+            frac = (temp - t0) / (t1 - t0)
+            return (
+                round(c0[0] + (c1[0] - c0[0]) * frac),
+                round(c0[1] + (c1[1] - c0[1]) * frac),
+                round(c0[2] + (c1[2] - c0[2]) * frac),
+            )
+    return stops[-1][1]
+
+
+def _temp_gradient_stops(values: list[float]) -> list[dict[str, str]]:
+    """Compute SVG linearGradient stop entries from temperatures.
+
+    Each value maps to an evenly-spaced offset (``"0.00%"`` for the
+    first entry, ``"100.00%"`` for the last) and a color from
+    ``_temp_to_rgb()``.  Mirrors the ``{"offset": ..., "color":
+    ...}`` shape ``graph.py``'s ``_threshold_gradient_stops()``
+    returns, so templates can loop over either the same way.
+
+    Args:
+        values: Temperatures sampled at even intervals across the
+            gradient's extent.  Must have at least two entries.
+
+    Returns:
+        List of ``{"offset": "XX.XX%", "color": "#hex"}`` dicts,
+        ordered start to end of the gradient.
+
+    Raises:
+        ValueError: If ``values`` has fewer than two entries.
+    """
+    if len(values) < 2:
+        raise ValueError(f"values must have >= 2 entries, got {len(values)}")
+    n = len(values) - 1
+    stops: list[dict[str, str]] = []
+    for i, temp in enumerate(values):
+        r, g, b = _temp_to_rgb(temp)
+        stops.append(
+            {
+                "offset": f"{i / n * 100:.2f}%",
+                "color": f"#{r:02x}{g:02x}{b:02x}",
+            }
+        )
+    return stops
 
 
 def _fmt(value: str, config: DisplayConfig) -> str:

@@ -710,8 +710,7 @@ class TestRenderWeather:
         cfg = make_config({"width": 600, "height": 300}, states=states)
         ctx = _build_weather_context(widget, cfg)
 
-        detail_texts = [d["text"] for d in ctx["detail_items"]]
-        assert "Feels like: 19.5°C" in detail_texts
+        assert ctx["feels_like_text"] == "Feels like: 19.5°C"
         assert ctx["date_text"] == "Saturday, 2026-05-02"
 
         img = render_to_image([widget], cfg)
@@ -721,7 +720,7 @@ class TestRenderWeather:
         self,
     ) -> None:
         # No apparent_temperature attribute on the entity: the
-        # feels-like chip must be omitted, but the date string
+        # feels-like line must be omitted, but the date string
         # (which doesn't depend on it) still renders.
         widget = {
             "type": "weather",
@@ -731,8 +730,7 @@ class TestRenderWeather:
             "mode": "current",
         }
         ctx = _build_weather_context(widget, self._config())
-        detail_texts = [d["text"] for d in ctx["detail_items"]]
-        assert not any(t.startswith("Feels like") for t in detail_texts)
+        assert ctx["feels_like_text"] == ""
         assert ctx["date_text"] == "Saturday, 2026-05-02"
 
     def test_weather_current_mode_date_falls_back_to_today(self) -> None:
@@ -759,6 +757,149 @@ class TestRenderWeather:
             mock_date.today.return_value = date(2026, 5, 2)
             ctx = _build_weather_context(widget, cfg)
         assert ctx["date_text"] == "Saturday, 2026-05-02"
+
+    @staticmethod
+    def _current_mode_bar_ctx(
+        temperature: float, lo: float = 14, hi: float = 28
+    ) -> dict[str, object]:
+        """Build a mode="current" context for a given current reading.
+
+        Uses a fixed forecast[0] with templow=``lo``, temperature=``hi``
+        (the today min/max bar's endpoints, 14/28 by default) so tests
+        only vary the current reading.
+        """
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": temperature,
+                    "temperature_unit": "°C",
+                    "forecast": [
+                        {
+                            "datetime": "2026-05-02T12:00:00",
+                            "temperature": hi,
+                            "templow": lo,
+                            "condition": "sunny",
+                        },
+                    ],
+                },
+            }
+        }
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": 0,
+            "y": 0,
+            "mode": "current",
+        }
+        cfg = make_config({"width": 600, "height": 400}, states=states)
+        return _build_weather_context(widget, cfg)
+
+    def test_weather_current_mode_bar_dot_position_proportional(
+        self,
+    ) -> None:
+        # The dot's x-position along the bar must be proportional
+        # to (current - lo) / (hi - lo), with lo=14 and hi=28.
+        ctx = self._current_mode_bar_ctx(21)
+        expected_frac = (21 - 14) / (28 - 14)
+        expected_cx = ctx["bar_x1"] + round(expected_frac * ctx["bar_w"])
+        assert ctx["bar_dot_cx"] == expected_cx
+
+    def test_weather_current_mode_bar_dot_clamps_out_of_range(self) -> None:
+        # A current reading below lo or above hi must clamp the dot
+        # to the corresponding end of the bar rather than drawing it
+        # outside the bar's bounds.
+        below = self._current_mode_bar_ctx(5)
+        assert below["bar_dot_cx"] == below["bar_x1"]
+
+        above = self._current_mode_bar_ctx(40)
+        assert above["bar_dot_cx"] == above["bar_x1"] + above["bar_w"]
+
+    def test_weather_current_mode_bar_absent_without_forecast(self) -> None:
+        # No forecast data: there is no today templow/temperature to
+        # anchor the bar to, so it must not render.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": PADDING,
+            "y": 10,
+            "mode": "current",
+        }
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 21.9,
+                    "temperature_unit": "°C",
+                    "forecast": [],
+                },
+            }
+        }
+        cfg = make_config({"width": 600, "height": 300}, states=states)
+        ctx = _build_weather_context(widget, cfg)
+        assert ctx["show_bar"] is False
+        assert ctx["bar_gradient_stops"] == []
+
+    def test_weather_current_mode_bar_absent_with_empty_temperature(
+        self,
+    ) -> None:
+        # forecast[0]["temperature"] == "" (this codebase's convention
+        # for "missing") must not crash the bar_hi - bar_lo arithmetic
+        # and must suppress the bar, matching the None case.
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": 0,
+            "y": 0,
+            "mode": "current",
+        }
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 21.9,
+                    "temperature_unit": "°C",
+                    "forecast": [
+                        {
+                            "datetime": "2026-05-02T12:00:00",
+                            "temperature": "",
+                            "templow": 14,
+                            "condition": "sunny",
+                        },
+                    ],
+                },
+            }
+        }
+        cfg = make_config({"width": 600, "height": 300}, states=states)
+        ctx = _build_weather_context(widget, cfg)
+        assert ctx["show_bar"] is False
+
+    def test_weather_current_mode_bar_dot_centered_when_hi_equals_lo(
+        self,
+    ) -> None:
+        # A zero-range today (hi == lo) must center the dot rather
+        # than dividing by zero.
+        ctx = self._current_mode_bar_ctx(20, lo=20, hi=20)
+        assert ctx["bar_dot_cx"] == ctx["bar_x1"] + round(0.5 * ctx["bar_w"])
+
+    def test_weather_current_mode_bar_dot_at_exact_endpoints(self) -> None:
+        # A current reading exactly at lo or hi is a distinct code
+        # path from the out-of-range clamp (frac lands at 0.0/1.0
+        # naturally rather than via min()/max()).
+        at_lo = self._current_mode_bar_ctx(14)
+        assert at_lo["bar_dot_cx"] == at_lo["bar_x1"]
+
+        at_hi = self._current_mode_bar_ctx(28)
+        assert at_hi["bar_dot_cx"] == at_hi["bar_x1"] + at_hi["bar_w"]
+
+    def test_weather_current_mode_bar_negative_temperatures(self) -> None:
+        # Negative lo/hi must still produce a proportional dot
+        # position and a full set of gradient stops.
+        ctx = self._current_mode_bar_ctx(-2, lo=-10, hi=5)
+        expected_frac = (-2 - -10) / (5 - -10)
+        expected_cx = ctx["bar_x1"] + round(expected_frac * ctx["bar_w"])
+        assert ctx["bar_dot_cx"] == expected_cx
+        assert len(ctx["bar_gradient_stops"]) == 13
 
     def test_weather_card_style_none_has_soft_padding(self) -> None:
         # card_style="none" applies soft lpad so content is inset by

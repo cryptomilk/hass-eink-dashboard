@@ -40,6 +40,8 @@ from custom_components.eink_dashboard.widgets._helpers import (
     _card_insets,
     _metrics_context,
     _resolve_icon_style,
+    _temp_gradient_stops,
+    _temp_to_rgb,
     _title_layout,
 )
 from tests.helpers import (
@@ -537,6 +539,43 @@ class TestHelperFunctions:
         """num_rows < 1 raises ValueError."""
         with pytest.raises(ValueError, match="num_rows"):
             _auto_row_height("", 0)
+
+    def test_temp_to_rgb_endpoint_colors(self) -> None:
+        """Gradient endpoints map to their exact defined colors."""
+        assert _temp_to_rgb(-20) == (0, 60, 98)
+        assert _temp_to_rgb(40) == (255, 192, 159)
+
+    def test_temp_to_rgb_clamps_beyond_range(self) -> None:
+        """Temperatures outside -20..40 clamp to the nearest end."""
+        assert _temp_to_rgb(-30) == _temp_to_rgb(-20)
+        assert _temp_to_rgb(50) == _temp_to_rgb(40)
+
+    def test_temp_to_rgb_interpolates_midpoint(self) -> None:
+        """A value halfway between two stops averages their colors."""
+        assert _temp_to_rgb(-15) == (60, 111, 151)
+
+    def test_temp_gradient_stops_offsets_and_colors(self) -> None:
+        """Stops are evenly spaced and match _temp_to_rgb per value."""
+        stops = _temp_gradient_stops([0, 10, 20])
+        assert [s["offset"] for s in stops] == [
+            "0.00%",
+            "50.00%",
+            "100.00%",
+        ]
+        assert stops[0]["color"] == "#{:02x}{:02x}{:02x}".format(
+            *_temp_to_rgb(0)
+        )
+        assert stops[1]["color"] == "#{:02x}{:02x}{:02x}".format(
+            *_temp_to_rgb(10)
+        )
+        assert stops[2]["color"] == "#{:02x}{:02x}{:02x}".format(
+            *_temp_to_rgb(20)
+        )
+
+    def test_temp_gradient_stops_rejects_single_value(self) -> None:
+        """Fewer than 2 values raises ValueError, not ZeroDivisionError."""
+        with pytest.raises(ValueError, match="values"):
+            _temp_gradient_stops([10])
 
 
 class TestResolveNumberFormat:

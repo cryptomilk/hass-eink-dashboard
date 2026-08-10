@@ -2,6 +2,16 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_state -%}
+{# Gradient for the "current" mode today min/max bar. #}
+{%- if show_bar -%}
+<defs>
+<linearGradient id="{{ bar_gradient_id }}" x1="0" y1="0" x2="1" y2="0">
+{%- for stop in bar_gradient_stops -%}
+<stop offset="{{ stop.offset }}" stop-color="{{ stop.color }}"/>
+{%- endfor -%}
+</linearGradient>
+</defs>
+{%- endif -%}
 {%- call card_container(
     x=0, y=0, w=card_w, h=total_h,
     card_style=card_style,
@@ -59,6 +69,16 @@
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ d.text }}</text>
 {%- endfor -%}
+{# "current" mode feels-like temperature, own centred line. #}
+{%- if feels_like_text -%}
+<text
+  x="{{ feels_like_x }}" y="{{ feels_like_y }}"
+  font-family="Roboto"
+  font-size="{{ font_sm }}"
+  text-anchor="middle"
+  dominant-baseline="central"
+  fill="{{ hex_gray }}">{{ feels_like_text }}</text>
+{%- endif -%}
 {# "current" mode date string, centred below the detail row. #}
 {%- if date_text -%}
 <text
@@ -68,6 +88,34 @@
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ date_text }}</text>
+{%- endif -%}
+{# "current" mode today min/max gradient bar. #}
+{%- if show_bar -%}
+<rect
+  x="{{ bar_x1 }}" y="{{ bar_y }}"
+  width="{{ bar_w }}" height="{{ bar_height }}"
+  rx="{{ bar_height // 2 }}"
+  fill="url(#{{ bar_gradient_id }})"/>
+{%- if bar_dot_cx is not none -%}
+<circle
+  cx="{{ bar_dot_cx }}" cy="{{ bar_cy }}"
+  r="{{ bar_height // 2 }}"
+  fill="{{ hex_black }}"/>
+{%- endif -%}
+<text
+  x="{{ bar_left_x }}" y="{{ bar_cy }}"
+  font-family="Roboto"
+  font-size="{{ font_sm }}"
+  text-anchor="start"
+  dominant-baseline="central"
+  fill="{{ hex_black }}">{{ bar_label_left }}</text>
+<text
+  x="{{ bar_right_x }}" y="{{ bar_cy }}"
+  font-family="Roboto"
+  font-size="{{ font_sm }}"
+  text-anchor="end"
+  dominant-baseline="central"
+  fill="{{ hex_black }}">{{ bar_label_right }}</text>
 {%- endif -%}
 {%- endif -%}
 {# Separator and forecast grid. #}

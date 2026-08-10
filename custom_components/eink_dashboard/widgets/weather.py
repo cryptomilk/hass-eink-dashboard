@@ -40,6 +40,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _temp_gradient_stops,
     _widget_dim,
 )
 
@@ -54,6 +55,9 @@ from ._helpers import (
 # it.
 _WX_ROW_H = 48  # 48, not DEFAULT_ROW_H (56): matches original PIL proportions
 _WX_NATURAL_W = 380  # natural card width
+# "current" mode is wider: room for the extra feels-like detail
+# chip and the min/max bar's side labels.
+_WX_NATURAL_W_CURRENT = 460
 _WX_ICON = 80  # condition icon diameter
 _WX_FONT_XL = 64  # temperature font size (bold)
 _WX_FONT_SM = 16  # hi/lo, detail, and forecast font
@@ -73,6 +77,10 @@ _WX_FC_PRECIP_Y = _WX_FC_ZONE_H  # precip text at zone bottom
 _WX_MIN_FC_COLS = 5  # minimum forecast column count
 _WX_LO_Y_FRAC = 0.4  # lo temp Y as fraction of temp_h
 _WX_PRECIP_Y_FRAC = 0.72  # precip text Y as fraction of temp_h
+_WX_BAR_H = 24  # today min/max gradient bar height
+_WX_BAR_LABEL_W_LEFT = 70  # left text reserve: day abbrev + lo temp
+_WX_BAR_LABEL_W_RIGHT = 50  # right text reserve: hi temp
+_WX_BAR_GRADIENT_STEPS = 12  # color stops sampled across the bar
 
 _DETAIL_ICON_MAP: dict[str, str] = {
     "humidity": "wi-humidity",
@@ -80,6 +88,22 @@ _DETAIL_ICON_MAP: dict[str, str] = {
     "wind": "wi-strong-wind",
     "cloud": "wi-cloud",
 }
+
+
+def _none_if_empty(value: Any) -> Any:
+    """Normalize this module's "field absent" sentinel to ``None``.
+
+    Forecast entries represent a missing numeric field as ``""``
+    (see ``fc_hi_val``/``fc_lo_val`` below) rather than omitting the
+    key or using ``None``.
+
+    Args:
+        value: A forecast field value.
+
+    Returns:
+        ``None`` if ``value`` is ``""``, otherwise ``value`` unchanged.
+    """
+    return None if value == "" else value
 
 
 def _resolve_sensor_override(
@@ -180,15 +204,12 @@ def _build_detail_items(
     detail_icon_h: int,
     icon_gap: int,
     font_sm: Any,
-    feels_like: str = "",
 ) -> list[dict[str, object]]:
     """Build the detail row's icon+text chips.
 
     Lays out humidity, pressure, wind, and cloud-coverage chips
     (whichever are present) as equal-width columns, each pairing
-    an inline icon SVG with its formatted text.  ``feels_like``, if
-    given, is appended as a final text-only chip (no icon exists
-    for it in ``_DETAIL_ICON_MAP``).
+    an inline icon SVG with its formatted text.
 
     Args:
         humidity: Humidity percentage, or None if unavailable.
@@ -205,9 +226,6 @@ def _build_detail_items(
         detail_icon_h: Detail icon height in pixels.
         icon_gap: Gap between a detail icon and its text.
         font_sm: PIL font used to measure detail text width.
-        feels_like: Pre-formatted feels-like temperature text
-            (e.g. ``"Feels like: 21.9°C"``), or empty to omit the
-            chip. Weather "current" mode only.
 
     Returns:
         A list of per-chip context dicts with icon/text
@@ -237,8 +255,6 @@ def _build_detail_items(
                 f"{_fmt(str(cloud_coverage), config)}%",
             )
         )
-    if feels_like:
-        raw_details.append(("feels_like", feels_like))
 
     detail_cols = max(len(raw_details), 1)
     col_w_detail = content_w // detail_cols
@@ -349,13 +365,14 @@ def _build_weather_context(
     states = config.get("states", {})
     state = states.get(entity_id)
     x = widget.get("x", PADDING)
+    y = widget.get("y", 0)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
 
     if state is None:
         svg_h = _widget_dim(
             widget,
             "h",
-            config["height"] - widget.get("y", 0),
+            config["height"] - y,
         )
         return {
             "w": svg_w,
@@ -379,10 +396,11 @@ def _build_weather_context(
     # Card width: use explicit w or natural width capped to
     # canvas.
     w_override = widget.get("w")
+    natural_w = _WX_NATURAL_W_CURRENT if mode == "current" else _WX_NATURAL_W
     if w_override is not None:
         card_w = w_override
     else:
-        card_w = min(round(_WX_NATURAL_W * scale), svg_w)
+        card_w = min(round(natural_w * scale), svg_w)
         # Clip SVG to content width so the editor resize box
         # matches the rendered content, not the full canvas.
         svg_w = _widget_dim(widget, "w", card_w)
@@ -416,6 +434,19 @@ def _build_weather_context(
     # showing current conditions instead of rendering a near-blank
     # sliver.
     show_current = show_current or not has_forecast
+
+    # Today min/max gradient bar, "current" mode only.  Uses
+    # forecast[0] directly (not has_forecast, which reflects the
+    # forecast-strip's own visibility) so the bar still renders
+    # even though "current" mode always hides the strip.
+    today_forecast = forecast[0] if forecast else None
+    bar_lo = _none_if_empty(
+        today_forecast.get("templow") if today_forecast else None
+    )
+    bar_hi = _none_if_empty(
+        today_forecast.get("temperature") if today_forecast else None
+    )
+    show_bar = mode == "current" and bar_lo is not None and bar_hi is not None
 
     # Optional sensor overrides for temperature and humidity.
     # When a sensor entity is configured and present in states, its
@@ -451,6 +482,7 @@ def _build_weather_context(
     sep_thickness = m.divider
     forecast_zone_h = round(_WX_FC_ZONE_H * scale)
     precip_text_h = round(_WX_PRECIP_H * scale)
+    bar_height = round(_WX_BAR_H * scale)
 
     # Measure temperature text height (PIL) for height
     # estimation.
@@ -469,15 +501,31 @@ def _build_weather_context(
     top_pad = m.padding
 
     # "current" mode reserves one extra line below the detail row
-    # for the date string.
+    # for the feels-like temperature (own line: too long to share
+    # an equal-width column with the numeric detail chips without
+    # overlapping), another for the date string, and (when today's
+    # forecast has both a low and a high) another for the min/max
+    # gradient bar.
+    feels_like_h = (
+        detail_gap + detail_icon_h
+        if mode == "current" and apparent_temperature is not None
+        else 0
+    )
     date_h = detail_gap + detail_icon_h if mode == "current" else 0
+    bar_h = sep_gap + bar_height if show_bar else 0
 
     # Total card height, matching PIL's formula exactly.  In
     # "forecast" mode row 1 and the detail row aren't drawn, so
     # they contribute no height and the forecast section starts
     # right after the top padding instead of a blank gap.
     current_h = (
-        top_pad + max(icon_size, temp_h) + detail_gap + detail_icon_h + date_h
+        top_pad
+        + max(icon_size, temp_h)
+        + detail_gap
+        + detail_icon_h
+        + feels_like_h
+        + date_h
+        + bar_h
         if show_current
         else top_pad
     )
@@ -571,13 +619,6 @@ def _build_weather_context(
         except (KeyError, FileNotFoundError):
             cond_icon_svg = ""
 
-        feels_like_text = ""
-        if mode == "current" and apparent_temperature is not None:
-            feels_like_text = (
-                f"Feels like: "
-                f"{_fmt_temp(apparent_temperature, nf, lang)}{temp_unit}"
-            )
-
         detail_y = row1_bottom + detail_gap
         detail_items = _build_detail_items(
             humidity,
@@ -593,21 +634,48 @@ def _build_weather_context(
             detail_icon_h,
             icon_gap,
             font_sm,
-            feels_like_text,
         )
 
     # In "forecast" mode the detail row isn't drawn either, so the
     # forecast section anchors to content_top instead.
     detail_bottom = detail_y + detail_icon_h if show_current else content_top
 
-    # Locale-aware date string, "current" mode only.  Anchored to
-    # forecast[0]'s date so it stays consistent with today's
-    # hi/lo/precip shown above; falls back to the real current
-    # date when no forecast data is available.
+    # Feels-like temperature and locale-aware date string, "current"
+    # mode only.  Each gets its own centred line below the detail
+    # row (rather than sharing an equal-width column with the
+    # numeric detail chips) since "Feels like: 19.5°C" is far
+    # longer than those chips and would overlap its neighbours.
+    # The date is anchored to forecast[0]'s date so it stays
+    # consistent with today's hi/lo/precip shown above; falls back
+    # to the real current date when no forecast data is available.
+    feels_like_text = ""
+    feels_like_x = 0
+    feels_like_y = 0
     date_text = ""
     date_x = 0
     date_y = 0
+    bar_gradient_id = ""
+    bar_gradient_stops: list[dict[str, str]] = []
+    bar_x1 = 0
+    bar_y = 0
+    bar_w = 0
+    bar_cy = 0
+    bar_dot_cx: int | None = None
+    bar_label_left = ""
+    bar_label_right = ""
+    bar_left_x = 0
+    bar_right_x = 0
     if mode == "current":
+        row_y = detail_bottom
+        if apparent_temperature is not None:
+            feels_like_text = (
+                f"Feels like: "
+                f"{_fmt_temp(apparent_temperature, nf, lang)}{temp_unit}"
+            )
+            feels_like_x = content_left + content_w // 2
+            feels_like_y = row_y + detail_gap + detail_icon_h // 2
+            row_y += feels_like_h
+
         today_date = (
             datetime.fromisoformat(forecast[0]["datetime"]).date()
             if forecast
@@ -615,7 +683,43 @@ def _build_weather_context(
         )
         date_text = _babel_format_date(today_date, "EEEE, yyyy-MM-dd", lang)
         date_x = content_left + content_w // 2
-        date_y = detail_bottom + detail_gap + detail_icon_h // 2
+        date_y = row_y + detail_gap + detail_icon_h // 2
+        row_y += date_h
+
+        bar_x1 = content_left + round(_WX_BAR_LABEL_W_LEFT * scale)
+        bar_x2 = (
+            content_left + content_w - round(_WX_BAR_LABEL_W_RIGHT * scale)
+        )
+        bar_w = bar_x2 - bar_x1
+        if bar_w < 1:
+            show_bar = False
+
+        if show_bar:
+            bar_gradient_id = f"wx-bar-{x}-{y}"
+            bar_y = row_y + sep_gap
+            bar_cy = bar_y + bar_height // 2
+
+            frac = 0.5 if bar_hi == bar_lo else None
+            current_reading = temp if isinstance(temp, (int, float)) else None
+            if frac is None and current_reading is not None:
+                frac = (current_reading - bar_lo) / (bar_hi - bar_lo)
+            if frac is not None:
+                frac = min(1.0, max(0.0, frac))
+                bar_dot_cx = bar_x1 + round(frac * bar_w)
+
+            bar_gradient_stops = _temp_gradient_stops(
+                [
+                    bar_lo + i / _WX_BAR_GRADIENT_STEPS * (bar_hi - bar_lo)
+                    for i in range(_WX_BAR_GRADIENT_STEPS + 1)
+                ]
+            )
+            bar_label_left = (
+                f"{_weekday_abbrev(today_date, lang)} "
+                f"{_fmt_temp(bar_lo, nf, lang)}°"
+            )
+            bar_label_right = f"{_fmt_temp(bar_hi, nf, lang)}°"
+            bar_left_x = content_left
+            bar_right_x = content_left + content_w
 
     # Forecast grid.
     forecast_entries: list[dict[str, object]] = []
@@ -728,9 +832,25 @@ def _build_weather_context(
         "precip_text": today_precip,
         "precip_y": precip_y,
         "detail_items": detail_items,
+        "feels_like_text": feels_like_text,
+        "feels_like_x": feels_like_x,
+        "feels_like_y": feels_like_y,
         "date_text": date_text,
         "date_x": date_x,
         "date_y": date_y,
+        "show_bar": show_bar,
+        "bar_gradient_id": bar_gradient_id,
+        "bar_gradient_stops": bar_gradient_stops,
+        "bar_x1": bar_x1,
+        "bar_y": bar_y,
+        "bar_w": bar_w,
+        "bar_height": bar_height,
+        "bar_cy": bar_cy,
+        "bar_dot_cx": bar_dot_cx,
+        "bar_label_left": bar_label_left,
+        "bar_label_right": bar_label_right,
+        "bar_left_x": bar_left_x,
+        "bar_right_x": bar_right_x,
         "has_forecast": has_forecast,
         "sep_x1": sep_x1,
         "sep_x2": sep_x2,
