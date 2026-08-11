@@ -1,0 +1,83 @@
+{%- from "_macros.svg.j2" import card_container -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+{%- if has_entity -%}
+{#- Temperature gradient for the curve, sampled from its own
+    values -- mirrors graph.svg.j2's threshold-gradient <defs>. -#}
+{%- if curve_path and curve_stops -%}
+<defs>
+<linearGradient id="mgTempGradient"
+  gradientUnits="userSpaceOnUse"
+  x1="{{ content_left }}" y1="0"
+  x2="{{ content_right }}" y2="0">
+{%- for stop in curve_stops -%}
+<stop offset="{{ stop.offset }}" stop-color="{{ stop.color }}"/>
+{%- endfor -%}
+</linearGradient>
+</defs>
+{%- endif -%}
+{%- call card_container(
+    x=0, y=0, w=w, h=h,
+    card_style=card_style,
+    radius=m_radius, border=m_border,
+    bar_width=bar_width,
+    border_color=hex_black,
+    bar_color=hex_gray) -%}
+{#- Day-boundary markers: dashed line (all but the first) plus a
+    weekday/date label. -#}
+{%- for marker in day_markers -%}
+{%- if marker.show_line -%}
+<line x1="{{ marker.x }}" y1="{{ marker.line_y1 }}"
+      x2="{{ marker.x }}" y2="{{ marker.line_y2 }}"
+      stroke="{{ hex_gray }}" stroke-width="1"
+      stroke-dasharray="4,3"/>
+{%- endif -%}
+<text x="{{ marker.x }}" y="{{ day_label_y }}"
+  font-family="Roboto"
+  font-size="{{ day_label_font_sz }}"
+  dominant-baseline="hanging"
+  fill="{{ hex_black }}">{{ marker.label }}</text>
+{%- endfor -%}
+{#- Cloud-coverage band: shaded area from the plot's top edge. -#}
+{%- if show_cloud_band -%}
+<path d="{{ cloud_band_path }}"
+  fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
+{%- endif -%}
+{#- Y-axis gridlines and labels. -#}
+{%- for grid in grid_lines -%}
+<line x1="{{ content_left }}" y1="{{ grid.y }}"
+      x2="{{ content_right }}" y2="{{ grid.y }}"
+      stroke="{{ hex_light_gray }}"
+      stroke-width="{{ grid_stroke_w }}"/>
+<text x="{{ content_left }}" y="{{ grid.y }}"
+  font-family="Roboto"
+  font-size="{{ grid_font_sz }}"
+  dominant-baseline="auto"
+  fill="{{ hex_gray }}">{{ grid.label }}</text>
+{%- endfor -%}
+{#- Temperature curve, colored along its length by value. -#}
+{%- if curve_path -%}
+<path d="{{ curve_path }}"
+  fill="none"
+  stroke="url(#mgTempGradient)"
+  stroke-width="{{ curve_stroke_w }}"
+  stroke-linejoin="round"
+  stroke-linecap="round"/>
+{%- endif -%}
+{#- Condition icons, floating just above the curve. -#}
+{%- for icon in icons -%}
+<g transform="translate({{ icon.x }}, {{ icon.y }})">{{ icon.svg }}</g>
+{%- endfor -%}
+{#- Hour-axis ticks below the plot. -#}
+{%- for tick in hour_ticks -%}
+<text x="{{ tick.x }}" y="{{ hour_row_y }}"
+  font-family="Roboto"
+  font-size="{{ hour_font_sz }}"
+  text-anchor="middle"
+  dominant-baseline="hanging"
+  fill="{{ hex_gray }}">{{ tick.label }}</text>
+{%- endfor -%}
+{%- endcall -%}
+{#- No entity or no usable hourly forecast: render blank SVG. -#}
+{%- endif -%}
+</svg>

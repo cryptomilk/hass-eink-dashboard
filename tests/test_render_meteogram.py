@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import ClassVar
 
 from custom_components.eink_dashboard.const import (
@@ -46,8 +46,13 @@ from tests.helpers import (
 # unclamped/data-extent-based render, rather than the two coinciding
 # because the mock data ran out first. Temperature follows a smooth
 # daily sine wave so a "hours"-limited window and the full window
-# produce visibly different curves.
-_HOURLY_START = datetime(2026, 5, 2, 0, 0, 0)
+# produce visibly different curves. Explicit UTC tzinfo (matching
+# real HA forecast timestamps and _FORECAST_TIMESERIES in
+# test_render_graph.py) keeps day-boundary math independent of the
+# host's local timezone -- a naive datetime's .isoformat() has no
+# offset, and _parse_attribute_timestamp() would then interpret it
+# as local time via datetime.fromisoformat(...).timestamp().
+_HOURLY_START = datetime(2026, 5, 2, 0, 0, 0, tzinfo=UTC)
 _METEOGRAM_HOURLY_FORECAST = [
     {
         "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),

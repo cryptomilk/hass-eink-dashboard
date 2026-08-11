@@ -32,10 +32,17 @@ from .colors import (
     _threshold_gradient_stops,
 )
 from .context import _build_graph_context
-from .data import _extract_entity_points, _resolve_start_cutoff, _y_bounds
+from .data import (
+    _extract_attribute_points,
+    _extract_entity_points,
+    _parse_attribute_timestamp,
+    _resolve_start_cutoff,
+    _y_bounds,
+)
 from .geometry import (
     _format_timestamp,
     _legend_geometry,
+    _smooth_fill,
     _smooth_path,
     _truncate_to_width,
 )
@@ -45,16 +52,19 @@ __all__ = [
     "_bar_series",
     "_bar_threshold_fill",
     "_build_graph_context",
+    "_extract_attribute_points",
     "_extract_entity_points",
     "_format_timestamp",
     "_legend_geometry",
     "_lighter_hex",
     "_line_series",
     "_normalize_thresholds",
+    "_parse_attribute_timestamp",
     "_resolve_start_cutoff",
     "_resolve_threshold_color",
     "_rgb_hex_to_grayscale",
     "_shade_to_hex",
+    "_smooth_fill",
     "_smooth_path",
     "_threshold_gradient_stops",
     "_truncate_to_width",
