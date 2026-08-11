@@ -28,6 +28,7 @@ import {
   getSummary,
 } from "../src/eink-dashboard-editor.js";
 import "../src/eink-dashboard-editor.js";
+import { ICON_FALLBACK } from "../src/eink-widget-picker.js";
 
 const DISPLAY = { width: 800, height: 480 };
 
@@ -71,9 +72,10 @@ describe("WIDGET_TYPES", () => {
     "calendar",
     "gauge",
     "graph",
+    "meteogram",
   ];
 
-  it("has all 13 widget types", () => {
+  it("has all 14 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -103,6 +105,14 @@ describe("WIDGET_TYPES", () => {
       expect(meta.icon.startsWith("mdi:")).toBe(true);
     }
   });
+
+  it("every widget type icon has an ICON_FALLBACK entry", () => {
+    // Ensures the picker grid shows a glyph, not a bare text
+    // fallback, when the browser can't load the MDI icon font.
+    for (const meta of Object.values(WIDGET_TYPES)) {
+      expect(ICON_FALLBACK).toHaveProperty(meta.icon);
+    }
+  });
 });
 
 // ── SCHEMAS ──────────────────────────────────────────────────────
@@ -122,9 +132,10 @@ describe("SCHEMAS", () => {
     "calendar",
     "gauge",
     "graph",
+    "meteogram",
   ];
 
-  it("has a schema builder for all 13 widget types", () => {
+  it("has a schema builder for all 14 widget types", () => {
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -164,6 +175,23 @@ describe("SCHEMAS", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "humidity_entity");
     expect(field?.selector?.entity).toMatchObject({ domain: "sensor" });
+  });
+
+  it("meteogram entity field uses domain filter 'weather'", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const entityField = findField(schema, "entity");
+    expect(entityField?.selector?.entity).toMatchObject({
+      domain: "weather",
+    });
+  });
+
+  it("meteogram hours field is clamped to 8-120", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const hoursField = findField(schema, "hours");
+    expect(hoursField?.selector?.number).toMatchObject({
+      min: 8,
+      max: 120,
+    });
   });
 
   it("weather mode field offers full, forecast, and current options", () => {
@@ -338,6 +366,16 @@ describe("getSummary", () => {
     expect(
       getSummary({ type: "graph", entity_2: "sensor.humidity" })
     ).toBe("sensor.humidity");
+  });
+
+  it("returns entity for meteogram widget", () => {
+    expect(
+      getSummary({ type: "meteogram", entity: "weather.home" })
+    ).toBe("weather.home");
+  });
+
+  it("returns '(no entity)' for meteogram widget with no entity", () => {
+    expect(getSummary({ type: "meteogram" })).toBe("(no entity)");
   });
 });
 

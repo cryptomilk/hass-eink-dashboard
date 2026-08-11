@@ -21,7 +21,7 @@ import type { WidgetTypeMeta } from "./types/ha.js";
 const PICKER_TAG = "eink-widget-picker";
 
 // Unicode fallbacks for MDI icon names that the browser can't load.
-const ICON_FALLBACK: Record<string, string> = {
+export const ICON_FALLBACK: Record<string, string> = {
   "mdi:format-text": "T",
   "mdi:format-header-1": "#",
   "mdi:minus": "—",
@@ -37,6 +37,7 @@ const ICON_FALLBACK: Record<string, string> = {
   "mdi:calendar": "📅",
   "mdi:gauge": "◎",
   "mdi:rectangle-outline": "□",
+  "mdi:weather-cloudy": "☁",
 };
 
 /**

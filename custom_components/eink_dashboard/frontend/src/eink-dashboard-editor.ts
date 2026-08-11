@@ -241,6 +241,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  meteogram: {
+    label: "Meteogram",
+    description: "Hourly temperature curve with forecast icons",
+    icon: "mdi:weather-cloudy",
+    defaults: {
+      type: "meteogram",
+      x: 24,
+      y: 0,
+      w: 400,
+      // 5 × DEFAULT_ROW_H (entire widget; no header row).
+      h: 280,
+      entity: "",
+      card_style: DEFAULT_CARD_STYLE,
+    },
+  },
 };
 
 // ── ha-form schema builders ──────────────────────────────────────
@@ -1604,6 +1619,50 @@ export const SCHEMAS: Record<
       schema: [cardStyleSelector(), boldValueSelector()],
     },
   ],
+  meteogram: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:weather-cloudy",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: { domain: "weather" } },
+        },
+        {
+          name: "hours",
+          default: 24,
+          selector: { number: { min: 8, max: 120, mode: "box" } },
+        },
+        {
+          name: "show_cloud_cover",
+          default: true,
+          selector: { boolean: {} },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [cardStyleSelector()],
+    },
+  ],
 };
 
 export const HELPERS: Record<string, string> = {
@@ -1705,6 +1764,8 @@ export const LABELS: Record<string, string> = {
   entity_3: "Third entity",
   name_3: "Third entity name",
   y_axis_3: "Third entity Y axis",
+  hours: "Hours to show",
+  show_cloud_cover: "Show cloud cover",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -1749,6 +1810,7 @@ export function getSummary(widget: Widget): string {
   if (
     t === "weather" || t === "tile" || t === "entity"
     || t === "sensor" || t === "calendar" || t === "gauge"
+    || t === "meteogram"
   ) {
     return widget.entity || "(no entity)";
   }

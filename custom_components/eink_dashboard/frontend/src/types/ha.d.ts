@@ -1222,6 +1222,19 @@ export interface GraphWidget extends WidgetBase {
   bold_value?: boolean;
 }
 
+/** Hourly temperature curve with forecast icons and day markers. */
+export interface MeteogramWidget extends WidgetBase {
+  type: "meteogram";
+  /** HA weather entity ID; must support hourly forecasts. */
+  entity?: string;
+  /** Hourly forecast window in hours, clamped to 8-120. Default: 24. */
+  hours?: number;
+  /** Show the cloud-coverage band above the curve. Default: true. */
+  show_cloud_cover?: boolean;
+  /** Decorative frame style. */
+  card_style?: CardStyle;
+}
+
 export type Widget =
   | FrameWidget
   | SeparatorWidget
@@ -1235,7 +1248,8 @@ export type Widget =
   | EntityWidget
   | SensorWidget
   | GaugeWidget
-  | GraphWidget;
+  | GraphWidget
+  | MeteogramWidget;
 
 /** Registry entry for one widget type shown in the widget picker grid. */
 export interface WidgetTypeMeta {
