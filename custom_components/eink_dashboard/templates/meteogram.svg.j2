@@ -43,6 +43,14 @@
 <path d="{{ cloud_band_path }}"
   fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
 {%- endif -%}
+{#- Precipitation bars: grow upward from the plot baseline. -#}
+{%- if show_precip -%}
+{%- for bar in precip_bars -%}
+<rect x="{{ bar.x }}" y="{{ bar.y }}"
+  width="{{ bar.w }}" height="{{ bar.h }}"
+  fill="{{ hex_gray }}" fill-opacity="0.5"/>
+{%- endfor -%}
+{%- endif -%}
 {#- Y-axis gridlines and labels. -#}
 {%- for grid in grid_lines -%}
 <line x1="{{ content_left }}" y1="{{ grid.y }}"

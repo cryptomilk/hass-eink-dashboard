@@ -194,6 +194,13 @@ describe("SCHEMAS", () => {
     });
   });
 
+  it("meteogram show_precipitation field defaults to true", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const field = findField(schema, "show_precipitation");
+    expect(field?.default).toBe(true);
+    expect(field?.selector).toHaveProperty("boolean");
+  });
+
   it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "mode");

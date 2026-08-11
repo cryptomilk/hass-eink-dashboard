@@ -1644,6 +1644,11 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "show_precipitation",
+          default: true,
+          selector: { boolean: {} },
+        },
       ],
     },
     {
@@ -1766,6 +1771,7 @@ export const LABELS: Record<string, string> = {
   y_axis_3: "Third entity Y axis",
   hours: "Hours to show",
   show_cloud_cover: "Show cloud cover",
+  show_precipitation: "Show precipitation",
 };
 
 // ── HA component loader ──────────────────────────────────────────

@@ -1231,6 +1231,8 @@ export interface MeteogramWidget extends WidgetBase {
   hours?: number;
   /** Show the cloud-coverage band above the curve. Default: true. */
   show_cloud_cover?: boolean;
+  /** Show precipitation bars below the curve. Default: true. */
+  show_precipitation?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

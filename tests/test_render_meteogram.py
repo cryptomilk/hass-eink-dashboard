@@ -30,6 +30,7 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets._helpers import _card_insets
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
@@ -61,8 +62,66 @@ _METEOGRAM_HOURLY_FORECAST = [
         ),
         "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
         "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+        # Nonzero for a few hours each day (10:00-12:00), zero the
+        # rest of the time -- gives the precipitation-bar tests both
+        # bars and gaps to check for.
+        "precipitation": 1.5 if 10 <= (i % 24) < 13 else 0.0,
     }
     for i in range(144)
+]
+
+# Same hourly cadence as _METEOGRAM_HOURLY_FORECAST but without a
+# "precipitation" key at all, matching weather integrations that
+# don't report it (see WEATHER.md's graceful-degradation note).
+_METEOGRAM_HOURLY_FORECAST_NO_PRECIP = [
+    {
+        "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),
+        "temperature": round(
+            20 + 6 * math.sin((i % 24) / 24 * 2 * math.pi), 1
+        ),
+        "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
+        "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+    }
+    for i in range(144)
+]
+
+# Precipitation on the very first and last plotted hour of a
+# default 24h window, so the resulting bars sit right at the
+# content area's left/right edges -- exercises the bar-clamping
+# logic that keeps bars from overhanging into the card border.
+_METEOGRAM_HOURLY_FORECAST_EDGE_PRECIP = [
+    {
+        "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),
+        "temperature": round(
+            20 + 6 * math.sin((i % 24) / 24 * 2 * math.pi), 1
+        ),
+        "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
+        "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+        "precipitation": 5.0 if i in (0, 24) else 0.0,
+    }
+    for i in range(144)
+]
+
+# Two forecast entries spaced 20h apart -- wider than the 8h
+# minimum window (_MIN_HOURS) -- so a widget requesting the
+# minimum window filters this down to a single remaining point.
+# Used to exercise the precipitation-bar computation's handling of
+# a too-short point list.
+_METEOGRAM_HOURLY_FORECAST_SPARSE = [
+    {
+        "datetime": _HOURLY_START.isoformat(),
+        "temperature": 20.0,
+        "condition": "sunny",
+        "cloud_coverage": 20,
+        "precipitation": 1.5,
+    },
+    {
+        "datetime": (_HOURLY_START + timedelta(hours=20)).isoformat(),
+        "temperature": 21.0,
+        "condition": "sunny",
+        "cloud_coverage": 20,
+        "precipitation": 0.0,
+    },
 ]
 
 MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
@@ -77,6 +136,27 @@ MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
         "state": "sunny",
         "attributes": {
             "temperature": 20.0,
+        },
+    },
+    "weather.no_precip": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_NO_PRECIP,
+        },
+    },
+    "weather.edge_precip": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_EDGE_PRECIP,
+        },
+    },
+    "weather.sparse_precip": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_SPARSE,
         },
     },
 }
@@ -309,3 +389,75 @@ class TestRenderMeteogram:
         svg_high = render_widget_svg(self._widget(hours=500), self._config())
         svg_max = render_widget_svg(self._widget(hours=120), self._config())
         assert svg_high == svg_max
+
+    # ── Precipitation bars ───────────────────────────────────────────
+
+    def test_meteogram_show_precipitation_default_true(self) -> None:
+        # show_precipitation defaults to True -- omitting it must
+        # produce the same output as explicitly enabling it.
+        default_svg = render_widget_svg(self._widget(), self._config())
+        explicit_svg = render_widget_svg(
+            self._widget(show_precipitation=True), self._config()
+        )
+        assert default_svg == explicit_svg
+
+    def test_meteogram_show_precipitation_toggle_changes_output(self) -> None:
+        # Disabling show_precipitation removes the precipitation
+        # bars, changing the rendered output.
+        bars_svg = render_widget_svg(
+            self._widget(show_precipitation=True), self._config()
+        )
+        no_bars_svg = render_widget_svg(
+            self._widget(show_precipitation=False), self._config()
+        )
+        assert bars_svg != no_bars_svg
+
+    def test_meteogram_precipitation_bars_present(self) -> None:
+        # Nonzero precipitation entries draw <rect> bars, distinct
+        # from every other SVG element the widget emits (lines,
+        # paths, text, inlined icon <g>/<path> elements).
+        svg = render_widget_svg(self._widget(hours=24), self._config())
+        assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is not None
+
+    def test_meteogram_no_precipitation_data_no_bars(self) -> None:
+        # An entity whose forecast entries omit "precipitation"
+        # entirely renders without crashing and without bars.
+        widget = self._widget(entity="weather.no_precip")
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is None
+
+    def test_meteogram_precip_bars_stay_within_content_bounds(self) -> None:
+        # Precipitation at the very first/last plotted hour maps to
+        # content_left/content_right exactly; the bar must be
+        # clamped so it doesn't overhang past those edges into the
+        # card border.
+        widget = self._widget(entity="weather.edge_precip")
+        svg = render_widget_svg(widget, self._config())
+
+        m = _compute_metrics(DEFAULT_ROW_H)
+        x_off, r_inset, _bar_width = _card_insets(m, "none", 16)
+        lpad = m.padding if x_off == 0 else 0
+        rpad = m.padding if r_inset == 0 else 0
+        content_left = x_off + lpad
+        content_right = 700 - r_inset - rpad
+
+        bars = re.findall(
+            r'<rect x="(-?\d+)"[^>]*width="(\d+)"[^>]*'
+            r'fill-opacity="0.5"',
+            svg,
+        )
+        assert bars
+        for x_str, w_str in bars:
+            x, bar_w = int(x_str), int(w_str)
+            assert x >= content_left
+            assert x + bar_w <= content_right
+
+    def test_meteogram_precip_bars_single_point_no_crash(self) -> None:
+        # Sparse/irregular hourly data can leave only one point
+        # after the hours-window filter (the raw forecast has two
+        # entries 20h apart, wider than the 8h minimum window).
+        # Precipitation-bar computation must not crash indexing
+        # into a second point that doesn't exist.
+        widget = self._widget(entity="weather.sparse_precip", hours=8)
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is None

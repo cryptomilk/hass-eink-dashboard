@@ -26,7 +26,7 @@ from __future__ import annotations
 import datetime
 import math
 from itertools import pairwise
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..const import (
     DEFAULT_CARD_STYLE,
@@ -49,6 +49,9 @@ from .graph import (
     _smooth_path,
     _y_bounds,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # Hourly forecast window, in hours, clamped to this range regardless
 # of what the widget config requests.
@@ -76,6 +79,9 @@ _DAY_LABEL_FONT_RATIO = 0.065
 _HOUR_FONT_RATIO = 0.05
 _GRID_FONT_RATIO = 0.05
 _CLOUD_BAND_FRAC = 0.4
+# Precipitation bars use at most this fraction of the plot height,
+# so they stay subordinate to the temperature curve.
+_PRECIP_BAR_MAX_FRAC = 0.5
 
 
 def _build_meteogram_context(
@@ -87,15 +93,15 @@ def _build_meteogram_context(
     Renders an hourly temperature curve colored by a continuous
     temperature gradient (matching the weather widget's min/max
     bar), with condition icons floating above the curve, dashed
-    day-boundary markers, an optional cloud-coverage band, and
-    hour-axis ticks below the plot.
+    day-boundary markers, an optional cloud-coverage band, optional
+    precipitation bars, and hour-axis ticks below the plot.
 
     Args:
         widget: Widget config dict.  Recognised keys: ``entity``
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
-            (bool, default ``True``), ``card_style``, ``x``, ``w``,
-            ``h``.
+            (bool, default ``True``), ``show_precipitation`` (bool,
+            default ``True``), ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``display_levels``.
 
@@ -113,6 +119,7 @@ def _build_meteogram_context(
     card_style = str(widget.get("card_style", DEFAULT_CARD_STYLE))
     display_levels = config.get("display_levels", 16)
     show_cloud_cover = bool(widget.get("show_cloud_cover", True))
+    show_precipitation = bool(widget.get("show_precipitation", True))
 
     entity: str = widget.get("entity", "")
     states_dict: dict[str, Any] = config.get("states", {})
@@ -268,6 +275,21 @@ def _build_meteogram_context(
                 cloud_band_path = _smooth_fill(band_path, band_pts, plot_top)
                 show_band = True
 
+    # --- Precipitation bars ---
+    precip_bars = (
+        _compute_precip_bars(
+            points,
+            entry_by_ts,
+            map_x,
+            plot_top,
+            plot_bottom,
+            content_left,
+            content_right,
+        )
+        if show_precipitation
+        else []
+    )
+
     # --- Day boundary markers ---
     language = str(config.get("language", "en"))
     day_markers: list[dict[str, object]] = []
@@ -362,6 +384,8 @@ def _build_meteogram_context(
         "content_right": content_right,
         "show_cloud_band": show_band,
         "cloud_band_path": cloud_band_path,
+        "show_precip": bool(precip_bars),
+        "precip_bars": precip_bars,
         "day_markers": day_markers,
         "day_label_font_sz": day_label_font_sz,
         "day_label_y": m.border,
@@ -370,6 +394,90 @@ def _build_meteogram_context(
         "hour_row_y": hour_row_y,
         "hour_font_sz": hour_font_sz,
     }
+
+
+def _compute_precip_bars(
+    points: list[tuple[float, float]],
+    entry_by_ts: dict[float, dict[str, object]],
+    map_x: Callable[[float], int],
+    plot_top: int,
+    plot_bottom: int,
+    content_left: int,
+    content_right: int,
+) -> list[dict[str, object]]:
+    """Compute precipitation bar rects for the meteogram plot.
+
+    Points with no ``precipitation`` entry or a zero/negative value
+    draw no bar -- unlike the cloud-coverage band (a filled area
+    that needs interpolated gap bridging), a missing precipitation
+    reading just means "no bar here".
+
+    Args:
+        points: ``(timestamp, temperature)`` pairs, sorted by
+            timestamp, defining the plotted time range.
+        entry_by_ts: Full forecast entries keyed by timestamp, used
+            to look up each point's ``precipitation`` value.
+        map_x: Maps a Unix timestamp to an X pixel coordinate.
+        plot_top: Y pixel coordinate of the plot's top edge.
+        plot_bottom: Y pixel coordinate of the plot's bottom edge
+            (baseline bars grow up from).
+        content_left: X pixel coordinate of the plot's left edge,
+            used to clamp bars so they don't overhang the content
+            area.
+        content_right: X pixel coordinate of the plot's right edge,
+            used to clamp bars so they don't overhang the content
+            area.
+
+    Returns:
+        Bar rects as ``{"x", "y", "w", "h"}`` dicts, one per point
+        with positive precipitation. Empty if none have data.
+    """
+    if len(points) < 2:
+        return []
+
+    precip_vals: list[tuple[float, float]] = []
+    for ts, _v in points:
+        entry = entry_by_ts.get(ts)
+        precip = entry.get("precipitation") if entry else None
+        if precip is None:
+            continue
+        try:
+            precip_val = float(str(precip))
+        except (ValueError, TypeError):
+            continue
+        if precip_val > 0:
+            precip_vals.append((ts, precip_val))
+
+    if not precip_vals:
+        return []
+
+    # Floor at 2mm and add 1mm headroom so drizzle amounts still
+    # draw a visible bar, mirroring the reference
+    # lovelace-meteogram-card's precipitation Y-scale.
+    precip_max = max(2.0, max(v for _, v in precip_vals) + 1)
+    max_bar_h = (plot_bottom - plot_top) * _PRECIP_BAR_MAX_FRAC
+    slot_w = map_x(points[1][0]) - map_x(points[0][0])
+    bar_w = max(2, round(slot_w * 0.8))
+
+    bars: list[dict[str, object]] = []
+    for ts, precip_val in precip_vals:
+        bar_h = max(1, round(precip_val / precip_max * max_bar_h))
+        # Clamp so the bar stays inside the content area at both
+        # edges (the first point maps to content_left, the last
+        # to content_right).
+        bar_x = max(
+            content_left,
+            min(map_x(ts) - bar_w // 2, content_right - bar_w),
+        )
+        bars.append(
+            {
+                "x": bar_x,
+                "y": plot_bottom - bar_h,
+                "w": bar_w,
+                "h": bar_h,
+            }
+        )
+    return bars
 
 
 def _sample_by_time(points: list[tuple[float, float]], frac: float) -> float:
