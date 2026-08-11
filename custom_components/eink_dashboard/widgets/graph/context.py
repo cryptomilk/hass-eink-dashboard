@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import datetime
+from dataclasses import dataclass
 from typing import Any, cast
 
 from ...const import (
@@ -73,9 +74,6 @@ def _fix_header_layout(
     is hidden), so callers that set an unusually long value string
     — e.g. the multi-entity combined state text — must do so before
     calling this function.
-
-    Returns ``(gx1, gx2)`` — the left and right graph area edges
-    computed from card insets, decoupled from icon geometry.
 
     Args:
         ctx: Context dict returned by ``_entity_info_context``; mutated
@@ -211,6 +209,247 @@ def _combined_state_text(
         formatted = _fmt(state_val, config)
         parts.append(f"{formatted}{unit}" if unit else formatted)
     return " / ".join(parts) if parts else None
+
+
+def _build_header_context(
+    entity_descs: list[dict[str, object]],
+    widget: Widget,
+    config: DisplayConfig,
+    states_dict: dict[str, object],
+    header_h: int,
+    svg_w: int,
+    svg_h: int,
+    display_levels: int,
+    *,
+    show_icon: bool,
+    show_state: bool,
+) -> tuple[dict[str, object], int, int] | None:
+    """Build the header context and graph area edges for the widget.
+
+    Tries each entity in ``entity_descs`` in order until one has a
+    usable state, so the header is never blank when the first
+    configured entity is missing from ``states``.  When more than one
+    entity is configured, the entities' states are concatenated into
+    ``ctx["value_text"]`` before laying out the header, so the
+    (possibly much longer) combined text goes through
+    ``_fix_header_layout``'s icon-overlap truncation rather than the
+    original single-entity value.
+
+    Args:
+        entity_descs: Normalized entity descriptor list from
+            ``_normalize_entities()``.
+        widget: Widget config dict.
+        config: Display config.
+        states_dict: ``config["states"]`` states dict.
+        header_h: Pixel height of the header row.
+        svg_w: Full widget width.
+        svg_h: Full widget height.
+        display_levels: Display grayscale depth.
+        show_icon: Widget's ``show_icon`` setting.
+        show_state: Widget's ``show_state`` setting.
+
+    Returns:
+        ``(ctx, gx1, gx2)`` — the header context dict from
+        ``_entity_info_context`` (adjusted in place by
+        ``_fix_header_layout``) and the left/right graph area pixel
+        edges, or ``None`` when no entity has a usable state.
+    """
+    ctx = None
+    for desc in entity_descs:
+        eid = str(desc["entity"])
+        name_override = str(desc.get("name", ""))
+        hw: dict[str, object] = {
+            **widget,
+            "entity": eid,
+            "hide_icon": not show_icon,
+        }
+        if name_override:
+            hw["name"] = name_override
+        ctx = _entity_info_context(hw, config, header_h, svg_w, svg_h)
+        if ctx is not None:
+            break
+
+    if ctx is None:
+        return None
+
+    combined_state = _combined_state_text(
+        entity_descs, states_dict, config, show_state, widget
+    )
+    if combined_state is not None:
+        ctx["value_text"] = combined_state
+        ctx["unit_text"] = ""
+
+    state_font_size = widget.get("state_font_size")
+    state_font_sz = (
+        int(float(state_font_size)) if state_font_size is not None else None
+    )
+    gx1, gx2 = _fix_header_layout(
+        ctx,
+        widget,
+        header_h,
+        svg_w,
+        display_levels,
+        state_font_sz=state_font_sz,
+    )
+    return ctx, gx1, gx2
+
+
+@dataclass(frozen=True, slots=True)
+class _SeriesData:
+    """Per-entity chart data and computed Y-axis bounds.
+
+    Attributes:
+        per_entity_points: One ``(timestamp, value)`` point list per
+            entry in ``entity_descs``, in the same order.
+        prim_y_min: Primary Y-axis lower bound.
+        prim_y_max: Primary Y-axis upper bound.
+        sec_y_min: Secondary Y-axis lower bound.
+        sec_y_max: Secondary Y-axis upper bound.
+        has_secondary: Whether any entity plots on the secondary axis.
+        all_points: Every point from every entity, concatenated;
+            used for shared axis geometry.
+        has_any_data: Whether any entity has at least one point.
+        primary_points: Points from the first primary-axis entity
+            that has data, used for label/extrema geometry; falls
+            back to the first entity with any data at all when every
+            entity with data is on the secondary axis.
+    """
+
+    per_entity_points: list[list[tuple[float, float]]]
+    prim_y_min: float
+    prim_y_max: float
+    sec_y_min: float
+    sec_y_max: float
+    has_secondary: bool
+    all_points: list[tuple[float, float]]
+    has_any_data: bool
+    primary_points: list[tuple[float, float]]
+
+
+def _collect_series_data(
+    entity_descs: list[dict[str, object]],
+    states_dict: dict[str, object],
+    hours_to_show: int,
+    points_per_hour: float,
+    aggregate_func: str,
+    start_cutoff: float | None,
+    *,
+    lower_bound: object,
+    upper_bound: object,
+    min_bound_range: object,
+    secondary_lower_bound: object,
+    secondary_upper_bound: object,
+) -> _SeriesData:
+    """Extract per-entity chart points and compute Y-axis bounds.
+
+    Entities with ``data_source="attribute"`` read a forecast-style
+    time-series list from a named entity attribute instead of the
+    recorder's state history.
+
+    Args:
+        entity_descs: Normalized entity descriptor list from
+            ``_normalize_entities()``.
+        states_dict: ``config["states"]`` states dict.
+        hours_to_show: History window in hours for entities using
+            state history (ignored for ``data_source="attribute"``).
+        points_per_hour: Data points per hour for bucketing.
+        aggregate_func: Aggregation function for bucketing
+            (``"avg"``, ``"min"``, ``"max"``, ``"first"``, ``"last"``,
+            or ``"sum"``).
+        start_cutoff: Optional fixed start time overriding
+            ``hours_to_show``, from ``_resolve_start_cutoff()``.
+        lower_bound: Optional fixed primary Y-axis lower bound.
+        upper_bound: Optional fixed primary Y-axis upper bound.
+        min_bound_range: Optional minimum primary Y-axis range.
+        secondary_lower_bound: Optional fixed secondary Y-axis lower
+            bound.
+        secondary_upper_bound: Optional fixed secondary Y-axis upper
+            bound.
+
+    Returns:
+        A ``_SeriesData`` instance with per-entity points, computed
+        Y-axis bounds, and the flattened/primary point lists used for
+        shared axis geometry.
+    """
+    per_entity_points: list[list[tuple[float, float]]] = []
+    for desc in entity_descs:
+        if str(desc.get("data_source", "history")) == "attribute":
+            per_entity_points.append(
+                _extract_attribute_points(desc, states_dict)
+            )
+        else:
+            per_entity_points.append(
+                _extract_entity_points(
+                    desc,
+                    states_dict,
+                    hours_to_show,
+                    points_per_hour,
+                    aggregate_func,
+                    start_cutoff,
+                )
+            )
+
+    primary_values: list[float] = []
+    secondary_values: list[float] = []
+    for i, desc in enumerate(entity_descs):
+        ep = per_entity_points[i]
+        if not ep:
+            continue
+        vals = [v for _, v in ep]
+        if str(desc.get("y_axis", "primary")) == "secondary":
+            secondary_values.extend(vals)
+        else:
+            primary_values.extend(vals)
+
+    has_primary = bool(primary_values)
+    has_secondary = bool(secondary_values)
+
+    prim_y_min, prim_y_max = (
+        _y_bounds(primary_values, lower_bound, upper_bound, min_bound_range)
+        if has_primary
+        else (0.0, 1.0)
+    )
+    sec_y_min, sec_y_max = (
+        # min_bound_range has no secondary_min_bound_range
+        # counterpart — only explicit min/max overrides are
+        # exposed for the secondary axis, so this is always None.
+        _y_bounds(
+            secondary_values,
+            secondary_lower_bound,
+            secondary_upper_bound,
+            None,
+        )
+        if has_secondary
+        else (0.0, 1.0)
+    )
+
+    all_points: list[tuple[float, float]] = [
+        p for ep in per_entity_points for p in ep
+    ]
+    has_any_data = bool(all_points)
+
+    # Use primary-axis points for label/extrema (first primary entity
+    # that has data).
+    primary_points: list[tuple[float, float]] = []
+    for i, desc in enumerate(entity_descs):
+        ep = per_entity_points[i]
+        if ep and str(desc.get("y_axis", "primary")) != "secondary":
+            primary_points = ep
+            break
+    if not primary_points and all_points:
+        primary_points = next((ep for ep in per_entity_points if ep), [])
+
+    return _SeriesData(
+        per_entity_points=per_entity_points,
+        prim_y_min=prim_y_min,
+        prim_y_max=prim_y_max,
+        sec_y_min=sec_y_min,
+        sec_y_max=sec_y_max,
+        has_secondary=has_secondary,
+        all_points=all_points,
+        has_any_data=has_any_data,
+        primary_points=primary_points,
+    )
 
 
 def _build_graph_context(
@@ -388,57 +627,30 @@ def _build_graph_context(
             **_color_context(),
         }
 
-    # Header uses the first entity.  If it is missing from states,
-    # try subsequent entities so the header is never blank.
-    ctx = None
-    for desc in entity_descs:
-        eid = str(desc["entity"])
-        name_override = str(desc.get("name", ""))
-        hw: dict[str, object] = {
-            **widget,
-            "entity": eid,
-            "hide_icon": not show_icon,
-        }
-        if name_override:
-            hw["name"] = name_override
-        ctx = _entity_info_context(hw, config, header_h, svg_w, svg_h)
-        if ctx is not None:
-            break
+    states_dict: dict[str, object] = config.get("states", {})
 
-    if ctx is None:
+    # Header uses the first entity with a usable state; multi-entity
+    # states are concatenated for display.
+    header_result = _build_header_context(
+        entity_descs,
+        widget,
+        config,
+        states_dict,
+        header_h,
+        svg_w,
+        svg_h,
+        display_levels,
+        show_icon=show_icon,
+        show_state=show_state,
+    )
+    if header_result is None:
         return {
             "w": svg_w,
             "h": svg_h,
             "has_entity": False,
             **_color_context(),
         }
-
-    # --- Multi-entity state display ---
-    # Header normally shows only the first entity's state; when
-    # multiple entities are configured, concatenate every entity
-    # with a usable state with " / " so all of them are visible.
-    # This must run before _fix_header_layout() so the (possibly
-    # much longer) combined text goes through its icon-overlap
-    # truncation, not the original single-entity value.
-    combined_state = _combined_state_text(
-        entity_descs, config.get("states", {}), config, show_state, widget
-    )
-    if combined_state is not None:
-        ctx["value_text"] = combined_state
-        ctx["unit_text"] = ""
-
-    state_font_size = widget.get("state_font_size")
-    state_font_sz = (
-        int(float(state_font_size)) if state_font_size is not None else None
-    )
-    gx1, gx2 = _fix_header_layout(
-        ctx,
-        widget,
-        header_h,
-        svg_w,
-        display_levels,
-        state_font_sz=state_font_sz,
-    )
+    ctx, gx1, gx2 = header_result
 
     # Stroke width: user-configured, widened on 2-level displays.
     graph_stroke_w = line_width * 2 if display_levels <= 2 else line_width
@@ -447,63 +659,31 @@ def _build_graph_context(
     gy1 = header_h + margin
     gy2 = svg_h - margin
 
-    # --- Per-entity data extraction ---
-    # Entities with data_source="attribute" read a forecast-style
-    # time-series list from a named entity attribute instead of the
-    # recorder's state history.
-    states_dict: dict[str, object] = config.get("states", {})
-    per_entity_points: list[list[tuple[float, float]]] = []
-    for desc in entity_descs:
-        if str(desc.get("data_source", "history")) == "attribute":
-            per_entity_points.append(
-                _extract_attribute_points(desc, states_dict)
-            )
-        else:
-            per_entity_points.append(
-                _extract_entity_points(
-                    desc,
-                    states_dict,
-                    hours_to_show,
-                    points_per_hour,
-                    aggregate_func,
-                    start_cutoff,
-                )
-            )
-
-    # --- Y bounds per axis ---
-    primary_values: list[float] = []
-    secondary_values: list[float] = []
-    for i, desc in enumerate(entity_descs):
-        ep = per_entity_points[i]
-        if not ep:
-            continue
-        vals = [v for _, v in ep]
-        if str(desc.get("y_axis", "primary")) == "secondary":
-            secondary_values.extend(vals)
-        else:
-            primary_values.extend(vals)
-
-    has_primary = bool(primary_values)
-    has_secondary = bool(secondary_values)
-
-    prim_y_min, prim_y_max = (
-        _y_bounds(primary_values, lower_bound, upper_bound, min_bound_range)
-        if has_primary
-        else (0.0, 1.0)
+    # --- Per-entity data extraction and Y-axis bounds ---
+    series_data = _collect_series_data(
+        entity_descs,
+        states_dict,
+        hours_to_show,
+        points_per_hour,
+        aggregate_func,
+        start_cutoff,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        min_bound_range=min_bound_range,
+        secondary_lower_bound=secondary_lower_bound,
+        secondary_upper_bound=secondary_upper_bound,
     )
-    sec_y_min, sec_y_max = (
-        # min_bound_range has no secondary_min_bound_range
-        # counterpart — only explicit min/max overrides are
-        # exposed for the secondary axis, so this is always None.
-        _y_bounds(
-            secondary_values,
-            secondary_lower_bound,
-            secondary_upper_bound,
-            None,
-        )
-        if has_secondary
-        else (0.0, 1.0)
-    )
+    per_entity_points = series_data.per_entity_points
+    prim_y_min = series_data.prim_y_min
+    prim_y_max = series_data.prim_y_max
+    sec_y_min = series_data.sec_y_min
+    sec_y_max = series_data.sec_y_max
+    has_secondary = series_data.has_secondary
+    # Single source of truth for "is there any data to draw" — reused
+    # for the legend-geometry gate, the final show_legend flag, and
+    # has_graph, so the three can never desync from one another.
+    has_any_data = series_data.has_any_data
+    primary_points = series_data.primary_points
 
     # Label / grid / extrema context — populated inside data guard.
     label_font_sz = 0
@@ -522,25 +702,6 @@ def _build_graph_context(
     extrema_max_str = ""
     extrema_y = gy2
     show_extrema_ctx = False
-
-    # Collect all points from all entities for shared axis geometry.
-    all_points: list[tuple[float, float]] = [
-        p for ep in per_entity_points for p in ep
-    ]
-    # Single source of truth for "is there any data to draw" — reused
-    # for the legend-geometry gate, the final show_legend flag, and
-    # has_graph, so the three can never desync from one another.
-    has_any_data = bool(all_points)
-    # Use primary-axis points for label/extrema (first primary entity
-    # that has data).
-    primary_points: list[tuple[float, float]] = []
-    for i, desc in enumerate(entity_descs):
-        ep = per_entity_points[i]
-        if ep and str(desc.get("y_axis", "primary")) != "secondary":
-            primary_points = ep
-            break
-    if not primary_points and all_points:
-        primary_points = per_entity_points[0]
 
     if primary_points:
         if show_labels:

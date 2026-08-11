@@ -256,10 +256,10 @@ async def _build_display_config(
     for state in hass.states.async_all():
         states[state.entity_id] = {
             "state": state.state,
-            # Shallow copy: _fetch_forecasts adds a "forecast"
-            # key to this dict.  A shallow copy is sufficient
-            # because it only assigns new keys, never mutates
-            # existing nested values.
+            # Shallow copy: _fetch_forecasts adds "forecast" and
+            # "forecast_hourly" keys to this dict.  A shallow copy
+            # is sufficient because it only assigns new keys, never
+            # mutates existing nested values.
             "attributes": dict(state.attributes),
         }
     await _enrich_entity_icons(hass, states)
@@ -375,11 +375,14 @@ async def _fetch_forecasts(
     widgets: list[dict[str, Any]],
     states: dict[str, Any],
 ) -> None:
-    """Fetch daily forecasts for weather widgets and inject into states.
+    """Fetch forecasts for weather and meteogram widgets into states.
 
     Calls the ``weather.get_forecasts`` service for each unique
-    weather entity referenced by ``widgets`` and writes the forecast
-    list into ``states[entity_id]["attributes"]["forecast"]`` so
+    weather entity referenced by ``widgets``: daily forecasts for
+    ``WEATHER`` widgets, written to
+    ``states[entity_id]["attributes"]["forecast"]``, and hourly
+    forecasts for ``METEOGRAM`` widgets, written to
+    ``states[entity_id]["attributes"]["forecast_hourly"]``. This way
     ``render_widget_svg`` sees the same data as the scheduled image
     render path.
 
@@ -389,12 +392,16 @@ async def _fetch_forecasts(
         states: Mutable states dict built by ``_build_display_config``.
     """
     weather_entities: set[str] = set()
+    meteogram_entities: set[str] = set()
     for w in widgets:
         # WidgetType is a StrEnum: wire-format strings compare equal.
+        eid = w.get("entity", "")
+        if not eid or eid not in states:
+            continue
         if w.get("type") == WidgetType.WEATHER:
-            eid = w.get("entity", "")
-            if eid and eid in states:
-                weather_entities.add(eid)
+            weather_entities.add(eid)
+        elif w.get("type") == WidgetType.METEOGRAM:
+            meteogram_entities.add(eid)
 
     for entity_id in weather_entities:
         try:
@@ -416,6 +423,27 @@ async def _fetch_forecasts(
             states[entity_id]["attributes"]["forecast"] = forecast
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Could not fetch forecast for %s", entity_id)
+
+    for entity_id in meteogram_entities:
+        try:
+            result = await hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity_id, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+            if result is None:
+                continue
+            entity_data = result.get(entity_id)
+            forecast = (
+                entity_data.get("forecast")
+                if isinstance(entity_data, dict)
+                else None
+            ) or []
+            states[entity_id]["attributes"]["forecast_hourly"] = forecast
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug("Could not fetch hourly forecast for %s", entity_id)
 
 
 async def _fetch_history(

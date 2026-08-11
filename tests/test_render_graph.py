@@ -1652,6 +1652,34 @@ class TestRenderGraph:
         assert "<svg" in svg
         assert "<polyline" not in svg
 
+    def test_graph_primary_missing_secondary_has_data_shows_labels(
+        self,
+    ) -> None:
+        # When the primary-axis entity has no data but a secondary-
+        # axis entity does, labels must still render from the
+        # secondary entity's points rather than silently disappearing
+        # because the primary-axis fallback picked an empty list.
+        widget: dict[str, object] = {
+            "type": "graph",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 280,
+            "entities": [
+                {"entity": "sensor.nonexistent"},
+                {
+                    "entity": "sensor.humidity",
+                    "y_axis": "secondary",
+                },
+            ],
+            "show_labels": True,
+            "smoothing": False,
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert "<polyline" in svg
+        # Secondary axis label (humidity range 65.0-70.0).
+        assert "65.0" in svg
+
     def test_graph_entities_empty_list_renders_blank(self) -> None:
         # An empty entities list renders valid SVG with no graph line.
         widget: dict[str, object] = {

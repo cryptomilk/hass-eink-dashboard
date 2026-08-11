@@ -372,6 +372,128 @@ class TestEinkDashboardImage:
 
         assert "forecast" not in states["weather.home"]["attributes"]
 
+    async def test_fetch_hourly_forecasts_for_meteogram(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # A METEOGRAM widget triggers an hourly (not daily) forecast
+        # fetch, stored under a separate "forecast_hourly" key.
+        forecast_data = [
+            {"datetime": "2025-05-04T10:00:00", "temperature": 18},
+        ]
+        entity, _entry = make_entity()
+        entity.set_widgets([{"type": "meteogram", "entity": "weather.home"}])
+
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {"temperature": 20},
+            }
+        }
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(
+                return_value={
+                    "weather.home": {"forecast": forecast_data},
+                }
+            ),
+        ) as mock_call:
+            await entity._async_fetch_forecasts(states)
+
+        assert (
+            states["weather.home"]["attributes"]["forecast_hourly"]
+            == forecast_data
+        )
+        assert "forecast" not in states["weather.home"]["attributes"]
+        mock_call.assert_called_once_with(
+            "weather",
+            "get_forecasts",
+            {"entity_id": "weather.home", "type": "hourly"},
+            blocking=True,
+            return_response=True,
+        )
+
+    async def test_fetch_forecasts_daily_and_hourly_for_same_entity(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # WEATHER and METEOGRAM widgets on the same entity fetch both
+        # daily and hourly forecasts without clobbering each other.
+        daily_data = [{"datetime": "2025-05-04", "temperature": 18}]
+        hourly_data = [
+            {"datetime": "2025-05-04T10:00:00", "temperature": 17},
+        ]
+        entity, _entry = make_entity()
+        entity.set_widgets(
+            [
+                {"type": "weather", "entity": "weather.home"},
+                {"type": "meteogram", "entity": "weather.home"},
+            ]
+        )
+
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {"temperature": 20},
+            }
+        }
+
+        def _get_forecasts(
+            _domain: str, _service: str, data: dict[str, Any], **_kwargs: Any
+        ) -> dict[str, Any]:
+            forecast = daily_data if data["type"] == "daily" else hourly_data
+            return {"weather.home": {"forecast": forecast}}
+
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(side_effect=_get_forecasts),
+        ) as mock_call:
+            await entity._async_fetch_forecasts(states)
+
+        assert states["weather.home"]["attributes"]["forecast"] == (daily_data)
+        assert states["weather.home"]["attributes"]["forecast_hourly"] == (
+            hourly_data
+        )
+        assert mock_call.call_count == 2
+
+    async def test_fetch_hourly_forecasts_skips_missing_entity(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # A METEOGRAM widget referencing an entity absent from states
+        # never triggers a service call.
+        entity, _entry = make_entity()
+        entity.set_widgets(
+            [{"type": "meteogram", "entity": "weather.missing"}]
+        )
+
+        states: dict[str, Any] = {}
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call", AsyncMock()
+        ) as mock_call:
+            await entity._async_fetch_forecasts(states)
+
+        mock_call.assert_not_called()
+
+    async def test_fetch_hourly_forecasts_handles_service_error(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # A failing hourly service call is swallowed; no crash and no
+        # forecast_hourly key is added.
+        entity, _entry = make_entity()
+        entity.set_widgets([{"type": "meteogram", "entity": "weather.home"}])
+
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {"temperature": 20},
+            }
+        }
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(side_effect=Exception("service unavailable")),
+        ):
+            await entity._async_fetch_forecasts(states)
+
+        assert "forecast_hourly" not in states["weather.home"]["attributes"]
+
     async def test_custom_update_interval(
         self, make_entity: Callable[..., Any]
     ) -> None:
