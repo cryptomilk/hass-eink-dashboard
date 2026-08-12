@@ -44,6 +44,7 @@ from ._helpers import (
 )
 from .graph import (
     _extract_attribute_points,
+    _maybe_grayscale_stops,
     _parse_attribute_timestamp,
     _smooth_fill,
     _smooth_path,
@@ -324,7 +325,9 @@ def _build_meteogram_context(
     curve_pts = [(map_x(t), map_y(v)) for t, v in points]
     curve_path = _smooth_path(curve_pts)
     sample_temps = [_sample_by_time(points, i / 16) for i in range(17)]
-    curve_stops = _temp_gradient_stops(sample_temps)
+    curve_stops = _maybe_grayscale_stops(
+        _temp_gradient_stops(sample_temps), config
+    )
 
     # --- Condition icons, floating above the curve ---
     icons: list[dict[str, object]] = []

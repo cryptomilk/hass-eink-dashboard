@@ -25,6 +25,7 @@ from __future__ import annotations
 from .colors import (
     _bar_threshold_fill,
     _lighter_hex,
+    _maybe_grayscale_stops,
     _normalize_thresholds,
     _resolve_threshold_color,
     _rgb_hex_to_grayscale,
@@ -58,6 +59,7 @@ __all__ = [
     "_legend_geometry",
     "_lighter_hex",
     "_line_series",
+    "_maybe_grayscale_stops",
     "_normalize_thresholds",
     "_parse_attribute_timestamp",
     "_resolve_start_cutoff",

@@ -21,6 +21,7 @@ from ...const import (
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
     COLOR_MEDIUM_GRAY,
+    DisplayConfig,
     Widget,
     color_to_hex,
 )
@@ -87,6 +88,35 @@ def _rgb_hex_to_grayscale(
     steps = display_levels - 1
     quantized = round(gray / 255 * steps) * 255 // steps
     return color_to_hex(quantized)
+
+
+def _maybe_grayscale_stops(
+    stops: list[dict[str, str]], config: DisplayConfig
+) -> list[dict[str, str]]:
+    """Convert SVG gradient stops to grayscale on non-color displays.
+
+    Continuous temperature gradients (the weather widget's min/max
+    bar, the meteogram's temperature curve) are only meaningful as
+    saturated color; on a device without a configured color scheme
+    they would otherwise dither into visual noise.
+
+    Args:
+        stops: SVG gradient stop dicts, e.g. as returned by
+            ``_temp_gradient_stops()``.
+        config: Display config. ``color_scheme`` unset means the
+            device is grayscale-only.
+
+    Returns:
+        ``stops`` unchanged when ``color_scheme`` is set, otherwise
+        the same stops with each color converted to grayscale.
+    """
+    if config.get("color_scheme"):
+        return stops
+    display_levels = config.get("display_levels", 16)
+    return [
+        {**stop, "color": _rgb_hex_to_grayscale(stop["color"], display_levels)}
+        for stop in stops
+    ]
 
 
 def _shade_to_hex(shade: str) -> str:
