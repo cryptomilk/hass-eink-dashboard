@@ -43,6 +43,7 @@ from ._helpers import (
     _temp_gradient_stops,
     _widget_dim,
 )
+from .graph import _rgb_hex_to_grayscale
 
 # Weather base geometry at scale=1.0
 # (font_size == FONT_SIZE_WEATHER == 32).  Each value is multiplied
@@ -88,6 +89,34 @@ _DETAIL_ICON_MAP: dict[str, str] = {
     "wind": "wi-strong-wind",
     "cloud": "wi-cloud",
 }
+
+
+def _maybe_grayscale_stops(
+    stops: list[dict[str, str]], config: DisplayConfig
+) -> list[dict[str, str]]:
+    """Convert gradient stops to grayscale on non-color displays.
+
+    The min/max bar's temperature gradient is only meaningful as
+    saturated color; on a device without a configured color scheme
+    it would otherwise dither into visual noise.
+
+    Args:
+        stops: SVG gradient stop dicts as returned by
+            ``_temp_gradient_stops()``.
+        config: Display config. ``color_scheme`` unset means the
+            device is grayscale-only.
+
+    Returns:
+        ``stops`` unchanged when ``color_scheme`` is set, otherwise
+        the same stops with each color converted to grayscale.
+    """
+    if config.get("color_scheme"):
+        return stops
+    display_levels = config.get("display_levels", 16)
+    return [
+        {**stop, "color": _rgb_hex_to_grayscale(stop["color"], display_levels)}
+        for stop in stops
+    ]
 
 
 def _none_if_empty(value: Any) -> Any:
@@ -707,11 +736,14 @@ def _build_weather_context(
                 frac = min(1.0, max(0.0, frac))
                 bar_dot_cx = bar_x1 + round(frac * bar_w)
 
-            bar_gradient_stops = _temp_gradient_stops(
-                [
-                    bar_lo + i / _WX_BAR_GRADIENT_STEPS * (bar_hi - bar_lo)
-                    for i in range(_WX_BAR_GRADIENT_STEPS + 1)
-                ]
+            bar_gradient_stops = _maybe_grayscale_stops(
+                _temp_gradient_stops(
+                    [
+                        bar_lo + i / _WX_BAR_GRADIENT_STEPS * (bar_hi - bar_lo)
+                        for i in range(_WX_BAR_GRADIENT_STEPS + 1)
+                    ]
+                ),
+                config,
             )
             bar_label_left = (
                 f"{_weekday_abbrev(today_date, lang)} "
