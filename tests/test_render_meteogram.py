@@ -31,6 +31,9 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import _card_insets
+from custom_components.eink_dashboard.widgets.meteogram import (
+    _prune_overlapping_day_markers,
+)
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
@@ -124,6 +127,23 @@ _METEOGRAM_HOURLY_FORECAST_SPARSE = [
     },
 ]
 
+# Hourly forecast starting late in the day (22:00 UTC) so the
+# "today" label sits only ~2h before the next midnight boundary on
+# the x-axis -- exercises _prune_overlapping_day_markers()'s
+# first-marker collision case.
+_HOURLY_START_LATE = datetime(2026, 5, 2, 22, 0, 0, tzinfo=UTC)
+_METEOGRAM_HOURLY_FORECAST_LATE_START = [
+    {
+        "datetime": (_HOURLY_START_LATE + timedelta(hours=i)).isoformat(),
+        "temperature": round(
+            20 + 6 * math.sin((i % 24) / 24 * 2 * math.pi), 1
+        ),
+        "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
+        "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+    }
+    for i in range(30)
+]
+
 MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
     "weather.home": {
         "state": "sunny",
@@ -157,6 +177,13 @@ MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
         "attributes": {
             "temperature": 20.0,
             "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_SPARSE,
+        },
+    },
+    "weather.late_start": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_LATE_START,
         },
     },
 }
@@ -347,6 +374,39 @@ class TestRenderMeteogram:
         )
         assert expected_label in svg
 
+    def test_meteogram_late_start_drops_first_day_label(self) -> None:
+        # A forecast window starting at 22:00 puts the "today"
+        # label only ~2h from the next midnight boundary on the
+        # x-axis -- close enough that the two labels would overlap,
+        # so the "today" label must be dropped in favor of the
+        # boundary label (regression test for
+        # _prune_overlapping_day_markers()).
+        widget = self._widget(entity="weather.late_start")
+        svg = render_widget_svg(widget, self._config())
+        today_label = (
+            f"{_weekday_abbrev(date(2026, 5, 2), 'en')} "
+            f"{_month_abbrev(date(2026, 5, 2), 'en')} 2"
+        )
+        next_day_label = (
+            f"{_weekday_abbrev(date(2026, 5, 3), 'en')} "
+            f"{_month_abbrev(date(2026, 5, 3), 'en')} 3"
+        )
+        assert today_label not in svg
+        assert next_day_label in svg
+
+    def test_meteogram_multi_day_window_keeps_all_labels(self) -> None:
+        # A window with generous spacing between day boundaries
+        # keeps every label -- pruning must not remove markers that
+        # don't actually collide or overflow.
+        widget = self._widget(hours=96)
+        svg = render_widget_svg(widget, self._config())
+        for day in (2, 3, 4, 5):
+            label = (
+                f"{_weekday_abbrev(date(2026, 5, day), 'en')} "
+                f"{_month_abbrev(date(2026, 5, day), 'en')} {day}"
+            )
+            assert label in svg
+
     def test_meteogram_show_cloud_cover_default_true(self) -> None:
         # show_cloud_cover defaults to True — omitting it must
         # produce the same output as explicitly enabling it.
@@ -461,3 +521,96 @@ class TestRenderMeteogram:
         widget = self._widget(entity="weather.sparse_precip", hours=8)
         svg = render_widget_svg(widget, self._config())
         assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is None
+
+
+class TestPruneOverlappingDayMarkers:
+    """Verify _prune_overlapping_day_markers() in isolation.
+
+    Marker x-spacing is chosen far smaller (or larger) than any
+    realistic label width at the given font size, so the expected
+    outcome doesn't depend on exact glyph metrics. The exception is
+    the overflow test below, which necessarily uses a tight margin
+    since it must actually overflow ``content_right``.
+    """
+
+    _FONT_SZ = 17
+
+    def test_markers_with_generous_spacing_are_all_kept(self) -> None:
+        # No label collides or overflows -- the list passes through
+        # unchanged.
+        markers: list[dict[str, object]] = [
+            {"x": 0, "label": "Sat May 2"},
+            {"x": 400, "label": "Sun May 3"},
+            {"x": 800, "label": "Mon May 4"},
+        ]
+        result = _prune_overlapping_day_markers(
+            markers, self._FONT_SZ, content_right=1000
+        )
+        assert result == markers
+
+    def test_first_marker_dropped_when_colliding_with_second(self) -> None:
+        # The "today" marker sits right next to the first midnight
+        # boundary -- it is dropped in favor of the boundary label.
+        markers: list[dict[str, object]] = [
+            {"x": 0, "label": "Sat May 2"},
+            {"x": 20, "label": "Sun May 3"},
+            {"x": 400, "label": "Mon May 4"},
+        ]
+        result = _prune_overlapping_day_markers(
+            markers, self._FONT_SZ, content_right=1000
+        )
+        assert result == markers[1:]
+
+    def test_interior_collisions_are_pruned(self) -> None:
+        # Regression test: the original implementation only checked
+        # the first-vs-second and last markers, so colliding markers
+        # in the middle of the axis survived unpruned. A run of
+        # markers crammed 20px apart (far closer than any 9-
+        # character label at font size 17) must collapse to the
+        # markers that actually clear each other.
+        markers: list[dict[str, object]] = [
+            {"x": 0, "label": "Sat May 2"},
+            {"x": 20, "label": "Sun May 3"},
+            {"x": 40, "label": "Mon May 4"},
+            {"x": 60, "label": "Tue May 5"},
+            {"x": 500, "label": "Wed May 6"},
+        ]
+        result = _prune_overlapping_day_markers(
+            markers, self._FONT_SZ, content_right=1000
+        )
+        assert result == [markers[1], markers[4]]
+
+    def test_last_marker_dropped_when_overflowing_content_right(
+        self,
+    ) -> None:
+        # The last label's estimated extent runs past the plot's
+        # right edge, so it's dropped even though it doesn't
+        # collide with its neighbour.
+        markers: list[dict[str, object]] = [
+            {"x": 0, "label": "Sat May 2"},
+            {"x": 900, "label": "Sun May 3"},
+        ]
+        result = _prune_overlapping_day_markers(
+            markers, self._FONT_SZ, content_right=950
+        )
+        assert result == markers[:1]
+
+    def test_empty_and_single_marker_lists_pass_through(self) -> None:
+        # Degenerate inputs (no markers, or only the "today"
+        # marker) must not raise.
+        assert _prune_overlapping_day_markers([], self._FONT_SZ, 1000) == []
+        single: list[dict[str, object]] = [{"x": 0, "label": "Sat May 2"}]
+        assert (
+            _prune_overlapping_day_markers(single, self._FONT_SZ, 1000)
+            == single
+        )
+
+    def test_sole_remaining_marker_kept_despite_overflow(self) -> None:
+        # Regression test: an overflowing last marker is normally
+        # dropped, but not when it is the only marker left -- an
+        # overflowing label is preferable to no day label at all.
+        single: list[dict[str, object]] = [{"x": 900, "label": "Sun May 3"}]
+        result = _prune_overlapping_day_markers(
+            single, self._FONT_SZ, content_right=950
+        )
+        assert result == single

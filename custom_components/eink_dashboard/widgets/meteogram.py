@@ -26,7 +26,7 @@ from __future__ import annotations
 import datetime
 import math
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ..const import (
     DEFAULT_CARD_STYLE,
@@ -320,6 +320,9 @@ def _build_meteogram_context(
             }
         )
         cursor += datetime.timedelta(days=1)
+    day_markers = _prune_overlapping_day_markers(
+        day_markers, day_label_font_sz, content_right
+    )
 
     # --- Temperature curve, colored by a continuous gradient ---
     curve_pts = [(map_x(t), map_y(v)) for t, v in points]
@@ -397,6 +400,75 @@ def _build_meteogram_context(
         "hour_row_y": hour_row_y,
         "hour_font_sz": hour_font_sz,
     }
+
+
+def _prune_overlapping_day_markers(
+    day_markers: list[dict[str, object]],
+    font_sz: int,
+    content_right: int,
+) -> list[dict[str, object]]:
+    """Drop day-boundary labels that would overlap or overflow.
+
+    Labels are left-anchored (``text-anchor="start"``), so a label
+    collides with its neighbour whenever its rendered right edge
+    reaches the neighbour's x position. This does a greedy left-to-
+    right scan, keeping a marker only if it clears the last kept
+    marker's label, so interior collisions are caught as well as the
+    first-vs-second case (common when the forecast starts late in
+    the day, putting midnight -- and the next label -- only a few
+    hours away). The first marker is the "today" label and is
+    preferred to drop over the midnight boundary it collides with,
+    since the boundary line/label is more informative. The last kept
+    label is dropped if it would overflow the plot's right edge,
+    unless it is the only marker left, in which case it is kept
+    (an overflowing label beats no label at all).
+
+    Args:
+        day_markers: Day-boundary marker dicts, in x order, each
+            with ``x`` and ``label`` keys. The first entry is
+            assumed to be the non-boundary "today" label, per how
+            ``_build_meteogram_context()`` constructs this list.
+        font_sz: Day-label font size in pixels, used to measure
+            label width.
+        content_right: X coordinate of the plot's right edge.
+
+    Returns:
+        The marker list with overlapping/overflowing labels removed.
+    """
+    from ..render import _load_font
+
+    font = _load_font(font_sz)
+
+    def label_extent(marker: dict[str, object]) -> int:
+        """Return a marker label's estimated rendered right edge."""
+        x = cast("int", marker["x"])
+        label = str(marker["label"])
+        return x + round(font.getlength(label))
+
+    if len(day_markers) >= 2:
+        first_edge = label_extent(day_markers[0]) + font_sz
+        second_x = cast("int", day_markers[1]["x"])
+        # A full font_sz of gap keeps labels from looking cramped
+        # when they just barely miss.
+        if first_edge >= second_x:
+            day_markers = day_markers[1:]
+
+    kept: list[dict[str, object]] = []
+    prev_edge: int | None = None
+    for marker in day_markers:
+        marker_x = cast("int", marker["x"])
+        if prev_edge is not None and prev_edge >= marker_x:
+            continue
+        kept.append(marker)
+        prev_edge = label_extent(marker) + font_sz
+
+    # No gap here: unlike the collision checks above, touching the
+    # plot's right edge exactly is not treated as overflow. Never
+    # drop the last remaining marker, since a single overflowing
+    # label is preferable to no day label at all.
+    if len(kept) > 1 and label_extent(kept[-1]) > content_right:
+        kept.pop()
+    return kept
 
 
 def _compute_precip_bars(
