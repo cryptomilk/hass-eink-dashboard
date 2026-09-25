@@ -39,6 +39,7 @@ from ..svg_render import _weather_svg_filter
 from ._helpers import (
     _card_insets,
     _color_context,
+    _fmt,
     _temp_gradient_stops,
     _widget_dim,
 )
@@ -79,6 +80,9 @@ _ICON_LANE_H_RATIO = 0.14
 _DAY_LABEL_FONT_RATIO = 0.065
 _HOUR_FONT_RATIO = 0.05
 _GRID_FONT_RATIO = 0.05
+# Precipitation amount labels use the same visual tier as the
+# Y-axis gridline labels.
+_PRECIP_LABEL_FONT_RATIO = 0.05
 _CLOUD_BAND_FRAC = 0.4
 # Precipitation bars use at most this fraction of the plot height,
 # so they stay subordinate to the temperature curve.
@@ -211,6 +215,7 @@ def _build_meteogram_context(
     day_label_font_sz = max(10, round(h * _DAY_LABEL_FONT_RATIO))
     hour_font_sz = max(9, round(h * _HOUR_FONT_RATIO))
     grid_font_sz = max(9, round(h * _GRID_FONT_RATIO))
+    precip_font_sz = max(9, round(h * _PRECIP_LABEL_FONT_RATIO))
     curve_stroke_w = max(2, round(h * 0.012))
     grid_stroke_w = max(1, curve_stroke_w // 2)
 
@@ -290,6 +295,16 @@ def _build_meteogram_context(
         if show_precipitation
         else []
     )
+    if precip_bars:
+        precip_bars = _label_precip_bars(
+            precip_bars,
+            config,
+            precip_font_sz,
+            plot_top,
+            row_gap,
+            content_left,
+            content_right,
+        )
 
     # --- Day boundary markers ---
     language = str(config.get("language", "en"))
@@ -392,6 +407,7 @@ def _build_meteogram_context(
         "cloud_band_path": cloud_band_path,
         "show_precip": bool(precip_bars),
         "precip_bars": precip_bars,
+        "precip_font_sz": precip_font_sz,
         "day_markers": day_markers,
         "day_label_font_sz": day_label_font_sz,
         "day_label_y": m.border,
@@ -504,24 +520,29 @@ def _compute_precip_bars(
             area.
 
     Returns:
-        Bar rects as ``{"x", "y", "w", "h"}`` dicts, one per point
-        with positive precipitation. Empty if none have data.
+        Bar rects as ``{"x", "y", "w", "h", "value", "value_str"}``
+        dicts, one per point with positive precipitation, where
+        ``value`` is the raw precipitation amount and ``value_str``
+        is its original string representation (preserved so label
+        formatting doesn't inherit spurious decimal places from a
+        ``float`` round-trip). Empty if none have data.
     """
     if len(points) < 2:
         return []
 
-    precip_vals: list[tuple[float, float]] = []
+    precip_vals: list[tuple[float, float, str]] = []
     for ts, _v in points:
         entry = entry_by_ts.get(ts)
         precip = entry.get("precipitation") if entry else None
         if precip is None:
             continue
+        precip_str = str(precip)
         try:
-            precip_val = float(str(precip))
+            precip_val = float(precip_str)
         except (ValueError, TypeError):
             continue
         if precip_val > 0:
-            precip_vals.append((ts, precip_val))
+            precip_vals.append((ts, precip_val, precip_str))
 
     if not precip_vals:
         return []
@@ -529,13 +550,13 @@ def _compute_precip_bars(
     # Floor at 2mm and add 1mm headroom so drizzle amounts still
     # draw a visible bar, mirroring the reference
     # lovelace-meteogram-card's precipitation Y-scale.
-    precip_max = max(2.0, max(v for _, v in precip_vals) + 1)
+    precip_max = max(2.0, max(v for _, v, _s in precip_vals) + 1)
     max_bar_h = (plot_bottom - plot_top) * _PRECIP_BAR_MAX_FRAC
     slot_w = map_x(points[1][0]) - map_x(points[0][0])
     bar_w = max(2, round(slot_w * 0.8))
 
     bars: list[dict[str, object]] = []
-    for ts, precip_val in precip_vals:
+    for ts, precip_val, precip_str in precip_vals:
         bar_h = max(1, round(precip_val / precip_max * max_bar_h))
         # Clamp so the bar stays inside the content area at both
         # edges (the first point maps to content_left, the last
@@ -550,9 +571,149 @@ def _compute_precip_bars(
                 "y": plot_bottom - bar_h,
                 "w": bar_w,
                 "h": bar_h,
+                "value": precip_val,
+                "value_str": precip_str,
             }
         )
     return bars
+
+
+def _is_zero_label(label: str) -> bool:
+    """Return whether a formatted numeric label displays as zero.
+
+    Checks the label's own digits rather than re-deriving a display
+    precision independently, so this can never disagree with what
+    ``_fmt()`` (and, underneath it, ``format_number()``) actually
+    renders -- e.g. a 0.01mm reading formatted to "0.0" or "0,0"
+    (decimal-comma locales) both correctly count as zero.
+
+    Args:
+        label: A number formatted via ``_fmt()``.
+
+    Returns:
+        ``True`` if ``label`` contains at least one digit and every
+        digit is "0".
+    """
+    digits = [c for c in label if c.isdigit()]
+    return bool(digits) and all(d == "0" for d in digits)
+
+
+def _label_precip_bars(
+    precip_bars: list[dict[str, object]],
+    config: DisplayConfig,
+    font_sz: int,
+    plot_top: int,
+    row_gap: int,
+    content_left: int,
+    content_right: int,
+) -> list[dict[str, object]]:
+    """Attach formatted, priority-pruned labels to precipitation bars.
+
+    Labels are centered above their bar (``text-anchor="middle"``),
+    so two labels collide when one's right half-width reaches into
+    the next's left half-width. When labels collide, the bar with
+    the higher precipitation value keeps its label -- a bar whose
+    label loses out, or would overflow the content area, still
+    draws its bar, but gets an empty ``"label"`` so no colliding or
+    overhanging text is rendered. Values that format to all-zero
+    digits at the display precision (e.g. a 0.01mm drizzle reading
+    formatting to "0.0") are also left unlabeled, since a visible
+    bar next to a "0.0" label would be misleading.
+
+    Args:
+        precip_bars: Bar dicts from ``_compute_precip_bars()``, in
+            x order, each with ``x``, ``y``, ``w``, ``value``, and
+            ``value_str`` keys.
+        config: Display config, used for locale-aware number
+            formatting via ``_fmt()``.
+        font_sz: Precipitation label font size in pixels.
+        plot_top: Y pixel coordinate of the plot's top edge, used
+            to keep labels from being clipped above the plot.
+        row_gap: Vertical gap between a bar's top and its label.
+        content_left: X pixel coordinate of the plot's left edge,
+            used to drop labels that would overhang it.
+        content_right: X pixel coordinate of the plot's right edge,
+            used to drop labels that would overhang it.
+
+    Returns:
+        New bar dicts, each with an added ``label`` key (possibly
+        empty). ``label_x`` and ``label_y`` are only present when
+        ``label`` is non-empty.
+    """
+    from ..render import _load_font
+
+    # Bold to match the template's font-weight="bold", so measured
+    # widths reflect what actually renders.
+    font = _load_font(font_sz, bold=True)
+
+    # Candidate labels that could be placed: (index, value, left,
+    # right, label, label_x, label_y). Bars that format to zero or
+    # would overhang the content area are excluded up front, since
+    # they can never win a placement regardless of priority.
+    candidates: list[tuple[int, float, float, float, str, int, int]] = []
+    for i, bar in enumerate(precip_bars):
+        value = cast("float", bar["value"])
+        value_str = cast("str", bar["value_str"])
+        label = _fmt(value_str, config)
+        if _is_zero_label(label):
+            continue
+
+        half_w = font.getlength(label) / 2
+        bar_x = cast("int", bar["x"])
+        bar_w = cast("int", bar["w"])
+        center = bar_x + bar_w / 2
+        left_edge = center - half_w
+        right_edge = center + half_w
+
+        # No gap here: matches _prune_overlapping_day_markers()'s
+        # strict edge check -- touching exactly is not overflow.
+        if left_edge < content_left or right_edge > content_right:
+            continue
+
+        # Safeguard: with _PRECIP_BAR_MAX_FRAC = 0.5 a bar's top
+        # can't rise above the plot's midpoint, so this clamp
+        # doesn't trigger today, but it guards against future
+        # changes to that fraction or very short plot heights.
+        label_y = max(cast("int", bar["y"]) - row_gap, plot_top + font_sz)
+        candidates.append(
+            (i, value, left_edge, right_edge, label, round(center), label_y)
+        )
+
+    # Place labels in descending precipitation order, so the most
+    # informative readings win when two labels would collide. Ties
+    # fall back to the original (left-to-right) order.
+    #
+    # A half-font-size margin is added to both sides of the overlap
+    # test, giving a full font_sz of separation between two placed
+    # labels -- the same "full font_sz of gap" margin
+    # _prune_overlapping_day_markers() uses so adjacent labels don't
+    # render touching.
+    gap = font_sz / 2
+    placed: dict[int, tuple[str, int, int]] = {}
+    occupied: list[tuple[float, float]] = []
+    for i, _value, left_edge, right_edge, label, label_x, label_y in sorted(
+        candidates, key=lambda c: (-c[1], c[0])
+    ):
+        overlaps = any(
+            left_edge < right + gap and right_edge > left - gap
+            for left, right in occupied
+        )
+        if not overlaps:
+            placed[i] = (label, label_x, label_y)
+            occupied.append((left_edge, right_edge))
+
+    labeled: list[dict[str, object]] = []
+    for i, bar in enumerate(precip_bars):
+        new_bar = dict(bar)
+        if i in placed:
+            label, label_x, label_y = placed[i]
+            new_bar["label"] = label
+            new_bar["label_x"] = label_x
+            new_bar["label_y"] = label_y
+        else:
+            new_bar["label"] = ""
+        labeled.append(new_bar)
+    return labeled
 
 
 def _sample_by_time(points: list[tuple[float, float]], frac: float) -> float:

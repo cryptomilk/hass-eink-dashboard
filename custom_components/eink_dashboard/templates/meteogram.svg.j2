@@ -43,14 +43,6 @@
 <path d="{{ cloud_band_path }}"
   fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
 {%- endif -%}
-{#- Precipitation bars: grow upward from the plot baseline. -#}
-{%- if show_precip -%}
-{%- for bar in precip_bars -%}
-<rect x="{{ bar.x }}" y="{{ bar.y }}"
-  width="{{ bar.w }}" height="{{ bar.h }}"
-  fill="{{ hex_gray }}" fill-opacity="0.5"/>
-{%- endfor -%}
-{%- endif -%}
 {#- Y-axis gridlines and labels. -#}
 {%- for grid in grid_lines -%}
 <line x1="{{ content_left }}" y1="{{ grid.y }}"
@@ -63,6 +55,26 @@
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
+{#- Precipitation bars: grow upward from the plot baseline, with
+    an optional amount label above (omitted where it would collide
+    with a neighbouring label). Drawn after the gridlines so bars
+    and their labels aren't cut through by a crossing gridline. -#}
+{%- if show_precip -%}
+{%- for bar in precip_bars -%}
+<rect x="{{ bar.x }}" y="{{ bar.y }}"
+  width="{{ bar.w }}" height="{{ bar.h }}"
+  fill="{{ hex_gray }}" fill-opacity="0.5"/>
+{%- if bar.label -%}
+<text x="{{ bar.label_x }}" y="{{ bar.label_y }}"
+  font-family="Roboto"
+  font-size="{{ precip_font_sz }}"
+  font-weight="bold"
+  text-anchor="middle"
+  dominant-baseline="auto"
+  fill="{{ hex_black }}">{{ bar.label }}</text>
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
 {#- Temperature curve, colored along its length by value. -#}
 {%- if curve_path -%}
 <path d="{{ curve_path }}"

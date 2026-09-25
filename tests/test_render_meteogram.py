@@ -91,7 +91,11 @@ _METEOGRAM_HOURLY_FORECAST_NO_PRECIP = [
 # Precipitation on the very first and last plotted hour of a
 # default 24h window, so the resulting bars sit right at the
 # content area's left/right edges -- exercises the bar-clamping
-# logic that keeps bars from overhanging into the card border.
+# logic that keeps bars from overhanging into the card border. The
+# value (999.9) is deliberately oversized so its label is far wider
+# than a single content-edge bar slot regardless of font-size or
+# padding tuning, rather than relying on a value that only just
+# barely overhangs.
 _METEOGRAM_HOURLY_FORECAST_EDGE_PRECIP = [
     {
         "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),
@@ -100,7 +104,7 @@ _METEOGRAM_HOURLY_FORECAST_EDGE_PRECIP = [
         ),
         "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
         "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
-        "precipitation": 5.0 if i in (0, 24) else 0.0,
+        "precipitation": 999.9 if i in (0, 24) else 0.0,
     }
     for i in range(144)
 ]
@@ -125,6 +129,40 @@ _METEOGRAM_HOURLY_FORECAST_SPARSE = [
         "cloud_coverage": 20,
         "precipitation": 0.0,
     },
+]
+
+# Precipitation amounts small enough (0.01mm) that format_number()
+# rounds them to "0.0" at its 1-decimal-place display precision --
+# exercises the near-zero label suppression that keeps a visible
+# bar from being paired with a misleading "0.0" label.
+_METEOGRAM_HOURLY_FORECAST_TINY_PRECIP = [
+    {
+        "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),
+        "temperature": round(
+            20 + 6 * math.sin((i % 24) / 24 * 2 * math.pi), 1
+        ),
+        "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
+        "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+        "precipitation": 0.01 if 10 <= (i % 24) < 13 else 0.0,
+    }
+    for i in range(144)
+]
+
+# Two adjacent hours with sharply different precipitation amounts,
+# close enough together in a narrow widget that their labels
+# collide -- exercises the priority-based placement that keeps the
+# higher amount's label over the lower one's.
+_METEOGRAM_HOURLY_FORECAST_PRIORITY_PRECIP = [
+    {
+        "datetime": (_HOURLY_START + timedelta(hours=i)).isoformat(),
+        "temperature": round(
+            20 + 6 * math.sin((i % 24) / 24 * 2 * math.pi), 1
+        ),
+        "condition": "sunny" if 6 <= (i % 24) < 20 else "clear-night",
+        "cloud_coverage": 20 if 6 <= (i % 24) < 20 else 60,
+        "precipitation": {10: 0.5, 11: 9.0}.get(i, 0.0),
+    }
+    for i in range(24)
 ]
 
 # Hourly forecast starting late in the day (22:00 UTC) so the
@@ -177,6 +215,20 @@ MOCK_METEOGRAM_STATES: dict[str, dict[str, object]] = {
         "attributes": {
             "temperature": 20.0,
             "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_SPARSE,
+        },
+    },
+    "weather.tiny_precip": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": _METEOGRAM_HOURLY_FORECAST_TINY_PRECIP,
+        },
+    },
+    "weather.priority_precip": {
+        "state": "sunny",
+        "attributes": {
+            "temperature": 20.0,
+            "forecast_hourly": (_METEOGRAM_HOURLY_FORECAST_PRIORITY_PRECIP),
         },
     },
     "weather.late_start": {
@@ -521,6 +573,109 @@ class TestRenderMeteogram:
         widget = self._widget(entity="weather.sparse_precip", hours=8)
         svg = render_widget_svg(widget, self._config())
         assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is None
+
+    def test_meteogram_precipitation_labels_present(self) -> None:
+        # Precipitation bars draw a formatted amount ("1.5") above
+        # them, distinguished from every other label by the
+        # text-anchor="middle" + dominant-baseline="auto" combo the
+        # template only uses for precip labels (day labels use
+        # dominant-baseline="hanging"; grid labels have no
+        # text-anchor).
+        svg = render_widget_svg(self._widget(hours=24), self._config())
+        labels = re.findall(
+            r'<text[^>]*text-anchor="middle"[^>]*'
+            r'dominant-baseline="auto"[^>]*>([^<]*)</text>',
+            svg,
+        )
+        assert "1.5" in labels
+
+    def test_meteogram_no_precipitation_no_labels(self) -> None:
+        # An entity without precipitation data draws no bars and
+        # therefore no precip amount labels.
+        widget = self._widget(entity="weather.no_precip")
+        svg = render_widget_svg(widget, self._config())
+        assert (
+            re.search(
+                r'<text[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>',
+                svg,
+            )
+            is None
+        )
+
+    def test_meteogram_narrow_widget_prunes_some_precip_labels(
+        self,
+    ) -> None:
+        # A narrow, multi-day window packs several precipitation
+        # bars close enough together that their labels would
+        # overlap -- some labels must be dropped (empty label),
+        # while every bar itself still renders.
+        widget = self._widget(w=300, hours=120)
+        config = self._config()
+        svg = render_widget_svg(widget, config)
+        bar_count = len(re.findall(r'<rect[^>]*fill-opacity="0.5"', svg))
+        label_count = len(
+            re.findall(
+                r'<text[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>',
+                svg,
+            )
+        )
+        assert bar_count > 0
+        assert 0 < label_count < bar_count
+
+    def test_meteogram_precip_priority_keeps_highest(self) -> None:
+        # Two adjacent hours (0.5mm, 9.0mm) sit close enough in a
+        # narrow widget that only one label fits -- the higher
+        # amount must win, not whichever bar comes first.
+        widget = self._widget(
+            w=300, entity="weather.priority_precip", hours=24
+        )
+        svg = render_widget_svg(widget, self._config())
+        labels = re.findall(
+            r'<text[^>]*text-anchor="middle"[^>]*'
+            r'dominant-baseline="auto"[^>]*>([^<]*)</text>',
+            svg,
+        )
+        assert "9.0" in labels
+        assert "0.5" not in labels
+
+    def test_meteogram_tiny_precip_bars_but_no_labels(self) -> None:
+        # A 0.01mm reading rounds to "0.0" at the formatter's
+        # 1-decimal-place precision -- the bar still draws, but no
+        # misleading "0.0" label should appear next to it.
+        widget = self._widget(entity="weather.tiny_precip", hours=24)
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(r'<rect[^>]*fill-opacity="0.5"', svg) is not None
+        assert (
+            re.search(
+                r'<text[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>',
+                svg,
+            )
+            is None
+        )
+
+    def test_meteogram_precip_labels_within_content_bounds(self) -> None:
+        # Precipitation at hours 0 and 24 places bars right at
+        # content_left/content_right, centered exactly on the
+        # boundary. A center-anchored label there is wider than the
+        # bar itself, so it would overhang past the card border --
+        # both edge labels must be suppressed while their bars still
+        # draw (previously they would render past the boundary).
+        widget = self._widget(entity="weather.edge_precip")
+        svg = render_widget_svg(widget, self._config())
+
+        bar_count = len(re.findall(r'<rect[^>]*fill-opacity="0.5"', svg))
+        label_count = len(
+            re.findall(
+                r'<text[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>',
+                svg,
+            )
+        )
+        assert bar_count == 2
+        assert label_count == 0
 
 
 class TestPruneOverlappingDayMarkers:
