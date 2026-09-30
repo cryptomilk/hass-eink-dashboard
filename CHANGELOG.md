@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-30
+
+### Added
+
+- **Meteogram widget**: hourly temperature curve over a weather
+  entity's forecast, colored by a continuous temperature gradient,
+  with condition icons, dashed day-boundary markers, an optional
+  cloud-coverage band, hour-axis ticks, and optional precipitation
+  bars labeled with their amount.
+- **`mode`** option on the Weather widget: `"full"` (default),
+  `"current"`, or `"forecast"`, to show only current conditions or
+  only the forecast strip. Current mode also adds a feels-like
+  temperature line, a locale-aware date, and a today min/max
+  gradient bar.
+
+### Changed
+
+- `widgets/graph.py` split into a `widgets/graph/` package
+  (`colors.py`, `data.py`, `geometry.py`, `series.py`, `context.py`)
+  so the Graph and Meteogram widgets can share path-smoothing,
+  Y-bounds, and gradient logic instead of duplicating it.
+
+### Fixed
+
+- Weather current-mode min/max bar and the meteogram temperature
+  curve now fall back to grayscale on displays without a configured
+  color scheme, instead of showing a raw color gradient in the
+  Lovelace editor preview.
+
 ## [0.7.0] - 2026-08-08
 
 ### Added
@@ -288,6 +317,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.8.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.4.1...v0.5.0
