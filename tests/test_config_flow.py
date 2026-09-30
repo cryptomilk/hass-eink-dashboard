@@ -871,6 +871,49 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"]["use_system_fonts"] is True
 
+    async def test_display_settings_saves_dark_mode_on(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Enabling dark_mode persists it as a top-level option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "dark_mode": True}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["dark_mode"] is True
+
+    async def test_display_settings_default_dark_mode_is_false(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Omitting dark_mode on a fresh entry defaults to False.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["dark_mode"].default() is False
+
+    async def test_display_settings_dark_mode_before_optimize(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Dark mode sits with the other top-level display checkboxes,
+        # above optimize and the Advanced section.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        field_order = [
+            k.schema
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        ]
+        assert field_order.index("dark_mode") < field_order.index(
+            "optimize"
+        )
+
     async def test_display_settings_default_use_system_fonts_is_false(
         self, hass: HomeAssistant
     ) -> None:

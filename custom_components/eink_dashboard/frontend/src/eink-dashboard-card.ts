@@ -61,6 +61,18 @@ export function shouldShowCopyUrl(
   return false;
 }
 
+/**
+ * Whether the SVG editor preview should use inverted (dark) colors.
+ *
+ * @param display - Layout display config from the layout API.
+ * @returns True when dark mode is enabled for this dashboard.
+ */
+export function isDarkModePreview(display: {
+  dark_mode?: boolean;
+}): boolean {
+  return Boolean(display.dark_mode);
+}
+
 // ── Card class ────────────────────────────────────────────────────────────────
 
 interface CardConfig {
@@ -239,6 +251,14 @@ class EinkDashboardCard extends HTMLElement {
           position: relative;
           width: 100%;
           background: #fff;
+        }
+        .container.dark-mode,
+        .container.dark-mode .scale-wrapper,
+        .container.dark-mode .svg-canvas {
+          background: #000;
+        }
+        .container.dark-mode .widget-wrapper {
+          filter: invert(1);
         }
         .loading, .error {
           padding: 16px;
@@ -539,6 +559,7 @@ class EinkDashboardCard extends HTMLElement {
       const div = document.createElement("div");
       div.className = "error";
       div.textContent = `Failed to load layout: ${(err as Error).message}`;
+      this._container.classList.remove("dark-mode");
       this._container.replaceChildren(div);
     } finally {
       this._fetching = false;
@@ -609,6 +630,10 @@ class EinkDashboardCard extends HTMLElement {
 
     this._renderedSvgs = [];
     this._container.innerHTML = "";
+    this._container.classList.toggle(
+      "dark-mode",
+      isDarkModePreview(this._layout!.display),
+    );
     this._container.appendChild(scaleWrapper);
     // Server image is a sibling so it fills the container
     // naturally (width: 100%; height: auto) when shown.

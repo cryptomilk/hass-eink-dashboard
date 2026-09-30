@@ -113,6 +113,12 @@ export interface DisplayConfig {
    * Used to widen dividers and borders for low-depth displays.
    */
   display_levels?: number;
+  /**
+   * When true, invert the dashboard to white-on-black (Kindle
+   * dark mode). The editor preview applies a CSS invert; the
+   * generated PNG is inverted after rasterisation.
+   */
+  dark_mode?: boolean;
 }
 
 /** Static device metadata returned by the `eink_dashboard/layout` WebSocket command. */

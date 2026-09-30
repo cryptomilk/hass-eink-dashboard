@@ -51,6 +51,7 @@ from . import (
 )
 from .battery import resolve_battery_level
 from .const import (
+    DEFAULT_DARK_MODE,
     DEFAULT_DISPLAY_LEVELS,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
@@ -248,6 +249,9 @@ class EinkDashboardImage(ImageEntity):
                     "rotation": self._entry.options.get("rotation", 0),
                     "optimize": self._entry.options.get(
                         "optimize", DEFAULT_OPTIMIZE
+                    ),
+                    "dark_mode": self._entry.options.get(
+                        "dark_mode", DEFAULT_DARK_MODE
                     ),
                     "display_levels": self._entry.options.get(
                         "display_levels", DEFAULT_DISPLAY_LEVELS
