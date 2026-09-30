@@ -23,6 +23,7 @@ from homeassistant.components.http import HomeAssistantView
 
 from .battery import build_entity_state, resolve_battery_level
 from .const import (
+    DEFAULT_DARK_MODE,
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
@@ -75,6 +76,9 @@ class EinkLayoutView(HomeAssistantView):
                     "width": width,
                     "height": height,
                     "display_levels": preset.display_levels,
+                    "dark_mode": entry.options.get(
+                        "dark_mode", DEFAULT_DARK_MODE
+                    ),
                 },
                 "device": {
                     "name": entry.title,

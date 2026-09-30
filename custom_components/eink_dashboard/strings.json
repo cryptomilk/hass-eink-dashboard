@@ -144,11 +144,13 @@
         "description": "{optimize_note}",
         "data": {
           "update_interval": "Update interval (seconds)",
+          "dark_mode": "Dark mode",
           "optimize": "E-ink optimization",
           "display_levels": "Display levels",
           "use_system_fonts": "Use system fonts"
         },
         "data_description": {
+          "dark_mode": "Invert the dashboard to white-on-black (Kindle dark mode). Applies to the widget editor preview and the generated image.",
           "optimize": "Apply autocontrast and quantization for e-ink displays",
           "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
           "use_system_fonts": "Also use fonts already installed on this Home Assistant host as a fallback for characters the bundled font and custom font directory do not cover. Off by default so dashboards render identically across HA OS, Docker, and other machines; enabling it can make text look different depending on what is installed on the host."

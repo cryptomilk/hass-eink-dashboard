@@ -35,7 +35,7 @@ from typing import Any
 
 from babel import UnknownLocaleError
 from babel.dates import format_date
-from PIL import Image, ImageFont
+from PIL import Image, ImageFont, ImageOps
 
 from .conditions import check_conditions
 from .const import (
@@ -839,19 +839,21 @@ def render_dashboard(
     """Render widgets to PNG bytes for e-ink display.
 
     Rasterises each widget SVG individually at its intrinsic size,
-    pastes the results onto a white canvas, then applies rotation
-    and e-ink optimisation.  Per-widget rasterisation is ~3x faster
-    than composing one large SVG because resvg's cost scales with
-    document complexity and pixmap area.
+    pastes the results onto a white canvas, then applies rotation,
+    e-ink optimisation, and optional dark-mode invert.  Per-widget
+    rasterisation is ~3x faster than composing one large SVG because
+    resvg's cost scales with document complexity and pixmap area.
 
     Args:
         widget_list: Widget configuration dicts.  Each must have a
             ``"type"`` key matching a registered SVG renderer.
         config: Display config with ``width``, ``height``, ``rotation``,
             entity ``states``, and optionally ``font_dir`` (a directory
-            of extra font files for resvg to fall back to) and
+            of extra font files for resvg to fall back to),
             ``use_system_fonts`` (also load fonts installed on the
-            host).  Defaults to 600×800 if dimensions are absent.
+            host), and ``dark_mode`` (invert the finished image for
+            Kindle-style white-on-black).  Defaults to 600×800 if
+            dimensions are absent.
 
     Returns:
         PNG image bytes ready for delivery to the e-ink display.
@@ -938,6 +940,17 @@ def render_dashboard(
         img = img.rotate(rotation, expand=True)
 
     img = optimize_for_eink(img, config)
+
+    if config.get("dark_mode"):
+        # Invert after optimisation so dithered levels stay a
+        # permutation of the same palette.  Matches the editor
+        # preview, which applies CSS filter: invert(1) on widgets.
+        # ImageOps.invert supports L/RGB; 1-bit output from the
+        # mono dither path is inverted via an L round-trip.
+        if img.mode == "1":
+            img = ImageOps.invert(img.convert("L")).convert("1")
+        else:
+            img = ImageOps.invert(img)
 
     _LOGGER.debug(
         "render_dashboard: post-optimize mode=%s size=%s",

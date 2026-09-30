@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildHeaderText,
   shouldShowCopyUrl,
+  isDarkModePreview,
 } from "../src/eink-dashboard-card.js";
 
 describe("buildHeaderText", () => {
@@ -38,4 +39,19 @@ describe("shouldShowCopyUrl", () => {
   it("returns false for custom with webhooks", () => expect(shouldShowCopyUrl("custom", true)).toBe(false));
   it("returns false for trmnl_og", () => expect(shouldShowCopyUrl("trmnl_og", false)).toBe(false));
   it("returns false for trmnl_x", () => expect(shouldShowCopyUrl("trmnl_x", true)).toBe(false));
+});
+
+describe("isDarkModePreview", () => {
+  it("returns false when dark_mode is absent", () => {
+    // Layouts without the flag keep the light SVG canvas.
+    expect(isDarkModePreview({})).toBe(false);
+  });
+
+  it("returns false when dark_mode is false", () => {
+    expect(isDarkModePreview({ dark_mode: false })).toBe(false);
+  });
+
+  it("returns true when dark_mode is true", () => {
+    expect(isDarkModePreview({ dark_mode: true })).toBe(true);
+  });
 });

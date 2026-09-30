@@ -656,6 +656,27 @@ class TestEinkDashboardImage:
             assert config["exposure"] == 1.5
             assert config["saturation"] == 0.8
 
+    async def test_dark_mode_forwarded_to_render(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        from custom_components.eink_dashboard.render import render_dashboard
+
+        entity, _entry = make_entity(
+            {
+                "width": 200,
+                "height": 100,
+                "dark_mode": True,
+            }
+        )
+
+        with patch(
+            "custom_components.eink_dashboard.image.render_dashboard",
+            wraps=render_dashboard,
+        ) as mock_render:
+            await entity._async_refresh(None)
+            config = mock_render.call_args[0][1]
+            assert config["dark_mode"] is True
+
     async def test_locale_options_forwarded_to_render(
         self, make_entity: Callable[..., Any]
     ) -> None:

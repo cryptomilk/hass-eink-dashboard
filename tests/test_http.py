@@ -455,6 +455,7 @@ class TestEinkLayoutView:
             "width": 758,
             "height": 1024,
             "display_levels": 16,
+            "dark_mode": False,
         }
         assert body["device"]["name"] == "Test Dashboard"
         assert body["device"]["model"] == "kindle_pw"
@@ -462,6 +463,27 @@ class TestEinkLayoutView:
         assert body["device"]["orientation"] == "portrait"
         assert body["device"]["area_id"] is None
         assert body["device"]["has_webhooks"] is False
+
+    async def test_display_includes_dark_mode(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # dark_mode from entry options is included in display config.
+        entry = await _setup_entry(
+            hass,
+            options={
+                "width": 758,
+                "height": 1024,
+                "device_model": "kindle_pw",
+                "dark_mode": True,
+            },
+        )
+
+        client = await hass_client()
+        resp = await client.get(_layout_url(entry.entry_id))
+
+        assert resp.status == 200
+        body = await resp.json()
+        assert body["display"]["dark_mode"] is True
 
     async def test_device_metadata_from_entry_options(
         self, hass: HomeAssistant, hass_client: ClientSessionGenerator

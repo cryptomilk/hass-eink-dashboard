@@ -19,6 +19,7 @@ from datetime import date
 from typing import ClassVar
 
 import pytest
+from PIL import ImageChops
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_ROW_H,
@@ -78,6 +79,39 @@ class TestRenderDashboard:
         assert img.mode == "L"
         assert img.size == (100, 100)
         assert pixel(img, 50, 50) == 255
+
+    def test_dark_mode_empty_canvas_is_black(self) -> None:
+        # dark_mode inverts the finished white canvas to black.
+        config = {"width": 100, "height": 100, "dark_mode": True}
+        img = render_to_image([], config)
+        assert pixel(img.convert("L"), 50, 50) == 0
+
+    def test_dark_mode_inverts_rendered_widgets(self) -> None:
+        # The dark-mode PNG is a channel invert of the light-mode
+        # PNG so Kindle dark mode matches the editor CSS invert.
+        widgets = [
+            {"type": "heading", "heading": "Hello", "x": 10, "y": 10}
+        ]
+        config = {"width": 200, "height": 80}
+        light = render_to_image(widgets, config).convert("L")
+        dark = render_to_image(
+            widgets, {**config, "dark_mode": True}
+        ).convert("L")
+        expected = ImageChops.invert(light)
+        assert list(dark.getdata()) == list(expected.getdata())
+
+    def test_dark_mode_inverts_1bit_optimized_canvas(self) -> None:
+        # 2-level optimisation yields mode "1"; dark_mode still
+        # inverts the white canvas to black.
+        config = {
+            "width": 100,
+            "height": 100,
+            "optimize": True,
+            "display_levels": 2,
+            "dark_mode": True,
+        }
+        img = render_to_image([], config)
+        assert pixel(img.convert("L"), 50, 50) == 0
 
     def test_returns_valid_png(self) -> None:
         # render_dashboard returns a valid PNG with the correct dimensions.
