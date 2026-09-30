@@ -49,7 +49,7 @@
       x2="{{ content_right }}" y2="{{ grid.y }}"
       stroke="{{ hex_light_gray }}"
       stroke-width="{{ grid_stroke_w }}"/>
-<text x="{{ content_left }}" y="{{ grid.y }}"
+<text x="{{ content_left }}" y="{{ grid.label_y }}"
   font-family="Roboto"
   font-size="{{ grid_font_sz }}"
   dominant-baseline="auto"
@@ -93,7 +93,7 @@
 <text x="{{ tick.x }}" y="{{ hour_row_y }}"
   font-family="Roboto"
   font-size="{{ hour_font_sz }}"
-  text-anchor="middle"
+  text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ tick.label }}</text>
 {%- endfor -%}

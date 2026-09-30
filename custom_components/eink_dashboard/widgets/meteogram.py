@@ -240,9 +240,13 @@ def _build_meteogram_context(
     grid_lines: list[dict[str, object]] = []
     grid_val = math.ceil(y_min / step) * step
     while grid_val <= y_max:
+        grid_y = map_y(grid_val)
         grid_lines.append(
             {
-                "y": map_y(grid_val),
+                "y": grid_y,
+                # A few px above the line itself, so the label sits
+                # just clear of it instead of straddling it.
+                "label_y": grid_y - row_gap,
                 "label": f"{grid_val:g}°",
             }
         )
@@ -378,13 +382,32 @@ def _build_meteogram_context(
         )
 
     # --- Hour-axis ticks ---
-    hour_ticks: list[dict[str, object]] = [
-        {
-            "x": map_x(points[i][0]),
-            "label": times[i].strftime("%H"),
-        }
-        for i in range(0, len(points), _HOUR_TICK_STEP_HOURS)
-    ]
+    # Center-anchoring every tick would let a tick sitting right at
+    # content_left/content_right (the first tick always does; the
+    # last one does too when the step divides evenly into the
+    # window) spill half its width past the plot edge -- harmless
+    # at small hour_font_sz, but it grows with h and can clip past
+    # the widget's own canvas edge on tall widgets. Anchor those
+    # edge ticks inward instead -- the same idea as the "start"/
+    # "end" anchoring GRAPH uses for its two fixed oldest/newest
+    # X-axis labels, applied here per-tick since hour_ticks is a
+    # full series where only the first/last entry sits at an edge.
+    hour_ticks: list[dict[str, object]] = []
+    for i in range(0, len(points), _HOUR_TICK_STEP_HOURS):
+        tick_x = map_x(points[i][0])
+        if tick_x <= content_left:
+            anchor = "start"
+        elif tick_x >= content_right:
+            anchor = "end"
+        else:
+            anchor = "middle"
+        hour_ticks.append(
+            {
+                "x": tick_x,
+                "label": times[i].strftime("%H"),
+                "anchor": anchor,
+            }
+        )
 
     return {
         "w": w,

@@ -39,6 +39,7 @@ from tests.helpers import (
     assert_card_border,
     assert_has_gray_pixels,
     assert_scales_proportionally,
+    content_bbox,
     make_config,
     render_to_image,
 )
@@ -398,6 +399,22 @@ class TestRenderMeteogram:
         # match elsewhere in the SVG can't produce a false pass.
         assert re.search(r'<path[^>]*fill="none"', svg) is not None
 
+    def test_meteogram_grid_labels_clear_their_gridline(self) -> None:
+        # Each Y-axis gridline label's baseline must sit above its
+        # own gridline (smaller y, since SVG y grows downward), not
+        # directly on it -- otherwise the label straddles the line
+        # instead of sitting clear of it.
+        svg = render_widget_svg(self._widget(), self._config())
+        pairs = re.findall(
+            r'<line x1="\d+" y1="(\d+)"\s+x2="\d+" y2="\d+"\s+'
+            r'stroke="[^"]*"\s+stroke-width="[^"]*"/>\s*'
+            r'<text x="\d+" y="(\d+)"',
+            svg,
+        )
+        assert pairs, "expected at least one Y-axis gridline/label pair"
+        for line_y, label_y in pairs:
+            assert int(label_y) < int(line_y)
+
     def test_meteogram_icons_every_two_to_three_hours(self) -> None:
         # Condition icons appear every 2-3h, not once per hour, for
         # a 24h window. Weather icons are inlined with a fixed
@@ -411,6 +428,60 @@ class TestRenderMeteogram:
         assert icon_count < 24, "icons must not be placed every hour"
         # 24h at a 2-3h step is 8-12 icons.
         assert 6 <= icon_count <= 12
+
+    def test_meteogram_edge_hour_ticks_anchor_inward(self) -> None:
+        # The first/last hour tick always maps exactly to
+        # content_left/content_right, regardless of widget height --
+        # they anchor "start"/"end" instead of "middle" so their
+        # label grows inward rather than straddling the plot edge.
+        # Distinguishes them from every other label in the SVG (only
+        # hour ticks pair an explicit text-anchor with
+        # dominant-baseline="hanging"; day labels use "hanging" with
+        # no text-anchor attribute at all).
+        widget = self._widget(h=550, hours=72)
+        svg = render_widget_svg(widget, self._config())
+        assert re.search(
+            r'<text[^>]*text-anchor="start"[^>]*'
+            r'dominant-baseline="hanging"[^>]*>00</text>',
+            svg,
+        )
+        assert re.search(
+            r'<text[^>]*text-anchor="end"[^>]*'
+            r'dominant-baseline="hanging"[^>]*>00</text>',
+            svg,
+        )
+        assert re.search(
+            r'<text[^>]*text-anchor="middle"[^>]*'
+            r'dominant-baseline="hanging"[^>]*>03</text>',
+            svg,
+        )
+
+    def test_meteogram_extreme_height_hour_ticks_do_not_clip(self) -> None:
+        # hour_font_sz scales with the widget's height, but the
+        # card's left/right insets don't -- at h=2000, hour_font_sz
+        # (100px) dwarfs the fixed 12px padding, so a center-anchored
+        # first/last tick would push roughly half its glyph width
+        # past the canvas edge, where resvg clips it out of the
+        # raster entirely. A wide w (5000) spaces interior ticks far
+        # enough apart that only the edge ticks are at risk of
+        # clipping -- isolating the fix from the unrelated, much
+        # denser interior-tick-overlap case. With "start"/"end"
+        # anchoring the edge labels grow inward instead, so no ink
+        # should touch column 0 or column w-1. Reverting to
+        # text-anchor="middle" for every tick reproduces the original
+        # bug: content_bbox's left/right edges collapse to exactly 0
+        # and w. The hour row occupies the bottom
+        # (_ROW_GAP_RATIO + _HOUR_ROW_H_RATIO) * h = 0.1 * h = 200px
+        # of the widget; nothing else in the template draws there.
+        w = 5000
+        h = 2000
+        widget = self._widget(w=w, h=h, hours=72)
+        img = render_to_image([widget], self._config(width=w, height=h))
+        bbox = content_bbox(img, 0, h - 200, w, h)
+        assert bbox is not None
+        left, _, right, _ = bbox
+        assert left > 0, "first hour tick clipped past the left edge"
+        assert right < w - 1, "last hour tick clipped past the right edge"
 
     def test_meteogram_day_boundary_line_and_label(self) -> None:
         # A window spanning a midnight crossing draws a dashed
