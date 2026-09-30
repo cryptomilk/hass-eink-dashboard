@@ -98,7 +98,7 @@ class TestRenderDashboard:
             widgets, {**config, "dark_mode": True}
         ).convert("L")
         expected = ImageChops.invert(light)
-        assert list(dark.getdata()) == list(expected.getdata())
+        assert list(dark.get_flattened_data()) == list(expected.get_flattened_data())
 
     def test_dark_mode_inverts_1bit_optimized_canvas(self) -> None:
         # 2-level optimisation yields mode "1"; dark_mode still
