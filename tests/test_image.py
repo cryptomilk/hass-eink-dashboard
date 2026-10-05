@@ -372,6 +372,67 @@ class TestEinkDashboardImage:
 
         assert "forecast" not in states["weather.home"]["attributes"]
 
+    async def test_fetch_calendar_events_sorted_by_start(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # CalDAV returns recurring occurrences before single events,
+        # so the service response is not chronological.  Events must
+        # be sorted by start before the widget truncates them.
+        backend_order = [
+            {
+                "start": "2026-10-08T19:00:00+02:00",
+                "end": "2026-10-08T19:45:00+02:00",
+                "summary": "Recurring",
+            },
+            {
+                "start": "2026-10-06T16:00:00+02:00",
+                "end": "2026-10-06T18:00:00+02:00",
+                "summary": "Tomorrow",
+            },
+            {
+                "start": "2026-10-08",
+                "end": "2026-10-09",
+                "summary": "All day",
+            },
+            {
+                "start": "2026-10-08T16:00:00+02:00",
+                "end": "2026-10-08T18:00:00+02:00",
+                "summary": "Afternoon",
+            },
+        ]
+        entity, _entry = make_entity()
+        entity.set_widgets([{"type": "calendar", "entity": "calendar.home"}])
+
+        states = {"calendar.home": {"state": "off", "attributes": {}}}
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(
+                return_value={"calendar.home": {"events": backend_order}},
+            ),
+        ):
+            await entity._async_fetch_calendar_events(states)
+
+        summaries = [
+            e["summary"]
+            for e in states["calendar.home"]["attributes"]["events"]
+        ]
+        assert summaries == ["Tomorrow", "All day", "Afternoon", "Recurring"]
+
+    async def test_fetch_calendar_events_handles_service_error(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
+        entity.set_widgets([{"type": "calendar", "entity": "calendar.home"}])
+
+        states = {"calendar.home": {"state": "off", "attributes": {}}}
+        with patch(
+            "homeassistant.core.ServiceRegistry.async_call",
+            AsyncMock(side_effect=Exception("service unavailable")),
+        ):
+            await entity._async_fetch_calendar_events(states)
+
+        assert "events" not in states["calendar.home"]["attributes"]
+
     async def test_fetch_hourly_forecasts_for_meteogram(
         self, make_entity: Callable[..., Any]
     ) -> None:

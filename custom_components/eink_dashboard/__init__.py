@@ -633,6 +633,12 @@ async def _fetch_calendar_events(
                 "list[dict[str, Any]]",
                 raw if isinstance(raw, list) else [],
             )
+            # calendar.get_events returns events in backend order
+            # (CalDAV puts recurring occurrences first), so sort by
+            # start before the widget truncates to max_events.  ISO
+            # strings sort chronologically; an all-day "YYYY-MM-DD"
+            # sorts before timed events on the same day.
+            events.sort(key=lambda e: str(e.get("start", "")))
             states[entity_id]["attributes"]["events"] = events
         except Exception:  # noqa: BLE001
             _LOGGER.debug("Could not fetch calendar events for %s", entity_id)
