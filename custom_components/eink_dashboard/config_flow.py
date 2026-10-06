@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from .const import (
+    DEFAULT_DARK_MODE,
     DEFAULT_DISPLAY_LEVELS,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
@@ -1221,6 +1222,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 "update_interval",
                 default=opts.get("update_interval", DEFAULT_UPDATE_INTERVAL),
             ): _POSITIVE_INT,
+            vol.Optional(
+                "dark_mode",
+                default=opts.get("dark_mode", DEFAULT_DARK_MODE),
+            ): bool,
             vol.Optional("optimize", default=optimize): bool,
             vol.Optional(
                 "display_levels",
