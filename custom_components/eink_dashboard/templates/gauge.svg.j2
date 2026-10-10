@@ -55,8 +55,8 @@
    default, so the fallback must be explicit rather than omitted. #}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
-  font-family="Roboto"
-  font-size="{{ value_font_sz }}"
+  font-family="{{ value_font_sz | font_family(font_family_name) }}"
+  font-size="{{ value_font_sz | font_px }}"
   font-weight="{{ 'bold' if value_bold else '500' }}"
   text-anchor="middle"
   dominant-baseline="central"
@@ -65,8 +65,8 @@
 {%- if unit_text -%}
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
-  font-family="Roboto"
-  font-size="{{ unit_font_sz }}"
+  font-family="{{ unit_font_sz | font_family(font_family_name) }}"
+  font-size="{{ unit_font_sz | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
@@ -75,8 +75,8 @@
 {%- if segment_label -%}
 <text
   x="{{ seg_label_x }}" y="{{ seg_label_y }}"
-  font-family="Roboto"
-  font-size="{{ seg_label_font_sz }}"
+  font-family="{{ seg_label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ seg_label_font_sz | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ segment_label }}</text>
@@ -84,8 +84,8 @@
 {# Name label at top or bottom depending on header_position. #}
 <text
   x="{{ name_x }}" y="{{ name_y }}"
-  font-family="Roboto"
-  font-size="{{ name_font_sz }}"
+  font-family="{{ name_font_sz | font_family(font_family_name) }}"
+  font-size="{{ name_font_sz | font_px }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>

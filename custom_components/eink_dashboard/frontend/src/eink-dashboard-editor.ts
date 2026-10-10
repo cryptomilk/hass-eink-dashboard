@@ -432,6 +432,52 @@ function boldValueSelector(): HaFormSchema {
 }
 
 /**
+ * Maximum list row height in pixels (default 56).
+ *
+ * Rows never grow beyond this, and it sets the row size when the
+ * widget height is not fixed.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function rowHeightSelector(): HaFormSchema {
+  return {
+    name: "row_height",
+    default: 56,
+    selector: {
+      number: { min: 16, max: 400, mode: "box", unit_of_measurement: "px" },
+    },
+  };
+}
+
+/**
+ * Hide-icon boolean toggle for list widgets.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function hideIconSelector(): HaFormSchema {
+  return {
+    name: "hide_icon",
+    default: false,
+    selector: { boolean: {} },
+  };
+}
+
+/**
+ * Pixel width of the dividers between list rows (default 1).
+ *
+ * @returns A single ha-form schema entry.
+ */
+function dividerWidthSelector(): HaFormSchema {
+  return {
+    name: "divider_width",
+    default: 1,
+    selector: {
+      number: { min: 0, max: 20, mode: "box", unit_of_measurement: "px" },
+    },
+  };
+}
+
+/**
  * Name position dropdown selector (above or below the value).
  *
  * @returns A single ha-form schema entry.
@@ -910,7 +956,10 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+        rowHeightSelector(),
+      ],
     },
     {
       name: "appearance",
@@ -918,7 +967,13 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector(),
+        boldValueSelector(),
+        hideIconSelector(),
+        dividerWidthSelector(),
+      ],
     },
   ],
 
@@ -1172,6 +1227,7 @@ export const SCHEMAS: Record<
       icon: "mdi:move-resize",
       schema: [
         { type: "grid", name: "", schema: posXYWH(d) },
+        rowHeightSelector(),
       ],
     },
     {
@@ -1180,7 +1236,12 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        boldValueSelector(),
+        hideIconSelector(),
+        dividerWidthSelector(),
+      ],
     },
   ],
   calendar: (d) => [
@@ -1221,7 +1282,10 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Layout",
       icon: "mdi:move-resize",
-      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+      schema: [
+        { type: "grid", name: "", schema: posXYWH(d) },
+        rowHeightSelector(),
+      ],
     },
     {
       name: "appearance",
@@ -1229,7 +1293,12 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        boldValueSelector(),
+        hideIconSelector(),
+        dividerWidthSelector(),
+      ],
     },
   ],
   gauge: (d) => [
@@ -1671,6 +1740,12 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  row_height:
+    "Rows never grow taller than this; extra widget height stays "
+    + "empty below the list.",
+  divider_width:
+    "Width of the lines between rows (default 1 px). "
+    + "0 hides them.",
   show_all:
     "When off, the widget is empty if no collection falls "
     + "within the next 3 days.",
@@ -1704,6 +1779,8 @@ export const LABELS: Record<string, string> = {
   card_style: "Card style",
   icon_style: "Icon style",
   bold_value: "Bold value",
+  divider_width: "Divider width",
+  row_height: "Max row height",
   layout: "Layout",
   show_all: "Show all upcoming dates",
   entries: "Entries",

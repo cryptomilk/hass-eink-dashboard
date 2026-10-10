@@ -38,32 +38,35 @@
     secondary_fill=hex_gray,
     value_fill=hex_black,
     value_bold=value_bold,
+    hide_icon=hide_icon,
     letter=row.letter,
     lpad=lpad, rpad=rpad,
     hex_black=hex_black, hex_white=hex_white) }}
-{%- if row.draw_divider -%}
+{%- if row.draw_divider and divider_stroke_w -%}
 <line
   x1="{{ x_off + lpad }}"
-  y1="{{ row.y + row_h }}"
+  y1="{{ row.y + row_h + divider_y_off }}"
   x2="{{ w - r_inset - rpad }}"
-  y2="{{ row.y + row_h }}"
+  y2="{{ row.y + row_h + divider_y_off }}"
   stroke="{{ hex_light_gray }}"
   stroke-width="{{ divider_stroke_w }}"/>
 {%- endif -%}
 {%- elif row.row_type == "divider" -%}
+{%- if divider_stroke_w -%}
 <line
   x1="{{ x_off + lpad }}"
-  y1="{{ row.line_y }}"
+  y1="{{ row.line_y + divider_y_off }}"
   x2="{{ w - r_inset - rpad }}"
-  y2="{{ row.line_y }}"
+  y2="{{ row.line_y + divider_y_off }}"
   stroke="{{ hex_light_gray }}"
   stroke-width="{{ divider_stroke_w }}"/>
+{%- endif -%}
 {%- elif row.row_type == "section" -%}
 <text
   x="{{ x_off + lpad }}"
   y="{{ row.text_y }}"
-  font-family="Roboto"
-  font-size="{{ row.font_sz }}"
+  font-family="{{ row.font_sz | font_family(font_family_name) }}"
+  font-size="{{ row.font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ row.label }}</text>
 {%- endif -%}

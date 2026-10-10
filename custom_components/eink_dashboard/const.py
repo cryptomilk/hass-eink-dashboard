@@ -37,7 +37,15 @@ DEFAULT_MEASURED_PALETTE = "auto"
 DEFAULT_EXPOSURE = 1.0
 DEFAULT_SATURATION = 1.0
 DEFAULT_USE_SYSTEM_FONTS = False
+# Snap TRMNL text to its pixel grid and disable text anti-aliasing.
+DEFAULT_PIXEL_FONTS = True
+# Render every non-white text colour (gray labels etc.) as black.
+DEFAULT_BLACK_TEXT = False
+DEFAULT_FONT_FAMILY = "TRMNL"
+FONT_FAMILY_OPTIONS = ("TRMNL", "Roboto")
 DEFAULT_ROW_H = 56
+# Default stroke width in px of the dividers between list rows.
+DEFAULT_DIVIDER_W = 1
 # DEFAULT_METRICS = _compute_metrics(DEFAULT_ROW_H) lives in render.py
 # rather than here to avoid a circular import (render.py imports const.py).
 MAX_WIDGETS = 200

@@ -22,6 +22,10 @@ from custom_components.eink_dashboard.const import (
     COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
 )
+from custom_components.eink_dashboard.fonts import (
+    pixel_font_size,
+    pixel_fonts_context,
+)
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
@@ -35,7 +39,6 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
-    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -361,29 +364,21 @@ class TestRenderEntities:
 
     # ── Scaling tests ─────────────────────────────────
 
-    def test_entities_scales_with_h(self) -> None:
-        # Doubling h for a single entity row doubles icon content
-        # height proportionally.
-        m_small = _compute_metrics(56)
-        m_large = _compute_metrics(112)
-        widget_small = {
+    def test_entities_shrinks_when_too_small(self) -> None:
+        # A widget shorter than DEFAULT_ROW_H per row still shrinks
+        # its rows to fit (halving h halves the icon height).
+        half = DEFAULT_ROW_H // 2
+        m_small = _compute_metrics(half)
+        m_large = _compute_metrics(DEFAULT_ROW_H)
+        base = {
             "type": "entities",
             "x": 0,
             "y": 0,
             "w": 400,
-            "h": 56,
             "entities": ["sensor.temperature"],
         }
-        widget_large = {
-            "type": "entities",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 112,
-            "entities": ["sensor.temperature"],
-        }
-        img_s = render_to_image([widget_small], self._config())
-        img_l = render_to_image([widget_large], self._config())
+        img_s = render_to_image([{**base, "h": half}], self._config())
+        img_l = render_to_image([{**base, "h": DEFAULT_ROW_H}], self._config())
         assert_scales_proportionally(
             img_s,
             img_l,
@@ -391,16 +386,121 @@ class TestRenderEntities:
                 m_small.padding,
                 0,
                 m_small.padding + m_small.icon_dia,
-                56,
+                half,
             ),
             region_large=(
                 m_large.padding,
                 0,
                 m_large.padding + m_large.icon_dia,
-                112,
+                DEFAULT_ROW_H,
             ),
             expected_ratio=2.0,
         )
+
+    def test_entities_rows_do_not_grow_beyond_default(self) -> None:
+        # A tall widget with one entity keeps the standard row
+        # height and stacks it at the top instead of blowing it up.
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 240,
+            "entities": ["sensor.temperature"],
+        }
+        svg = render_widget_svg(w, self._config())
+        img = render_to_image([w], self._config())
+        assert 'height="240"' in svg
+        assert_has_dark_pixels(img, 0, 0, 400, DEFAULT_ROW_H)
+        assert_all_white(img, 0, DEFAULT_ROW_H + 2, 400, 240)
+
+    def test_entities_row_height_caps_rows(self) -> None:
+        # row_height sets the maximum row height: a tall widget with
+        # one entity renders one row_height-tall row at the top.
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 240,
+            "row_height": 100,
+            "entities": ["sensor.temperature"],
+        }
+        svg = render_widget_svg(w, self._config())
+        img = render_to_image([w], self._config())
+        m = _compute_metrics(100)
+        assert f'r="{m.icon_dia // 2}"' in svg
+        assert_has_dark_pixels(img, 0, 0, 400, 100)
+        assert_all_white(img, 0, 102, 400, 240)
+
+    def test_entities_row_height_drives_auto_height(self) -> None:
+        # Without explicit h the widget is num_rows * row_height tall.
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "row_height": 40,
+            "entities": ["sensor.temperature", "sensor.humidity"],
+        }
+        svg = render_widget_svg(w, self._config())
+        assert 'height="80"' in svg
+
+    def test_entities_hide_icon(self) -> None:
+        # hide_icon removes icon circles and letter fallbacks and
+        # starts the text at the row's left padding.
+        m = _compute_metrics(DEFAULT_ROW_H)
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "hide_icon": True,
+            "entities": ["sensor.temperature", "binary_sensor.motion"],
+        }
+        svg = render_widget_svg(w, self._config())
+        assert "<circle" not in svg
+        assert "<path" not in svg
+        assert f'<text\n  x="{m.padding}"' in svg
+
+    def test_entities_divider_width_configurable(self) -> None:
+        # divider_width sets a fixed stroke for auto and explicit
+        # dividers on any display.
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "divider_width": 1,
+            "entities": [
+                "sensor.temperature",
+                "sensor.humidity",
+                {"type": "divider"},
+                "sensor.temperature",
+            ],
+        }
+        for levels in (2, 16):
+            svg = render_widget_svg(w, self._config(display_levels=levels))
+            widths = re.findall(r'<line[^>]*stroke-width="(\d+)"', svg)
+            assert widths == ["1", "1"]
+
+    def test_entities_divider_width_zero_hides_divider(self) -> None:
+        # divider_width=0 removes all divider lines.
+        w = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "divider_width": 0,
+            "entities": [
+                "sensor.temperature",
+                "sensor.humidity",
+                {"type": "divider"},
+                "sensor.temperature",
+            ],
+        }
+        svg = render_widget_svg(w, self._config())
+        assert "<line" not in svg
 
     # ── Content tests ─────────────────────────────────
 
@@ -542,27 +642,29 @@ class TestRenderEntities:
     def test_entities_value_font_larger_than_name(self) -> None:
         # The state value is the element users scan for at a
         # glance, so it must render in a larger font than the
-        # entity name — compare rendered glyph heights.
-        m = _compute_metrics(80)
-        widgets = [
-            {
-                "type": "entities",
-                "x": 0,
-                "y": 0,
-                "w": 400,
-                "h": 80,
-                "entities": ["sensor.temperature"],
-            }
-        ]
-        img = render_to_image(widgets, self._config())
-        name_left = m.padding + m.icon_dia + m.inner_gap
-        name_bbox = content_bbox(img, name_left, 0, 280, 80)
-        value_bbox = content_bbox(img, 300, 0, 395, 80)
-        assert name_bbox is not None
-        assert value_bbox is not None
-        name_h = name_bbox[3] - name_bbox[1]
-        value_h = value_bbox[3] - value_bbox[1]
-        assert value_h > name_h
+        # entity name.  Compare SVG font sizes: at the capped
+        # 56 px row the name's descenders make rendered glyph
+        # boxes equally tall.
+        m = _compute_metrics(DEFAULT_ROW_H)
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": DEFAULT_ROW_H,
+            "entities": ["sensor.temperature"],
+        }
+        svg = render_widget_svg(widget, self._config())
+        sizes = {
+            int(sz) for sz in re.findall(r'<text[^>]*font-size="(\d+)"', svg)
+        }
+        # Sizes are snapped to the TRMNL pixel grid (default on).
+        with pixel_fonts_context(True):
+            primary = pixel_font_size(m.font_primary)
+            secondary = pixel_font_size(m.font_secondary)
+        assert primary in sizes
+        assert secondary in sizes
+        assert primary > secondary
 
     def test_entities_bold_value_renders_bold_weight(self) -> None:
         # bold_value=True renders each row's right-aligned state
@@ -572,7 +674,7 @@ class TestRenderEntities:
             "x": 0,
             "y": 0,
             "w": 400,
-            "h": 80,
+            "h": DEFAULT_ROW_H,
             "entities": ["sensor.temperature"],
             "bold_value": True,
         }
@@ -587,7 +689,7 @@ class TestRenderEntities:
             "x": 0,
             "y": 0,
             "w": 400,
-            "h": 80,
+            "h": DEFAULT_ROW_H,
             "entities": ["sensor.temperature"],
         }
         svg = render_widget_svg(widget, self._config())
@@ -599,19 +701,19 @@ class TestRenderEntities:
         # Active entity (state "on") without explicit icon_style draws
         # a filled gray circle.  The top ring above the icon glyph
         # contains gray background pixels.
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.motion"],
             }
         ]
         img = render_to_image(widgets, self._config())
-        rx1, ry1, rx2, ry2 = _icon_ring_region(80, m)
+        rx1, ry1, rx2, ry2 = _icon_ring_region(DEFAULT_ROW_H, m)
         assert_has_gray_pixels(
             img, rx1, ry1, rx2, ry2, low=COLOR_GRAY - 20, high=COLOR_GRAY + 20
         )
@@ -621,19 +723,19 @@ class TestRenderEntities:
     ) -> None:
         # Inactive entity (state "off") without explicit icon_style
         # draws an outlined circle with white fill.
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.front_door"],
             }
         ]
         img = render_to_image(widgets, self._config())
-        rx1, ry1, rx2, ry2 = _icon_ring_region(80, m)
+        rx1, ry1, rx2, ry2 = _icon_ring_region(DEFAULT_ROW_H, m)
         found_gray = False
         for y in range(ry1, ry2):
             for x in range(rx1, rx2):
@@ -649,20 +751,20 @@ class TestRenderEntities:
     def test_entities_icon_style_filled_explicit(self) -> None:
         # icon_style="filled" forces a gray circle even for an
         # inactive entity (state "off").
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.front_door"],
                 "icon_style": "filled",
             }
         ]
         img = render_to_image(widgets, self._config())
-        rx1, ry1, rx2, ry2 = _icon_ring_region(80, m)
+        rx1, ry1, rx2, ry2 = _icon_ring_region(DEFAULT_ROW_H, m)
         assert_has_gray_pixels(
             img, rx1, ry1, rx2, ry2, low=COLOR_GRAY - 20, high=COLOR_GRAY + 20
         )
@@ -670,20 +772,20 @@ class TestRenderEntities:
     def test_entities_icon_style_outlined_explicit(self) -> None:
         # icon_style="outlined" forces an outlined circle even for an
         # active entity (state "on"); top ring has white fill.
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.motion"],
                 "icon_style": "outlined",
             }
         ]
         img = render_to_image(widgets, self._config())
-        rx1, ry1, rx2, ry2 = _icon_ring_region(80, m)
+        rx1, ry1, rx2, ry2 = _icon_ring_region(DEFAULT_ROW_H, m)
         found_gray = False
         for y in range(ry1, ry2):
             for x in range(rx1, rx2):
@@ -698,20 +800,20 @@ class TestRenderEntities:
     def test_entities_icon_style_none_no_circle(self) -> None:
         # icon_style="none" suppresses the circle background;
         # top ring above icon glyph is white (no gray fill).
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.motion"],
                 "icon_style": "none",
             }
         ]
         img = render_to_image(widgets, self._config())
-        rx1, ry1, rx2, ry2 = _icon_ring_region(80, m)
+        rx1, ry1, rx2, ry2 = _icon_ring_region(DEFAULT_ROW_H, m)
         found_gray = False
         for y in range(ry1, ry2):
             for x in range(rx1, rx2):
@@ -727,20 +829,20 @@ class TestRenderEntities:
         # On a 2-level display (display_levels=2) the auto-switch
         # forces outlined even for an active entity (state "on");
         # top ring has no gray fill.
-        m = _compute_metrics(80)
+        m = _compute_metrics(DEFAULT_ROW_H)
         widgets = [
             {
                 "type": "entities",
                 "x": 0,
                 "y": 0,
                 "w": 400,
-                "h": 80,
+                "h": DEFAULT_ROW_H,
                 "entities": ["binary_sensor.motion"],
             }
         ]
         img = render_to_image(widgets, self._config(display_levels=2))
         rx1, ry1, rx2, ry2 = _icon_ring_region(
-            80, m, stroke_inset=m.border * 3 // 2
+            DEFAULT_ROW_H, m, stroke_inset=m.border * 3 // 2
         )
         found_gray = False
         for y in range(ry1, ry2):
@@ -753,10 +855,9 @@ class TestRenderEntities:
             "2-level display must force outlined (no gray fill)"
         )
 
-    def test_entities_2level_divider_stroke_widened(self) -> None:
-        # On a 2-level display the auto-divider stroke-width must be
-        # 3× m.divider to prevent dithering into dot patterns.
-        m = _compute_metrics(DEFAULT_ROW_H)
+    def test_entities_divider_defaults_to_one_pixel(self) -> None:
+        # Without divider_width auto and explicit dividers are 1 px
+        # on every display.
         w = {
             "type": "entities",
             "x": 0,
@@ -765,14 +866,14 @@ class TestRenderEntities:
             "entities": [
                 "sensor.temperature",
                 "sensor.humidity",
+                {"type": "divider"},
+                "sensor.temperature",
             ],
         }
-        svg = render_widget_svg(w, self._config(display_levels=2))
-        expected_sw = m.divider * 3
-        assert f'stroke-width="{expected_sw}"' in svg, (
-            f"2-level divider stroke-width should be {expected_sw}"
-            f" (3 × m.divider={m.divider})"
-        )
+        for levels in (2, 16):
+            svg = render_widget_svg(w, self._config(display_levels=levels))
+            widths = re.findall(r'<line[^>]*stroke-width="(\d+)"', svg)
+            assert widths == ["1", "1"]
 
     # ── Auto-sizing tests ─────────────────────────────
 

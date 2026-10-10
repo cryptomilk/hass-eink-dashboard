@@ -871,6 +871,32 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"]["use_system_fonts"] is True
 
+    async def test_display_settings_saves_font_family(
+        self, hass: HomeAssistant
+    ) -> None:
+        # The selected bundled family is persisted as an option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "font_family": "Roboto"}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["font_family"] == "Roboto"
+
+    async def test_display_settings_defaults_to_trmnl_font_family(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Existing entries without the option retain TRMNL as the default.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["font_family"].default() == "TRMNL"
+
     async def test_display_settings_default_use_system_fonts_is_false(
         self, hass: HomeAssistant
     ) -> None:
@@ -885,6 +911,59 @@ class TestEinkDashboardOptionsFlow:
             if hasattr(k, "schema")
         }
         assert markers["use_system_fonts"].default() is False
+
+    async def test_display_settings_default_pixel_fonts_is_true(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Pixel-perfect text is on by default so the TRMNL pixel font
+        # renders crisply on 1-bit displays.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["pixel_fonts"].default() is True
+
+    async def test_display_settings_saves_pixel_fonts_off(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Disabling pixel-perfect text persists it as a top-level option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "pixel_fonts": False}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["pixel_fonts"] is False
+
+    async def test_display_settings_default_black_text_is_false(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Gray text keeps its colour unless the user opts in.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["black_text"].default() is False
+
+    async def test_display_settings_saves_black_text_on(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Enabling black text persists it as a top-level option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "black_text": True}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["black_text"] is True
 
     async def test_display_settings_use_system_fonts_before_font_dir(
         self, hass: HomeAssistant
@@ -1064,10 +1143,9 @@ class TestEinkDashboardOptionsFlow:
     async def test_display_settings_saves_optimize_toggle_on(
         self, hass: HomeAssistant
     ) -> None:
-        # Turning optimize on in the same submission where it was
-        # previously off must succeed even though the eink-only
-        # fields are absent from the schema built from the stale
-        # stored value (only font_dir was available to submit).
+        # Turning optimize on re-shows the form with the eink-only
+        # fields in an expanded Advanced section; the second
+        # submission (including those fields) is then saved.
         flow = await _make_options_flow(
             hass, {"update_interval": 60, "optimize": False}
         )
@@ -1079,11 +1157,76 @@ class TestEinkDashboardOptionsFlow:
             }
         )
 
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "display_settings"
+        top_level = {
+            k.schema: (k, v)
+            for k, v in result["data_schema"].schema.items()
+            if hasattr(k, "schema")
+        }
+        assert top_level["optimize"][0].default() is True
+        advanced = top_level["advanced_section"][1]
+        assert advanced.options["collapsed"] is False
+        section_fields = {
+            k.schema for k in advanced.schema.schema if hasattr(k, "schema")
+        }
+        assert {"dither_algorithm", "exposure", "saturation"} <= (
+            section_fields
+        )
+        assert (
+            "Advanced" in result["description_placeholders"]["optimize_note"]
+        )
+
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "display_levels": "2",
+                "advanced_section": {"dither_algorithm": "threshold"},
+            }
+        )
+
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"]["optimize"] is True
-        assert "dither_algorithm" not in result["data"]
-        assert "exposure" not in result["data"]
-        assert "saturation" not in result["data"]
+        assert result["data"]["display_levels"] == 2
+        assert result["data"]["dither_algorithm"] == "threshold"
+
+    async def test_display_settings_reshows_when_leaving_256_levels(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Switching away from 256 levels reveals exposure/saturation,
+        # so the form is shown again instead of saving.
+        flow = await _make_options_flow(
+            hass,
+            {"update_interval": 60, "optimize": True, "display_levels": 256},
+        )
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": True,
+                "display_levels": "2",
+            }
+        )
+
+        assert result["type"] is FlowResultType.FORM
+
+    async def test_display_settings_saves_when_no_new_fields(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Turning optimize off hides fields, so the form saves at once.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, "optimize": True}
+        )
+        result = await flow.async_step_display_settings(
+            {
+                "update_interval": 60,
+                "optimize": False,
+                "display_levels": "16",
+            }
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["optimize"] is False
 
     async def test_display_settings_preserves_advanced_when_optimize_off(
         self, hass: HomeAssistant

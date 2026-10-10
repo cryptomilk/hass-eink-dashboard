@@ -15,15 +15,23 @@
 from __future__ import annotations
 
 import dataclasses
+import re
 from datetime import date
 from typing import ClassVar
 
 import pytest
+from PIL import ImageFont
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_ROW_H,
     NumberFormat,
     color_to_hex,
+)
+from custom_components.eink_dashboard.fonts import (
+    font_family,
+    font_family_context,
+    pixel_font_size,
+    pixel_fonts_context,
 )
 from custom_components.eink_dashboard.render import (
     DEFAULT_METRICS,
@@ -35,6 +43,7 @@ from custom_components.eink_dashboard.render import (
     format_number,
     resolve_number_format,
 )
+from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import (
     _auto_row_height,
     _card_insets,
@@ -71,6 +80,13 @@ class TestColorToHex:
 
 
 class TestRenderDashboard:
+    def test_roboto_font_family_renders_text(self) -> None:
+        # The selected Roboto face rasterizes through the full pipeline.
+        config = {"width": 200, "height": 80, "font_family": "Roboto"}
+        widgets = [{"type": "heading", "x": 0, "y": 0, "heading": "Roboto"}]
+        img = render_to_image(widgets, config)
+        assert_has_dark_pixels(img, 0, 0, 200, 80)
+
     def test_empty_widget_list_returns_white_image(self) -> None:
         # An empty widget list renders a plain white canvas.
         config = {"width": 100, "height": 100}
@@ -110,7 +126,7 @@ class TestRenderDashboard:
     ) -> None:
         # A configured font_dir is forwarded to _svg_to_png() as
         # extra_font_dirs so resvg can fall back to it for glyphs
-        # missing from the bundled Roboto font.
+        # missing from the bundled TRMNL fonts.
         import custom_components.eink_dashboard.render as render_module
 
         seen: list[list[str] | None] = []
@@ -147,7 +163,7 @@ class TestRenderDashboard:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Without a configured font_dir, extra_font_dirs is None so
-        # only the bundled Roboto directory is used.
+        # only the bundled TRMNL directory is used.
         import custom_components.eink_dashboard.render as render_module
 
         seen: list[list[str] | None] = []
@@ -331,7 +347,224 @@ class TestVisibilityConditions:
         assert_has_dark_pixels(img, 10, 60, 190, 95)
 
 
+class TestPixelFonts:
+    @pytest.mark.parametrize(
+        ("size", "expected"),
+        [
+            (8, 12),
+            (10, 12),
+            (12, 12),
+            (13, 12),
+            (14, 12),
+            (15, 16),
+            (19, 21),
+            (23, 24),
+            (30, 32),
+            (40, 42),
+            (47, 48),
+        ],
+    )
+    def test_snaps_to_native_size_or_multiple(
+        self, size: int, expected: int
+    ) -> None:
+        # TRMNL is a pixel font: sizes snap to the nearest native size
+        # (12/16/21) or an integer multiple of one, ties round down.
+        with pixel_fonts_context(True):
+            assert pixel_font_size(size) == expected
+
+    def test_disabled_keeps_size(self) -> None:
+        # Without the pixel-font context, sizes pass through unchanged.
+        assert pixel_font_size(10) == 10
+        with pixel_fonts_context(False):
+            assert pixel_font_size(13) == 13
+
+    def test_roboto_keeps_size(self) -> None:
+        # Roboto is an outline font, so snapping does not apply.
+        with font_family_context("Roboto"), pixel_fonts_context(True):
+            assert pixel_font_size(13) == 13
+
+    @pytest.mark.parametrize(
+        ("size", "expected_family"),
+        [(10, "TRMNL12"), (24, "TRMNL12"), (32, "TRMNL16"), (42, "TRMNL21")],
+    )
+    def test_family_matches_snapped_size(
+        self, size: int, expected_family: str
+    ) -> None:
+        # The face is the one whose pixel grid divides the snapped size,
+        # so 24 px uses TRMNL12 at 2x rather than TRMNL21.
+        with pixel_fonts_context(True):
+            assert font_family(size) == expected_family
+            loaded = _load_font(size)
+        assert isinstance(loaded, ImageFont.FreeTypeFont)
+        assert loaded.getname()[0] == expected_family
+        assert loaded.size == pixel_font_size_for(size)
+
+    def test_widget_svg_uses_snapped_sizes(self) -> None:
+        # Template font-size attributes use the snapped size and the
+        # root SVG disables text anti-aliasing.
+        config = {"width": 200, "height": 60, "pixel_fonts": True}
+        w = {"type": "heading", "heading": "Hi", "w": 200, "h": 60}
+        svg = render_widget_svg(w, config)
+        sizes = {int(v) for v in re.findall(r'font-size="(\d+)"', svg)}
+        assert sizes
+        assert all(any(s % n == 0 for n in (12, 16, 21)) for s in sizes), sizes
+        assert 'text-rendering="optimizeSpeed"' in svg
+
+    def test_widget_svg_disabled_keeps_antialiasing(self) -> None:
+        # pixel_fonts=False keeps the anti-aliased renderer default.
+        config = {"width": 200, "height": 60, "pixel_fonts": False}
+        w = {"type": "heading", "heading": "Hi", "w": 200, "h": 60}
+        svg = render_widget_svg(w, config)
+        assert "text-rendering" not in svg
+
+    def test_pixel_fonts_default_on(self) -> None:
+        # Pixel-perfect text is the default when the option is absent.
+        config = {"width": 200, "height": 60}
+        w = {"type": "heading", "heading": "Hi", "w": 200, "h": 60}
+        assert 'text-rendering="optimizeSpeed"' in render_widget_svg(w, config)
+
+    def test_rendered_text_has_no_gray_edges(self) -> None:
+        # Snapped, non-anti-aliased text rasterises to pure black and
+        # white, so a black/white threshold cannot fatten glyphs.
+        config = {"width": 300, "height": 40, "pixel_fonts": True}
+        widgets = [
+            {
+                "type": "heading",
+                "x": 0,
+                "y": 0,
+                "w": 300,
+                "h": 40,
+                "heading": "Keller aufräumen 18:00",
+            }
+        ]
+        img = render_to_image(widgets, config)
+        values = {v for v, n in enumerate(img.histogram()) if n}
+        assert values <= {0, 255}, values
+
+
+class TestBlackText:
+    _STATES: ClassVar[dict[str, object]] = {
+        "sensor.temp": {
+            "state": "21.5",
+            "attributes": {
+                "friendly_name": "Living Room",
+                "unit_of_measurement": "°C",
+            },
+        },
+    }
+
+    def _svg(self, **overrides: object) -> str:
+        """Render an entity widget whose name text is gray by default."""
+        config = {"width": 400, "height": 120, "states": self._STATES}
+        config.update(overrides)
+        w = {
+            "type": "entity",
+            "entity": "sensor.temp",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 120,
+        }
+        return render_widget_svg(w, config)
+
+    @staticmethod
+    def _text_fills(svg: str) -> set[str]:
+        """Return the fill colours of every <text> element in ``svg``."""
+        return {
+            fill.lower()
+            for tag in re.findall(r"<text\b[^>]*>", svg)
+            for fill in re.findall(r'fill="([^"]+)"', tag)
+        }
+
+    def test_default_keeps_gray_text(self) -> None:
+        # Without the option the entity name keeps its gray colour.
+        assert "#787878" in self._text_fills(self._svg())
+
+    def test_black_text_turns_gray_text_black(self) -> None:
+        # black_text=True recolours every non-white text fill to black.
+        fills = self._text_fills(self._svg(black_text=True))
+        assert fills <= {"#000000", "#ffffff"}, fills
+        assert "#000000" in fills
+
+    def test_black_text_keeps_white_text(self) -> None:
+        # White text sits on a dark fill (inverted styles), so it must
+        # stay white or it would vanish.
+        fixed = TestBlackText._force(
+            '<text x="1" fill="#ffffff">a</text>'
+            '<text x="2" fill="#787878">b</text>'
+        )
+        assert 'fill="#ffffff">a' in fixed
+        assert 'fill="#000000">b' in fixed
+
+    def test_black_text_leaves_shapes_alone(self) -> None:
+        # Only text is recoloured; gray shapes such as icon circles
+        # keep their colour.
+        fixed = TestBlackText._force(
+            '<circle fill="#787878"/><text fill="#787878">b</text>'
+        )
+        assert '<circle fill="#787878"/>' in fixed
+
+    def test_black_text_renders_no_gray_text_pixels(self) -> None:
+        # The gray name renders as pure black, with no gray pixels in
+        # the text column.
+        config = {
+            "width": 400,
+            "height": 120,
+            "states": self._STATES,
+            "black_text": True,
+        }
+        widgets = [
+            {
+                "type": "entity",
+                "entity": "sensor.temp",
+                "x": 0,
+                "y": 0,
+                "w": 400,
+                "h": 120,
+                "hide_icon": True,
+            }
+        ]
+        img = render_to_image(widgets, config)
+        values = {v for v, n in enumerate(img.histogram()) if n}
+        assert values <= {0, 255}, values
+
+    @staticmethod
+    def _force(svg: str) -> str:
+        """Apply the black-text recolouring to a raw SVG snippet."""
+        from custom_components.eink_dashboard.svg_render import (
+            _force_black_text,
+        )
+
+        return _force_black_text(svg)
+
+
+def pixel_font_size_for(size: int) -> int:
+    """Return the snapped size for ``size`` with pixel fonts enabled."""
+    with pixel_fonts_context(True):
+        return pixel_font_size(size)
+
+
 class TestLoadFont:
+    @pytest.mark.parametrize(
+        ("size", "expected_family"),
+        [(10, "TRMNL12"), (15, "TRMNL16"), (20, "TRMNL21")],
+    )
+    def test_uses_closest_optical_size(
+        self, size: int, expected_family: str
+    ) -> None:
+        # PIL measurement and SVG rendering use the same optical-size map.
+        assert font_family(size) == expected_family
+        loaded = _load_font(size)
+        assert isinstance(loaded, ImageFont.FreeTypeFont)
+        assert loaded.getname()[0] == expected_family
+
+    def test_roboto_context_selects_roboto_for_measurement(self) -> None:
+        # Pillow measurement follows the primary family selected for SVG.
+        with font_family_context("Roboto"):
+            loaded = _load_font(18)
+        assert isinstance(loaded, ImageFont.FreeTypeFont)
+        assert loaded.getname()[0] == "Roboto"
+
     def test_medium_returns_different_object(self) -> None:
         # medium=True must produce a distinct cached object
         regular = _load_font(18)

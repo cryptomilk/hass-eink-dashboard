@@ -22,6 +22,7 @@ import resvg_py
 from PIL import Image
 
 from custom_components.eink_dashboard.svg_render import (
+    _FONTS_DIR,
     _TEMPLATE_DIR,
     _jinja_env,
     _make_jinja_env,
@@ -52,11 +53,11 @@ def test_resvg_rasterises_simple_svg():
 
 
 def test_svg_to_png_produces_valid_png():
-    """Verify _svg_to_png() rasterises Roboto text to a valid PNG."""
+    """Verify _svg_to_png() rasterises bundled TRMNL text to PNG."""
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80)
@@ -69,7 +70,7 @@ def test_svg_to_png_extra_font_dirs_accepted(tmp_path):
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, extra_font_dirs=[str(tmp_path)])
@@ -82,7 +83,7 @@ def test_svg_to_png_no_extra_font_dirs_still_works():
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, extra_font_dirs=None)
@@ -94,7 +95,7 @@ def test_svg_to_png_use_system_fonts_produces_valid_png():
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, use_system_fonts=True)
@@ -117,6 +118,10 @@ def test_svg_to_png_default_skips_system_fonts(monkeypatch):
     )
     _svg_to_png("<svg/>", 10, 10)
     assert calls[0]["skip_system_fonts"] is True
+    assert calls[0]["font_dirs"] == [
+        str(_FONTS_DIR / "TRMNL"),
+        str(_FONTS_DIR / "Roboto"),
+    ]
 
 
 def test_svg_to_png_use_system_fonts_disables_skip(monkeypatch):

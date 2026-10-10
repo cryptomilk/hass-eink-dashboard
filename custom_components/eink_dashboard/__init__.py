@@ -42,9 +42,12 @@ if TYPE_CHECKING:
 
 from .battery import resolve_battery_level
 from .const import (
+    DEFAULT_BLACK_TEXT,
     DEFAULT_DISPLAY_LEVELS,
     DEFAULT_EXPOSURE,
+    DEFAULT_FONT_FAMILY,
     DEFAULT_HEIGHT,
+    DEFAULT_PIXEL_FONTS,
     DEFAULT_SATURATION,
     DEFAULT_USE_SYSTEM_FONTS,
     DEFAULT_WIDTH,
@@ -277,6 +280,9 @@ async def _build_display_config(
             "display_levels", DEFAULT_DISPLAY_LEVELS
         ),
         "color_scheme": entry.options.get("color_scheme"),
+        "font_family": entry.options.get("font_family", DEFAULT_FONT_FAMILY),
+        "black_text": entry.options.get("black_text", DEFAULT_BLACK_TEXT),
+        "pixel_fonts": entry.options.get("pixel_fonts", DEFAULT_PIXEL_FONTS),
         "font_dir": entry.options.get("font_dir", ""),
         "use_system_fonts": entry.options.get(
             "use_system_fonts", DEFAULT_USE_SYSTEM_FONTS

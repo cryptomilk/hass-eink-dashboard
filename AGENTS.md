@@ -134,6 +134,12 @@ the standard row height; use its fields (`icon_dia`, `icon_inner`,
 loads `fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
 `medium=True`, or `Roboto-Bold.ttf` when `bold=True`; `bold` takes
 precedence over `medium`), falling back to PIL's built-in default.
+Templates must write sizes as `font-size="{{ sz | font_px }}"` and
+families as `font-family="{{ sz | font_family(font_family_name) }}"`
+with the *same* `sz`: with the `pixel_fonts` option (default on)
+`font_px` snaps TRMNL sizes to the font's pixel grid (12/16/21 px or
+multiples), and `font_family` picks the matching face. `_load_font`
+applies the same snapping so measurements match the rendered text.
 
 **Localization**: Weekday/month abbreviations (`_weekday_abbrev`,
 `_month_abbrev` in `render.py`) use `babel.dates.format_date` against

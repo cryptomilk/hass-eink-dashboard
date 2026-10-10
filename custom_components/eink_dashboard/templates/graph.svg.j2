@@ -49,27 +49,27 @@
 {%- if show_name -%}
 <text
   x="{{ name_x }}" y="{{ name_y }}"
-  font-family="Roboto"
+  font-family="{{ name_font_sz | font_family(font_family_name) }}"
   font-weight="500"
-  font-size="{{ name_font_sz }}"
+  font-size="{{ name_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>
 {%- endif -%}
 {%- if not hide_state -%}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
-  font-family="Roboto"
+  font-family="{{ value_font_sz | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ value_font_sz }}"
+  font-size="{{ value_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ value_text }}</text>
 {%- if unit_text -%}
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
-  font-family="Roboto"
-  font-size="{{ unit_font_sz }}"
+  font-family="{{ unit_font_sz | font_family(font_family_name) }}"
+  font-size="{{ unit_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
 {%- endif -%}
@@ -139,28 +139,28 @@
 {#- Primary Y-axis labels: min at bottom, max at top. -#}
 {%- if show_labels -%}
 <text x="{{ y_label_x }}" y="{{ y_max_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ y_max_str }}</text>
 <text x="{{ y_label_x }}" y="{{ y_min_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ y_min_str }}</text>
 {#- X-axis labels: oldest time left, newest time right.
     Suppressed on very short widgets (x_oldest_str is empty). -#}
 {%- if x_oldest_str -%}
 <text x="{{ x_label_left }}" y="{{ x_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ x_oldest_str }}</text>
 {%- endif -%}
 {%- if x_newest_str -%}
 <text x="{{ x_label_right }}" y="{{ x_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ x_newest_str }}</text>
@@ -169,14 +169,14 @@
 {#- Secondary Y-axis labels: right side, separate scale. -#}
 {%- if show_secondary_labels -%}
 <text x="{{ y2_label_right_x }}" y="{{ y2_max_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ y2_max_str }}</text>
 <text x="{{ y2_label_right_x }}" y="{{ y2_min_label_y }}"
-  font-family="Roboto"
-  font-size="{{ label_font_sz }}"
+  font-family="{{ label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ label_font_sz | font_px }}"
   text-anchor="end"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ y2_min_str }}</text>
@@ -184,13 +184,13 @@
 {#- Extrema: min/max values with timestamps below the graph. -#}
 {%- if show_extrema -%}
 <text x="{{ extrema_left }}" y="{{ extrema_y }}"
-  font-family="Roboto"
-  font-size="{{ extrema_font_sz }}"
+  font-family="{{ extrema_font_sz | font_family(font_family_name) }}"
+  font-size="{{ extrema_font_sz | font_px }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ extrema_min_str }}</text>
 <text x="{{ extrema_right }}" y="{{ extrema_y }}"
-  font-family="Roboto"
-  font-size="{{ extrema_font_sz }}"
+  font-family="{{ extrema_font_sz | font_family(font_family_name) }}"
+  font-size="{{ extrema_font_sz | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ extrema_max_str }}</text>
@@ -215,8 +215,8 @@
 {%- endif %}/>
 {%- endif -%}
 <text x="{{ entry.text_x }}" y="{{ entry.text_y }}"
-  font-family="Roboto"
-  font-size="{{ entry.font_sz }}"
+  font-family="{{ entry.font_sz | font_family(font_family_name) }}"
+  font-size="{{ entry.font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ entry.name }}</text>
 {%- endfor -%}

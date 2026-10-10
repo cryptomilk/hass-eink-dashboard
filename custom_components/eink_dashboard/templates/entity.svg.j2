@@ -41,18 +41,18 @@
 {#- Value + unit: black, positioned right of the icon. -#}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
-  font-family="Roboto"
+  font-family="{{ value_font_sz | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ value_font_sz }}"
+  font-size="{{ value_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_white if invert else hex_black }}">{{ value_text }}</text>
 {%- if unit_text -%}
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
-  font-family="Roboto"
-  font-size="{{ unit_font_sz }}"
+  font-family="{{ unit_font_sz | font_family(font_family_name) }}"
+  font-size="{{ unit_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_white if invert else hex_black }}">{{ unit_text }}</text>
 {%- endif -%}
@@ -61,9 +61,9 @@
 {%- if not hide_name -%}
 <text
   x="{{ name_x }}" y="{{ name_y }}"
-  font-family="Roboto"
+  font-family="{{ name_font_sz | font_family(font_family_name) }}"
   font-weight="500"
-  font-size="{{ name_font_sz }}"
+  font-size="{{ name_font_sz | font_px }}"
   text-anchor="{{ name_anchor }}"
   dominant-baseline="central"
   fill="{{ hex_white if invert else hex_gray }}">{{ name_text }}</text>

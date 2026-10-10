@@ -21,11 +21,12 @@
   height="{{ fill_h }}" fill="{{ color_hex }}"/>
 {%- endif -%}
 {%- endif -%}
-<text x="{{ text_abs_x }}" y="{{ text_y }}" font-family="Roboto"
+<text x="{{ text_abs_x }}" y="{{ text_y }}"
+  font-family="{{ font_sz | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ font_sz }}" dominant-baseline="central"
+  font-size="{{ font_sz | font_px }}" dominant-baseline="central"
   fill="{{ color_hex }}">{{ label }}</text>
 {%- else -%}
 <rect x="{{ body_x }}" y="{{ icon_y }}" width="{{ body_w }}" height="{{ body_h }}"
@@ -36,11 +37,12 @@
 <rect x="{{ fill_abs_x }}" y="{{ icon_fill_y }}" width="{{ fill_w }}"
   height="{{ icon_fill_h }}" fill="{{ color_hex }}"/>
 {%- endif -%}
-<text x="{{ text_abs_x }}" y="{{ text_svg_y }}" font-family="Roboto"
+<text x="{{ text_abs_x }}" y="{{ text_svg_y }}"
+  font-family="{{ font_sz | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ font_sz }}" dominant-baseline="central"
+  font-size="{{ font_sz | font_px }}" dominant-baseline="central"
   fill="{{ color_hex }}">{{ label }}</text>
 {%- endif -%}
 {%- endcall -%}

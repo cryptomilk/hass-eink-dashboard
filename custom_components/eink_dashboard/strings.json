@@ -146,11 +146,17 @@
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",
           "display_levels": "Display levels",
+          "font_family": "Font family",
+          "pixel_fonts": "Pixel-perfect text",
+          "black_text": "Black text",
           "use_system_fonts": "Use system fonts"
         },
         "data_description": {
           "optimize": "Apply autocontrast and quantization for e-ink displays",
           "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
+          "font_family": "Primary font used for dashboard text. The other bundled font remains available as a glyph fallback.",
+          "pixel_fonts": "Render the TRMNL font only at its native pixel sizes (12, 16, 21 px or whole multiples) without anti-aliasing, so text stays sharp on black-and-white displays. Font sizes may shift by a pixel or two. Has no effect with Roboto.",
+          "black_text": "Render all text in black instead of gray, so labels stay crisp instead of being dithered into dot patterns on displays with few gray levels. White text on dark backgrounds is kept.",
           "use_system_fonts": "Also use fonts already installed on this Home Assistant host as a fallback for characters the bundled font and custom font directory do not cover. Off by default so dashboards render identically across HA OS, Docker, and other machines; enabling it can make text look different depending on what is installed on the host."
         },
         "sections": {
@@ -164,8 +170,8 @@
               "saturation": "Saturation"
             },
             "data_description": {
-              "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled Roboto font does not cover, such as Hebrew, Arabic, or CJK. The directory must be reachable by Home Assistant (mount it into the container on HA OS or Docker). Leave empty to use only the bundled font.",
-              "dither_algorithm": "Algorithm used for error-diffusion dithering",
+              "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled fonts do not cover, such as Hebrew, Arabic, or CJK. The directory must be reachable by Home Assistant (mount it into the container on HA OS or Docker).",
+              "dither_algorithm": "Algorithm used for error-diffusion dithering. None (pure black and white) skips dithering and turns every non-white pixel black (grayscale displays only; ignored at 256 levels).",
               "measured_palette": "Photographically calibrated palette for your specific display model. Auto uses the idealized palette.",
               "exposure": "1.0 = unchanged, higher = brighter (0.0–10.0)",
               "saturation": "1.0 = unchanged, 0.0 = grayscale, higher = more vivid (0.0–10.0)"
@@ -199,12 +205,19 @@
     }
   },
   "selector": {
+    "font_family": {
+      "options": {
+        "TRMNL": "TRMNL",
+        "Roboto": "Roboto"
+      }
+    },
     "dither_algorithm": {
       "options": {
         "floyd_steinberg": "Floyd-Steinberg (recommended)",
         "atkinson": "Atkinson (high contrast)",
         "stucki": "Stucki (smooth gradients)",
-        "burkes": "Burkes (balanced)"
+        "burkes": "Burkes (balanced)",
+        "threshold": "None (pure black and white)"
       }
     },
     "measured_palette": {

@@ -484,6 +484,23 @@ export interface CalendarWidget extends WidgetBase {
   card_style?: CardStyle;
   /** When true, renders the event date/time value in bold. */
   bold_value?: boolean;
+  /**
+   * Stroke width in pixels of the light-gray dividers between rows,
+   * applied on every display type.  ``0`` hides the dividers.
+   * Default: 1.
+   */
+  divider_width?: number;
+  /**
+   * Maximum row height in pixels.  Rows shrink to fit a short widget
+   * but never grow beyond this; when ``h`` is omitted each row is
+   * this tall.  Default: 56.
+   */
+  row_height?: number;
+  /**
+   * When true, omits the icon circle on every row and starts the
+   * row text at the left padding.  Default: false.
+   */
+  hide_icon?: boolean;
 }
 
 /** Waste-collection schedule widget with relative dates. */
@@ -506,6 +523,23 @@ export interface WasteScheduleWidget extends WidgetBase {
   card_style?: CardStyle;
   /** When true, renders the date value in bold. */
   bold_value?: boolean;
+  /**
+   * Stroke width in pixels of the light-gray dividers between rows,
+   * applied on every display type.  ``0`` hides the dividers.
+   * Default: 1.
+   */
+  divider_width?: number;
+  /**
+   * Maximum row height in pixels.  Rows shrink to fit a short widget
+   * but never grow beyond this; when ``h`` is omitted each row is
+   * this tall.  Default: 56.
+   */
+  row_height?: number;
+  /**
+   * When true, omits the icon circle on every row and starts the
+   * row text at the left padding.  Default: false.
+   */
+  hide_icon?: boolean;
 }
 
 /** Single-entity tile card modelled after the HA Tile card. */
@@ -590,8 +624,8 @@ export interface HeadingWidget extends WidgetBase {
   heading?: string;
   /**
    * Visual style for the heading text.
-   * - ``"title"`` — large Roboto Medium in black (default).
-   * - ``"subtitle"`` — smaller Roboto Regular in gray.
+   * - ``"title"`` — large regular-weight text in black (default).
+   * - ``"subtitle"`` — smaller regular text in gray.
    */
   heading_style?: "title" | "subtitle";
   /**
@@ -670,6 +704,23 @@ export interface EntitiesWidget extends WidgetBase {
   icon_style?: IconStyle;
   /** When true, renders each row's state value in bold. */
   bold_value?: boolean;
+  /**
+   * Stroke width in pixels of the light-gray dividers between rows,
+   * applied on every display type.  ``0`` hides the dividers.
+   * Default: 1.
+   */
+  divider_width?: number;
+  /**
+   * Maximum row height in pixels.  Rows shrink to fit a short widget
+   * but never grow beyond this; when ``h`` is omitted each row is
+   * this tall.  Default: 56.
+   */
+  row_height?: number;
+  /**
+   * When true, omits the icon circle on every row and starts the
+   * row text at the left padding.  Default: false.
+   */
+  hide_icon?: boolean;
 }
 
 /**

@@ -19,9 +19,9 @@
 {%- if heading -%}
 <text
   x="{{ text_x }}" y="{{ text_y }}"
-  font-family="Roboto"
+  font-family="{{ font_sz | font_family(font_family_name) }}"
   font-weight="{{ font_weight }}"
-  font-size="{{ font_sz }}"
+  font-size="{{ font_sz | font_px }}"
   dominant-baseline="central"
   text-anchor="{{ text_anchor }}"
   fill="{{ text_fill }}">{{ heading }}</text>
@@ -36,8 +36,8 @@
 <text
   x="{{ badge.text_x }}"
   y="{{ badge.text_y }}"
-  font-family="Roboto"
-  font-size="{{ badge_font_sz }}"
+  font-family="{{ badge_font_sz | font_family(font_family_name) }}"
+  font-size="{{ badge_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ badge.text }}</text>
 {%- endif -%}

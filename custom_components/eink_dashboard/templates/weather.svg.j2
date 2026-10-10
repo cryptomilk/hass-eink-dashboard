@@ -25,16 +25,16 @@
 {%- endif -%}
 <text
   x="{{ temp_x }}" y="{{ temp_y }}"
-  font-family="Roboto"
-  font-size="{{ font_xl }}"
+  font-family="{{ font_xl | font_family(font_family_name) }}"
+  font-size="{{ font_xl | font_px }}"
   font-weight="bold"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ temp_text }}</text>
 {%- if hi_text -%}
 <text
   x="{{ hilo_right }}" y="{{ hi_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ hi_text }}</text>
@@ -42,8 +42,8 @@
 {%- if lo_text -%}
 <text
   x="{{ hilo_right }}" y="{{ lo_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ lo_text }}</text>
@@ -51,8 +51,8 @@
 {%- if precip_text -%}
 <text
   x="{{ hilo_right }}" y="{{ precip_y }}"
-  font-family="Roboto"
-  font-size="{{ font_xs }}"
+  font-family="{{ font_xs | font_family(font_family_name) }}"
+  font-size="{{ font_xs | font_px }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ precip_text }}</text>
@@ -64,8 +64,8 @@
 {%- endif -%}
 <text
   x="{{ d.text_x }}" y="{{ d.text_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ d.text }}</text>
 {%- endfor -%}
@@ -73,8 +73,8 @@
 {%- if feels_like_text -%}
 <text
   x="{{ feels_like_x }}" y="{{ feels_like_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ feels_like_text }}</text>
@@ -83,8 +83,8 @@
 {%- if date_text -%}
 <text
   x="{{ date_x }}" y="{{ date_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ date_text }}</text>
@@ -104,15 +104,15 @@
 {%- endif -%}
 <text
   x="{{ bar_left_x }}" y="{{ bar_cy }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="start"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ bar_label_left }}</text>
 <text
   x="{{ bar_right_x }}" y="{{ bar_cy }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="end"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ bar_label_right }}</text>
@@ -130,8 +130,8 @@
 {%- for day in forecast_entries -%}
 <text
   x="{{ day.cx }}" y="{{ day.label_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ day.label }}</text>
@@ -141,8 +141,8 @@
 {%- if day.hi -%}
 <text
   x="{{ day.cx }}" y="{{ day.hi_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ day.hi }}</text>
@@ -150,8 +150,8 @@
 {%- if day.lo -%}
 <text
   x="{{ day.cx }}" y="{{ day.lo_y }}"
-  font-family="Roboto"
-  font-size="{{ font_sm }}"
+  font-family="{{ font_sm | font_family(font_family_name) }}"
+  font-size="{{ font_sm | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ day.lo }}</text>
@@ -159,8 +159,8 @@
 {%- if day.precip -%}
 <text
   x="{{ day.cx }}" y="{{ day.precip_y }}"
-  font-family="Roboto"
-  font-size="{{ font_xs }}"
+  font-family="{{ font_xs | font_family(font_family_name) }}"
+  font-size="{{ font_xs | font_px }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ day.precip }}</text>

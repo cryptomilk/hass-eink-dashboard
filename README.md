@@ -20,7 +20,9 @@ headless browser or other server component required running.
   (OpenDisplay)
 - **E-ink optimization** - optional post-processing pipeline: autocontrast,
   sharpness, contrast adjustment, and grayscale quantization (2/4/16/256
-  levels with Floyd-Steinberg dithering)
+  levels with Floyd-Steinberg dithering, or pure black and white without
+  dithering) and pixel-perfect text; see
+  [Sharp text on black-and-white displays](docs/black_and_white.md)
 - **Jinja2 templates** - heading widgets support Home Assistant templates
   (e.g. `{{ now().strftime('%H:%M') }}`)
 - **ETag support** - conditional HTTP responses so devices skip the download
@@ -105,7 +107,10 @@ After setup, click **Configure** on the integration entry to:
 - **Device settings** - change device model, orientation, or area
 - **Display settings** - update interval, e-ink optimization toggle,
   grayscale levels, sharpness, contrast, and [font settings](docs/fonts.md)
-  for non-Latin scripts (Hebrew, Arabic, CJK, ...)
+  for non-Latin scripts (Hebrew, Arabic, CJK, ...). For black-and-white
+  displays, see
+  [Sharp text on black-and-white displays](docs/black_and_white.md) for the
+  recommended settings
 - **Add / remove push target** - manage TRMNL webhook URLs
 - **Copy card YAML** - get the Lovelace card snippet for this device
 - **Copy dashboard YAML** - get a full dashboard YAML with cards for all
@@ -265,5 +270,13 @@ Apache 2.0 -- see [LICENSE](LICENSE).
 
 Weather icons from [erikflowers/weather-icons](https://github.com/erikflowers/weather-icons),
 licensed under SIL Open Font License 1.1.
+
+TRMNL pixel font (TRMNL12, TRMNL16, TRMNL21) designed by
+[Renegade Fonts](https://renegadefonts.com) /
+[Heavyweight Digital Type Foundry](http://www.heavyweight-type.com),
+© 2026 Heavyweight Digital Type Foundry s.r.o., licensed under SIL Open
+Font License 1.1 -- see
+[fonts/TRMNL/OFL.txt](custom_components/eink_dashboard/fonts/TRMNL/OFL.txt).
+The font files are bundled unmodified.
 
 Roboto font by Google, licensed under Apache 2.0.

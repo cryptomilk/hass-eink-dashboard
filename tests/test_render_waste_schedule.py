@@ -38,6 +38,7 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -280,19 +281,50 @@ class TestRenderWasteSchedule:
             f" (3 × m.border={m.border})"
         )
 
-    def test_waste_schedule_2level_divider_stroke_widened(self) -> None:
-        # On a 2-level display divider stroke-width must be
-        # 3× m.divider to avoid dithering into dot patterns.
-        m = _compute_metrics(DEFAULT_ROW_H)
+    def test_divider_defaults_to_one_pixel(self) -> None:
+        # Without divider_width the dividers are 1 px on every display.
         w = self._widget(h=3 * DEFAULT_ROW_H)
+        for levels in (2, 16):
+            with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+                mock_dt.today.return_value = _TODAY
+                svg = render_widget_svg(w, self._config(display_levels=levels))
+            widths = re.findall(r'<line[^>]*stroke-width="(\d+)"', svg)
+            assert widths == ["1", "1"]
+
+    def test_row_height_caps_rows(self) -> None:
+        # row_height sets the maximum row height: a tall list with
+        # one entry renders one row_height-tall row at the top.
+        entries = [{"attribute": "Restmuell", "label": "Restmuell"}]
+        w = self._widget(entries=entries, h=240, row_height=100)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config(display_levels=2))
-        expected_sw = m.divider * 3
-        assert f'stroke-width="{expected_sw}"' in svg, (
-            f"2-level divider stroke-width should be {expected_sw}"
-            f" (3 × m.divider={m.divider})"
-        )
+            svg = render_widget_svg(w, self._config())
+            img = render_to_image([w], self._config())
+        m = _compute_metrics(100)
+        assert f'r="{m.icon_dia // 2}"' in svg
+        assert_has_dark_pixels(img, 0, 0, 400, 100)
+        assert_all_white(img, 0, 102, 400, 240)
+
+    def test_row_height_drives_auto_height(self) -> None:
+        # Without explicit h the list is num_rows * row_height tall.
+        w = self._widget(row_height=40)
+        del w["h"]
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'height="120"' in svg
+
+    def test_hide_icon(self) -> None:
+        # hide_icon removes the icon circles and starts the text at
+        # the row's left padding.
+        m = _compute_metrics(DEFAULT_ROW_H)
+        w = self._widget(h=3 * DEFAULT_ROW_H, hide_icon=True)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert "<circle" not in svg
+        assert "<path" not in svg
+        assert f'<text\n  x="{m.padding}"' in svg
 
     # ── Alignment tests ───────────────────────────────
 
@@ -324,15 +356,17 @@ class TestRenderWasteSchedule:
 
     # ── Scaling tests ─────────────────────────────────
 
-    def test_scales_with_h(self) -> None:
-        # Doubling h roughly doubles icon area content height.
+    def test_shrinks_when_too_small(self) -> None:
+        # A widget shorter than DEFAULT_ROW_H per row still shrinks
+        # its rows to fit (halving h halves the icon height).
         entries = [
             {"attribute": "Restmuell", "label": "Restmuell"},
         ]
-        m_small = _compute_metrics(56)
-        m_large = _compute_metrics(112)
-        w_small = self._widget(entries=entries, h=56)
-        w_large = self._widget(entries=entries, h=112)
+        half = DEFAULT_ROW_H // 2
+        m_small = _compute_metrics(half)
+        m_large = _compute_metrics(DEFAULT_ROW_H)
+        w_small = self._widget(entries=entries, h=half)
+        w_large = self._widget(entries=entries, h=DEFAULT_ROW_H)
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             img_s = render_to_image([w_small], self._config())
@@ -344,16 +378,75 @@ class TestRenderWasteSchedule:
                 m_small.padding,
                 0,
                 m_small.padding + m_small.icon_dia,
-                56,
+                half,
             ),
             region_large=(
                 m_large.padding,
                 0,
                 m_large.padding + m_large.icon_dia,
-                112,
+                DEFAULT_ROW_H,
             ),
             expected_ratio=2.0,
         )
+
+    def test_list_rows_do_not_grow_beyond_default(self) -> None:
+        # A tall list widget with one entry keeps the standard row
+        # height and stacks it at the top instead of blowing it up.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=240)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+            img = render_to_image([w], self._config())
+        assert 'height="240"' in svg
+        assert_has_dark_pixels(img, 0, 0, 400, DEFAULT_ROW_H)
+        assert_all_white(img, 0, DEFAULT_ROW_H + 2, 400, 240)
+
+    def test_list_border_wraps_rows_only(self) -> None:
+        # With a tall widget the border card hugs the rows instead of
+        # enclosing the empty space below them.
+        entries = [
+            {"attribute": "Restmuell", "label": "Restmuell"},
+        ]
+        w = self._widget(entries=entries, h=240, card_style="border")
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        assert_has_dark_pixels(
+            img, 40, DEFAULT_ROW_H - 4, 360, DEFAULT_ROW_H + 1
+        )
+        assert_all_white(img, 0, DEFAULT_ROW_H + 4, 400, 240)
+
+    def test_card_layout_still_fills_height(self) -> None:
+        # The single-entry card layout keeps using the full height.
+        w = self._widget(layout="card", h=112)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        m = _compute_metrics(112)
+        assert_has_dark_pixels(img, m.padding, 0, m.padding + m.icon_dia, 112)
+        bbox = content_bbox(img, 0, 0, 400, 112)
+        assert bbox is not None
+        assert bbox[3] - bbox[1] > DEFAULT_ROW_H
+
+    def test_divider_width_configurable(self) -> None:
+        # divider_width sets a fixed divider stroke on any display.
+        w = self._widget(h=3 * DEFAULT_ROW_H, divider_width=1)
+        for levels in (2, 16):
+            with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+                mock_dt.today.return_value = _TODAY
+                svg = render_widget_svg(w, self._config(display_levels=levels))
+            assert re.search(r'<line[^>]*stroke-width="1"', svg)
+
+    def test_divider_width_zero_hides_divider(self) -> None:
+        # divider_width=0 removes the dividers between rows.
+        w = self._widget(h=3 * DEFAULT_ROW_H, divider_width=0)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert "<line" not in svg
 
     # ── Content tests ─────────────────────────────────
 

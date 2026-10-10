@@ -33,8 +33,8 @@
       stroke-dasharray="4,3"/>
 {%- endif -%}
 <text x="{{ marker.x }}" y="{{ day_label_y }}"
-  font-family="Roboto"
-  font-size="{{ day_label_font_sz }}"
+  font-family="{{ day_label_font_sz | font_family(font_family_name) }}"
+  font-size="{{ day_label_font_sz | font_px }}"
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ marker.label }}</text>
 {%- endfor -%}
@@ -50,8 +50,8 @@
       stroke="{{ hex_light_gray }}"
       stroke-width="{{ grid_stroke_w }}"/>
 <text x="{{ content_left }}" y="{{ grid.label_y }}"
-  font-family="Roboto"
-  font-size="{{ grid_font_sz }}"
+  font-family="{{ grid_font_sz | font_family(font_family_name) }}"
+  font-size="{{ grid_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
@@ -66,8 +66,8 @@
   fill="{{ hex_gray }}" fill-opacity="0.5"/>
 {%- if bar.label -%}
 <text x="{{ bar.label_x }}" y="{{ bar.label_y }}"
-  font-family="Roboto"
-  font-size="{{ precip_font_sz }}"
+  font-family="{{ precip_font_sz | font_family(font_family_name) }}"
+  font-size="{{ precip_font_sz | font_px }}"
   font-weight="bold"
   text-anchor="middle"
   dominant-baseline="auto"
@@ -91,8 +91,8 @@
 {#- Hour-axis ticks below the plot. -#}
 {%- for tick in hour_ticks -%}
 <text x="{{ tick.x }}" y="{{ hour_row_y }}"
-  font-family="Roboto"
-  font-size="{{ hour_font_sz }}"
+  font-family="{{ hour_font_sz | font_family(font_family_name) }}"
+  font-size="{{ hour_font_sz | font_px }}"
   text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ tick.label }}</text>

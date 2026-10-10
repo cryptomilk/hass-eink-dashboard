@@ -29,7 +29,9 @@ from ._helpers import (
     _auto_row_height,
     _card_insets,
     _color_context,
+    _divider_stroke_width,
     _fmt,
+    _max_row_height,
     _metrics_context,
     _resolve_icon_style,
     _resolve_icon_svg,
@@ -82,8 +84,17 @@ def _build_entities_context(
             ``title`` (optional label above the card),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
             ``"none"``), ``bold_value`` (render the right-aligned
-            state value in bold; default ``False``), ``card_style``,
-            ``x``, ``w``, ``h``.
+            state value in bold; default ``False``),
+            ``row_height`` (maximum entity row height in px;
+            default ``DEFAULT_ROW_H``; also the per-row size when
+            ``h`` is omitted),
+            ``hide_icon`` (omit the icon circles; text starts at
+            the left padding; default ``False``),
+            ``divider_width`` (fixed stroke in px for auto and
+            explicit dividers; ``0`` hides the lines; default 1),
+            ``card_style``, ``x``, ``w``, ``h``.
+            Entity rows never grow beyond ``row_height``; extra
+            height is left blank below the rows.
         config: Display config with ``width``, ``states``, and
             ``display_levels``.
 
@@ -104,6 +115,8 @@ def _build_entities_context(
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     value_bold: bool = widget.get("bold_value", False)
+    hide_icon: bool = bool(widget.get("hide_icon", False))
+    max_row_h = _max_row_height(widget)
     entity_configs: list = widget.get("entities", [])
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
@@ -160,9 +173,9 @@ def _build_entities_context(
     n_section = sum(1 for r in classified if r["row_type"] == "section")
 
     # Divider takes 15% of an entity row height.
-    divider_h_base = round(DEFAULT_ROW_H * 0.15)
+    divider_h_base = round(max_row_h * 0.15)
     # Section sub-heading takes 60% of an entity row height.
-    section_h_base = round(DEFAULT_ROW_H * 0.6)
+    section_h_base = round(max_row_h * 0.6)
 
     # --- Height ---
     if "h" not in widget:
@@ -171,7 +184,7 @@ def _build_entities_context(
         # for the mix of entity, divider, and section row
         # heights.
         content_target = (
-            n_entity * DEFAULT_ROW_H
+            n_entity * max_row_h
             + n_divider * divider_h_base
             + n_section * section_h_base
         )
@@ -181,20 +194,27 @@ def _build_entities_context(
             content_target=content_target,
         )
         title_font_sz, content_y, content_h = _title_layout(title, svg_h)
-        row_h = DEFAULT_ROW_H
+        row_h = max_row_h
     else:
         svg_h = _widget_dim(widget, "h", DEFAULT_ROW_H)
         title_font_sz, content_y, content_h = _title_layout(title, svg_h)
         # Proportional allocation: entity rows have weight 1,
         # divider rows 0.15, section rows 0.6.
+        # Rows never grow beyond max_row_h so a tall widget with
+        # few rows stacks them at the top at the standard size.
         total_weight = n_entity + n_divider * 0.15 + n_section * 0.6
-        row_h = max(1, round(content_h / total_weight))
+        row_h = max(1, min(max_row_h, round(content_h / total_weight)))
 
     # Sub-row heights scale with row_h.
     # Divider takes 15% of an entity row height.
     divider_h = max(1, round(row_h * 0.15))
     # Section sub-heading takes 60% of an entity row height.
     section_h = max(1, round(row_h * 0.6))
+    # The card frame wraps the rows only, not any unused space below.
+    content_h = min(
+        content_h,
+        n_entity * row_h + n_divider * divider_h + n_section * section_h,
+    )
 
     m = _compute_metrics(row_h)
     x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
@@ -204,8 +224,11 @@ def _build_entities_context(
     # Widen outline stroke on 2-level displays to avoid
     # dithering.
     icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
-    # Widen divider lines on 2-level displays (same rationale).
-    divider_stroke_w = m.divider * 3 if display_levels <= 2 else m.divider
+    divider_stroke_w = _divider_stroke_width(widget)
+    # SVG strokes are centred on the path; shift odd widths by half a
+    # pixel so the line covers whole pixel rows instead of blurring
+    # across two.
+    divider_y_off = (divider_stroke_w % 2) / 2
     icon_fill = color_to_hex(COLOR_GRAY)
     # Section label font ~46% of row height (matches chip label
     # ratio).
@@ -322,5 +345,7 @@ def _build_entities_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
+        "divider_y_off": divider_y_off,
         "value_bold": value_bold,
+        "hide_icon": hide_icon,
     }

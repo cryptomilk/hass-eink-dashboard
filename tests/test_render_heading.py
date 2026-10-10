@@ -22,8 +22,10 @@ from custom_components.eink_dashboard.const import (
     DEFAULT_ROW_H,
     PADDING,
 )
+from custom_components.eink_dashboard.fonts import pixel_fonts_context
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
+    _load_font,
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
@@ -129,7 +131,7 @@ class TestRenderHeading:
         # Content must start at m.padding (single inset), not 2*m.padding.
         # The strip [m.padding, 2*m.padding) should have dark pixels after
         # the fix; it would be white if double-padding were applied.
-        # "XXXX" is chosen because Roboto's X glyph has ink at its leftmost
+        # "XXXX" is chosen because TRMNL's X glyph has ink at its leftmost
         # pixel, making the narrow-strip assertion reliable regardless of
         # font hinting.
         m = _compute_metrics(56)
@@ -769,11 +771,7 @@ class TestRenderHeading:
         assert_has_dark_pixels(img, 200, 0, 400, 56)
 
     def test_heading_badge_inset_with_border(self) -> None:
-        # With card_style="border", r_inset is m.padding, so badge content
-        # must reach up to 400 - m.padding (single right inset), not
-        # 400 - 2*m.padding (double inset). Assert dark pixels in the strip
-        # [400 - 2*m.padding, 400 - m.padding) — badge ink must appear
-        # there when the inset is computed correctly.
+        # The measured badge width should end at the single content inset.
         m = _compute_metrics(56)
         widgets = [
             {
@@ -787,10 +785,18 @@ class TestRenderHeading:
                 "card_style": "border",
             }
         ]
-        img = render_to_image(widgets, self._config())
-        right_single = 400 - m.padding
-        right_double = 400 - m.padding * 2
-        assert_has_dark_pixels(img, right_double, 4, right_single, 52)
+        svg = render_widget_svg(widgets[0], self._config())
+        badge_match = re.search(
+            r'<text\s+x="(\d+)"[^>]*>22\.5°C</text>', svg, re.DOTALL
+        )
+        assert badge_match is not None
+        badge_x = int(badge_match.group(1))
+        # Measure inside the pixel-font context the renderer uses by
+        # default so the snapped size matches the rendered one.
+        with pixel_fonts_context(True):
+            font = _load_font(m.font_secondary)
+        badge_w = round(font.getlength("22.5°C"))
+        assert badge_x + badge_w == 400 - m.padding
 
     # ── Edge case tests ───────────────────────────────
 
@@ -893,3 +899,15 @@ class TestRenderHeading:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == 200
+
+    def test_selected_font_family_is_used_in_svg(self) -> None:
+        # The selected family is primary while TRMNL remains the fallback.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "heading": "Section",
+        }
+        svg = render_widget_svg(widget, self._config(font_family="Roboto"))
+        assert 'font-family="Roboto, TRMNL16"' in svg

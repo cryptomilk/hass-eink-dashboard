@@ -53,18 +53,22 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 from .const import (
+    DEFAULT_BLACK_TEXT,
     DEFAULT_DISPLAY_LEVELS,
     DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
+    DEFAULT_FONT_FAMILY,
     DEFAULT_HEIGHT,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
+    DEFAULT_PIXEL_FONTS,
     DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_USE_SYSTEM_FONTS,
     DEFAULT_WIDTH,
     DEVICE_PRESETS,
     DOMAIN,
+    FONT_FAMILY_OPTIONS,
     DateFormat,
     NumberFormat,
     TimeFormat,
@@ -122,6 +126,7 @@ _DITHER_ALGO_OPTIONS = [
     "atkinson",
     "stucki",
     "burkes",
+    "threshold",
 ]
 
 _MEASURED_PALETTE_OPTIONS = [
@@ -186,7 +191,10 @@ def _build_user_schema(
 
 
 def _build_advanced_section(
-    opts: Mapping[str, Any], display_levels: int, optimize: bool
+    opts: Mapping[str, Any],
+    display_levels: int,
+    optimize: bool,
+    expanded: bool = False,
 ) -> Any:
     """Build the collapsed Advanced section of the display settings form.
 
@@ -204,6 +212,8 @@ def _build_advanced_section(
             only forwarded to dither_image(), which is never called on
             the 256-level passthrough path.
         optimize: Whether e-ink optimization is currently enabled.
+        expanded: Whether the section starts expanded instead of
+            collapsed.
 
     Returns:
         A voluptuous section wrapping font_dir and, once optimize is
@@ -268,7 +278,89 @@ def _build_advanced_section(
             )
     return flow_section(
         vol.Schema(advanced_fields),
-        {"collapsed": True},
+        {"collapsed": not expanded},
+    )
+
+
+def _advanced_field_names(schema: vol.Schema) -> set[str]:
+    """Return the field names inside a display settings Advanced section."""
+    for key, value in schema.schema.items():
+        if getattr(key, "schema", None) == "advanced_section":
+            return {
+                k.schema for k in value.schema.schema if hasattr(k, "schema")
+            }
+    return set()
+
+
+def _build_display_settings_schema(
+    opts: Mapping[str, Any], expand_advanced: bool = False
+) -> vol.Schema:
+    """Build the display settings options form schema.
+
+    Args:
+        opts: Option values used as field defaults. Either the stored
+            config entry options or those merged with a submission
+            that is being shown again.
+        expand_advanced: Whether the Advanced section starts expanded.
+
+    Returns:
+        The voluptuous schema for the display settings form.
+    """
+    optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
+    preset = DEVICE_PRESETS.get(opts.get("device_model", ""))
+    default_display_levels = (
+        preset.display_levels if preset else DEFAULT_DISPLAY_LEVELS
+    )
+    display_levels = int(opts.get("display_levels", default_display_levels))
+    font_family = opts.get("font_family", DEFAULT_FONT_FAMILY)
+    if font_family not in FONT_FAMILY_OPTIONS:
+        font_family = DEFAULT_FONT_FAMILY
+    return vol.Schema(
+        {
+            vol.Required(
+                "update_interval",
+                default=opts.get("update_interval", DEFAULT_UPDATE_INTERVAL),
+            ): _POSITIVE_INT,
+            vol.Optional("optimize", default=optimize): bool,
+            vol.Optional(
+                "display_levels",
+                default=str(display_levels),
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=["2", "4", "16", "256"],
+                    translation_key="display_levels",
+                    mode=SelectSelectorMode.LIST,
+                )
+            ),
+            vol.Optional(
+                "font_family",
+                default=font_family,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(FONT_FAMILY_OPTIONS),
+                    translation_key="font_family",
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                "pixel_fonts",
+                default=opts.get("pixel_fonts", DEFAULT_PIXEL_FONTS),
+            ): bool,
+            vol.Optional(
+                "black_text",
+                default=opts.get("black_text", DEFAULT_BLACK_TEXT),
+            ): bool,
+            vol.Optional(
+                "use_system_fonts",
+                default=opts.get("use_system_fonts", DEFAULT_USE_SYSTEM_FONTS),
+            ): bool,
+            # font_dir lives in the Advanced section (built below) since
+            # it is a power-user field; the section itself is always
+            # present so font support does not depend on optimize.
+            vol.Optional("advanced_section"): _build_advanced_section(
+                opts, display_levels, optimize, expand_advanced
+            ),
+        }
     )
 
 
@@ -724,6 +816,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         """Initialise options flow state."""
         super().__init__()
         self._data: dict[str, Any] = {}
+        # Options merged from a display_settings submission that revealed
+        # new Advanced fields; the form is re-shown with these values.
+        self._display_settings_opts: dict[str, Any] | None = None
 
     def _save_display_entry(
         self,
@@ -1203,47 +1298,27 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update refresh interval, optimize, and image quality settings.
 
-        Also collects ``use_system_fonts`` (top-level, off by default)
-        and, via the Advanced section, ``font_dir`` — both add glyph
-        fallback fonts for scripts the bundled Roboto font does not
-        cover, such as Hebrew, Arabic, or CJK. See docs/fonts.md.
+        Also collects ``font_family``, ``pixel_fonts`` (top-level, on
+        by default), ``black_text`` (top-level, off by default),
+        ``use_system_fonts`` (top-level, off by default),
+        and, via the Advanced section, ``font_dir``.
+        See docs/fonts.md for font and glyph fallback details.
+
+        HA forms are static, so fields that depend on ``optimize`` or
+        ``display_levels`` cannot appear while the user edits the form.
+        When a submission would reveal new Advanced fields (e.g.
+        optimize was just enabled), the form is shown again with the
+        submitted values pre-filled and the Advanced section expanded
+        instead of saving, so those fields can be reviewed first.
         """
-        opts = self.config_entry.options
-        optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
+        # After a re-show, validate against the schema that was actually
+        # displayed (built from the earlier submission), not the stale
+        # stored options, or the newly revealed fields would be rejected.
+        opts = self._display_settings_opts or self.config_entry.options
+        expand_advanced = self._display_settings_opts is not None
         device_model = opts.get("device_model", "")
         preset = DEVICE_PRESETS.get(device_model)
-        default_display_levels = (
-            preset.display_levels if preset else DEFAULT_DISPLAY_LEVELS
-        )
-        display_levels = opts.get("display_levels", default_display_levels)
-        schema_fields: dict = {
-            vol.Required(
-                "update_interval",
-                default=opts.get("update_interval", DEFAULT_UPDATE_INTERVAL),
-            ): _POSITIVE_INT,
-            vol.Optional("optimize", default=optimize): bool,
-            vol.Optional(
-                "display_levels",
-                default=str(display_levels),
-            ): SelectSelector(
-                SelectSelectorConfig(
-                    options=["2", "4", "16", "256"],
-                    translation_key="display_levels",
-                    mode=SelectSelectorMode.LIST,
-                )
-            ),
-            vol.Optional(
-                "use_system_fonts",
-                default=opts.get("use_system_fonts", DEFAULT_USE_SYSTEM_FONTS),
-            ): bool,
-            # font_dir lives in the Advanced section (built below) since
-            # it is a power-user field; the section itself is always
-            # present so font support does not depend on optimize.
-            vol.Optional("advanced_section"): _build_advanced_section(
-                opts, display_levels, optimize
-            ),
-        }
-        schema = vol.Schema(schema_fields)
+        schema = _build_display_settings_schema(opts, expand_advanced)
         if preset and preset.integration_dithers:
             optimize_note = (
                 "This device's Home Assistant integration handles image"
@@ -1255,7 +1330,7 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         if user_input is not None:
             validated = schema(user_input)
             validated["display_levels"] = int(validated["display_levels"])
-            section = validated.get("advanced_section", {})
+            section = validated.pop("advanced_section", {})
             font_dir = section.get("font_dir", "")
             if font_dir and not await self.hass.async_add_executor_job(
                 os.path.isdir, font_dir
@@ -1266,10 +1341,28 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                     errors={"base": "font_dir_not_found"},
                     description_placeholders={"optimize_note": optimize_note},
                 )
-            section = validated.pop("advanced_section", {})
-            return self.async_create_entry(
-                data={**opts, **validated, **section},
+            new_opts = {**opts, **validated, **section}
+            new_schema = _build_display_settings_schema(
+                new_opts, expand_advanced=True
             )
+            if _advanced_field_names(new_schema) - _advanced_field_names(
+                schema
+            ):
+                note = (
+                    "More e-ink settings are now available in the"
+                    " Advanced section. Review them and submit again"
+                    " to save."
+                )
+                self._display_settings_opts = new_opts
+                return self.async_show_form(
+                    step_id="display_settings",
+                    data_schema=new_schema,
+                    description_placeholders={
+                        "optimize_note": f"{optimize_note} {note}".strip()
+                    },
+                )
+            self._display_settings_opts = None
+            return self.async_create_entry(data=new_opts)
         return self.async_show_form(
             step_id="display_settings",
             data_schema=schema,

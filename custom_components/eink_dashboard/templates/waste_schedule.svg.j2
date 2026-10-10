@@ -30,16 +30,17 @@
     value_fill=row.value_fill,
     secondary_fill=row.secondary_fill,
     value_bold=value_bold,
+    hide_icon=hide_icon,
     secondary_bold=value_bold,
     letter=row.letter,
     lpad=lpad, rpad=rpad,
     hex_black=hex_black, hex_white=hex_white) }}
-{%- if not loop.last -%}
+{%- if not loop.last and divider_stroke_w -%}
 <line
   x1="{{ x_off + lpad }}"
-  y1="{{ row.y + row_h }}"
+  y1="{{ row.y + row_h + divider_y_off }}"
   x2="{{ w - r_inset - rpad }}"
-  y2="{{ row.y + row_h }}"
+  y2="{{ row.y + row_h + divider_y_off }}"
   stroke="{{ hex_light_gray }}"
   stroke-width="{{ divider_stroke_w }}"/>
 {%- endif -%}

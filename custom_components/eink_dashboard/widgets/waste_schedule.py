@@ -31,6 +31,9 @@ from ._helpers import (
     _auto_row_height,
     _card_insets,
     _color_context,
+    _divider_stroke_width,
+    _list_row_height,
+    _max_row_height,
     _metrics_context,
     _title_layout,
     _widget_dim,
@@ -58,7 +61,8 @@ def _build_waste_schedule_context(
 
     - ``"list"`` (default): one row per visible entry, each with a
       gray horizontal divider between rows; date is shown as a
-      right-aligned ``value`` string.
+      right-aligned ``value`` string.  Rows never grow beyond
+      ``row_height``; extra widget height is left blank.
     - ``"card"``: only the most urgent entry (lowest day count)
       using the full widget height; date is shown as a
       ``secondary`` line below the primary label.
@@ -76,6 +80,13 @@ def _build_waste_schedule_context(
             ``show_all`` (``bool``, default ``False``),
             ``bold_value`` (render the date text in bold; default
             ``False``),
+            ``row_height`` (maximum row height in px; default
+            ``DEFAULT_ROW_H``; also the per-row size when ``h`` is
+            omitted),
+            ``hide_icon`` (omit the icon circles; text starts at
+            the left padding; default ``False``),
+            ``divider_width`` (fixed divider stroke in px; ``0``
+            hides dividers; default 1),
             ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
             state dict), ``display_levels``, and ``language``.
@@ -104,6 +115,8 @@ def _build_waste_schedule_context(
     title: str = widget.get("title", "")
     show_all: bool = bool(widget.get("show_all", False))
     value_bold: bool = widget.get("bold_value", False)
+    hide_icon: bool = bool(widget.get("hide_icon", False))
+    max_row_h = _max_row_height(widget)
     language: str = config.get("language", "en")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
@@ -161,17 +174,25 @@ def _build_waste_schedule_context(
     svg_h = _widget_dim(
         widget,
         "h",
-        _auto_row_height(title, num_display_rows),
+        _auto_row_height(title, num_display_rows, max_row_h),
     )
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
-    # card layout always trims visible to one entry above, so
-    # num_display_rows == 1 and the division is equivalent to
-    # content_h.
-    row_h = content_h // num_display_rows
+    if layout == "card":
+        # Single most-urgent entry fills the whole widget.
+        row_h = content_h
+    else:
+        row_h = _list_row_height(content_h, num_display_rows, max_row_h)
+        # The card frame wraps the rows only, not any unused space
+        # below them.
+        content_h = row_h * num_display_rows
 
     m = _compute_metrics(row_h)
     icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
-    divider_stroke_w = m.divider * 3 if display_levels <= 2 else m.divider
+    divider_stroke_w = _divider_stroke_width(widget)
+    # SVG strokes are centred on the path; shift odd widths by half a
+    # pixel so the line covers whole pixel rows instead of blurring
+    # across two.
+    divider_y_off = (divider_stroke_w % 2) / 2
     x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
@@ -232,5 +253,7 @@ def _build_waste_schedule_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
+        "divider_y_off": divider_y_off,
         "value_bold": value_bold,
+        "hide_icon": hide_icon,
     }
