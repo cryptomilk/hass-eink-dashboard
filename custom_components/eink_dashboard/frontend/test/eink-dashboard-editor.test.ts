@@ -505,6 +505,76 @@ describe("SCHEMAS form grouping", () => {
     expect(fields).toContain("font_size");
   });
 
+  it("entity appearance section exposes nested font overrides", () => {
+    // The entity widget exposes per-role font size and weight
+    // overrides under a nested "fonts" section (value/name/unit).
+    // It must not flatten, so ha-form nests the values into a
+    // fonts object matching what resolve_font reads in Python.
+    const schema = SCHEMAS.entity(DISPLAY);
+    const appearance = getExpandableSections(schema).find(
+      (s) => s.name === "appearance"
+    )!;
+    const fonts = findField(appearance.schema!, "fonts");
+    expect(fonts).toBeDefined();
+    expect(fonts!.flatten).toBeFalsy();
+    const roles = getExpandableSections(fonts!.schema!);
+    expect(roles.map((r) => r.name)).toEqual(["value", "name", "unit"]);
+    for (const role of roles) {
+      const fields = flattenFields(role.schema!);
+      expect(fields).toContain("size");
+      expect(fields).toContain("weight");
+    }
+  });
+
+  it("every widget appearance section exposes its font roles", () => {
+    // Each widget exposes per-role font size and weight overrides
+    // under a nested "fonts" section. The role names are fixed by
+    // the Python renderer's resolve_font API.
+    const expected: [string, string[], boolean][] = [
+      ["entity", ["value", "name", "unit"], false],
+      ["tile", ["primary", "secondary"], false],
+      ["calendar", ["title", "primary", "secondary", "value"], false],
+      [
+        "entities",
+        ["title", "row_primary", "row_secondary", "value", "section"],
+        false,
+      ],
+      ["waste_schedule", ["title", "primary", "secondary", "value"], false],
+      ["heading", ["heading", "badge"], false],
+      ["device_battery", ["label"], false],
+      ["gauge", ["value", "unit", "name", "segment"], false],
+      ["meteogram", ["day", "hour", "grid", "precip"], false],
+      // Weather's geometry is coupled to font_size, so it exposes
+      // weight-only overrides and omits the per-role size selector.
+      ["weather", ["temp", "detail", "precip"], true],
+      ["sensor", ["name", "value", "unit"], false],
+      ["graph", ["name", "value", "unit", "axis"], false],
+    ];
+    for (const [type, roles, weightOnly] of expected) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const appearance = getExpandableSections(schema).find(
+        (s) => s.name === "appearance"
+      );
+      expect(appearance, `${type} has an appearance section`).toBeDefined();
+      const fonts = findField(appearance!.schema!, "fonts");
+      expect(fonts, `${type} has a fonts section`).toBeDefined();
+      expect(fonts!.flatten, `${type} fonts does not flatten`).toBeFalsy();
+      const roleFields = getExpandableSections(fonts!.schema!);
+      expect(roleFields.map((r) => r.name), `${type} font roles`).toEqual(
+        roles
+      );
+      for (const role of roleFields) {
+        const fields = flattenFields(role.schema!);
+        expect(fields, `${type}.${role.name} weight`).toContain("weight");
+        if (weightOnly) {
+          expect(fields, `${type}.${role.name} size`).not.toContain("size");
+        } else {
+          expect(fields, `${type}.${role.name} size`).toContain("size");
+        }
+      }
+    }
+  });
+
   it("device_battery appearance section contains color", () => {
     // Appearance is the visual styling group: device_battery uses
     // color to control the text colour rendered on the dashboard.

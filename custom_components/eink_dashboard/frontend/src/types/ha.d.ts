@@ -349,6 +349,45 @@ export interface LegacyCondition {
   state_not?: string | string[];
 }
 
+// ── Font customization ────────────────────────────────────────────────────────
+
+/**
+ * Font weight keyword for a text role.
+ *
+ * Mirrors the `FontWeight` enum in `const.py`; each value maps to a
+ * Roboto face (Regular / Medium / Bold) used for both measurement
+ * and rasterisation.
+ */
+export type FontWeight = "regular" | "medium" | "bold";
+
+/**
+ * Font override for a single text role within a widget.
+ *
+ * Both members are optional: an omitted `size` keeps the widget's
+ * derived size (scaled by the display-level `font_scale`), and an
+ * omitted `weight` keeps the role's default weight.
+ */
+export interface FontSpec {
+  /**
+   * Absolute font size in pixels (8–72). Omit to use the widget's
+   * derived size, which the display-level `font_scale` multiplies.
+   */
+  size?: number;
+  /**
+   * Font weight. Omit to use the role's default (e.g. the entity
+   * widget's name defaults to `"medium"`).
+   */
+  weight?: FontWeight;
+}
+
+/**
+ * Per-role font overrides for a widget, keyed by role name.
+ *
+ * Role names are widget-specific (e.g. the entity widget uses
+ * `value`, `name`, and `unit`). Unknown roles are ignored.
+ */
+export type WidgetFonts = Record<string, FontSpec>;
+
 // ── Widget types ──────────────────────────────────────────────────────────────
 
 /**
@@ -375,6 +414,11 @@ interface WidgetBase {
   h?: number;
   /** Font size override (weather widget only). */
   font_size?: number;
+  /**
+   * Per-role font size and weight overrides. Role names are
+   * widget-specific; see each widget interface for its roles.
+   */
+  fonts?: WidgetFonts;
   /** Foreground color as a grayscale integer (0 = black, 255 = white). */
   color?: number;
   /**
@@ -415,7 +459,11 @@ export interface SeparatorWidget extends WidgetBase {
   length?: number;
 }
 
-/** Weather forecast widget with conditions and temperature. */
+/**
+ * Weather forecast widget with conditions and temperature.
+ *
+ * `fonts` roles (weight-only): `temp`, `detail`, `precip`.
+ */
 export interface WeatherWidget extends WidgetBase {
   type: "weather";
   /** HA weather entity ID. */
@@ -444,7 +492,11 @@ export interface WeatherWidget extends WidgetBase {
   mode?: WeatherMode;
 }
 
-/** Device battery level indicator in icon or chip layout. */
+/**
+ * Device battery level indicator in icon or chip layout.
+ *
+ * `fonts` roles: `label`.
+ */
 export interface DeviceBatteryWidget extends WidgetBase {
   type: "device_battery";
   /** Visual layout mode for the indicator. */
@@ -463,7 +515,11 @@ export interface WasteScheduleEntry {
   label: string;
 }
 
-/** Upcoming calendar events from a single HA calendar entity. */
+/**
+ * Upcoming calendar events from a single HA calendar entity.
+ *
+ * `fonts` roles: `title`, `primary`, `secondary`, `value`.
+ */
 export interface CalendarWidget extends WidgetBase {
   type: "calendar";
   /** HA calendar entity ID (e.g. "calendar.family"). */
@@ -486,7 +542,11 @@ export interface CalendarWidget extends WidgetBase {
   bold_value?: boolean;
 }
 
-/** Waste-collection schedule widget with relative dates. */
+/**
+ * Waste-collection schedule widget with relative dates.
+ *
+ * `fonts` roles: `title`, `primary`, `secondary`, `value`.
+ */
 export interface WasteScheduleWidget extends WidgetBase {
   type: "waste_schedule";
   /** Optional card header text. */
@@ -508,7 +568,11 @@ export interface WasteScheduleWidget extends WidgetBase {
   bold_value?: boolean;
 }
 
-/** Single-entity tile card modelled after the HA Tile card. */
+/**
+ * Single-entity tile card modelled after the HA Tile card.
+ *
+ * `fonts` roles: `primary`, `secondary`.
+ */
 export interface TileWidget extends WidgetBase {
   type: "tile";
   /** HA entity ID to display (required at runtime). */
@@ -580,6 +644,8 @@ export interface HeadingBadge {
  * the centre, and optional entity badges flowing from the right edge.
  * Use this widget instead of the deprecated TextWidget for section
  * headers.
+ *
+ * `fonts` roles: `heading`, `badge`.
  */
 export interface HeadingWidget extends WidgetBase {
   type: "heading";
@@ -645,6 +711,9 @@ export type EntitiesRowConfig =
  * rows show an icon circle, primary name, and right-aligned state
  * value; divider rows show a gray horizontal line; section rows
  * show a gray sub-heading label.
+ *
+ * `fonts` roles: `title`, `row_primary`, `row_secondary`, `value`,
+ * `section`.
  */
 export interface EntitiesWidget extends WidgetBase {
   type: "entities";
@@ -675,6 +744,8 @@ export interface EntitiesWidget extends WidgetBase {
 /**
  * Single-entity display with large state value, modelled after
  * HA's Entity card (``hui-entity-card.ts``).
+ *
+ * `fonts` roles: `value`, `name`, `unit`.
  */
 export interface EntityWidget extends WidgetBase {
   type: "entity";
@@ -734,6 +805,8 @@ export interface SensorLimits {
 /**
  * Single-entity sensor with optional history sparkline graph,
  * modelled after HA's Sensor card (``hui-sensor-card.ts``).
+ *
+ * `fonts` roles: `name`, `value`, `unit`, `axis`.
  */
 export interface SensorWidget extends WidgetBase {
   type: "sensor";
@@ -823,6 +896,8 @@ export interface GaugeSegment {
  * Circular arc gauge showing a sensor value on a 270°, 180°, or
  * 360° track with optional color segments, fill arc or needle
  * indicator, and segment labels.
+ *
+ * `fonts` roles: `value`, `unit`, `name`, `segment`.
  */
 export interface GaugeWidget extends WidgetBase {
   type: "gauge";
@@ -976,6 +1051,8 @@ export interface GraphEntityConfig {
  * Multiple entities can be overlaid with distinct dash patterns
  * (line mode) or fill shades (bar mode) and an optional secondary
  * Y-axis.
+ *
+ * `fonts` roles: `name`, `value`, `unit`, `axis`.
  */
 export interface GraphWidget extends WidgetBase {
   type: "graph";
@@ -1222,7 +1299,11 @@ export interface GraphWidget extends WidgetBase {
   bold_value?: boolean;
 }
 
-/** Hourly temperature curve with forecast icons and day markers. */
+/**
+ * Hourly temperature curve with forecast icons and day markers.
+ *
+ * `fonts` roles: `day`, `hour`, `grid`, `precip`.
+ */
 export interface MeteogramWidget extends WidgetBase {
   type: "meteogram";
   /** HA weather entity ID; must support hourly forecasts. */
