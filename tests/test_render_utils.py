@@ -15,7 +15,8 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import date
+import zoneinfo
+from datetime import UTC, date
 from typing import ClassVar
 
 import pytest
@@ -40,6 +41,7 @@ from custom_components.eink_dashboard.widgets._helpers import (
     _card_insets,
     _metrics_context,
     _resolve_icon_style,
+    _resolve_tz,
     _temp_gradient_stops,
     _temp_to_rgb,
     _title_layout,
@@ -576,6 +578,27 @@ class TestHelperFunctions:
         """Fewer than 2 values raises ValueError, not ZeroDivisionError."""
         with pytest.raises(ValueError, match="values"):
             _temp_gradient_stops([10])
+
+
+class TestResolveTz:
+    """Unit tests for _resolve_tz(), shared by GRAPH and METEOGRAM."""
+
+    def test_missing_time_zone_defaults_to_utc(self) -> None:
+        """No time_zone key in config falls back to UTC."""
+        assert _resolve_tz({}) == UTC
+
+    def test_empty_time_zone_defaults_to_utc(self) -> None:
+        """An empty time_zone string falls back to UTC."""
+        assert _resolve_tz({"time_zone": ""}) == UTC
+
+    def test_known_time_zone_resolves(self) -> None:
+        """A recognised IANA name resolves to its ZoneInfo."""
+        tz = _resolve_tz({"time_zone": "Europe/Berlin"})
+        assert tz == zoneinfo.ZoneInfo("Europe/Berlin")
+
+    def test_unknown_time_zone_falls_back_to_utc(self) -> None:
+        """An unrecognised zone name falls back to UTC."""
+        assert _resolve_tz({"time_zone": "Nowhere/X"}) == UTC
 
 
 class TestResolveNumberFormat:

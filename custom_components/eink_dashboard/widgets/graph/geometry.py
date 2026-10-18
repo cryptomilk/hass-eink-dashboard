@@ -17,10 +17,9 @@
 from __future__ import annotations
 
 import datetime
-import zoneinfo
 from typing import TYPE_CHECKING, Any
 
-from .._helpers import _fmt
+from .._helpers import _fmt, _resolve_tz
 
 if TYPE_CHECKING:
     from ...const import DisplayConfig
@@ -87,21 +86,6 @@ def _smooth_fill(
     if not path:
         return ""
     return f"{path} L {pts[-1][0]},{gy2} L {pts[0][0]},{gy2} Z"
-
-
-def _resolve_tz(config: DisplayConfig) -> datetime.tzinfo:
-    """Return the display time zone from ``config``, defaulting to UTC.
-
-    ``time_zone`` holds HA's configured IANA zone name.  Missing or
-    unknown names fall back to UTC so rendering never fails.
-    """
-    name = config.get("time_zone")
-    if name:
-        try:
-            return zoneinfo.ZoneInfo(str(name))
-        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-            pass
-    return datetime.UTC
 
 
 def _format_timestamp(

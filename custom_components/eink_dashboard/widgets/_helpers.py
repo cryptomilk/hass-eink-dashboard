@@ -27,7 +27,9 @@ dependencies: ``render.py`` → ``svg_render.py`` → ``widgets/`` →
 from __future__ import annotations
 
 import contextlib
+import datetime
 import functools
+import zoneinfo
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from itertools import pairwise
@@ -129,6 +131,31 @@ def _color_context() -> dict[str, str]:
         "hex_gray": color_to_hex(COLOR_GRAY),
         "hex_light_gray": color_to_hex(COLOR_LIGHT_GRAY),
     }
+
+
+def _resolve_tz(config: DisplayConfig) -> datetime.tzinfo:
+    """Return the display time zone from ``config``, defaulting to UTC.
+
+    ``time_zone`` holds HA's configured IANA zone name.  Missing or
+    unknown names fall back to UTC so rendering never fails.
+
+    Args:
+        config: Display config dict, optionally containing a
+            ``time_zone`` key with an IANA zone name (e.g.
+            ``"Europe/Berlin"``).
+
+    Returns:
+        ``zoneinfo.ZoneInfo`` for the configured zone, or
+        ``datetime.UTC`` when ``time_zone`` is missing, empty, or
+        not a recognised IANA name.
+    """
+    name = config.get("time_zone")
+    if name:
+        try:
+            return zoneinfo.ZoneInfo(str(name))
+        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+            pass
+    return datetime.UTC
 
 
 # Temperature (°C) -> RGB color stops, sorted ascending by

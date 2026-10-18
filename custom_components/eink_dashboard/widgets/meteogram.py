@@ -40,6 +40,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _fmt,
+    _resolve_tz,
     _temp_gradient_stops,
     _widget_dim,
 )
@@ -192,12 +193,12 @@ def _build_meteogram_context(
     content_w = w - x_off - lpad - r_inset - rpad
     content_right = content_left + content_w
 
-    # Day boundaries are computed against UTC calendar dates, not
-    # HA's configured local timezone -- matching the existing
-    # pattern in widgets/weather.py for forecast day labels.
-    times = [
-        datetime.datetime.fromtimestamp(t, tz=datetime.UTC) for t, _ in points
-    ]
+    # Day boundaries and hour-axis labels are shown in HA's
+    # configured time zone (falling back to UTC when unset or
+    # unknown) -- the same _resolve_tz() helper the GRAPH widget
+    # uses for its x-axis/extrema time labels.
+    tz = _resolve_tz(config)
+    times = [datetime.datetime.fromtimestamp(t, tz=tz) for t, _ in points]
     temps = [v for _, v in points]
     t_span = max((points[-1][0] - points[0][0]), 1.0)
 
@@ -324,7 +325,7 @@ def _build_meteogram_context(
     cursor = datetime.datetime.combine(
         first_date + datetime.timedelta(days=1),
         datetime.time.min,
-        tzinfo=datetime.UTC,
+        tzinfo=tz,
     )
     t_last = times[-1]
     while cursor < t_last:

@@ -17,7 +17,7 @@ from __future__ import annotations
 import math
 import re
 from datetime import UTC, date, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
@@ -32,6 +32,7 @@ from custom_components.eink_dashboard.render import (
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import _card_insets
 from custom_components.eink_dashboard.widgets.meteogram import (
+    _build_meteogram_context,
     _prune_overlapping_day_markers,
 )
 from tests.helpers import (
@@ -276,6 +277,13 @@ class TestRenderMeteogram:
         w.update(overrides)
         return w
 
+    @staticmethod
+    def _ctx(
+        widget: dict[str, object], config: dict[str, object]
+    ) -> dict[str, Any]:
+        """Return the meteogram template context for ``widget``."""
+        return _build_meteogram_context(widget, config)  # type: ignore[arg-type]
+
     # ── Structural tests (card style, mirrors TestRenderGraph) ──────────
 
     def test_meteogram_card_border(self) -> None:
@@ -496,6 +504,44 @@ class TestRenderMeteogram:
             f"{_month_abbrev(date(2026, 5, 3), 'en')} 3"
         )
         assert expected_label in svg
+
+    # ── Time zone ─────────────────────────────────────────────────────
+
+    def test_meteogram_hour_ticks_use_configured_time_zone(self) -> None:
+        # Hour-axis labels are shown in HA's configured time zone
+        # instead of UTC (Berlin is UTC+2 in May), mirroring the
+        # GRAPH widget's fix for the same bug (see
+        # widgets/graph/geometry.py's _resolve_tz()).
+        utc = self._ctx(self._widget(), self._config())
+        berlin = self._ctx(
+            self._widget(), self._config(time_zone="Europe/Berlin")
+        )
+        utc_first = int(utc["hour_ticks"][0]["label"])
+        berlin_first = int(berlin["hour_ticks"][0]["label"])
+        assert (berlin_first - utc_first) % 24 == 2
+
+    def test_meteogram_invalid_time_zone_falls_back_to_utc(self) -> None:
+        # An unknown time zone name does not crash rendering and
+        # keeps the UTC labels (same fallback as the GRAPH widget).
+        utc = self._ctx(self._widget(), self._config())
+        bad = self._ctx(self._widget(), self._config(time_zone="Nowhere/X"))
+        utc_labels = [t["label"] for t in utc["hour_ticks"]]
+        bad_labels = [t["label"] for t in bad["hour_ticks"]]
+        assert utc_labels == bad_labels
+
+    def test_meteogram_day_boundary_uses_configured_time_zone(
+        self,
+    ) -> None:
+        # The day-boundary crossing is anchored to HA's local
+        # midnight, not UTC midnight -- Europe/Berlin (UTC+2) pulls
+        # the boundary 2 hours earlier in absolute time than UTC,
+        # moving its on-canvas x position.
+        widget = self._widget(hours=48)
+        utc = self._ctx(widget, self._config())
+        berlin = self._ctx(widget, self._config(time_zone="Europe/Berlin"))
+        utc_line = next(m for m in utc["day_markers"] if m["show_line"])
+        berlin_line = next(m for m in berlin["day_markers"] if m["show_line"])
+        assert berlin_line["x"] != utc_line["x"]
 
     def test_meteogram_late_start_drops_first_day_label(self) -> None:
         # A forecast window starting at 22:00 puts the "today"
