@@ -24,7 +24,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig

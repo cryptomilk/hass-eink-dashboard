@@ -22,7 +22,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
