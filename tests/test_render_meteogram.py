@@ -22,9 +22,11 @@ from typing import Any, ClassVar
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
     DEFAULT_ROW_H,
+    FontWeight,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
+    _load_role_font,
     _month_abbrev,
     _weekday_abbrev,
     render_dashboard,
@@ -423,6 +425,27 @@ class TestRenderMeteogram:
         for line_y, label_y in pairs:
             assert int(label_y) < int(line_y)
 
+    def test_meteogram_grid_labels_clear_the_plot(self) -> None:
+        # Regression test: the chart (gridlines, curve, icons) used
+        # to be anchored at the same left edge as the Y-axis labels,
+        # so the labels rendered on top of it. Every gridline must
+        # now start to the right of the widest label's right edge.
+        svg = render_widget_svg(self._widget(), self._config())
+        pairs = re.findall(
+            r'<line x1="(\d+)" y1="\d+"\s+x2="\d+" y2="\d+"\s+'
+            r'stroke="[^"]*"\s+stroke-width="[^"]*"/>\s*'
+            r'<text x="(\d+)" y="\d+"\s+'
+            r'font-family="Roboto"\s+font-size="(\d+)"\s+'
+            r'font-weight="[^"]*"\s+dominant-baseline="auto"[^>]*>'
+            r"([^<]*)</text>",
+            svg,
+        )
+        assert pairs, "expected at least one Y-axis gridline/label pair"
+        for line_x, text_x, font_sz, label in pairs:
+            font = _load_role_font(int(font_sz), FontWeight.REGULAR)
+            right_edge = int(text_x) + round(font.getlength(label))
+            assert right_edge < int(line_x)
+
     def test_meteogram_icons_every_two_to_three_hours(self) -> None:
         # Condition icons appear every 2-3h, not once per hour, for
         # a 24h window. Weather icons are inlined with a fixed
@@ -438,8 +461,8 @@ class TestRenderMeteogram:
         assert 6 <= icon_count <= 12
 
     def test_meteogram_edge_hour_ticks_anchor_inward(self) -> None:
-        # The first/last hour tick always maps exactly to
-        # content_left/content_right, regardless of widget height --
+        # The first/last hour tick always maps exactly to the
+        # plot's left/right edges, regardless of widget height --
         # they anchor "start"/"end" instead of "middle" so their
         # label grows inward rather than straddling the plot edge.
         # Distinguishes them from every other label in the SVG (only
@@ -657,7 +680,7 @@ class TestRenderMeteogram:
 
     def test_meteogram_precip_bars_stay_within_content_bounds(self) -> None:
         # Precipitation at the very first/last plotted hour maps to
-        # content_left/content_right exactly; the bar must be
+        # the plot's left/right edges exactly; the bar must be
         # clamped so it doesn't overhang past those edges into the
         # card border.
         widget = self._widget(entity="weather.edge_precip")
@@ -774,8 +797,8 @@ class TestRenderMeteogram:
         )
 
     def test_meteogram_precip_labels_within_content_bounds(self) -> None:
-        # Precipitation at hours 0 and 24 places bars right at
-        # content_left/content_right, centered exactly on the
+        # Precipitation at hours 0 and 24 places bars right at the
+        # plot's left/right edges, centered exactly on the
         # boundary. A center-anchored label there is wider than the
         # bar itself, so it would overhang past the card border --
         # both edge labels must be suppressed while their bars still

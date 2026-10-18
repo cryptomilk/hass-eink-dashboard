@@ -191,7 +191,8 @@ def _build_meteogram_context(
     points = [p for p in points if p[0] <= cutoff]
 
     # x_off/r_inset reserve space for a card frame; the plot area
-    # itself uses the full remaining width, with no header row.
+    # fills the remaining width apart from the Y-axis label gutter
+    # reserved below, and has no header row.
     # Meteogram has no header row to derive a natural row height
     # from, so card frame metrics (border/radius/left_bar) use the
     # fixed DEFAULT_ROW_H reference, independent of the chart's own
@@ -214,11 +215,6 @@ def _build_meteogram_context(
     times = [datetime.datetime.fromtimestamp(t, tz=tz) for t, _ in points]
     temps = [v for _, v in points]
     t_span = max((points[-1][0] - points[0][0]), 1.0)
-
-    def map_x(ts: float) -> int:
-        """Map a Unix timestamp to an X pixel coordinate."""
-        frac = (ts - points[0][0]) / t_span
-        return round(content_left + frac * content_w)
 
     day_label_h = round(h * _DAY_LABEL_H_RATIO)
     row_gap = max(1, round(h * _ROW_GAP_RATIO))
@@ -274,6 +270,24 @@ def _build_meteogram_context(
     y_min = math.floor(y_min_raw / 5) * 5 - 5
     y_max = math.ceil(y_max_raw / 5) * 5 + 5
 
+    # --- Y-axis label gutter ---
+    # Gridline values and the plot's horizontal anchor are resolved
+    # together: the widest label decides how far right the chart has
+    # to start.
+    grid_values, plot_left, plot_w = _y_axis_layout(
+        y_min,
+        y_max,
+        grid_font_sz,
+        grid_weight,
+        content_left,
+        content_right,
+    )
+
+    def map_x(ts: float) -> int:
+        """Map a Unix timestamp to an X pixel coordinate."""
+        frac = (ts - points[0][0]) / t_span
+        return round(plot_left + frac * plot_w)
+
     scale_top = plot_top + icon_lane_h
     scale_h = max(1, plot_bottom - scale_top)
 
@@ -283,10 +297,8 @@ def _build_meteogram_context(
         return round(plot_bottom - frac * scale_h)
 
     # --- Y-axis gridlines/labels ---
-    step = 5 if (y_max - y_min) <= 30 else 10
     grid_lines: list[dict[str, object]] = []
-    grid_val = math.ceil(y_min / step) * step
-    while grid_val <= y_max:
+    for grid_val in grid_values:
         grid_y = map_y(grid_val)
         grid_lines.append(
             {
@@ -297,7 +309,6 @@ def _build_meteogram_context(
                 "label": f"{grid_val:g}°",
             }
         )
-        grid_val += step
 
     # --- Cloud-coverage band ---
     show_band = False
@@ -340,7 +351,7 @@ def _build_meteogram_context(
             map_x,
             plot_top,
             plot_bottom,
-            content_left,
+            plot_left,
             content_right,
         )
         if show_precipitation
@@ -353,7 +364,7 @@ def _build_meteogram_context(
             precip_font_sz,
             plot_top,
             row_gap,
-            content_left,
+            plot_left,
             content_right,
             precip_weight,
         )
@@ -364,7 +375,7 @@ def _build_meteogram_context(
     first_date = times[0].date()
     day_markers.append(
         {
-            "x": content_left,
+            "x": plot_left,
             "show_line": False,
             "label": _day_label(first_date, language),
         }
@@ -411,12 +422,12 @@ def _build_meteogram_context(
             icon_svg = _weather_svg_filter(condition, icon_size)
         except (KeyError, FileNotFoundError):
             continue
-        # Clamp so the icon stays inside the content area at both
-        # edges (the first point maps to content_left, the last
+        # Clamp so the icon stays inside the plot area at both
+        # edges (the first point maps to plot_left, the last
         # to content_right).
         cx = map_x(ts)
         cx = max(
-            content_left + icon_size // 2,
+            plot_left + icon_size // 2,
             min(cx, content_right - icon_size // 2),
         )
         cy = map_y(temp) - icon_gap - icon_size // 2
@@ -431,7 +442,7 @@ def _build_meteogram_context(
 
     # --- Hour-axis ticks ---
     # Center-anchoring every tick would let a tick sitting right at
-    # content_left/content_right (the first tick always does; the
+    # plot_left/content_right (the first tick always does; the
     # last one does too when the step divides evenly into the
     # window) spill half its width past the plot edge -- harmless
     # at small hour_font_sz, but it grows with h and can clip past
@@ -443,7 +454,7 @@ def _build_meteogram_context(
     hour_ticks: list[dict[str, object]] = []
     for i in range(0, len(points), _HOUR_TICK_STEP_HOURS):
         tick_x = map_x(points[i][0])
-        if tick_x <= content_left:
+        if tick_x <= plot_left:
             anchor = "start"
         elif tick_x >= content_right:
             anchor = "end"
@@ -475,6 +486,7 @@ def _build_meteogram_context(
         "grid_stroke_w": grid_stroke_w,
         "content_left": content_left,
         "content_right": content_right,
+        "plot_left": plot_left,
         "show_cloud_band": show_band,
         "cloud_band_path": cloud_band_path,
         "show_precip": bool(precip_bars),
@@ -491,6 +503,60 @@ def _build_meteogram_context(
         "hour_font_sz": hour_font_sz,
         "hour_font_weight": _font_weight_svg(hour_weight),
     }
+
+
+def _y_axis_layout(
+    y_min: float,
+    y_max: float,
+    font_sz: int,
+    weight: FontWeight,
+    content_left: int,
+    content_right: int,
+) -> tuple[list[int], int, int]:
+    """Lay out the Y-axis gridlines and reserve the label gutter.
+
+    Gridline values are picked first (a 5-degree step on small
+    ranges, 10 on wide ones), then the widest formatted label sizes
+    the left gutter: labels are left-anchored at ``content_left``,
+    so the gutter is the widest label plus a half-font gap -- the
+    same reservation ``_label_geometry()`` makes for GRAPH's
+    Y-axis.  The chart is anchored to the right of that gutter so
+    the labels never render on top of it.
+
+    Args:
+        y_min: Y-axis lower bound.
+        y_max: Y-axis upper bound.
+        font_sz: Resolved grid-label font size in pixels.
+        weight: Resolved grid-label weight, so the measured advance
+            widths match the face the template renders.
+        content_left: X pixel coordinate of the content area's left
+            edge, where the labels are anchored.
+        content_right: X pixel coordinate of the content area's
+            right edge, which is also the plot's right edge.
+
+    Returns:
+        ``(grid_values, plot_left, plot_w)``: the gridline values,
+        the X coordinate the chart is anchored at, and the plot
+        width.
+    """
+    from ..render import _load_role_font
+
+    step = 5 if (y_max - y_min) <= 30 else 10
+    grid_values: list[int] = []
+    grid_val = math.ceil(y_min / step) * step
+    while grid_val <= y_max:
+        grid_values.append(grid_val)
+        grid_val += step
+
+    grid_font = _load_role_font(font_sz, weight)
+    label_w = max(
+        (round(grid_font.getlength(f"{v:g}°")) for v in grid_values),
+        default=0,
+    )
+    label_gap = font_sz // 2
+    plot_left = content_left + label_w + label_gap
+    plot_w = max(1, content_right - plot_left)
+    return grid_values, plot_left, plot_w
 
 
 def _prune_overlapping_day_markers(
@@ -572,8 +638,8 @@ def _compute_precip_bars(
     map_x: Callable[[float], int],
     plot_top: int,
     plot_bottom: int,
-    content_left: int,
-    content_right: int,
+    plot_left: int,
+    plot_right: int,
 ) -> list[dict[str, object]]:
     """Compute precipitation bar rects for the meteogram plot.
 
@@ -591,12 +657,10 @@ def _compute_precip_bars(
         plot_top: Y pixel coordinate of the plot's top edge.
         plot_bottom: Y pixel coordinate of the plot's bottom edge
             (baseline bars grow up from).
-        content_left: X pixel coordinate of the plot's left edge,
-            used to clamp bars so they don't overhang the content
-            area.
-        content_right: X pixel coordinate of the plot's right edge,
-            used to clamp bars so they don't overhang the content
-            area.
+        plot_left: X pixel coordinate of the plot's left edge,
+            used to clamp bars so they don't overhang the plot.
+        plot_right: X pixel coordinate of the plot's right edge,
+            used to clamp bars so they don't overhang the plot.
 
     Returns:
         Bar rects as ``{"x", "y", "w", "h", "value", "value_str"}``
@@ -637,12 +701,12 @@ def _compute_precip_bars(
     bars: list[dict[str, object]] = []
     for ts, precip_val, precip_str in precip_vals:
         bar_h = max(1, round(precip_val / precip_max * max_bar_h))
-        # Clamp so the bar stays inside the content area at both
-        # edges (the first point maps to content_left, the last
-        # to content_right).
+        # Clamp so the bar stays inside the plot at both edges
+        # (the first point maps to plot_left, the last to
+        # plot_right).
         bar_x = max(
-            content_left,
-            min(map_x(ts) - bar_w // 2, content_right - bar_w),
+            plot_left,
+            min(map_x(ts) - bar_w // 2, plot_right - bar_w),
         )
         bars.append(
             {
@@ -683,8 +747,8 @@ def _label_precip_bars(
     font_sz: int,
     plot_top: int,
     row_gap: int,
-    content_left: int,
-    content_right: int,
+    plot_left: int,
+    plot_right: int,
     weight: FontWeight = FontWeight.BOLD,
 ) -> list[dict[str, object]]:
     """Attach formatted, priority-pruned labels to precipitation bars.
@@ -693,7 +757,7 @@ def _label_precip_bars(
     so two labels collide when one's right half-width reaches into
     the next's left half-width. When labels collide, the bar with
     the higher precipitation value keeps its label -- a bar whose
-    label loses out, or would overflow the content area, still
+    label loses out, or would overflow the plot, still
     draws its bar, but gets an empty ``"label"`` so no colliding or
     overhanging text is rendered. Values that format to all-zero
     digits at the display precision (e.g. a 0.01mm drizzle reading
@@ -710,9 +774,9 @@ def _label_precip_bars(
         plot_top: Y pixel coordinate of the plot's top edge, used
             to keep labels from being clipped above the plot.
         row_gap: Vertical gap between a bar's top and its label.
-        content_left: X pixel coordinate of the plot's left edge,
+        plot_left: X pixel coordinate of the plot's left edge,
             used to drop labels that would overhang it.
-        content_right: X pixel coordinate of the plot's right edge,
+        plot_right: X pixel coordinate of the plot's right edge,
             used to drop labels that would overhang it.
         weight: Resolved weight of the precipitation-label role, so
             the measured widths reflect what actually renders.
@@ -728,7 +792,7 @@ def _label_precip_bars(
 
     # Candidate labels that could be placed: (index, value, left,
     # right, label, label_x, label_y). Bars that format to zero or
-    # would overhang the content area are excluded up front, since
+    # would overhang the plot are excluded up front, since
     # they can never win a placement regardless of priority.
     candidates: list[tuple[int, float, float, float, str, int, int]] = []
     for i, bar in enumerate(precip_bars):
@@ -747,7 +811,7 @@ def _label_precip_bars(
 
         # No gap here: matches _prune_overlapping_day_markers()'s
         # strict edge check -- touching exactly is not overflow.
-        if left_edge < content_left or right_edge > content_right:
+        if left_edge < plot_left or right_edge > plot_right:
             continue
 
         # Safeguard: with _PRECIP_BAR_MAX_FRAC = 0.5 a bar's top
