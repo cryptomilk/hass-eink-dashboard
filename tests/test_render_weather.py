@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import ClassVar
 from unittest.mock import patch
@@ -27,6 +28,7 @@ from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
 )
+from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets.weather import (
     _build_weather_context,
 )
@@ -80,6 +82,22 @@ MOCK_WEATHER_STATE = {
         },
     },
 }
+
+
+def _text_element(svg: str, content: str) -> str:
+    """Return the SVG ``<text>`` element whose content is ``content``.
+
+    Args:
+        svg: Rendered SVG string.
+        content: Exact text content of the element to find.
+
+    Returns:
+        The matching ``<text>…</text>`` element, including its
+        attributes.
+    """
+    match = re.search(r"<text\b[^>]*>" + re.escape(content) + r"</text>", svg)
+    assert match is not None, f"no <text> element containing {content!r}"
+    return match.group(0)
 
 
 class TestRenderWeather:
@@ -962,6 +980,101 @@ class TestRenderWeather:
         # content_left = ox + m.padding, temp_x = content_left + 80 + 16
         temp_x_min = ox + m.padding + 80 + 16
         assert_has_dark_pixels(img, temp_x_min, oy + 10, ox + 280, oy + 70)
+
+    # ── Font customization tests ──────────────────────
+
+    @staticmethod
+    def _font_widget(**overrides: object) -> dict[str, object]:
+        """Build a row-1-only weather widget for font assertions."""
+        return {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": 0,
+            "y": 0,
+            "w": 500,
+            "forecast_days": 0,
+            **overrides,
+        }
+
+    def test_weather_default_temp_weight_is_bold(self) -> None:
+        # Without any font override the temperature keeps the bold
+        # weight the template has always rendered.
+        svg = render_widget_svg(self._font_widget(), self._config())
+        assert 'font-weight="bold"' in _text_element(svg, "22°C")
+
+    def test_weather_fonts_temp_weight_regular_unbolds(self) -> None:
+        # fonts.temp.weight="regular" removes the temperature's
+        # default bold weight.
+        svg = render_widget_svg(
+            self._font_widget(fonts={"temp": {"weight": "regular"}}),
+            self._config(),
+        )
+        temp = _text_element(svg, "22°C")
+        assert 'font-weight="400"' in temp
+        assert 'font-weight="bold"' not in temp
+
+    def test_weather_fonts_detail_weight_bold(self) -> None:
+        # fonts.detail.weight="bold" drives the font_sm texts, here
+        # today's hi temperature.
+        svg = render_widget_svg(
+            self._font_widget(fonts={"detail": {"weight": "bold"}}),
+            self._config(),
+        )
+        assert 'font-weight="bold"' in _text_element(svg, "24°")
+
+    def test_weather_fonts_precip_weight_bold(self) -> None:
+        # fonts.precip.weight="bold" drives the font_xs texts, here
+        # today's precipitation.
+        svg = render_widget_svg(
+            self._font_widget(fonts={"precip": {"weight": "bold"}}),
+            self._config(),
+        )
+        assert 'font-weight="bold"' in _text_element(svg, "0mm")
+
+    def test_weather_default_detail_and_precip_are_regular(self) -> None:
+        # Detail and precip default to regular weight; the
+        # temperature stays the only bold text on the card.
+        svg = render_widget_svg(self._font_widget(), self._config())
+        assert svg.count('font-weight="bold"') == 1
+        assert 'font-weight="400"' in _text_element(svg, "24°")
+        assert 'font-weight="400"' in _text_element(svg, "0mm")
+
+    def test_weather_fonts_size_override_ignored(self) -> None:
+        # Weather geometry is coupled to font_size, so the roles
+        # expose weight-only overrides: a size override must leave
+        # the rendered SVG untouched.
+        default = render_widget_svg(self._font_widget(), self._config())
+        overridden = render_widget_svg(
+            self._font_widget(fonts={"temp": {"size": 200}}),
+            self._config(),
+        )
+        assert overridden == default
+
+    def test_weather_font_size_still_scales_geometry(self) -> None:
+        # font_size keeps driving the weather geometry: a larger
+        # font_size renders a visibly taller temperature glyph.
+        # The mock state carries only a temperature, so the measured
+        # band holds the temperature text and nothing else.
+        states = {
+            "weather.home": {
+                "state": "sunny",
+                "attributes": {
+                    "temperature": 22,
+                    "temperature_unit": "°C",
+                },
+            }
+        }
+        cfg = self._config(states=states)
+        base = self._font_widget(card_style="none", h=300)
+        small = render_to_image([{**base, "font_size": 32}], cfg)
+        large = render_to_image([{**base, "font_size": 48}], cfg)
+        bbox_small = content_bbox(small, 200, 0, 500, 300)
+        bbox_large = content_bbox(large, 200, 0, 500, 300)
+        assert bbox_small is not None
+        assert bbox_large is not None
+        assert (bbox_large[3] - bbox_large[1]) > (
+            bbox_small[3] - bbox_small[1]
+        )
 
 
 # ── Custom sensor overrides ─────────────────────────────────────────

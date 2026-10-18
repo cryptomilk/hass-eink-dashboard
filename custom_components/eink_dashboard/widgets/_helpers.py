@@ -48,6 +48,7 @@ from ..const import (
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -490,23 +491,29 @@ class EntityTextGeometry:
 
     Attributes:
         name_font_sz: Font size for the entity name label.
+        name_weight: Resolved font weight for the name label.
         name_x: X coordinate for the name text anchor.
         name_y: Y coordinate for the name text anchor.
         value_font_sz: Font size for the state value.
+        value_weight: Resolved font weight for the state value.
         value_x: X coordinate for the value text anchor.
         value_y: Y coordinate for the value text anchor.
         unit_font_sz: Font size for the unit label.
+        unit_weight: Resolved font weight for the unit label.
         unit_x: X coordinate for the unit text anchor.
         unit_y: Y coordinate for the unit text anchor.
     """
 
     name_font_sz: int
+    name_weight: FontWeight
     name_x: int
     name_y: int
     value_font_sz: int
+    value_weight: FontWeight
     value_x: int
     value_y: int
     unit_font_sz: int
+    unit_weight: FontWeight
     unit_x: int
     unit_y: int
 
@@ -522,6 +529,8 @@ def _entity_text_geometry(
     value_text: str,
     unit_text: str,
     value_bold: bool,
+    widget: Widget | None = None,
+    scale: float = 1.0,
 ) -> EntityTextGeometry:
     """Compute name/value/unit font sizes and positions.
 
@@ -544,39 +553,65 @@ def _entity_text_geometry(
             unit is shown, and ``unit_x`` falls back to
             ``value_x``.
         value_bold: Whether the value is rendered in bold, which
-            changes the font used for measuring ``value_text``.
+            changes the font used for measuring ``value_text`` and
+            is the legacy alias for ``fonts.value.weight: "bold"``.
+        widget: Widget config dict, forwarded to ``resolve_font`` so
+            per-role ``fonts`` overrides apply. ``None`` disables
+            overrides (used by callers that only need defaults).
+        scale: Display-level ``font_scale`` multiplier applied to
+            derived sizes that have no explicit override.
 
     Returns:
-        ``EntityTextGeometry`` with font sizes and positions for
-        the name, value, and unit text elements.
+        ``EntityTextGeometry`` with font sizes, weights, and
+        positions for the name, value, and unit text elements.
     """
-    from ..render import _load_font
+    from ..render import _load_role_font, resolve_font
 
-    name_font_sz = max(10, round(header_h * 0.32))
+    source = widget if widget is not None else {}
+    name_font_sz, name_weight = resolve_font(
+        source,
+        "name",
+        max(10, round(header_h * 0.32)),
+        FontWeight.MEDIUM,
+        scale=scale,
+    )
     name_x = x_off + lpad
     name_y = header_h // 2
 
-    value_font_sz = max(10, round(section_h * 0.38))
+    value_font_sz, value_weight = resolve_font(
+        source,
+        "value",
+        max(10, round(section_h * 0.38)),
+        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        scale=scale,
+    )
     value_x = x_off + lpad
     value_y = header_h + round(info_h * 0.65)
 
-    unit_font_sz = m.font_secondary
+    unit_font_sz, unit_weight = resolve_font(
+        source,
+        "unit",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=scale,
+    )
     unit_x = value_x
     if unit_text:
-        value_font = _load_font(
-            value_font_sz, medium=not value_bold, bold=value_bold
-        )
+        value_font = _load_role_font(value_font_sz, value_weight)
         text_w = round(value_font.getlength(value_text))
         unit_x = value_x + text_w + m.inner_gap // 2
 
     return EntityTextGeometry(
         name_font_sz=name_font_sz,
+        name_weight=name_weight,
         name_x=name_x,
         name_y=name_y,
         value_font_sz=value_font_sz,
+        value_weight=value_weight,
         value_x=value_x,
         value_y=value_y,
         unit_font_sz=unit_font_sz,
+        unit_weight=unit_weight,
         unit_x=unit_x,
         unit_y=value_y,
     )
@@ -619,7 +654,7 @@ def _entity_info_context(
         section value/unit, card style, metrics, and colors.
         Returns ``None`` when the entity is missing from states.
     """
-    from ..render import _compute_metrics
+    from ..render import _compute_metrics, _font_weight_svg
 
     entity_id: str = widget.get("entity", "")
     name_override = widget.get("name")
@@ -733,6 +768,8 @@ def _entity_info_context(
         value_text=value_text,
         unit_text=unit_text,
         value_bold=value_bold,
+        widget=widget,
+        scale=config.get("font_scale", 1.0),
     )
 
     return {
@@ -763,14 +800,16 @@ def _entity_info_context(
         "name_x": geo.name_x,
         "name_y": geo.name_y,
         "name_font_sz": geo.name_font_sz,
+        "name_weight": _font_weight_svg(geo.name_weight),
         # Info section.
         "value_text": value_text,
         "value_x": geo.value_x,
         "value_y": geo.value_y,
         "value_font_sz": geo.value_font_sz,
-        "value_bold": value_bold,
+        "value_weight": _font_weight_svg(geo.value_weight),
         "unit_text": unit_text,
         "unit_x": geo.unit_x,
         "unit_y": geo.unit_y,
         "unit_font_sz": geo.unit_font_sz,
+        "unit_weight": _font_weight_svg(geo.unit_weight),
     }

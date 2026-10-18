@@ -27,6 +27,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -199,8 +200,19 @@ def _build_gauge_context(
             ``"full"``; default ``"standard"``),
             ``header_position`` (``"bottom"`` / ``"top"``;
             default ``"bottom"``),
-            ``bold_value`` (render the value text in bold instead
-            of medium weight; default ``False``),
+            ``bold_value`` (legacy alias for the value role's bold
+            weight; render the value text in bold instead of the
+            default medium weight; default ``False``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"value"``, ``"unit"``, ``"name"``, and ``"segment"``
+            (the segment label).  An omitted ``size`` keeps the
+            widget's derived size scaled by the display-level
+            ``font_scale``; an explicit ``size`` is absolute.  An
+            omitted ``weight`` keeps the role's default: value
+            ``"medium"`` (``"bold"`` when ``bold_value`` is set),
+            unit ``"regular"``, name ``"regular"``, segment
+            ``"regular"``),
             ``card_style``, ``segments``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``display_levels``.
@@ -211,7 +223,7 @@ def _build_gauge_context(
         **_color_context()}`` when the entity is missing from the
         state dict.
     """
-    from ..render import _compute_metrics
+    from ..render import _compute_metrics, _font_weight_svg, resolve_font
 
     x = widget.get("x", PADDING)
     w = _widget_dim(widget, "w", config["width"] - x)
@@ -221,6 +233,7 @@ def _build_gauge_context(
     entity_id: str = widget.get("entity", "")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
+    font_scale: float = config.get("font_scale", 1.0)
     card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
     gauge_type: str = widget.get("gauge_type", "standard")
     header_position: str = widget.get("header_position", "bottom")
@@ -289,7 +302,15 @@ def _build_gauge_context(
 
     # --- Gauge geometry ---
     # Name label: height proportional to the total widget height.
-    name_font_sz = max(10, round(h * 0.07))
+    # Resolved before the label band is derived so an enlarged name
+    # font grows the band with it rather than spilling over the arc.
+    name_font_sz, name_weight = resolve_font(
+        widget,
+        "name",
+        max(10, round(h * 0.07)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
     name_h = round(name_font_sz * 1.8)
 
     # Content area width after horizontal card insets.
@@ -436,17 +457,36 @@ def _build_gauge_context(
     needle_border_r = needle_dot_r + 2
 
     # --- Text layout ---
-    # Value: large text centred at the arc centre.
-    value_font_sz = max(12, round(radius * 0.45))
+    # Value: large text centred at the arc centre.  ``bold_value`` is
+    # the legacy alias for this role's bold weight.
+    value_font_sz, value_weight = resolve_font(
+        widget,
+        "value",
+        max(12, round(radius * 0.45)),
+        FontWeight.BOLD if value_bold else FontWeight.MEDIUM,
+        scale=font_scale,
+    )
     value_x = cx
     value_y = cy
 
     # Unit: smaller text, baseline below the value glyph.
-    unit_font_sz = max(10, round(radius * 0.22))
+    unit_font_sz, unit_weight = resolve_font(
+        widget,
+        "unit",
+        max(10, round(radius * 0.22)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
     unit_y = cy + value_font_sz // 2 + 4
 
     # Segment label: below the unit.
-    seg_label_font_sz = max(10, round(radius * 0.20))
+    seg_label_font_sz, seg_label_weight = resolve_font(
+        widget,
+        "segment",
+        max(10, round(radius * 0.20)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
     seg_label_y = unit_y + unit_font_sz + 2
 
     # Icon position: above the value text.
@@ -487,17 +527,19 @@ def _build_gauge_context(
         "value_x": value_x,
         "value_y": value_y,
         "value_font_sz": value_font_sz,
-        "value_bold": value_bold,
+        "value_weight": _font_weight_svg(value_weight),
         # Unit text.
         "unit_text": unit_text,
         "unit_x": cx,
         "unit_y": unit_y,
         "unit_font_sz": unit_font_sz,
+        "unit_weight": _font_weight_svg(unit_weight),
         # Segment label.
         "segment_label": segment_label,
         "seg_label_x": cx,
         "seg_label_y": seg_label_y,
         "seg_label_font_sz": seg_label_font_sz,
+        "seg_label_weight": _font_weight_svg(seg_label_weight),
         # Icon.
         "has_icon": has_icon,
         "icon_svg": icon_svg,
@@ -508,4 +550,5 @@ def _build_gauge_context(
         "name_x": cx,
         "name_y": name_y,
         "name_font_sz": name_font_sz,
+        "name_weight": _font_weight_svg(name_weight),
     }

@@ -29,6 +29,7 @@ from tests.helpers import (
     assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
+    content_bbox,
     make_config,
     render_to_image,
 )
@@ -481,3 +482,71 @@ class TestRenderGauge:
             expected_ratio=2.0,
             tolerance=0.4,
         )
+
+    # ── Font customization tests ───────────────────────────────────────
+
+    def test_gauge_value_font_size_override(self) -> None:
+        # fonts.value.size enlarges the centre value glyph.  The unit
+        # is hidden and no segments are configured, so the measured
+        # region holds the value text alone.  The region stays inside
+        # the arc's inner edge (radius - stroke/2 = 60 px from the
+        # centre at (100, 87)); its corners are 58 px out.
+        base = self._base_widget(show_unit=False)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"value": {"size": 48}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, 58, 45, 142, 129)
+        bbox_bigger = content_bbox(bigger, 58, 45, 142, 129)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_gauge_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" bolds the value text even without
+        # the legacy bold_value flag.
+        svg = render_widget_svg(
+            self._base_widget(fonts={"value": {"weight": "bold"}}),
+            self._config(),
+        )
+        assert 'font-weight="bold"' in svg
+
+    def test_gauge_fonts_name_weight_bold(self) -> None:
+        # The name label keeps its regular weight by default and
+        # honours a bold override.
+        base = self._base_widget()
+        plain = render_widget_svg(base, self._config())
+        bold = render_widget_svg(
+            {**base, "fonts": {"name": {"weight": "bold"}}},
+            self._config(),
+        )
+        assert 'font-weight="bold"' not in plain
+        assert 'font-weight="bold"' in bold
+
+    def test_gauge_fonts_unit_weight_bold(self) -> None:
+        # The unit keeps its regular weight by default and honours a
+        # bold override.
+        base = self._base_widget()
+        plain = render_widget_svg(base, self._config())
+        bold = render_widget_svg(
+            {**base, "fonts": {"unit": {"weight": "bold"}}},
+            self._config(),
+        )
+        assert 'font-weight="bold"' not in plain
+        assert 'font-weight="bold"' in bold
+
+    def test_gauge_fonts_segment_weight_bold(self) -> None:
+        # The segment label keeps its regular weight by default and
+        # honours a bold override.
+        segments: list[object] = [{"from": 0, "color": 180, "label": "Cool"}]
+        base = self._base_widget(segments=segments)
+        plain = render_widget_svg(base, self._config())
+        bold = render_widget_svg(
+            {**base, "fonts": {"segment": {"weight": "bold"}}},
+            self._config(),
+        )
+        assert 'font-weight="bold"' not in plain
+        assert 'font-weight="bold"' in bold

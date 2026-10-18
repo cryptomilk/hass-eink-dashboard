@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 from unittest.mock import patch
 
 from custom_components.eink_dashboard.const import (
@@ -42,15 +42,40 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
 )
 
+if TYPE_CHECKING:
+    from PIL import Image
+
 _TODAY = dt.date(2026, 6, 11)
 _TOMORROW = dt.date(2026, 6, 12)
 _FUTURE = dt.date(2026, 6, 15)  # Monday, 4 days from _TODAY
 _PATCH_NOW = "custom_components.eink_dashboard.render.date"
+
+
+def _card_top(img: Image.Image, h: int, x: int = 350) -> int:
+    """Return the y of a bordered card's top edge.
+
+    The border spans the full card width, and no other content
+    reaches ``x`` (the right-aligned value and the title both stay
+    clear of it), so the topmost dark pixel in that column is the
+    border's top edge.
+
+    Args:
+        img: Grayscale render of a widget with ``card_style``
+            ``"border"``.
+        h: Widget height in pixels.
+        x: Column to scan.
+
+    Returns:
+        The y coordinate of the card's top edge.
+    """
+    return next(y for y in range(h) if pixel(img, x, y) < 128)
+
 
 # End times are chosen so _is_event_now() always returns False
 # during any real test run (events ended before the day began),
@@ -814,3 +839,148 @@ class TestRenderCalendar:
                 assert pixel(img, x, y) == pixel(ref, x, y), (x, y)
         # The gap in front of the label stays white.
         assert_all_white(img, value_left - m.inner_gap // 2, 0, value_left, h)
+
+    # ── Font customization tests ──────────────────────
+
+    def test_calendar_value_font_size_override(self) -> None:
+        # fonts.value.size enlarges the right-aligned date/time
+        # value relative to the widget's derived default size.
+        h = 56
+        base = self._widget(entity="calendar.future_only", h=h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            bigger = render_to_image(
+                [{**base, "fonts": {"value": {"size": 30}}}],
+                self._config(),
+            )
+        bbox_default = content_bbox(default, 250, 0, 400, h)
+        bbox_bigger = content_bbox(bigger, 250, 0, 400, h)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_calendar_primary_font_size_override(self) -> None:
+        # fonts.primary.size enlarges the gray event summary in the
+        # text column right of the icon.
+        h = 56
+        m = _compute_metrics(h)
+        text_left = m.padding + m.icon_dia + m.inner_gap
+        base = self._widget(entity="calendar.future_only", h=h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            bigger = render_to_image(
+                [{**base, "fonts": {"primary": {"size": 30}}}],
+                self._config(),
+            )
+        bbox_default = content_bbox(default, text_left, 0, 250, h)
+        bbox_bigger = content_bbox(bigger, text_left, 0, 250, h)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_calendar_title_font_size_override(self) -> None:
+        # fonts.title.size enlarges the title label above the card.
+        # Measuring up to the card's top border isolates the title:
+        # no other content draws between it and the widget top.
+        h = 112
+        base = self._widget(
+            entity="calendar.future_only",
+            h=h,
+            title="My Events",
+            max_events=1,
+            card_style="border",
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            bigger = render_to_image(
+                [{**base, "fonts": {"title": {"size": 28}}}],
+                self._config(),
+            )
+        bbox_default = content_bbox(default, 0, 0, 250, _card_top(default, h))
+        bbox_bigger = content_bbox(bigger, 0, 0, 250, _card_top(bigger, h))
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_calendar_large_title_size_clears_card_border(self) -> None:
+        # A title large enough to outgrow the default title band
+        # pushes the card down with it: the border must still sit
+        # below the title glyphs rather than crossing them.
+        h = 112
+        w = self._widget(
+            entity="calendar.future_only",
+            h=h,
+            title="My Events",
+            card_style="border",
+            fonts={"title": {"size": 40}},
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            img = render_to_image([w], self._config())
+        border_top = _card_top(img, h)
+        title_bbox = content_bbox(img, 0, 0, 250, border_top)
+        assert title_bbox is not None
+        assert title_bbox[3] < border_top - 2
+
+    def test_calendar_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" bolds the date/time value even
+        # without the legacy bold_value flag.
+        w = self._widget(fonts={"value": {"weight": "bold"}})
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_calendar_fonts_title_weight_bold(self) -> None:
+        # The title keeps its regular weight by default and honours a
+        # bold override.
+        base = self._widget(h=80, title="My Events")
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            plain = render_widget_svg(base, self._config())
+            bold = render_widget_svg(
+                {**base, "fonts": {"title": {"weight": "bold"}}},
+                self._config(),
+            )
+        assert 'font-weight="bold"' not in plain
+        assert 'font-weight="bold"' in bold
+
+    def test_calendar_fonts_primary_weight(self) -> None:
+        # The event summary keeps its historical medium weight by
+        # default and honours a bold override.
+        base = self._widget(entity="calendar.future_only", h=56)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            plain = render_widget_svg(base, self._config())
+            bold = render_widget_svg(
+                {**base, "fonts": {"primary": {"weight": "bold"}}},
+                self._config(),
+            )
+        assert 'font-weight="500"' in plain
+        assert 'font-weight="bold"' in bold
+
+    def test_calendar_font_scale_enlarges_value(self) -> None:
+        # A display-level font_scale multiplies the derived value
+        # size without any per-widget override.
+        h = 56
+        base = self._widget(entity="calendar.future_only", h=h)
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            scaled = render_to_image([base], self._config(font_scale=1.8))
+        bbox_default = content_bbox(default, 250, 0, 400, h)
+        bbox_scaled = content_bbox(scaled, 250, 0, 400, h)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )

@@ -794,6 +794,96 @@ class TestRenderMeteogram:
         assert bar_count == 2
         assert label_count == 0
 
+    # ── Font customization tests ──────────────────────
+
+    def _lowest_gridline_ys(self, svg: str) -> tuple[int, int]:
+        """Return the lowest Y-axis gridline's y and the next one up.
+
+        Args:
+            svg: Rendered meteogram SVG.
+
+        Returns:
+            ``(lowest_y, next_y_up)``, both from the gridline
+            elements the template emits (day-boundary lines carry a
+            ``stroke-dasharray`` and are therefore not matched).
+        """
+        ys = sorted(
+            int(y)
+            for y in re.findall(
+                r'<line x1="\d+" y1="(\d+)"\s+x2="\d+" y2="\d+"\s+'
+                r'stroke="[^"]*"\s+stroke-width="[^"]*"/>',
+                svg,
+            )
+        )
+        assert len(ys) >= 2, "expected at least two Y-axis gridlines"
+        return ys[-1], ys[-2]
+
+    def test_meteogram_grid_font_size_override(self) -> None:
+        # fonts.grid.size enlarges the Y-axis gridline labels. The
+        # band between the lowest gridline and the one above it
+        # isolates that gridline's own label: no other text, curve,
+        # bar, or band draws there (the lowest gridline sits below
+        # the temperature minimum by construction).
+        base = self._widget()
+        override = {**base, "fonts": {"grid": {"size": 40}}}
+        grid_y, next_y_up = self._lowest_gridline_ys(
+            render_widget_svg(base, self._config())
+        )
+        m = _compute_metrics(DEFAULT_ROW_H)
+        x_off, _r_inset, _bar_width = _card_insets(m, "none", 16)
+        content_left = x_off + (m.padding if x_off == 0 else 0)
+        # Stop 9px above the gridline itself (the label's baseline
+        # sits one row_gap above it) so the line's own pixels stay
+        # out of the bbox.
+        region = (content_left, next_y_up + 2, content_left + 200, grid_y - 9)
+        bbox_default = content_bbox(
+            render_to_image([base], self._config()), *region
+        )
+        bbox_bigger = content_bbox(
+            render_to_image([override], self._config()), *region
+        )
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[2] - bbox_bigger[0]) > (
+            bbox_default[2] - bbox_default[0]
+        )
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_meteogram_fonts_day_weight_bold(self) -> None:
+        # fonts.day.weight="bold" renders the day labels bold.
+        # weather.no_precip draws no precipitation labels, the only
+        # role that is bold by default, so the baseline SVG proves
+        # the attribute comes from the override and not from precip.
+        base = self._widget(entity="weather.no_precip")
+        default_svg = render_widget_svg(base, self._config())
+        assert 'font-weight="bold"' not in default_svg
+        bold_svg = render_widget_svg(
+            {**base, "fonts": {"day": {"weight": "bold"}}}, self._config()
+        )
+        assert 'font-weight="bold"' in bold_svg
+
+    def test_meteogram_fonts_precip_weight_regular(self) -> None:
+        # fonts.precip.weight="regular" drops the bold weight the
+        # precipitation amount labels render with by default, while
+        # the labels themselves still draw.
+        default_svg = render_widget_svg(self._widget(), self._config())
+        assert 'font-weight="bold"' in default_svg
+        regular_svg = render_widget_svg(
+            self._widget(fonts={"precip": {"weight": "regular"}}),
+            self._config(),
+        )
+        assert 'font-weight="bold"' not in regular_svg
+        assert (
+            re.search(
+                r'<text[^>]*font-weight="400"[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>1.5</text>',
+                regular_svg,
+            )
+            is not None
+        )
+
 
 class TestPruneOverlappingDayMarkers:
     """Verify _prune_overlapping_day_markers() in isolation.

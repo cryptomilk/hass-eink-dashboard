@@ -3,7 +3,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_rows -%}
-{{ widget_title(title, title_font_sz, fill=hex_gray) }}
+{{ widget_title(title, title_font_sz, fill=hex_gray,
+    weight=title_weight) }}
 {%- call card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
@@ -14,17 +15,18 @@
 {%- if row.row_type == "entity" -%}
 {#- The name renders in the secondary (smaller, gray) style
     and the value in the primary (larger, black) style, so
-    the metrics are cross-wired here: m_font_secondary feeds
-    font_primary (name) and m_font_primary feeds font_value
-    (value) -- the value gets visual priority. -#}
+    the metrics are cross-wired here: row_primary_font_sz (the
+    name) resolves from the secondary metric and value_font_sz
+    from the primary metric -- the value gets visual priority.
+    Weights come from the context's per-role font resolution. -#}
 {{ card_row(
     x=x_off, y=row.y,
     w=w - x_off - r_inset, row_h=row_h,
     padding=m_padding, icon_dia=m_icon_dia,
     inner_gap=m_inner_gap, border=icon_stroke_w,
-    font_primary=m_font_secondary,
-    font_secondary=m_font_secondary,
-    font_value=m_font_primary,
+    font_primary=row_primary_font_sz,
+    font_secondary=row_secondary_font_sz,
+    font_value=value_font_sz,
     icon_inner=m_icon_inner,
     letter_font_sz=m_font_letter,
     primary=row.primary,
@@ -37,7 +39,9 @@
     primary_fill=hex_gray,
     secondary_fill=hex_gray,
     value_fill=hex_black,
-    value_bold=value_bold,
+    primary_weight=row_primary_weight,
+    secondary_weight=row_secondary_weight,
+    value_weight=value_weight,
     letter=row.letter,
     lpad=lpad, rpad=rpad,
     hex_black=hex_black, hex_white=hex_white) }}
@@ -63,6 +67,7 @@
   x="{{ x_off + lpad }}"
   y="{{ row.text_y }}"
   font-family="Roboto"
+  font-weight="{{ row.font_weight }}"
   font-size="{{ row.font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ row.label }}</text>

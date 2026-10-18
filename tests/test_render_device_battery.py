@@ -33,6 +33,7 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -568,3 +569,107 @@ class TestRenderDeviceBattery:
         assert_all_white(img, 0, 0, m.padding - 1, 40)
         # Content must exist after the soft padding.
         assert_has_dark_pixels(img, m.padding, 0, 200, 40, threshold=200)
+
+    # ── Font customization tests ──────────────────────
+
+    def test_icon_label_font_size_override(self) -> None:
+        # fonts.label.size enlarges the percentage label glyphs in
+        # icon layout relative to the widget's derived default size.
+        base = {"type": "device_battery", "x": PADDING, "y": 20}
+        # The label column starts right of the battery icon
+        # (x + body_w + nub_gap + nub_w + gap = x + 46) and the
+        # region spans the full canvas so the enlarged glyphs are
+        # not clipped by the widget's own 40px box.
+        region = (PADDING + 46, 0, 200, 100)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"label": {"size": 48}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, *region)
+        bbox_bigger = content_bbox(bigger, *region)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_chip_label_font_size_override(self) -> None:
+        # fonts.label.size enlarges the chip layout's percentage
+        # label, which derives its own default size from h.
+        base = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "w": 200,
+            "h": 40,
+            "layout": "chip",
+        }
+        # The chip is a pill (radius = h/2), so its border arcs curve
+        # into the right end of the label column.  Measure between
+        # the arcs — x from the label's left edge to just before the
+        # right cap (chip_x + chip_w - radius) — and inside the top
+        # and bottom border strokes, so only glyph ink is measured.
+        region = (PADDING + 68, 13, PADDING + 87, 47)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"label": {"size": 36}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, *region)
+        bbox_bigger = content_bbox(bigger, *region)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_icon_fonts_label_weight_bold(self) -> None:
+        # fonts.label.weight="bold" renders the icon layout's label
+        # in bold without the legacy bold_value flag.
+        widget = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 20,
+            "fonts": {"label": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_chip_fonts_label_weight_bold(self) -> None:
+        # fonts.label.weight="bold" renders the chip layout's label
+        # in bold without the legacy bold_value flag.
+        widget = {
+            "type": "device_battery",
+            "x": PADDING,
+            "y": 10,
+            "w": 200,
+            "h": 40,
+            "layout": "chip",
+            "fonts": {"label": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_icon_default_label_weight_is_regular(self) -> None:
+        # Without overrides the label keeps the regular weight the
+        # template has always rendered (an explicit 400 rasterises
+        # like the omitted attribute it replaced).
+        widget = {"type": "device_battery", "x": PADDING, "y": 20}
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="400"' in svg
+
+    def test_icon_font_scale_enlarges_label(self) -> None:
+        # A display-level font_scale multiplies the derived label
+        # size without any per-widget override.
+        base = {"type": "device_battery", "x": PADDING, "y": 20}
+        region = (PADDING + 46, 0, 200, 100)
+        default = render_to_image([base], self._config())
+        scaled = render_to_image([base], self._config(font_scale=2.0))
+        bbox_default = content_bbox(default, *region)
+        bbox_scaled = content_bbox(scaled, *region)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )

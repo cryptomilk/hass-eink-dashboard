@@ -873,3 +873,74 @@ class TestRenderEntities:
             DEFAULT_ROW_H,
             threshold=200,
         )
+
+    # ── Font customization tests ──────────────────────
+
+    def test_entities_value_font_size_override(self) -> None:
+        # fonts.value.size enlarges the right-aligned state value
+        # glyphs relative to the widget's derived default size.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entities": ["binary_sensor.front_door"],
+        }
+        default = render_to_image([widget], self._config())
+        bigger = render_to_image(
+            [{**widget, "fonts": {"value": {"size": 40}}}],
+            self._config(),
+        )
+        # Only the right-aligned value lives in the right strip; the
+        # name and icon sit far to the left of it.
+        bbox_default = content_bbox(default, 300, 0, 398, 56)
+        bbox_bigger = content_bbox(bigger, 300, 0, 398, 56)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_entities_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" renders the row value in bold even
+        # without the legacy bold_value flag.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entities": ["sensor.temperature"],
+            "fonts": {"value": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_entities_section_font_size_override(self) -> None:
+        # fonts.section.size enlarges the standalone section-row label
+        # glyphs relative to the derived default size.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "entities": [
+                {"type": "section", "label": "Climate"},
+                "sensor.temperature",
+            ],
+        }
+        default = render_to_image([widget], self._config())
+        bigger = render_to_image(
+            [{**widget, "fonts": {"section": {"size": 40}}}],
+            self._config(),
+        )
+        # The section row occupies the top band (section_h ≈ 34 px);
+        # only its gray label renders there.
+        bbox_default = content_bbox(default, 0, 0, 300, 34)
+        bbox_bigger = content_bbox(bigger, 0, 0, 300, 34)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )

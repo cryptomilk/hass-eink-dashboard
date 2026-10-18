@@ -35,6 +35,7 @@
 <text x="{{ marker.x }}" y="{{ day_label_y }}"
   font-family="Roboto"
   font-size="{{ day_label_font_sz }}"
+  font-weight="{{ day_label_font_weight }}"
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ marker.label }}</text>
 {%- endfor -%}
@@ -52,6 +53,7 @@
 <text x="{{ content_left }}" y="{{ grid.label_y }}"
   font-family="Roboto"
   font-size="{{ grid_font_sz }}"
+  font-weight="{{ grid_font_weight }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
@@ -68,7 +70,7 @@
 <text x="{{ bar.label_x }}" y="{{ bar.label_y }}"
   font-family="Roboto"
   font-size="{{ precip_font_sz }}"
-  font-weight="bold"
+  font-weight="{{ precip_font_weight }}"
   text-anchor="middle"
   dominant-baseline="auto"
   fill="{{ hex_black }}">{{ bar.label }}</text>
@@ -93,6 +95,7 @@
 <text x="{{ tick.x }}" y="{{ hour_row_y }}"
   font-family="Roboto"
   font-size="{{ hour_font_sz }}"
+  font-weight="{{ hour_font_weight }}"
   text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ tick.label }}</text>
