@@ -19,10 +19,11 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Any
 
+from ...const import FontWeight
 from .._helpers import _fmt, _resolve_tz
 
 if TYPE_CHECKING:
-    from ...const import DisplayConfig
+    from ...const import DisplayConfig, Widget
 
 
 def _smooth_path(pts: list[tuple[int, int]]) -> str:
@@ -111,6 +112,42 @@ def _format_timestamp(
     return dt.strftime("%H:%M")
 
 
+def _axis_font(
+    widget: Widget | None,
+    graph_h: int,
+    scale: float,
+) -> tuple[int, FontWeight]:
+    """Resolve the shared ``axis`` label role for a graph area height.
+
+    Axis, extrema, and legend annotations all render with the same
+    face, so one role covers them.  The default size is proportional
+    to the graph area's pixel height; an explicit ``fonts.axis.size``
+    overrides it, and ``fonts.axis.weight`` overrides the regular
+    default.
+
+    Args:
+        widget: Widget config dict carrying the optional ``fonts``
+            mapping.  ``None`` (direct geometry unit tests) means no
+            override applies.
+        graph_h: Graph area height in pixels the default size is
+            derived from.
+        scale: Display-level ``font_scale`` multiplier applied to the
+            derived default size.
+
+    Returns:
+        ``(size, weight)`` for the axis label role.
+    """
+    from ...render import resolve_font
+
+    return resolve_font(
+        widget if widget is not None else {},
+        "axis",
+        max(10, round(graph_h * 0.06)),
+        FontWeight.REGULAR,
+        scale=scale,
+    )
+
+
 def _label_geometry(
     points: list[tuple[float, float]],
     y_min: float,
@@ -119,7 +156,8 @@ def _label_geometry(
     gy1: int,
     gy2: int,
     config: DisplayConfig,
-    graph_h: int,
+    label_font_sz: int,
+    weight: FontWeight,
 ) -> tuple[int, int, int, int, int, str, str, str, str]:
     """Compute Y-axis and X-axis label geometry.
 
@@ -138,8 +176,11 @@ def _label_geometry(
         gy1: Top edge of the graph area (used to detect clipping).
         gy2: Current bottom edge of the graph area (will be shifted).
         config: Display config for locale formatting and time_format.
-        graph_h: Pixel height of the graph area (gy2 - gy1), used to
-            derive proportional font size.
+        label_font_sz: Resolved axis label font size in pixels, from
+            ``_axis_font()``.  Shared with the extrema and legend
+            labels.
+        weight: Resolved axis label weight, used to load the same
+            face the template renders.
 
     Returns:
         Tuple of
@@ -150,10 +191,9 @@ def _label_geometry(
         When X-axis labels are suppressed, ``x_label_y`` is 0 and the
         time strings are empty.
     """
-    from ...render import _load_font
+    from ...render import _load_role_font
 
-    label_font_sz = max(10, round(graph_h * 0.06))
-    label_font = _load_font(label_font_sz)
+    label_font = _load_role_font(label_font_sz, weight)
     y_min_str = _fmt(f"{y_min:.1f}", config)
     y_max_str = _fmt(f"{y_max:.1f}", config)
     label_w = max(
@@ -204,6 +244,8 @@ def _secondary_label_geometry(
     gx2: int,
     label_font_sz: int,
     config: DisplayConfig,
+    *,
+    weight: FontWeight = FontWeight.REGULAR,
 ) -> tuple[int, int, str, str]:
     """Compute secondary Y-axis label geometry on the right side.
 
@@ -217,17 +259,19 @@ def _secondary_label_geometry(
         gx2: Current right edge of the graph area.
         label_font_sz: Font size shared with primary labels.
         config: Display config for locale formatting.
+        weight: Resolved axis label weight, used to load the same
+            face the template renders.
 
     Returns:
         Tuple of ``(new_gx2, y2_label_right_x, y2_min_str,
         y2_max_str)`` where ``new_gx2`` is the adjusted right
         edge and the strings are the formatted Y-axis labels.
     """
-    from ...render import _load_font
+    from ...render import _load_role_font
 
     y2_min_str = _fmt(f"{y_min:.1f}", config)
     y2_max_str = _fmt(f"{y_max:.1f}", config)
-    font = _load_font(label_font_sz)
+    font = _load_role_font(label_font_sz, weight)
     label_w = max(
         round(font.getlength(y2_min_str)),
         round(font.getlength(y2_max_str)),
@@ -244,6 +288,8 @@ def _extrema_geometry(
     gy2: int,
     config: DisplayConfig,
     graph_h: int,
+    *,
+    widget: Widget | None = None,
 ) -> tuple[int, int, int, str, str, bool]:
     """Compute extrema text geometry and formatted strings.
 
@@ -254,14 +300,16 @@ def _extrema_geometry(
         points: Sorted (timestamp, value) data pairs.
         label_font_sz: Font size already chosen for axis labels; reuse
             it for extrema so both are the same size.  Pass 0 when
-            axis labels are disabled — the function then falls back to
-            ``max(10, round(graph_h * 0.06))``, the same formula used
-            by ``_label_geometry``.
+            axis labels are disabled — the function then resolves the
+            ``axis`` role itself from ``graph_h``, the same formula
+            ``_axis_font()`` applies to the axis labels.
         gy2: Bottom edge of the free area; the band is taken from
             here upward and the returned ``new_gy2`` is its top.
         config: Display config for locale formatting and time_format.
         graph_h: Pixel height of the graph area (gy2 - gy1), used to
             derive a proportional font size when ``label_font_sz`` is 0.
+        widget: Widget config dict, consulted for the ``fonts.axis``
+            override when ``label_font_sz`` is 0.
 
     Returns:
         Tuple of
@@ -270,7 +318,12 @@ def _extrema_geometry(
         where ``new_gy2`` is the adjusted graph bottom and the string
         fields are the formatted extrema labels.
     """
-    efont_sz = label_font_sz or max(10, round(graph_h * 0.06))
+    if label_font_sz:
+        efont_sz = label_font_sz
+    else:
+        efont_sz, _ = _axis_font(
+            widget, graph_h, config.get("font_scale", 1.0)
+        )
     extrema_h = efont_sz + efont_sz // 2
     # The text hangs from the band top, so it stays inside the band
     # instead of running into whatever lies below gy2.
@@ -333,6 +386,9 @@ def _legend_geometry(
     label_font_sz: int,
     graph_h: int,
     bar_fills: tuple[str, ...] | None = None,
+    *,
+    widget: Widget | None = None,
+    scale: float = 1.0,
 ) -> tuple[int, int, list[dict[str, object]]]:
     """Compute legend layout below the graph area.
 
@@ -360,7 +416,8 @@ def _legend_geometry(
         gy2: Bottom edge of the free area; the band is taken from
             here upward.
         label_font_sz: Font size from axis labels; 0 triggers the
-            same fallback formula as ``_label_geometry``.
+            same ``axis`` role resolution as ``_axis_font()``, based
+            on ``graph_h``.
         graph_h: Graph area pixel height used when
             ``label_font_sz`` is 0.
         bar_fills: Tuple of hex fill colors for bar chart entities
@@ -368,6 +425,12 @@ def _legend_geometry(
             When provided, each legend entry includes swatch rect
             geometry keyed as ``swatch_x``, ``swatch_y``,
             ``swatch_w``, ``swatch_h``, ``bar_fill``.
+        widget: Widget config dict, consulted for the ``fonts.axis``
+            override.  The resolved weight applies to the legend text
+            even when ``label_font_sz`` is given, so the measured
+            face matches the rendered one.
+        scale: Display-level ``font_scale`` multiplier applied to the
+            derived size when ``label_font_sz`` is 0.
 
     Returns:
         Tuple of ``(new_gy2, legend_y, legend_entries)`` where
@@ -377,10 +440,15 @@ def _legend_geometry(
         ``bar_fill``, ``text_x``, ``text_y``,
         ``stroke_dasharray``, and ``font_sz``.
     """
-    from ...render import _load_font
+    from ...render import _load_role_font
 
-    font_sz = label_font_sz or max(10, round(graph_h * 0.06))
-    legend_font = _load_font(font_sz)
+    font_sz, font_weight = _axis_font(widget, graph_h, scale)
+    if label_font_sz:
+        # Axis labels are shown, so the caller already resolved the
+        # role from the pre-adjustment graph height; reuse that size
+        # rather than this call's smaller, post-adjustment basis.
+        font_sz = label_font_sz
+    legend_font = _load_role_font(font_sz, font_weight)
     line_sample_w = font_sz * 2
     gap = font_sz // 2
     legend_h = font_sz + gap

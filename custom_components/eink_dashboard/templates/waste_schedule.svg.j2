@@ -3,7 +3,8 @@
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_rows -%}
-{{ widget_title(title, title_font_sz, fill=hex_gray) }}
+{{ widget_title(title, title_font_sz, fill=hex_gray,
+    weight=title_weight) }}
 {%- call card_container(
     x=0, y=content_y, w=w, h=content_h,
     card_style=card_style,
@@ -16,8 +17,9 @@
     w=w - x_off - r_inset, row_h=row_h,
     padding=m_padding, icon_dia=m_icon_dia,
     inner_gap=m_inner_gap, border=icon_stroke_w,
-    font_primary=m_font_primary,
-    font_secondary=m_font_secondary,
+    font_primary=primary_font_sz,
+    font_secondary=secondary_font_sz,
+    font_value=value_font_sz,
     icon_inner=m_icon_inner,
     letter_font_sz=m_font_letter,
     primary=row.primary,
@@ -29,8 +31,9 @@
     primary_fill=hex_gray,
     value_fill=row.value_fill,
     secondary_fill=row.secondary_fill,
-    value_bold=value_bold,
-    secondary_bold=value_bold,
+    primary_weight=primary_weight,
+    secondary_weight=secondary_weight,
+    value_weight=value_weight,
     letter=row.letter,
     lpad=lpad, rpad=rpad,
     hex_black=hex_black, hex_white=hex_white) }}

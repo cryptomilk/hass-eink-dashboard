@@ -26,9 +26,11 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components import eink_dashboard as eink_init
 from custom_components.eink_dashboard import (
     _async_get_locale,
     _enrich_entity_icons,
+    _frontend_asset_version,
     async_setup,
     async_setup_entry,
     async_unload_entry,
@@ -41,6 +43,8 @@ from custom_components.eink_dashboard.http import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from homeassistant.core import HomeAssistant
 
 
@@ -120,6 +124,34 @@ class TestAsyncSetup:
         result = await async_setup(hass, {})
 
         assert result is True
+
+
+class TestFrontendAssetVersion:
+    def test_token_tracks_bundle_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The card URL's ?v= must change when the compiled bundle
+        # changes, so a redeploy busts the browser cache even though
+        # manifest.json's version stays the same between deploys.
+        monkeypatch.setattr(eink_init, "_FRONTEND_DIR", tmp_path)
+        (tmp_path / "bundle.js").write_text("first")
+
+        first = _frontend_asset_version()
+
+        assert first.startswith(f"{eink_init._VERSION}.")
+        assert len(first.rsplit(".", 1)[1]) == 12
+
+        (tmp_path / "bundle.js").write_text("second")
+        assert _frontend_asset_version() != first
+
+    def test_falls_back_to_version_without_bundle(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # With no compiled assets (e.g. a cleaned tree) the token is
+        # just the manifest version rather than an error.
+        monkeypatch.setattr(eink_init, "_FRONTEND_DIR", tmp_path)
+
+        assert _frontend_asset_version() == eink_init._VERSION
 
 
 class TestAsyncSetupEntry:

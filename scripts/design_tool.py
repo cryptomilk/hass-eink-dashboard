@@ -680,24 +680,61 @@ class _DesignState:
         widgets: list[dict],
         multi: bool,
         states: dict,
-        config: dict,
         preset: DevicePreset,
         port: int,
         data_path: Path | None = None,
+        config_overrides: dict | None = None,
     ) -> None:
         """Initialize the design state."""
         self.widget_type = widget_type
         self.widgets = widgets
         self.multi = multi
         self.states = states
-        self.config = config
         self.preset = preset
         self.port = port
         self.data_path = data_path
+        # Display-level keys from the data file's ``config`` block,
+        # reapplied on every rebuild so a reload keeps them.
+        self.config_overrides = config_overrides or {}
+        self.config = self._render_config(
+            widgets, states, self.config_overrides
+        )
         self.change_event = threading.Event()
         self._lock = threading.Lock()
 
-    def apply_data(self, widgets: list[dict], states: dict) -> None:
+    def _render_config(
+        self,
+        widgets: list[dict],
+        states: dict,
+        overrides: dict,
+    ) -> dict:
+        """Build the display config for a widget list and state dict.
+
+        Merges the data-file ``config`` block (e.g. ``font_scale``,
+        ``number_format``) over the device preset, then injects the
+        mock battery level when a device_battery widget is present.
+        ``states`` is always taken from the argument, never from the
+        overrides, so a stray key cannot desync the two.
+
+        Args:
+            widgets: Widget list about to be rendered.
+            states: Entity state dict.
+            overrides: Display-level config keys.
+
+        Returns:
+            A DisplayConfig dict for ``render_dashboard``.
+        """
+        extra = {k: v for k, v in overrides.items() if k not in ("states",)}
+        if any(w.get("type") == WidgetType.DEVICE_BATTERY for w in widgets):
+            extra["device_battery_level"] = 72
+        return _build_config(self.preset, states, **extra)
+
+    def apply_data(
+        self,
+        widgets: list[dict],
+        states: dict,
+        config_overrides: dict | None = None,
+    ) -> None:
         """Replace the current widget list and states from the editor.
 
         Rebuilds the display config from the device preset and
@@ -706,12 +743,15 @@ class _DesignState:
         Args:
             widgets: New list of widget configuration dicts.
             states: New entity state dict.
+            config_overrides: Display-level config keys (e.g.
+                ``font_scale``) that replace the stored ones when
+                given.
         """
-        extra: dict = {}
-        # Inject battery level when any widget is device_battery.
-        if any(w.get("type") == WidgetType.DEVICE_BATTERY for w in widgets):
-            extra["device_battery_level"] = 72
-        config = _build_config(self.preset, states, **extra)
+        if config_overrides is not None:
+            self.config_overrides = {
+                k: v for k, v in config_overrides.items() if k != "states"
+            }
+        config = self._render_config(widgets, states, self.config_overrides)
         label = " + ".join(w.get("type", "?") for w in widgets)
         with self._lock:
             self.widgets = widgets
@@ -730,8 +770,8 @@ class _DesignState:
         if self.data_path is None:
             return
         try:
-            widgets, states = _load_data_file(self.data_path)
-            self.apply_data(widgets, states)
+            widgets, states, config = _load_data_file(self.data_path)
+            self.apply_data(widgets, states, config)
             _logger.info("Data file reloaded: %s", self.data_path)
         except Exception:
             _logger.exception("Failed to reload data file")
@@ -747,26 +787,24 @@ class _DesignState:
             return self.widgets, self.config, self.multi
 
     def data_json(self) -> str:
-        """Serialize the current widget(s) and states as JSON.
+        """Serialize the current widget(s), states, and config as JSON.
 
         In single-widget mode, uses ``widget`` key for backward
         compatibility with ``--data`` file round-trips.  In
-        multi-widget mode, uses ``widgets`` (a list).
+        multi-widget mode, uses ``widgets`` (a list).  ``config``
+        carries the display-level overrides so the browser editor's
+        GET-then-POST round-trip cannot drop them.
 
         Returns:
             Pretty-printed JSON string.
         """
         with self._lock:
             if self.multi:
-                payload: dict = {
-                    "widgets": self.widgets,
-                    "states": self.states,
-                }
+                payload: dict = {"widgets": self.widgets}
             else:
-                payload = {
-                    "widget": self.widgets[0],
-                    "states": self.states,
-                }
+                payload = {"widget": self.widgets[0]}
+            payload["states"] = self.states
+            payload["config"] = self.config_overrides
             return json.dumps(payload, indent=2)
 
 
@@ -775,26 +813,35 @@ class _DesignState:
 # -------------------------------------------------------------------
 
 
-def _load_data_file(path: Path) -> tuple[list[dict], dict]:
-    """Load widget(s) and states from a JSON or YAML file.
+def _load_data_file(
+    path: Path,
+) -> tuple[list[dict], dict, dict]:
+    """Load widget(s), states, and config overrides from a data file.
 
     Accepts two formats::
 
         {"widget": {"type": "weather", ...}, "states": {...}}
         {"widgets": [{"type": "weather", ...}, ...], "states": {...}}
 
+    An optional ``config`` object supplies display-level keys that are
+    merged over the device preset — e.g. ``font_scale``,
+    ``number_format``, ``language``.  ``states`` is always read from
+    the top-level ``states`` key, never from ``config``.
+
     Args:
         path: Path to the data file.
 
     Returns:
-        Tuple of ``(widget_list, states_dict)``.
+        Tuple of ``(widget_list, states_dict, config_overrides)``.
 
     Raises:
-        ValueError: If the file format is unsupported or neither
-            ``widget`` nor ``widgets`` key is present.
+        ValueError: If the file format is unsupported, neither
+            ``widget`` nor ``widgets`` key is present, or ``config``
+            is not an object.
 
     Note:
-        The ``states`` key is optional and defaults to an empty dict.
+        The ``states`` and ``config`` keys are optional and default
+        to empty dicts.
     """
     text = path.read_text()
     if path.suffix in (".yaml", ".yml"):
@@ -812,6 +859,9 @@ def _load_data_file(path: Path) -> tuple[list[dict], dict]:
     if not isinstance(data, dict):
         raise ValueError(f"Data file must contain a JSON/YAML object: {path}")
     states = data.get("states", {})
+    config = data.get("config", {})
+    if not isinstance(config, dict):
+        raise ValueError(f"'config' must be an object: {path}")
     if "widgets" in data:
         widgets = data["widgets"]
         if (
@@ -822,13 +872,13 @@ def _load_data_file(path: Path) -> tuple[list[dict], dict]:
             raise ValueError(
                 f"'widgets' must be a non-empty list of objects: {path}"
             )
-        return widgets, states
+        return widgets, states, config
     widget = data.get("widget")
     if not widget:
         raise ValueError(
             f"Data file must have a 'widget' or 'widgets' key: {path}"
         )
-    return [widget], states
+    return [widget], states, config
 
 
 # -------------------------------------------------------------------
@@ -1071,6 +1121,13 @@ class _DesignHandler(BaseHTTPRequestHandler):
             )
             return
         states = data.get("states", {})
+        config = data.get("config", {})
+        if not isinstance(config, dict):
+            self._text_response(
+                HTTPStatus.BAD_REQUEST,
+                "'config' must be an object.",
+            )
+            return
         if "widgets" in data:
             widgets = data["widgets"]
             if (
@@ -1099,7 +1156,7 @@ class _DesignHandler(BaseHTTPRequestHandler):
             )
             return
         st = self._state()
-        st.apply_data(widgets, states)
+        st.apply_data(widgets, states, config)
         st.change_event.set()
         self._text_response(HTTPStatus.OK, "OK")
 
@@ -1368,10 +1425,11 @@ def main() -> None:
     multi: bool
     widgets: list[dict]
     states: dict
+    config_overrides: dict = {}
 
     if args.data:
         try:
-            widgets, states = _load_data_file(args.data)
+            widgets, states, config_overrides = _load_data_file(args.data)
         except ValueError as exc:
             sys.exit(str(exc))
         widget_type = " + ".join(w.get("type", "?") for w in widgets)
@@ -1401,21 +1459,15 @@ def main() -> None:
             widget_type,
         )
 
-    extra: dict = {}
-    if any(w.get("type") == WidgetType.DEVICE_BATTERY for w in widgets):
-        extra["device_battery_level"] = 72
-
-    config = _build_config(preset, states, **extra)
-
     state = _DesignState(
         widget_type=widget_type,
         widgets=widgets,
         multi=multi,
         states=states,
-        config=config,
         preset=preset,
         port=args.port,
         data_path=args.data,
+        config_overrides=config_overrides,
     )
 
     # File watcher: monitor templates/ for .j2 changes.

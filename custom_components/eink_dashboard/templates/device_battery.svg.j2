@@ -22,9 +22,7 @@
 {%- endif -%}
 {%- endif -%}
 <text x="{{ text_abs_x }}" y="{{ text_y }}" font-family="Roboto"
-{%- if value_bold %}
-  font-weight="bold"
-{%- endif %}
+  font-weight="{{ font_weight }}"
   font-size="{{ font_sz }}" dominant-baseline="central"
   fill="{{ color_hex }}">{{ label }}</text>
 {%- else -%}
@@ -37,9 +35,7 @@
   height="{{ icon_fill_h }}" fill="{{ color_hex }}"/>
 {%- endif -%}
 <text x="{{ text_abs_x }}" y="{{ text_svg_y }}" font-family="Roboto"
-{%- if value_bold %}
-  font-weight="bold"
-{%- endif %}
+  font-weight="{{ font_weight }}"
   font-size="{{ font_sz }}" dominant-baseline="central"
   fill="{{ color_hex }}">{{ label }}</text>
 {%- endif -%}

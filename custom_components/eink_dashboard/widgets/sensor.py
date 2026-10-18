@@ -68,8 +68,14 @@ def _build_sensor_context(
             the graph line; default ``False``),
             ``hide_state`` (suppress the large value/unit text in
             the info section; default ``False``),
-            ``bold_value`` (render the value text in bold; default
-            ``False``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"name"``, ``"value"``, and ``"unit"``.  An omitted
+            ``size`` keeps the widget's derived size scaled by the
+            display-level ``font_scale``; an explicit ``size`` is
+            absolute.  An omitted ``weight`` keeps the role's
+            default: name ``"medium"``, value and unit
+            ``"regular"``),
             ``hide_icon`` (suppress the icon; default ``False``),
             ``hide_name`` (suppress the entity name text; default
             ``False``),

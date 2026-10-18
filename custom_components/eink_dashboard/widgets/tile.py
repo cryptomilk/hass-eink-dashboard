@@ -23,6 +23,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -72,8 +73,16 @@ def _build_tile_context(
             ``state_content`` (attribute name or list; first element
             used when a list is provided),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``), ``bold_value`` (render the secondary
-            state line in bold; default ``False``), ``card_style``,
+            ``"none"``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"primary"`` (the entity name) and ``"secondary"``
+            (the state line).  An omitted ``size`` keeps the
+            widget's derived size scaled by the display-level
+            ``font_scale``; an explicit ``size`` is absolute.  An
+            omitted ``weight`` keeps the role's default: primary
+            ``"medium"``, secondary ``"regular"``),
+            ``card_style``,
             ``invert_condition`` (list of Lovelace condition dicts,
             same format as ``visibility``; when non-empty and all
             conditions are met the tile renders inverted — solid
@@ -93,11 +102,14 @@ def _build_tile_context(
         ``secondary``), icon data (``icon_svg``, ``letter``),
         and icon style flags (``icon_fill``, ``icon_outline``,
         ``icon_no_circle``), plus ``invert`` (whether the
-        ``invert_condition`` conditions were met).  The ``card_row``
-        ``value`` key is intentionally omitted — tiles have no
-        right-aligned value text; the macro defaults to ``""``.
+        ``invert_condition`` conditions were met), and the resolved
+        row text roles (``primary_font_sz``, ``primary_weight``,
+        ``secondary_font_sz``, ``secondary_weight``; the weights are
+        SVG ``font-weight`` strings).  The ``card_row`` ``value`` key
+        is intentionally omitted — tiles have no right-aligned value
+        text; the macro defaults to ``""``.
     """
-    from ..render import _compute_metrics
+    from ..render import _compute_metrics, _font_weight_svg, resolve_font
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -106,10 +118,11 @@ def _build_tile_context(
     icon_override = widget.get("icon")
     hide_icon: bool = widget.get("hide_icon", False)
     hide_state: bool = widget.get("hide_state", False)
-    value_bold: bool = widget.get("bold_value", False)
+
     state_content = widget.get("state_content")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
+    font_scale: float = config.get("font_scale", 1.0)
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
@@ -134,6 +147,24 @@ def _build_tile_context(
     # side.
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
+
+    # Row text roles resolve through the shared API so the widget's
+    # ``fonts`` overrides and the display-level ``font_scale`` apply.
+    # The tile renders its state line as card_row's secondary text.
+    primary_font_sz, primary_weight = resolve_font(
+        widget,
+        "primary",
+        m.font_primary,
+        FontWeight.MEDIUM,
+        scale=font_scale,
+    )
+    secondary_font_sz, secondary_weight = resolve_font(
+        widget,
+        "secondary",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
 
     attrs = state.get("attributes", {})
     domain = entity_id.split(".")[0] if entity_id else ""
@@ -217,7 +248,10 @@ def _build_tile_context(
         "rpad": rpad,
         "primary": primary,
         "secondary": secondary,
-        "value_bold": value_bold,
+        "primary_font_sz": primary_font_sz,
+        "primary_weight": _font_weight_svg(primary_weight),
+        "secondary_font_sz": secondary_font_sz,
+        "secondary_weight": _font_weight_svg(secondary_weight),
         "icon_svg": icon_svg,
         "icon_fill": icon_fill,
         "icon_outline": icon_outline,

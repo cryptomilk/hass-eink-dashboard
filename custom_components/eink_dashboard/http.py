@@ -111,7 +111,17 @@ class EinkLayoutView(HomeAssistantView):
             raise web.HTTPBadRequest(text="Too many widgets")
 
         valid_types = {t.value for t in WidgetType}
-        _allowed_field_types = (str, int, float, bool, list, type(None))
+        # Field values may be any JSON type, including nested objects
+        # (e.g. the entity widget's per-role "fonts" overrides).
+        _allowed_field_types = (
+            str,
+            int,
+            float,
+            bool,
+            list,
+            dict,
+            type(None),
+        )
         for widget in body:
             if not isinstance(widget, dict):
                 raise web.HTTPBadRequest(text="Each widget must be an object")

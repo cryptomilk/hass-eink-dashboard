@@ -27,6 +27,7 @@ from ..const import (
     FONT_SIZE_WEATHER,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
 )
 from ..svg_render import (
@@ -340,7 +341,17 @@ def _build_weather_context(
         widget: Widget config dict.  Recognised keys:
             ``entity``, ``x``, ``y``, ``w``, ``font_size``,
             ``forecast_days``, ``card_style``, ``mode``,
-            ``temperature_entity``, ``humidity_entity``.
+            ``temperature_entity``, ``humidity_entity``,
+            ``fonts`` (per-role font weight overrides — a mapping
+            of role name to ``{"size": int, "weight": str}``; roles
+            are ``"temp"`` (default ``"bold"``), ``"detail"``
+            (default ``"regular"``), and ``"precip"`` (default
+            ``"regular"``).  Weather geometry is coupled to
+            ``font_size`` via a single scale factor, so an explicit
+            ``size`` is ignored for this widget — only ``weight`` is
+            read, letting a role be unbolded without disturbing the
+            layout.  An unrecognised weight keeps the role's
+            default).
         config: Display config with ``width``, ``height``,
             ``states``, ``display_levels``.
 
@@ -356,10 +367,12 @@ def _build_weather_context(
         _babel_format_date,
         _compute_metrics,
         _fmt_temp,
+        _font_weight_svg,
         _get_today,
-        _load_font,
+        _load_role_font,
         _weekday_abbrev,
         format_number,
+        resolve_font,
     )
 
     entity_id = widget.get("entity", "")
@@ -406,13 +419,27 @@ def _build_weather_context(
         # matches the rendered content, not the full canvas.
         svg_w = _widget_dim(widget, "w", card_w)
 
+    # Per-role font weights.  Weather geometry is driven entirely by
+    # ``font_size`` (via ``scale``) so the roles here expose
+    # weight-only overrides: the ``size`` half of each ``resolve_font``
+    # result is deliberately discarded, keeping every size derived
+    # from ``scale``.
+    temp_font_sz = round(_WX_FONT_XL * scale)
+    detail_font_sz = round(_WX_FONT_SM * scale)
+    precip_font_sz = round(_WX_FONT_XS * scale)
+    _, temp_weight = resolve_font(
+        widget, "temp", temp_font_sz, FontWeight.BOLD
+    )
+    _, detail_weight = resolve_font(widget, "detail", detail_font_sz)
+    _, precip_weight = resolve_font(widget, "precip", precip_font_sz)
+
     # PIL fonts for text measurement only — never used for
     # drawing.  Affects: temp_h, temp_bbox (getbbox) and
-    # text_w_i (getlength) below.
-    # Bold is used for font_xl because the temperature text
-    # renders with font-weight="bold" in the SVG template.
-    font_xl = _load_font(round(_WX_FONT_XL * scale), bold=True)
-    font_sm = _load_font(round(_WX_FONT_SM * scale))
+    # text_w_i (getlength) below.  The weight-matched faces are
+    # required so measured advance widths match the rendered glyphs.
+    font_xl = _load_role_font(temp_font_sz, temp_weight)
+    font_sm = _load_role_font(detail_font_sz, detail_weight)
+    font_xs = _load_role_font(precip_font_sz, precip_weight)
 
     # Entity attributes.
     condition = state.get("state", "")
@@ -591,10 +618,10 @@ def _build_weather_context(
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
     font_xl_size = _cap_weather_font_xl(
-        round(_WX_FONT_XL * scale),
+        temp_font_sz,
         font_xl,
         font_sm,
-        _load_font(round(_WX_FONT_XS * scale)),
+        font_xs,
         temp_text,
         hilo_right - temp_x - pad,
         today_hi,
@@ -825,9 +852,13 @@ def _build_weather_context(
         "temp_x": temp_x,
         "temp_y": temp_y,
         "font_xl": font_xl_size,
-        "font_sm": round(_WX_FONT_SM * scale),
-        # font_xs is template-only; no PIL measurement needed.
-        "font_xs": round(_WX_FONT_XS * scale),
+        "font_sm": detail_font_sz,
+        # font_xs is template-only; no PIL measurement needed beyond
+        # the weight-matched face used for the temp-width cap above.
+        "font_xs": precip_font_sz,
+        "temp_font_weight": _font_weight_svg(temp_weight),
+        "detail_font_weight": _font_weight_svg(detail_weight),
+        "precip_font_weight": _font_weight_svg(precip_weight),
         "hilo_right": hilo_right,
         "hi_text": today_hi,
         "hi_y": vis_top,

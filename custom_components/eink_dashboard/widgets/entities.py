@@ -22,6 +22,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -81,9 +82,17 @@ def _build_entities_context(
             ``entities`` (list of row configs),
             ``title`` (optional label above the card),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``), ``bold_value`` (render the right-aligned
-            state value in bold; default ``False``), ``card_style``,
-            ``x``, ``w``, ``h``.
+            ``"none"``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"title"``, ``"row_primary"`` (the entity name),
+            ``"row_secondary"``, ``"value"``, and ``"section"``.
+            An omitted ``size`` keeps the widget's derived size
+            scaled by the display-level ``font_scale``; an explicit
+            ``size`` is absolute.  An omitted ``weight`` keeps the
+            role's default: title/row_secondary/value/section
+            ``"regular"``, row_primary ``"medium"``),
+            ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``, and
             ``display_levels``.
 
@@ -96,14 +105,18 @@ def _build_entities_context(
         metrics (``m_*``), colors (``hex_*``), row list and
         per-row layout dicts.
     """
-    from ..render import _compute_metrics
+    from ..render import (
+        _compute_metrics,
+        _font_weight_svg,
+        resolve_font,
+    )
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
     title: str = widget.get("title", "")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    value_bold: bool = widget.get("bold_value", False)
+
     entity_configs: list = widget.get("entities", [])
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
@@ -181,10 +194,33 @@ def _build_entities_context(
             content_target=content_target,
         )
         title_font_sz, content_y, content_h = _title_layout(title, svg_h)
-        row_h = DEFAULT_ROW_H
+        auto_rows = True
     else:
         svg_h = _widget_dim(widget, "h", DEFAULT_ROW_H)
         title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+        auto_rows = False
+
+    font_scale = config.get("font_scale", 1.0)
+    if title:
+        title_font_sz, title_weight = resolve_font(
+            widget,
+            "title",
+            title_font_sz,
+            FontWeight.REGULAR,
+            scale=font_scale,
+        )
+        # _title_layout reserves the band from the *default* title
+        # size (advance = 1.4 × size); re-derive it from the resolved
+        # size so an enlarged title keeps its clearance from the card
+        # content instead of overlapping the first row.
+        content_y = round(title_font_sz * 1.4)
+        content_h = svg_h - content_y
+    else:
+        title_weight = FontWeight.REGULAR
+
+    if auto_rows:
+        row_h = DEFAULT_ROW_H
+    else:
         # Proportional allocation: entity rows have weight 1,
         # divider rows 0.15, section rows 0.6.
         total_weight = n_entity + n_divider * 0.15 + n_section * 0.6
@@ -211,6 +247,41 @@ def _build_entities_context(
     # ratio).
     section_font_sz = round(row_h * 0.46)
 
+    # Per-role font overrides.  Each role resolves through the shared
+    # API so the widget's ``fonts`` map and the display-level
+    # ``font_scale`` apply uniformly.  The entity-row metrics are
+    # cross-wired (see the template): the name uses the secondary
+    # size and the value the primary size, so the role defaults
+    # follow the same wiring.
+    row_primary_font_sz, row_primary_weight = resolve_font(
+        widget,
+        "row_primary",
+        m.font_secondary,
+        FontWeight.MEDIUM,
+        scale=font_scale,
+    )
+    row_secondary_font_sz, row_secondary_weight = resolve_font(
+        widget,
+        "row_secondary",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    value_font_sz, value_weight = resolve_font(
+        widget,
+        "value",
+        m.font_primary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    section_font_sz, section_weight = resolve_font(
+        widget,
+        "section",
+        section_font_sz,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+
     # --- Build row dicts ---
     rows: list[dict[str, object]] = []
     y = content_y  # absolute SVG y pointer within the canvas
@@ -231,6 +302,7 @@ def _build_entities_context(
                     "row_type": "section",
                     "label": str(cls.get("label", "")),
                     "font_sz": section_font_sz,
+                    "font_weight": _font_weight_svg(section_weight),
                     "text_y": y + section_h // 2,
                 }
             )
@@ -308,6 +380,7 @@ def _build_entities_context(
         "has_rows": True,
         "title": title,
         "title_font_sz": title_font_sz,
+        "title_weight": _font_weight_svg(title_weight),
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
@@ -322,5 +395,10 @@ def _build_entities_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
-        "value_bold": value_bold,
+        "row_primary_font_sz": row_primary_font_sz,
+        "row_primary_weight": _font_weight_svg(row_primary_weight),
+        "row_secondary_font_sz": row_secondary_font_sz,
+        "row_secondary_weight": _font_weight_svg(row_secondary_weight),
+        "value_font_sz": value_font_sz,
+        "value_weight": _font_weight_svg(value_weight),
     }

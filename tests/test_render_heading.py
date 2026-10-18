@@ -893,3 +893,133 @@ class TestRenderHeading:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == 200
+
+    # ── Font customization tests ──────────────────────
+
+    def test_heading_font_size_override_enlarges_text(self) -> None:
+        # fonts.heading.size enlarges the heading glyphs relative to
+        # the widget's derived default size.
+        base = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "heading": "Section",
+        }
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"heading": {"size": 64}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, 0, 0, 400, 112)
+        bbox_bigger = content_bbox(bigger, 0, 0, 400, 112)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_heading_font_scale_enlarges_text(self) -> None:
+        # A display-level font_scale multiplies the derived heading
+        # size without any per-widget override.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "Section",
+        }
+        default = render_to_image([widget], self._config())
+        scaled = render_to_image([widget], self._config(font_scale=2.0))
+        bbox_default = content_bbox(default, 0, 0, 400, 56)
+        bbox_scaled = content_bbox(scaled, 0, 0, 400, 56)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_heading_fonts_weight_bold(self) -> None:
+        # fonts.heading.weight="bold" renders the heading in bold.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "heading": "Section",
+            "fonts": {"heading": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_heading_title_default_weight_is_medium(self) -> None:
+        # The title style keeps rendering at the medium (500) weight.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "heading": "Section",
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="500"' in svg
+
+    def test_heading_subtitle_default_weight_is_regular(self) -> None:
+        # The subtitle style keeps rendering at the regular (400)
+        # weight rather than inheriting the title's medium default.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "heading": "Section",
+            "heading_style": "subtitle",
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="400"' in svg
+
+    def test_heading_fonts_badge_weight_bold(self) -> None:
+        # fonts.badge.weight="bold" applies to the badge value text.
+        widget = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "Section",
+            "badges": ["sensor.temperature"],
+            "fonts": {"badge": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        # The heading keeps its medium default; only the badge is bold.
+        assert 'font-weight="500"' in svg
+        assert 'font-weight="bold"' in svg
+
+    def test_heading_badge_size_override_enlarges_badge(self) -> None:
+        # fonts.badge.size enlarges the badge value text.
+        base = {
+            "type": "heading",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "heading": "",
+            "badges": ["sensor.temperature"],
+        }
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"badge": {"size": 40}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, 200, 0, 400, 56)
+        bbox_bigger = content_bbox(bigger, 200, 0, 400, 56)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )

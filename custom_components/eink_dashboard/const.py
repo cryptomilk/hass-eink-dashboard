@@ -299,6 +299,24 @@ class TimeFormat(StrEnum):
     """24-hour clock (13:30)."""
 
 
+class FontWeight(StrEnum):
+    """Font weight for widget text roles.
+
+    Maps a role's weight to both the Roboto face used for text
+    measurement and rasterisation and the SVG ``font-weight`` value.
+    Widgets expose per-role weight overrides through the ``fonts``
+    widget key (see ``render.resolve_font``); this enum is the
+    resolved value those overrides produce.
+    """
+
+    REGULAR = "regular"
+    """Roboto Regular — SVG ``font-weight="400"``."""
+    MEDIUM = "medium"
+    """Roboto Medium — SVG ``font-weight="500"``."""
+    BOLD = "bold"
+    """Roboto Bold — SVG ``font-weight="bold"``."""
+
+
 class WidgetType(StrEnum):
     """Supported widget type identifiers."""
 

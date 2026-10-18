@@ -33,6 +33,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
 )
 from ..svg_render import _weather_svg_filter
@@ -107,9 +108,17 @@ def _build_meteogram_context(
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
             (bool, default ``True``), ``show_precipitation`` (bool,
-            default ``True``), ``card_style``, ``x``, ``w``, ``h``.
-        config: Display config with ``width``, ``states``, and
-            ``display_levels``.
+            default ``True``), ``fonts`` (per-role font overrides — a
+            mapping of role name to ``{"size": int, "weight": str}``;
+            roles are ``"day"``, ``"hour"``, ``"grid"``, and
+            ``"precip"``.  An omitted ``size`` keeps the widget's
+            height-derived size scaled by the display-level
+            ``font_scale``; an explicit ``size`` is absolute.  An
+            omitted ``weight`` keeps the role's default: day, hour,
+            and grid ``"regular"``, precip ``"bold"``),
+            ``card_style``, ``x``, ``w``, ``h``.
+        config: Display config with ``width``, ``states``,
+            ``display_levels``, and ``font_scale``.
 
     Returns:
         Template context dict consumed by ``meteogram.svg.j2``.
@@ -117,7 +126,11 @@ def _build_meteogram_context(
         **_color_context()}`` when the entity is missing from
         states or has no usable hourly forecast.
     """
-    from ..render import _compute_metrics
+    from ..render import (
+        _compute_metrics,
+        _font_weight_svg,
+        resolve_font,
+    )
 
     x = widget.get("x", PADDING)
     w = _widget_dim(widget, "w", config["width"] - x)
@@ -213,10 +226,43 @@ def _build_meteogram_context(
     icon_size = round(h * _ICON_SIZE_RATIO)
     icon_gap = round(h * _ICON_GAP_RATIO)
     icon_lane_h = round(h * _ICON_LANE_H_RATIO)
-    day_label_font_sz = max(10, round(h * _DAY_LABEL_FONT_RATIO))
-    hour_font_sz = max(9, round(h * _HOUR_FONT_RATIO))
-    grid_font_sz = max(9, round(h * _GRID_FONT_RATIO))
-    precip_font_sz = max(9, round(h * _PRECIP_LABEL_FONT_RATIO))
+    # Each text role resolves through resolve_font, so the widget's
+    # ``fonts`` overrides and the display-level ``font_scale`` can
+    # adjust size and weight while the ratios below stay the
+    # defaults.  Positions are independent of the font sizes (labels
+    # anchor to derived row heights), so a size override only grows
+    # the glyphs.
+    font_scale = config.get("font_scale", 1.0)
+    day_label_font_sz, day_weight = resolve_font(
+        widget,
+        "day",
+        max(10, round(h * _DAY_LABEL_FONT_RATIO)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    hour_font_sz, hour_weight = resolve_font(
+        widget,
+        "hour",
+        max(9, round(h * _HOUR_FONT_RATIO)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    grid_font_sz, grid_weight = resolve_font(
+        widget,
+        "grid",
+        max(9, round(h * _GRID_FONT_RATIO)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    # Precip labels render bold by default, so the measured advance
+    # widths used for collision pruning match the bold face.
+    precip_font_sz, precip_weight = resolve_font(
+        widget,
+        "precip",
+        max(9, round(h * _PRECIP_LABEL_FONT_RATIO)),
+        FontWeight.BOLD,
+        scale=font_scale,
+    )
     curve_stroke_w = max(2, round(h * 0.012))
     grid_stroke_w = max(1, curve_stroke_w // 2)
 
@@ -309,6 +355,7 @@ def _build_meteogram_context(
             row_gap,
             content_left,
             content_right,
+            precip_weight,
         )
 
     # --- Day boundary markers ---
@@ -341,7 +388,7 @@ def _build_meteogram_context(
         )
         cursor += datetime.timedelta(days=1)
     day_markers = _prune_overlapping_day_markers(
-        day_markers, day_label_font_sz, content_right
+        day_markers, day_label_font_sz, content_right, day_weight
     )
 
     # --- Temperature curve, colored by a continuous gradient ---
@@ -424,6 +471,7 @@ def _build_meteogram_context(
         "curve_stroke_w": curve_stroke_w,
         "grid_lines": grid_lines,
         "grid_font_sz": grid_font_sz,
+        "grid_font_weight": _font_weight_svg(grid_weight),
         "grid_stroke_w": grid_stroke_w,
         "content_left": content_left,
         "content_right": content_right,
@@ -432,13 +480,16 @@ def _build_meteogram_context(
         "show_precip": bool(precip_bars),
         "precip_bars": precip_bars,
         "precip_font_sz": precip_font_sz,
+        "precip_font_weight": _font_weight_svg(precip_weight),
         "day_markers": day_markers,
         "day_label_font_sz": day_label_font_sz,
+        "day_label_font_weight": _font_weight_svg(day_weight),
         "day_label_y": m.border,
         "icons": icons,
         "hour_ticks": hour_ticks,
         "hour_row_y": hour_row_y,
         "hour_font_sz": hour_font_sz,
+        "hour_font_weight": _font_weight_svg(hour_weight),
     }
 
 
@@ -446,6 +497,7 @@ def _prune_overlapping_day_markers(
     day_markers: list[dict[str, object]],
     font_sz: int,
     content_right: int,
+    weight: FontWeight = FontWeight.REGULAR,
 ) -> list[dict[str, object]]:
     """Drop day-boundary labels that would overlap or overflow.
 
@@ -471,13 +523,16 @@ def _prune_overlapping_day_markers(
         font_sz: Day-label font size in pixels, used to measure
             label width.
         content_right: X coordinate of the plot's right edge.
+        weight: Resolved weight of the day-label role, so the
+            measured advance widths match the face the template
+            renders.
 
     Returns:
         The marker list with overlapping/overflowing labels removed.
     """
-    from ..render import _load_font
+    from ..render import _load_role_font
 
-    font = _load_font(font_sz)
+    font = _load_role_font(font_sz, weight)
 
     def label_extent(marker: dict[str, object]) -> int:
         """Return a marker label's estimated rendered right edge."""
@@ -630,6 +685,7 @@ def _label_precip_bars(
     row_gap: int,
     content_left: int,
     content_right: int,
+    weight: FontWeight = FontWeight.BOLD,
 ) -> list[dict[str, object]]:
     """Attach formatted, priority-pruned labels to precipitation bars.
 
@@ -658,17 +714,17 @@ def _label_precip_bars(
             used to drop labels that would overhang it.
         content_right: X pixel coordinate of the plot's right edge,
             used to drop labels that would overhang it.
+        weight: Resolved weight of the precipitation-label role, so
+            the measured widths reflect what actually renders.
 
     Returns:
         New bar dicts, each with an added ``label`` key (possibly
         empty). ``label_x`` and ``label_y`` are only present when
         ``label`` is non-empty.
     """
-    from ..render import _load_font
+    from ..render import _load_role_font
 
-    # Bold to match the template's font-weight="bold", so measured
-    # widths reflect what actually renders.
-    font = _load_font(font_sz, bold=True)
+    font = _load_role_font(font_sz, weight)
 
     # Candidate labels that could be placed: (index, value, left,
     # right, label, label_x, label_y). Bars that format to zero or

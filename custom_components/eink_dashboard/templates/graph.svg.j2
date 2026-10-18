@@ -50,7 +50,7 @@
 <text
   x="{{ name_x }}" y="{{ name_y }}"
   font-family="Roboto"
-  font-weight="500"
+  font-weight="{{ name_weight }}"
   font-size="{{ name_font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>
@@ -59,9 +59,7 @@
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
-{%- if value_bold %}
-  font-weight="bold"
-{%- endif %}
+  font-weight="{{ value_weight }}"
   font-size="{{ value_font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ value_text }}</text>
@@ -69,6 +67,7 @@
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
   font-family="Roboto"
+  font-weight="{{ unit_weight }}"
   font-size="{{ unit_font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
@@ -140,11 +139,13 @@
 {%- if show_labels -%}
 <text x="{{ y_label_x }}" y="{{ y_max_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ y_max_str }}</text>
 <text x="{{ y_label_x }}" y="{{ y_min_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ y_min_str }}</text>
@@ -153,6 +154,7 @@
 {%- if x_oldest_str -%}
 <text x="{{ x_label_left }}" y="{{ x_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ x_oldest_str }}</text>
@@ -160,6 +162,7 @@
 {%- if x_newest_str -%}
 <text x="{{ x_label_right }}" y="{{ x_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
@@ -170,12 +173,14 @@
 {%- if show_secondary_labels -%}
 <text x="{{ y2_label_right_x }}" y="{{ y2_max_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ y2_max_str }}</text>
 <text x="{{ y2_label_right_x }}" y="{{ y2_min_label_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ label_font_sz }}"
   text-anchor="end"
   dominant-baseline="auto"
@@ -185,11 +190,13 @@
 {%- if show_extrema -%}
 <text x="{{ extrema_left }}" y="{{ extrema_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ extrema_font_sz }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ extrema_min_str }}</text>
 <text x="{{ extrema_right }}" y="{{ extrema_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ extrema_font_sz }}"
   text-anchor="end"
   dominant-baseline="hanging"
@@ -216,6 +223,7 @@
 {%- endif -%}
 <text x="{{ entry.text_x }}" y="{{ entry.text_y }}"
   font-family="Roboto"
+  font-weight="{{ axis_font_weight }}"
   font-size="{{ entry.font_sz }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ entry.name }}</text>

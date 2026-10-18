@@ -25,6 +25,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -65,8 +66,16 @@ def _build_calendar_context(
             ``entity`` (calendar entity ID),
             ``max_events`` (int, default 5),
             ``title`` (optional header string),
-            ``bold_value`` (render the right-aligned date/time
-            value in bold; default ``False``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"title"``, ``"primary"`` (event summary),
+            ``"secondary"``, and ``"value"`` (date/time).  An
+            omitted ``size`` keeps the widget's derived size scaled
+            by the display-level ``font_scale``; an explicit
+            ``size`` is absolute.  An omitted ``weight`` keeps the
+            role's default: title ``"regular"``, primary
+            ``"medium"``, secondary ``"regular"``, value
+            ``"regular"``),
             ``card_style`` (``"border"``, ``"left_bar"``,
             or ``"none"``), ``x``, ``w``, ``h``.
         config: Display config with ``states``,
@@ -81,10 +90,12 @@ def _build_calendar_context(
     """
     from ..render import (
         _compute_metrics,
+        _font_weight_svg,
         _format_calendar_label,
         _get_today,
         _is_event_now,
         _parse_calendar_dt,
+        resolve_font,
     )
 
     x = widget.get("x", PADDING)
@@ -94,9 +105,10 @@ def _build_calendar_context(
     max_events: int = int(widget.get("max_events", 5))
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
-    value_bold: bool = widget.get("bold_value", False)
+
     time_format: str = config.get("time_format", "24")
     language: str = config.get("language", "en")
+    font_scale: float = config.get("font_scale", 1.0)
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
@@ -134,6 +146,23 @@ def _build_calendar_context(
         _auto_row_height(title, num_rows),
     )
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+    if title:
+        title_font_sz, title_weight = resolve_font(
+            widget,
+            "title",
+            title_font_sz,
+            FontWeight.REGULAR,
+            scale=font_scale,
+        )
+        # _title_layout reserves a band sized for the *default*
+        # title size (advance = 1.4 × font size).  Re-derive it from
+        # the resolved size with the same ratio, so an enlarged
+        # title keeps its clearance from the card content instead of
+        # overlapping the first row.
+        content_y = round(title_font_sz * 1.4)
+        content_h = svg_h - content_y
+    else:
+        title_weight = FontWeight.REGULAR
     row_h = content_h // num_rows
 
     m = _compute_metrics(row_h)
@@ -142,6 +171,32 @@ def _build_calendar_context(
     x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
+
+    # Row text roles resolve through the shared API so the widget's
+    # ``fonts`` overrides and the display-level ``font_scale`` apply.
+    # The value falls back to the secondary size, matching card_row's
+    # own default.
+    primary_font_sz, primary_weight = resolve_font(
+        widget,
+        "primary",
+        m.font_primary,
+        FontWeight.MEDIUM,
+        scale=font_scale,
+    )
+    secondary_font_sz, secondary_weight = resolve_font(
+        widget,
+        "secondary",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    value_font_sz, value_weight = resolve_font(
+        widget,
+        "value",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
 
     # Build the calendar icon once; all rows share the same glyph.
     icon_svg = _mdi_svg_filter("calendar", m.icon_inner)
@@ -189,6 +244,7 @@ def _build_calendar_context(
         "has_rows": True,
         "title": title,
         "title_font_sz": title_font_sz,
+        "title_weight": _font_weight_svg(title_weight),
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
@@ -197,11 +253,16 @@ def _build_calendar_context(
         **_color_context(),
         "row_h": row_h,
         "rows": rows,
+        "primary_font_sz": primary_font_sz,
+        "primary_weight": _font_weight_svg(primary_weight),
+        "secondary_font_sz": secondary_font_sz,
+        "secondary_weight": _font_weight_svg(secondary_weight),
+        "value_font_sz": value_font_sz,
+        "value_weight": _font_weight_svg(value_weight),
         "x_off": x_off,
         "r_inset": r_inset,
         "lpad": lpad,
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
-        "value_bold": value_bold,
     }
