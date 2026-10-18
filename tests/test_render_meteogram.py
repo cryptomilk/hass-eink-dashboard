@@ -20,9 +20,11 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
 from custom_components.eink_dashboard.const import (
+    COLOR_BLACK,
     COLOR_GRAY,
     DEFAULT_ROW_H,
     FontWeight,
+    color_to_hex,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
@@ -408,6 +410,28 @@ class TestRenderMeteogram:
         # Bind fill="none" to the same <path> tag, so a coincidental
         # match elsewhere in the SVG can't produce a false pass.
         assert re.search(r'<path[^>]*fill="none"', svg) is not None
+
+    def test_meteogram_curve_black_on_2level(self) -> None:
+        # Regression test: on a 2-level (B&W) display every stop of
+        # the temperature gradient quantizes to white, which left
+        # the curve invisible. It must fall back to a solid black
+        # stroke with no gradient defined -- the same fallback the
+        # GRAPH widget uses for its lines on 2-level displays.
+        black_hex = color_to_hex(COLOR_BLACK)
+        svg = render_widget_svg(self._widget(), self._config(display_levels=2))
+        assert "<linearGradient" not in svg
+        assert (
+            re.search(rf'<path[^>]*fill="none"[^>]*stroke="{black_hex}"', svg)
+            is not None
+        )
+
+    def test_meteogram_curve_keeps_gradient_on_grayscale(self) -> None:
+        # On a grayscale display (>2 levels) the temperature
+        # gradient still applies, converted to gray stops by
+        # _maybe_grayscale_stops() -- only 2-level displays lose it.
+        svg = render_widget_svg(self._widget(), self._config())
+        assert '<linearGradient id="mgTempGradient"' in svg
+        assert 'stroke="url(#mgTempGradient)"' in svg
 
     def test_meteogram_grid_labels_clear_their_gridline(self) -> None:
         # Each Y-axis gridline label's baseline must sit above its

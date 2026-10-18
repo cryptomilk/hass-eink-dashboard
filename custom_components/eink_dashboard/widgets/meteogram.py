@@ -405,9 +405,10 @@ def _build_meteogram_context(
     # --- Temperature curve, colored by a continuous gradient ---
     curve_pts = [(map_x(t), map_y(v)) for t, v in points]
     curve_path = _smooth_path(curve_pts)
-    sample_temps = [_sample_by_time(points, i / 16) for i in range(17)]
-    curve_stops = _maybe_grayscale_stops(
-        _temp_gradient_stops(sample_temps), config
+    # No stops on 2-level displays: the template then strokes the
+    # curve with hex_black instead of the gradient URL.
+    curve_stroke_w, curve_stops = _curve_stroke_and_stops(
+        curve_stroke_w, points, config, display_levels
     )
 
     # --- Condition icons, floating above the curve ---
@@ -557,6 +558,44 @@ def _y_axis_layout(
     plot_left = content_left + label_w + label_gap
     plot_w = max(1, content_right - plot_left)
     return grid_values, plot_left, plot_w
+
+
+def _curve_stroke_and_stops(
+    base_stroke_w: int,
+    points: list[tuple[float, float]],
+    config: DisplayConfig,
+    display_levels: int,
+) -> tuple[int, list[dict[str, str]]]:
+    """Resolve the temperature curve's stroke width and gradient stops.
+
+    The temperature gradient's palette is light at the warm end, so
+    on a 2-level (B&W) display every stop quantizes to white and the
+    curve would disappear.  The curve is drawn as a solid black line
+    instead -- the template strokes with ``hex_black`` when the stop
+    list is empty -- with a doubled stroke, matching how the GRAPH
+    widget draws its lines on 2-level displays.  Every other display
+    keeps the gradient, converted to grayscale stops when no colour
+    scheme is configured.
+
+    Args:
+        base_stroke_w: Stroke width before the 2-level widening.
+        points: ``(timestamp, temperature)`` pairs, sorted by
+            timestamp, defining the plotted time range.
+        config: Display config, used for the grayscale conversion
+            and for the ``color_scheme`` check.
+        display_levels: Number of distinct gray levels on the
+            display.
+
+    Returns:
+        ``(stroke_w, stops)``.  ``stops`` is empty when no gradient
+        applies, which the template reads as "stroke with black".
+    """
+    if display_levels <= 2:
+        return base_stroke_w * 2, []
+    sample_temps = [_sample_by_time(points, i / 16) for i in range(17)]
+    return base_stroke_w, _maybe_grayscale_stops(
+        _temp_gradient_stops(sample_temps), config
+    )
 
 
 def _prune_overlapping_day_markers(

@@ -78,11 +78,12 @@
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}
-{#- Temperature curve, colored along its length by value. -#}
+{#- Temperature curve, colored along its length by value, or a
+    solid black line when no gradient applies (2-level displays). -#}
 {%- if curve_path -%}
 <path d="{{ curve_path }}"
   fill="none"
-  stroke="url(#mgTempGradient)"
+  stroke="{{ 'url(#mgTempGradient)' if curve_stops else hex_black }}"
   stroke-width="{{ curve_stroke_w }}"
   stroke-linejoin="round"
   stroke-linecap="round"/>
