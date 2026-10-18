@@ -15,9 +15,8 @@
     border_color=hex_white if invert else hex_black,
     bar_color=hex_gray) -%}
 {#- tile has no right-aligned value slot; the state line is
-    rendered as the macro's secondary text, so bold_value
-    resolves to the secondary role's weight (secondary_weight)
-    in the context builder. #}
+    rendered as the macro's secondary text, so the secondary
+    role's weight (secondary_weight) applies to it. #}
 {{ card_row(
     x=x_off, y=0,
     w=w - x_off - r_inset, row_h=row_h,

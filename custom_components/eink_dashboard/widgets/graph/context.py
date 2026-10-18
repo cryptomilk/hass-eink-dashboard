@@ -74,8 +74,7 @@ def _fix_header_layout(
 
     Header text roles resolve through the shared ``resolve_font``
     API, so the widget's ``fonts`` overrides apply.  The legacy
-    ``state_font_size`` and ``bold_value`` keys supply the value/unit
-    size and the value weight fallbacks respectively.
+    ``state_font_size`` key supplies the value/unit size fallback.
 
     ``ctx["value_text"]`` is truncated in place to fit between
     ``value_x`` and the icon (or the right card inset, when the icon
@@ -117,12 +116,11 @@ def _fix_header_layout(
     # Header text roles resolve through the shared API so the widget's
     # ``fonts`` overrides and the display-level ``font_scale`` apply.
     # ``state_font_size`` is the legacy fallback for the value/unit
-    # size, and ``bold_value`` the legacy alias for the value role's
-    # bold weight.
+    # size.
     value_unit_sz = (
         state_font_sz if state_font_sz is not None else m_hdr.font_secondary
     )
-    value_bold = bool(widget.get("bold_value", False))
+
     name_font_sz, name_weight = resolve_font(
         widget,
         "name",
@@ -134,7 +132,7 @@ def _fix_header_layout(
         widget,
         "value",
         value_unit_sz,
-        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
     unit_font_sz, unit_weight = resolve_font(
@@ -591,9 +589,6 @@ def _build_graph_context(
             graph with polyline/path elements, or ``"bar"`` for a
             bar chart with ``<rect>`` elements; in bar mode
             ``smoothing`` and ``show_fill`` are ignored),
-            ``bold_value`` (render the header value in bold;
-            default ``False``; legacy alias for
-            ``fonts.value.weight: "bold"``),
             ``fonts`` (per-role font overrides — a mapping of role
             name to ``{"size": int, "weight": str}``; roles are
             ``"name"`` (the header name), ``"value"`` (the header

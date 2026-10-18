@@ -419,19 +419,6 @@ function weatherModeSelector(): HaFormSchema {
 }
 
 /**
- * Bold-value boolean toggle.
- *
- * @returns A single ha-form schema entry.
- */
-function boldValueSelector(): HaFormSchema {
-  return {
-    name: "bold_value",
-    default: false,
-    selector: { boolean: {} },
-  };
-}
-
-/**
  * Name position dropdown selector (above or below the value).
  *
  * @returns A single ha-form schema entry.
@@ -912,7 +899,6 @@ export const SCHEMAS: Record<
       schema: [
         cardStyleSelector(),
         iconStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["primary", "Primary"],
           ["secondary", "Secondary"],
@@ -969,7 +955,6 @@ export const SCHEMAS: Record<
       schema: [
         cardStyleSelector(),
         iconStyleSelector(),
-        boldValueSelector(),
         namePositionSelector(),
         nameAlignSelector(),
         fontsSection([
@@ -1015,7 +1000,6 @@ export const SCHEMAS: Record<
       schema: [
         cardStyleSelector(),
         iconStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["title", "Title"],
           ["row_primary", "Row primary"],
@@ -1127,7 +1111,6 @@ export const SCHEMAS: Record<
       schema: [
         colorSelector(),
         cardStyleSelector(),
-        boldValueSelector(),
         fontsSection([["label", "Label"]]),
       ],
     },
@@ -1241,7 +1224,6 @@ export const SCHEMAS: Record<
       schema: [
         cardStyleSelector(),
         iconStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["name", "Name"],
           ["value", "Value"],
@@ -1305,7 +1287,6 @@ export const SCHEMAS: Record<
       icon: "mdi:palette",
       schema: [
         cardStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["title", "Title"],
           ["primary", "Primary"],
@@ -1363,7 +1344,6 @@ export const SCHEMAS: Record<
       icon: "mdi:palette",
       schema: [
         cardStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["title", "Title"],
           ["primary", "Primary"],
@@ -1468,7 +1448,6 @@ export const SCHEMAS: Record<
       icon: "mdi:palette",
       schema: [
         cardStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["value", "Value"],
           ["unit", "Unit"],
@@ -1768,7 +1747,6 @@ export const SCHEMAS: Record<
       icon: "mdi:palette",
       schema: [
         cardStyleSelector(),
-        boldValueSelector(),
         fontsSection([
           ["name", "Name"],
           ["value", "Value"],
@@ -1872,7 +1850,6 @@ export const LABELS: Record<string, string> = {
   badges: "Badges",
   card_style: "Card style",
   icon_style: "Icon style",
-  bold_value: "Bold value",
   layout: "Layout",
   show_all: "Show all upcoming dates",
   entries: "Entries",

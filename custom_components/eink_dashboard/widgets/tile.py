@@ -73,9 +73,7 @@ def _build_tile_context(
             ``state_content`` (attribute name or list; first element
             used when a list is provided),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
-            ``"none"``), ``bold_value`` (render the secondary
-            state line in bold; default ``False``; legacy alias for
-            ``fonts.secondary.weight: "bold"``),
+            ``"none"``),
             ``fonts`` (per-role font overrides — a mapping of role
             name to ``{"size": int, "weight": str}``; roles are
             ``"primary"`` (the entity name) and ``"secondary"``
@@ -120,7 +118,7 @@ def _build_tile_context(
     icon_override = widget.get("icon")
     hide_icon: bool = widget.get("hide_icon", False)
     hide_state: bool = widget.get("hide_state", False)
-    value_bold: bool = widget.get("bold_value", False)
+
     state_content = widget.get("state_content")
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -152,9 +150,7 @@ def _build_tile_context(
 
     # Row text roles resolve through the shared API so the widget's
     # ``fonts`` overrides and the display-level ``font_scale`` apply.
-    # ``bold_value`` is the legacy alias for the secondary role's
-    # bold weight — the tile renders its state line as card_row's
-    # secondary text, so the flag has always bolded that slot.
+    # The tile renders its state line as card_row's secondary text.
     primary_font_sz, primary_weight = resolve_font(
         widget,
         "primary",
@@ -166,7 +162,7 @@ def _build_tile_context(
         widget,
         "secondary",
         m.font_secondary,
-        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
 

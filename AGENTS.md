@@ -145,10 +145,12 @@ scale=…)` in `render.py`; an explicit `size` is absolute, an omitted
 size is multiplied by the display-level `font_scale`. Always measure
 with `_load_role_font(size, weight)` so PIL's measured advance matches
 the rendered SVG face, and pass `_font_weight_svg(weight)` into the
-template's `font-weight`. The legacy `bold_value` boolean remains the
-default BOLD weight for the value role. The `card_row`/`widget_title`
-macros take SVG weight strings (`primary_weight`/`secondary_weight`/
-`value_weight`/`weight`), where `""` omits the attribute.
+template's `font-weight`. The `card_row`/`widget_title` macros take SVG
+weight strings (`primary_weight`/`secondary_weight`/`value_weight`/
+`weight`), where `""` omits the attribute. The older `bold_value`
+boolean is gone: `store.py` migrates stored widget lists (storage
+version 1 → 2), rewriting `bold_value: true` into the equivalent
+`fonts.<role>.weight: "bold"`, so the renderers never read it.
 
 **Localization**: Weekday/month abbreviations (`_weekday_abbrev`,
 `_month_abbrev` in `render.py`) use `babel.dates.format_date` against

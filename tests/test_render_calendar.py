@@ -681,17 +681,8 @@ class TestRenderCalendar:
         text_left = m.padding + m.icon_dia + m.inner_gap
         assert_has_gray_pixels(img, text_left, 0, 300, h)
 
-    def test_calendar_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the date/time value with a bold
-        # font-weight attribute in the SVG.
-        w = self._widget(bold_value=True)
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_calendar_default_value_not_bold(self) -> None:
-        # Without bold_value, the date/time value has no bold
+        # By default, the date/time value has no bold
         # font-weight attribute.
         w = self._widget()
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
@@ -932,8 +923,7 @@ class TestRenderCalendar:
         assert title_bbox[3] < border_top - 2
 
     def test_calendar_fonts_value_weight_bold(self) -> None:
-        # fonts.value.weight="bold" bolds the date/time value even
-        # without the legacy bold_value flag.
+        # fonts.value.weight="bold" bolds the date/time value.
         w = self._widget(fonts={"value": {"weight": "bold"}})
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY

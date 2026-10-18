@@ -730,26 +730,8 @@ class TestRenderWasteSchedule:
 
     # ── Bold value tests ───────────────────────────────
 
-    def test_bold_value_list_layout(self) -> None:
-        # bold_value=True renders the right-aligned date value
-        # (list layout) with a bold font-weight attribute.
-        w = self._widget(bold_value=True)
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' in svg
-
-    def test_bold_value_card_layout(self) -> None:
-        # bold_value=True renders the secondary date line (card
-        # layout) with a bold font-weight attribute.
-        w = self._widget(layout="card", bold_value=True)
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_default_value_not_bold(self) -> None:
-        # Without bold_value, neither layout renders a bold value.
+        # By default, neither layout renders a bold value.
         w = self._widget()
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
@@ -798,8 +780,7 @@ class TestRenderWasteSchedule:
         )
 
     def test_waste_fonts_value_weight_bold(self) -> None:
-        # fonts.value.weight="bold" bolds the list-layout date value
-        # without the legacy bold_value flag.
+        # fonts.value.weight="bold" bolds the list-layout date value.
         w = self._widget(fonts={"value": {"weight": "bold"}})
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
@@ -817,17 +798,6 @@ class TestRenderWasteSchedule:
             svg = render_widget_svg(w, self._config())
         assert 'font-weight="bold"' in svg
         assert 'font-weight="500"' in svg
-
-    def test_waste_fonts_weight_beats_bold_value(self) -> None:
-        # bold_value is only the date roles' *default* weight: an
-        # explicit regular weight on the value role wins over it.
-        w = self._widget(
-            bold_value=True, fonts={"value": {"weight": "regular"}}
-        )
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' not in svg
 
     def test_waste_title_font_override(self) -> None:
         # fonts.title drives both the size and the weight of the

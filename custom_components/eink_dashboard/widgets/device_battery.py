@@ -55,16 +55,14 @@ def _build_device_battery_context(
     Args:
         widget: Widget config dict.  Recognised keys: ``x``,
             ``y``, ``w``, ``h`` (default 40), ``layout``,
-            ``card_style``, ``color``, ``bold_value`` (render the
-            percentage label in bold; default ``False``; legacy
-            alias for ``fonts.label.weight: "bold"``), ``fonts``
+            ``card_style``, ``color``, ``fonts``
             (per-role font overrides — a mapping of role name to
             ``{"size": int, "weight": str}``; the only role is
             ``"label"`` (the percentage text).  An omitted ``size``
             keeps the widget's derived size scaled by the
             display-level ``font_scale``; an explicit ``size`` is
             absolute.  An omitted ``weight`` keeps the role's
-            default: ``"regular"`` unless ``bold_value`` is set).
+            default: ``"regular"``).
         config: Display config with ``device_battery_level``
             (int 0–100) and ``display_levels``.
 
@@ -103,7 +101,7 @@ def _build_device_battery_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     display_levels = config.get("display_levels", 16)
     color: int = widget.get("color", COLOR_BLACK)
-    value_bold: bool = widget.get("bold_value", False)
+
     font_scale: float = config.get("font_scale", 1.0)
     # Force black below 20% for visual emphasis.
     if pct < 20:
@@ -135,13 +133,12 @@ def _build_device_battery_context(
         font_sz = max(10, h * 46 // 100)
         # The label role resolves through the shared API so the
         # widget's ``fonts.label`` overrides and the display-level
-        # ``font_scale`` apply; ``bold_value`` is the legacy alias
-        # for the label role's bold weight.
+        # ``font_scale`` apply.
         font_sz, label_weight = resolve_font(
             widget,
             "label",
             font_sz,
-            FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+            FontWeight.REGULAR,
             scale=font_scale,
         )
         # PIL font for text measurement only — resvg does not
@@ -212,7 +209,7 @@ def _build_device_battery_context(
         widget,
         "label",
         font_sz,
-        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
     font = _load_role_font(font_sz, label_weight)

@@ -68,9 +68,6 @@ def _build_sensor_context(
             the graph line; default ``False``),
             ``hide_state`` (suppress the large value/unit text in
             the info section; default ``False``),
-            ``bold_value`` (render the value text in bold; default
-            ``False``; legacy alias for ``fonts.value.weight:
-            "bold"``),
             ``fonts`` (per-role font overrides — a mapping of role
             name to ``{"size": int, "weight": str}``; roles are
             ``"name"``, ``"value"``, and ``"unit"``.  An omitted

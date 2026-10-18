@@ -72,20 +72,8 @@ class TestRenderDeviceBattery:
         img = render_to_image(widgets, self._config())
         assert_has_dark_pixels(img, PADDING + 38, 29, PADDING + 80, 47)
 
-    def test_icon_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the percentage label in icon
-        # layout with a bold font-weight attribute.
-        widget = {
-            "type": "device_battery",
-            "x": PADDING,
-            "y": 20,
-            "bold_value": True,
-        }
-        svg = render_widget_svg(widget, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_icon_default_value_not_bold(self) -> None:
-        # Without bold_value, the percentage label has no bold
+        # By default, the percentage label has no bold
         # font-weight attribute.
         widget = {"type": "device_battery", "x": PADDING, "y": 20}
         svg = render_widget_svg(widget, self._config())
@@ -312,23 +300,8 @@ class TestRenderDeviceBattery:
         # Text should appear in the right portion of the chip
         assert_has_dark_pixels(img, PADDING + 60, 14, PADDING + 150, 46)
 
-    def test_chip_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the percentage label in chip
-        # layout with a bold font-weight attribute.
-        widget = {
-            "type": "device_battery",
-            "x": PADDING,
-            "y": 10,
-            "w": 200,
-            "h": 40,
-            "layout": "chip",
-            "bold_value": True,
-        }
-        svg = render_widget_svg(widget, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_chip_default_value_not_bold(self) -> None:
-        # Without bold_value, the chip percentage label has no bold
+        # By default, the chip percentage label has no bold
         # font-weight attribute.
         widget = {
             "type": "device_battery",
@@ -626,7 +599,7 @@ class TestRenderDeviceBattery:
 
     def test_icon_fonts_label_weight_bold(self) -> None:
         # fonts.label.weight="bold" renders the icon layout's label
-        # in bold without the legacy bold_value flag.
+        # in bold.
         widget = {
             "type": "device_battery",
             "x": PADDING,
@@ -638,7 +611,7 @@ class TestRenderDeviceBattery:
 
     def test_chip_fonts_label_weight_bold(self) -> None:
         # fonts.label.weight="bold" renders the chip layout's label
-        # in bold without the legacy bold_value flag.
+        # in bold.
         widget = {
             "type": "device_battery",
             "x": PADDING,

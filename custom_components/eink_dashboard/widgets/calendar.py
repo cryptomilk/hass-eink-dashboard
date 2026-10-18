@@ -66,9 +66,6 @@ def _build_calendar_context(
             ``entity`` (calendar entity ID),
             ``max_events`` (int, default 5),
             ``title`` (optional header string),
-            ``bold_value`` (render the right-aligned date/time
-            value in bold; default ``False``; legacy alias for
-            ``fonts.value.weight: "bold"``),
             ``fonts`` (per-role font overrides — a mapping of role
             name to ``{"size": int, "weight": str}``; roles are
             ``"title"``, ``"primary"`` (event summary),
@@ -78,7 +75,7 @@ def _build_calendar_context(
             ``size`` is absolute.  An omitted ``weight`` keeps the
             role's default: title ``"regular"``, primary
             ``"medium"``, secondary ``"regular"``, value
-            ``"regular"`` unless ``bold_value`` is set),
+            ``"regular"``),
             ``card_style`` (``"border"``, ``"left_bar"``,
             or ``"none"``), ``x``, ``w``, ``h``.
         config: Display config with ``states``,
@@ -108,7 +105,7 @@ def _build_calendar_context(
     max_events: int = int(widget.get("max_events", 5))
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
-    value_bold: bool = widget.get("bold_value", False)
+
     time_format: str = config.get("time_format", "24")
     language: str = config.get("language", "en")
     font_scale: float = config.get("font_scale", 1.0)
@@ -178,8 +175,7 @@ def _build_calendar_context(
     # Row text roles resolve through the shared API so the widget's
     # ``fonts`` overrides and the display-level ``font_scale`` apply.
     # The value falls back to the secondary size, matching card_row's
-    # own default; ``bold_value`` is the legacy alias for the value
-    # role's bold weight.
+    # own default.
     primary_font_sz, primary_weight = resolve_font(
         widget,
         "primary",
@@ -198,7 +194,7 @@ def _build_calendar_context(
         widget,
         "value",
         m.font_secondary,
-        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
 

@@ -82,9 +82,6 @@ def _build_entity_context(
             ``unit`` (unit string override),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
             ``"none"``),
-            ``bold_value`` (render the state value in bold;
-            default ``False``; legacy alias for
-            ``fonts.value.weight: "bold"``),
             ``fonts`` (per-role font overrides — a mapping of role
             name to ``{"size": int, "weight": str}``; roles are
             ``"value"``, ``"name"``, and ``"unit"``.  An omitted
@@ -134,7 +131,6 @@ def _build_entity_context(
     hide_name: bool = widget.get("hide_name", False)
     icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    value_bold: bool = widget.get("bold_value", False)
     name_position = widget.get("name_position", "bottom")
     name_align = widget.get("name_align", "left")
     states = config.get("states", {})
@@ -257,7 +253,7 @@ def _build_entity_context(
         widget,
         "value",
         max(10, round(row_ref * 0.42)),
-        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
     unit_font_sz, unit_weight = resolve_font(

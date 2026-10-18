@@ -75,10 +75,6 @@ def _build_waste_schedule_context(
             ``entries`` (list of ``{"attribute": …, "label": …}``
             dicts), ``layout`` (``"list"`` or ``"card"``),
             ``show_all`` (``bool``, default ``False``),
-            ``bold_value`` (render the date text in bold;
-            default ``False``; legacy alias for
-            ``fonts.value.weight: "bold"`` in list layout and
-            ``fonts.secondary.weight: "bold"`` in card layout),
             ``fonts`` (per-role font overrides — a mapping of
             role name to ``{"size": int, "weight": str}``; roles
             are ``"title"``, ``"primary"``, ``"secondary"``, and
@@ -87,8 +83,7 @@ def _build_waste_schedule_context(
             ``font_scale``; an explicit ``size`` is absolute.  An
             omitted ``weight`` keeps the role's default: title
             ``"regular"``, primary ``"medium"``, secondary and
-            value ``"regular"`` — or ``"bold"`` when
-            ``bold_value`` is set),
+            value ``"regular"``),
             ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
             state dict), ``display_levels``, ``font_scale``, and
@@ -119,7 +114,7 @@ def _build_waste_schedule_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
     show_all: bool = bool(widget.get("show_all", False))
-    value_bold: bool = widget.get("bold_value", False)
+
     language: str = config.get("language", "en")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
@@ -207,10 +202,6 @@ def _build_waste_schedule_context(
     # Per-role font resolution.  The defaults reproduce what the
     # template rendered before the overrides existed: the title and
     # the date text were Roboto Regular, the label Roboto Medium.
-    # ``bold_value`` is only the *default* weight for the date roles
-    # (value in list layout, secondary in card layout), so an
-    # explicit ``fonts.<role>.weight`` still wins over it.
-    date_weight = FontWeight.BOLD if value_bold else FontWeight.REGULAR
     primary_font_sz, primary_weight = resolve_font(
         widget,
         "primary",
@@ -222,14 +213,14 @@ def _build_waste_schedule_context(
         widget,
         "secondary",
         m.font_secondary,
-        date_weight,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
     value_font_sz, value_weight = resolve_font(
         widget,
         "value",
         m.font_secondary,
-        date_weight,
+        FontWeight.REGULAR,
         scale=font_scale,
     )
 

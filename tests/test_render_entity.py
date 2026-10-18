@@ -672,23 +672,8 @@ class TestRenderEntity:
         name_h = name_bbox[3] - name_bbox[1]
         assert value_h > name_h
 
-    def test_entity_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the state value with a bold
-        # font-weight attribute in the SVG.
-        widget = {
-            "type": "entity",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 112,
-            "entity": "sensor.temperature",
-            "bold_value": True,
-        }
-        svg = render_widget_svg(widget, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_entity_default_value_not_bold(self) -> None:
-        # Without bold_value, the state value has no bold
+        # By default, the state value has no bold
         # font-weight attribute.
         widget = {
             "type": "entity",
@@ -1537,8 +1522,7 @@ class TestRenderEntity:
         )
 
     def test_entity_fonts_value_weight_bold(self) -> None:
-        # fonts.value.weight="bold" renders the value in bold even
-        # without the legacy bold_value flag.
+        # fonts.value.weight="bold" renders the value in bold.
         widget = {
             "type": "entity",
             "x": 0,
