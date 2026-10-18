@@ -108,7 +108,11 @@ def _build_meteogram_context(
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
             (bool, default ``True``), ``show_precipitation`` (bool,
-            default ``True``), ``line_width`` (curve stroke width in
+            default ``True``), ``day_label_format``
+            (``"weekday_month_day"`` -- the default, e.g. "Sun Oct
+            18"; ``"weekday_abbrev"`` "Sun"; ``"weekday_wide"``
+            "Sunday"; ``"month_day"`` "Oct 18"),
+            ``line_width`` (curve stroke width in
             pixels; omitted keeps the height-derived width, an
             explicit value is absolute), ``smoothing`` (bool,
             default ``True``; ``False`` draws straight segments),
@@ -145,6 +149,7 @@ def _build_meteogram_context(
     display_levels = config.get("display_levels", 16)
     show_cloud_cover = bool(widget.get("show_cloud_cover", True))
     show_precipitation = bool(widget.get("show_precipitation", True))
+    day_label_format = str(widget.get("day_label_format", "weekday_month_day"))
     # Line appearance options.  Defaults preserve the widget's
     # pre-option rendering: the stroke stays height-derived and no
     # fill is drawn, so existing configs look unchanged.
@@ -386,7 +391,7 @@ def _build_meteogram_context(
         {
             "x": plot_left,
             "show_line": False,
-            "label": _day_label(first_date, language),
+            "label": _day_label(first_date, language, day_label_format),
         }
     )
     cursor = datetime.datetime.combine(
@@ -403,7 +408,7 @@ def _build_meteogram_context(
                 "show_line": True,
                 "line_y1": plot_top,
                 "line_y2": plot_bottom,
-                "label": _day_label(cursor.date(), language),
+                "label": _day_label(cursor.date(), language, day_label_format),
             }
         )
         cursor += datetime.timedelta(days=1)
@@ -1011,18 +1016,36 @@ def _sample_by_time(points: list[tuple[float, float]], frac: float) -> float:
     return points[-1][1]
 
 
-def _day_label(d: datetime.date, language: str) -> str:
-    """Return a day-boundary label: "Weekday Mon D".
+def _day_label(
+    d: datetime.date,
+    language: str,
+    fmt: str = "weekday_month_day",
+) -> str:
+    """Return a day-boundary label in the configured format.
 
     Args:
         d: Date to format.
         language: BCP 47 language code.
+        fmt: Label format: ``"weekday_month_day"`` (e.g. "Sun Oct
+            18"), ``"weekday_abbrev"`` ("Sun"), ``"weekday_wide"``
+            ("Sunday"), or ``"month_day"`` ("Oct 18").  Unknown
+            values fall back to ``"weekday_month_day"``.
 
     Returns:
         Formatted label string.
     """
-    from ..render import _month_abbrev, _weekday_abbrev
+    from ..render import (
+        _babel_format_date,
+        _month_abbrev,
+        _weekday_abbrev,
+    )
 
     weekday = _weekday_abbrev(d, language)
+    if fmt == "weekday_abbrev":
+        return weekday
+    if fmt == "weekday_wide":
+        return _babel_format_date(d, "EEEE", language)
     month = _month_abbrev(d, language)
+    if fmt == "month_day":
+        return f"{month} {d.day}"
     return f"{weekday} {month} {d.day}"

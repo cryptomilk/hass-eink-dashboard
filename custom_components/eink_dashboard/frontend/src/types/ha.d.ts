@@ -1294,6 +1294,16 @@ export interface MeteogramWidget extends WidgetBase {
   /** Show precipitation bars below the curve. Default: true. */
   show_precipitation?: boolean;
   /**
+   * Format of the day-boundary labels: `"weekday_month_day"`
+   * (default, e.g. "Sun Oct 18"), `"weekday_abbrev"` ("Sun"),
+   * `"weekday_wide"` ("Sunday"), or `"month_day"` ("Oct 18").
+   */
+  day_label_format?:
+    | "weekday_month_day"
+    | "weekday_abbrev"
+    | "weekday_wide"
+    | "month_day";
+  /**
    * Curve stroke width in pixels.  Omitted keeps the height-derived
    * width, so existing configs are unaffected.
    */

@@ -1786,6 +1786,21 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "day_label_format",
+          default: "weekday_month_day",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "weekday_month_day", label: "Sun Oct 18" },
+                { value: "weekday_abbrev", label: "Sun" },
+                { value: "weekday_wide", label: "Sunday" },
+                { value: "month_day", label: "Oct 18" },
+              ],
+            },
+          },
+        },
       ],
     },
     {
@@ -1908,6 +1923,7 @@ export const LABELS: Record<string, string> = {
   show_icon: "Show icon",
   show_legend: "Show legend",
   smoothing: "Smoothing",
+  day_label_format: "Date format",
   show_labels: "Show labels",
   show_extrema: "Show extrema",
   group_by: "Group by",

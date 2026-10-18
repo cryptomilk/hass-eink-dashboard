@@ -214,6 +214,18 @@ describe("SCHEMAS", () => {
     expect(findField(schema, "show_fill")?.default).toBe(false);
   });
 
+  it("meteogram day_label_format offers the four formats", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const field = findField(schema, "day_label_format");
+    expect(field?.default).toBe("weekday_month_day");
+    expect(field?.selector?.select?.options?.map((o) => o.value)).toEqual([
+      "weekday_month_day",
+      "weekday_abbrev",
+      "weekday_wide",
+      "month_day",
+    ]);
+  });
+
   it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "mode");

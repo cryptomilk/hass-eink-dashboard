@@ -485,6 +485,50 @@ class TestRenderMeteogram:
         assert re.search(fill, filled) is not None
         assert re.search(r'<path[^>]*fill="none"', filled) is not None
 
+    def test_meteogram_day_label_format_weekday_abbrev(self) -> None:
+        # day_label_format="weekday_abbrev" renders just the short
+        # weekday ("Sat"), dropping the month and day number.
+        svg = render_widget_svg(
+            self._widget(day_label_format="weekday_abbrev"),
+            self._config(),
+        )
+        assert ">Sat</text>" in svg
+        assert "May 2" not in svg
+
+    def test_meteogram_day_label_format_weekday_wide(self) -> None:
+        # day_label_format="weekday_wide" renders the full weekday
+        # ("Saturday").
+        svg = render_widget_svg(
+            self._widget(day_label_format="weekday_wide"),
+            self._config(),
+        )
+        assert ">Saturday</text>" in svg
+        assert "May 2" not in svg
+
+    def test_meteogram_day_label_format_month_day(self) -> None:
+        # day_label_format="month_day" renders the month and day
+        # without the weekday ("May 2").
+        svg = render_widget_svg(
+            self._widget(day_label_format="month_day"),
+            self._config(),
+        )
+        assert ">May 2</text>" in svg
+        assert ">Sat" not in svg
+
+    def test_meteogram_day_label_format_localized(self) -> None:
+        # The full weekday and month-day formats resolve through
+        # CLDR data, so a German display reads "Samstag" / "Mai 2".
+        wide_svg = render_widget_svg(
+            self._widget(day_label_format="weekday_wide"),
+            self._config(language="de"),
+        )
+        assert ">Samstag</text>" in wide_svg
+        month_day_svg = render_widget_svg(
+            self._widget(day_label_format="month_day"),
+            self._config(language="de"),
+        )
+        assert ">Mai 2</text>" in month_day_svg
+
     def test_meteogram_grid_labels_clear_their_gridline(self) -> None:
         # Each Y-axis gridline label's baseline must sit above its
         # own gridline (smaller y, since SVG y grows downward), not
