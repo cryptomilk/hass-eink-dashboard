@@ -108,7 +108,13 @@ def _build_meteogram_context(
             (HA weather entity ID), ``hours`` (forecast window in
             hours, clamped to 8-120; default 24), ``show_cloud_cover``
             (bool, default ``True``), ``show_precipitation`` (bool,
-            default ``True``), ``fonts`` (per-role font overrides — a
+            default ``True``), ``line_width`` (curve stroke width in
+            pixels; omitted keeps the height-derived width, an
+            explicit value is absolute), ``smoothing`` (bool,
+            default ``True``; ``False`` draws straight segments),
+            ``show_fill`` (bool, default ``False``; ``True`` fills
+            the area below the curve), ``fonts`` (per-role font
+            overrides — a
             mapping of role name to ``{"size": int, "weight": str}``;
             roles are ``"day"``, ``"hour"``, ``"grid"``, and
             ``"precip"``.  An omitted ``size`` keeps the widget's
@@ -139,6 +145,12 @@ def _build_meteogram_context(
     display_levels = config.get("display_levels", 16)
     show_cloud_cover = bool(widget.get("show_cloud_cover", True))
     show_precipitation = bool(widget.get("show_precipitation", True))
+    # Line appearance options.  Defaults preserve the widget's
+    # pre-option rendering: the stroke stays height-derived and no
+    # fill is drawn, so existing configs look unchanged.
+    line_width = _line_width(widget, h)
+    smoothing = bool(widget.get("smoothing", True))
+    show_fill = bool(widget.get("show_fill", False))
 
     entity: str = widget.get("entity", "")
     states_dict: dict[str, Any] = config.get("states", {})
@@ -259,9 +271,6 @@ def _build_meteogram_context(
         FontWeight.BOLD,
         scale=font_scale,
     )
-    curve_stroke_w = max(2, round(h * 0.012))
-    grid_stroke_w = max(1, curve_stroke_w // 2)
-
     plot_top = day_label_h + row_gap
     hour_row_y = h - row_gap - hour_row_h
     plot_bottom = hour_row_y - row_gap
@@ -404,11 +413,14 @@ def _build_meteogram_context(
 
     # --- Temperature curve, colored by a continuous gradient ---
     curve_pts = [(map_x(t), map_y(v)) for t, v in points]
-    curve_path = _smooth_path(curve_pts)
     # No stops on 2-level displays: the template then strokes the
     # curve with hex_black instead of the gradient URL.
     curve_stroke_w, curve_stops = _curve_stroke_and_stops(
-        curve_stroke_w, points, config, display_levels
+        line_width, points, config, display_levels
+    )
+    grid_stroke_w = max(1, line_width // 2)
+    curve_path, curve_points, fill_path, fill_points = _curve_geometry(
+        curve_pts, plot_bottom, smoothing, show_fill
     )
 
     # --- Condition icons, floating above the curve ---
@@ -479,8 +491,11 @@ def _build_meteogram_context(
         "m_radius": m.radius,
         **_color_context(),
         "curve_path": curve_path,
+        "curve_points": curve_points,
         "curve_stops": curve_stops,
         "curve_stroke_w": curve_stroke_w,
+        "fill_path": fill_path,
+        "fill_points": fill_points,
         "grid_lines": grid_lines,
         "grid_font_sz": grid_font_sz,
         "grid_font_weight": _font_weight_svg(grid_weight),
@@ -560,8 +575,31 @@ def _y_axis_layout(
     return grid_values, plot_left, plot_w
 
 
+def _line_width(widget: Widget, h: int) -> int:
+    """Resolve the temperature curve's stroke width.
+
+    An explicit ``line_width`` is an absolute pixel value.  When it
+    is omitted (or empty, as an untouched editor number field
+    produces), the width stays proportional to the widget height --
+    the pre-option behaviour -- so existing configs render exactly
+    as they did before the option existed.
+
+    Args:
+        widget: Widget config dict, carrying the optional
+            ``line_width`` key.
+        h: Widget height in pixels, used for the derived default.
+
+    Returns:
+        Stroke width in pixels.
+    """
+    raw = widget.get("line_width")
+    if raw is None or raw == "":
+        return max(2, round(h * 0.012))
+    return int(float(raw))
+
+
 def _curve_stroke_and_stops(
-    base_stroke_w: int,
+    line_width: int,
     points: list[tuple[float, float]],
     config: DisplayConfig,
     display_levels: int,
@@ -578,7 +616,8 @@ def _curve_stroke_and_stops(
     scheme is configured.
 
     Args:
-        base_stroke_w: Stroke width before the 2-level widening.
+        line_width: Stroke width in pixels, before the 2-level
+            widening.
         points: ``(timestamp, temperature)`` pairs, sorted by
             timestamp, defining the plotted time range.
         config: Display config, used for the grayscale conversion
@@ -591,11 +630,59 @@ def _curve_stroke_and_stops(
         applies, which the template reads as "stroke with black".
     """
     if display_levels <= 2:
-        return base_stroke_w * 2, []
+        return line_width * 2, []
     sample_temps = [_sample_by_time(points, i / 16) for i in range(17)]
-    return base_stroke_w, _maybe_grayscale_stops(
+    return line_width, _maybe_grayscale_stops(
         _temp_gradient_stops(sample_temps), config
     )
+
+
+def _curve_geometry(
+    curve_pts: list[tuple[int, int]],
+    plot_bottom: int,
+    smoothing: bool,
+    show_fill: bool,
+) -> tuple[str, str, str, str]:
+    """Build the curve's line and fill geometry.
+
+    Mirrors ``_line_series()``'s split: a midpoint Q-curve ``path``
+    when ``smoothing`` is on, a straight-segment ``points`` list
+    otherwise, with the fill following the same split (a
+    ``_smooth_fill()`` closure for the smooth path, a baseline
+    polygon for the polyline).  Only one of each pair is non-empty,
+    so the template picks the matching SVG element.
+
+    Args:
+        curve_pts: Ordered ``(x, y)`` pixel coordinates,
+            oldest-to-newest.
+        plot_bottom: Y pixel coordinate of the plot's bottom edge,
+            which the fill drops to.
+        smoothing: When ``True`` use a midpoint Q-curve path; when
+            ``False`` use straight segments.
+        show_fill: When ``True`` close the curve down to the plot
+            baseline to produce a filled area.
+
+    Returns:
+        ``(curve_path, curve_points, fill_path, fill_points)``.
+    """
+    if len(curve_pts) < 2:
+        return "", "", "", ""
+    if not smoothing:
+        points_str = " ".join(f"{px},{py}" for px, py in curve_pts)
+        fill_points = ""
+        if show_fill:
+            fill_poly = [
+                *curve_pts,
+                (curve_pts[-1][0], plot_bottom),
+                (curve_pts[0][0], plot_bottom),
+            ]
+            fill_points = " ".join(f"{px},{py}" for px, py in fill_poly)
+        return "", points_str, "", fill_points
+    path = _smooth_path(curve_pts)
+    fill_path = ""
+    if show_fill and path:
+        fill_path = _smooth_fill(path, curve_pts, plot_bottom)
+    return path, "", fill_path, ""
 
 
 def _prune_overlapping_day_markers(

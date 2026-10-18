@@ -201,6 +201,19 @@ describe("SCHEMAS", () => {
     expect(field?.selector).toHaveProperty("boolean");
   });
 
+  it("meteogram line options preserve the existing defaults", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const lineWidth = findField(schema, "line_width");
+    // No default: omitting the field keeps the height-derived width.
+    expect(lineWidth?.default).toBeUndefined();
+    expect(lineWidth?.selector?.number).toMatchObject({
+      min: 1,
+      max: 10,
+    });
+    expect(findField(schema, "smoothing")?.default).toBe(true);
+    expect(findField(schema, "show_fill")?.default).toBe(false);
+  });
+
   it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "mode");

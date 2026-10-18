@@ -4,7 +4,7 @@
 {%- if has_entity -%}
 {#- Temperature gradient for the curve, sampled from its own
     values -- mirrors graph.svg.j2's threshold-gradient <defs>. -#}
-{%- if curve_path and curve_stops -%}
+{%- if (curve_path or curve_points) and curve_stops -%}
 <defs>
 <linearGradient id="mgTempGradient"
   gradientUnits="userSpaceOnUse"
@@ -44,6 +44,14 @@
 <path d="{{ cloud_band_path }}"
   fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
 {%- endif -%}
+{#- Temperature fill: area under the curve down to the plot
+    baseline, drawn before the gridlines so they stay readable. -#}
+{%- if fill_path -%}
+<path d="{{ fill_path }}" fill="{{ hex_light_gray }}" stroke="none"/>
+{%- elif fill_points -%}
+<polygon points="{{ fill_points }}"
+  fill="{{ hex_light_gray }}" stroke="none"/>
+{%- endif -%}
 {#- Y-axis gridlines and labels.  The line spans the plot, which
     starts at plot_left to clear the labels anchored at content_left. -#}
 {%- for grid in grid_lines -%}
@@ -79,9 +87,18 @@
 {%- endfor -%}
 {%- endif -%}
 {#- Temperature curve, colored along its length by value, or a
-    solid black line when no gradient applies (2-level displays). -#}
+    solid black line when no gradient applies (2-level displays).
+    Smoothing off switches the path to a straight-segment polyline,
+    mirroring graph.svg.j2's line/polyline split. -#}
 {%- if curve_path -%}
 <path d="{{ curve_path }}"
+  fill="none"
+  stroke="{{ 'url(#mgTempGradient)' if curve_stops else hex_black }}"
+  stroke-width="{{ curve_stroke_w }}"
+  stroke-linejoin="round"
+  stroke-linecap="round"/>
+{%- elif curve_points -%}
+<polyline points="{{ curve_points }}"
   fill="none"
   stroke="{{ 'url(#mgTempGradient)' if curve_stops else hex_black }}"
   stroke-width="{{ curve_stroke_w }}"

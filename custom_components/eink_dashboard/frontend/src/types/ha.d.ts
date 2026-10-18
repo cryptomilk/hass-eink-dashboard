@@ -1293,6 +1293,19 @@ export interface MeteogramWidget extends WidgetBase {
   show_cloud_cover?: boolean;
   /** Show precipitation bars below the curve. Default: true. */
   show_precipitation?: boolean;
+  /**
+   * Curve stroke width in pixels.  Omitted keeps the height-derived
+   * width, so existing configs are unaffected.
+   */
+  line_width?: number;
+  /**
+   * Smooth the temperature curve with midpoint Q-curve
+   * interpolation.  When false, the curve is drawn as straight
+   * segments between hourly points.  Default: true.
+   */
+  smoothing?: boolean;
+  /** Draw a light-gray filled area below the curve. Default: false. */
+  show_fill?: boolean;
   /** Decorative frame style. */
   card_style?: CardStyle;
 }

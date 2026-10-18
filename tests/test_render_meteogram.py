@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 from custom_components.eink_dashboard.const import (
     COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
     FontWeight,
     color_to_hex,
@@ -432,6 +433,57 @@ class TestRenderMeteogram:
         svg = render_widget_svg(self._widget(), self._config())
         assert '<linearGradient id="mgTempGradient"' in svg
         assert 'stroke="url(#mgTempGradient)"' in svg
+
+    def test_meteogram_line_width_default_is_height_derived(self) -> None:
+        # Omitting line_width keeps the original height-proportional
+        # stroke, so existing configs render unchanged: 3px at the
+        # default h=260.
+        svg = render_widget_svg(self._widget(), self._config())
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="3"', svg)
+            is not None
+        )
+
+    def test_meteogram_line_width_override(self) -> None:
+        # line_width sets the curve stroke width in pixels, like the
+        # GRAPH widget's option of the same name.
+        svg = render_widget_svg(self._widget(line_width=5), self._config())
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="5"', svg)
+            is not None
+        )
+
+    def test_meteogram_line_width_doubled_on_2level(self) -> None:
+        # 2-level displays double the stroke, as GRAPH's do.
+        svg = render_widget_svg(
+            self._widget(line_width=3), self._config(display_levels=2)
+        )
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="6"', svg)
+            is not None
+        )
+
+    def test_meteogram_smoothing_false_draws_polyline(self) -> None:
+        # smoothing=false replaces the midpoint Q-curve path with a
+        # straight-segment polyline, mirroring GRAPH's option.
+        svg = render_widget_svg(self._widget(smoothing=False), self._config())
+        assert "<polyline" in svg
+        assert re.search(r'<path[^>]*fill="none"', svg) is None
+
+    def test_meteogram_show_fill_toggle(self) -> None:
+        # No fill is drawn by default -- the pre-option rendering --
+        # and show_fill=true adds the light-gray area below the
+        # curve. The cloud band shares the color but carries a
+        # fill-opacity attribute, so the attribute-free fill is the
+        # curve's own.
+        fill = rf'fill="{color_to_hex(COLOR_LIGHT_GRAY)}"\s+stroke="none"'
+        default_svg = render_widget_svg(self._widget(), self._config())
+        filled = render_widget_svg(
+            self._widget(show_fill=True), self._config()
+        )
+        assert re.search(fill, default_svg) is None
+        assert re.search(fill, filled) is not None
+        assert re.search(r'<path[^>]*fill="none"', filled) is not None
 
     def test_meteogram_grid_labels_clear_their_gridline(self) -> None:
         # Each Y-axis gridline label's baseline must sit above its
