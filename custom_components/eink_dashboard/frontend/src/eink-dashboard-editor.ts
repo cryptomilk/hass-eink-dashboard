@@ -419,19 +419,6 @@ function weatherModeSelector(): HaFormSchema {
 }
 
 /**
- * Bold-value boolean toggle.
- *
- * @returns A single ha-form schema entry.
- */
-function boldValueSelector(): HaFormSchema {
-  return {
-    name: "bold_value",
-    default: false,
-    selector: { boolean: {} },
-  };
-}
-
-/**
  * Name position dropdown selector (above or below the value).
  *
  * @returns A single ha-form schema entry.
@@ -468,6 +455,76 @@ function nameAlignSelector(): HaFormSchema {
         ],
       },
     },
+  };
+}
+
+/**
+ * Font size number selector for a nested font role (8–72 px).
+ *
+ * @returns A single ha-form schema entry named `size`.
+ */
+function fontRoleSizeSelector(): HaFormSchema {
+  return {
+    name: "size",
+    selector: { number: { min: 8, max: 72, mode: "box" } },
+  };
+}
+
+/**
+ * Font weight dropdown selector for a nested font role.
+ *
+ * @returns A single ha-form schema entry named `weight`.
+ */
+function fontRoleWeightSelector(): HaFormSchema {
+  return {
+    name: "weight",
+    selector: {
+      select: {
+        options: [
+          { value: "regular", label: "Regular" },
+          { value: "medium", label: "Medium" },
+          { value: "bold", label: "Bold" },
+        ],
+        mode: "dropdown",
+      },
+    },
+  };
+}
+
+/**
+ * Nested "Fonts" section exposing per-role size and weight overrides.
+ *
+ * ha-form nests child values under the container `name` when
+ * `flatten` is unset, so this writes a `fonts` object keyed by role
+ * (`{ fonts: { value: { size, weight } } }`) — the shape
+ * `resolve_font` reads in the Python renderer.
+ *
+ * When `weightOnly` is set the per-role size selector is omitted and
+ * only weight overrides are exposed. The weather widget uses this
+ * because its text geometry is derived from `font_size`; a role size
+ * override there would be ignored by the renderer.
+ *
+ * @param roles - `[role, label]` pairs for the widget type.
+ * @param opts - `weightOnly` omits the size selector (weather only).
+ * @returns An expandable ha-form schema entry named `fonts`.
+ */
+function fontsSection(
+  roles: [string, string][],
+  opts: { weightOnly?: boolean } = {},
+): HaFormSchema {
+  return {
+    name: "fonts",
+    type: "expandable",
+    title: "Fonts",
+    icon: "mdi:format-font",
+    schema: roles.map(([role, label]) => ({
+      name: role,
+      type: "expandable",
+      title: label,
+      schema: opts.weightOnly
+        ? [fontRoleWeightSelector()]
+        : [fontRoleSizeSelector(), fontRoleWeightSelector()],
+    })),
   };
 }
 
@@ -778,7 +835,18 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [fontSizeSelector(FONT_SIZE_WEATHER), cardStyleSelector()],
+      schema: [
+        fontSizeSelector(FONT_SIZE_WEATHER),
+        cardStyleSelector(),
+        fontsSection(
+          [
+            ["temp", "Temperature"],
+            ["detail", "Detail"],
+            ["precip", "Precipitation"],
+          ],
+          { weightOnly: true }
+        ),
+      ],
     },
   ],
 
@@ -828,7 +896,14 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector(),
+        fontsSection([
+          ["primary", "Primary"],
+          ["secondary", "Secondary"],
+        ]),
+      ],
     },
   ],
 
@@ -880,9 +955,13 @@ export const SCHEMAS: Record<
       schema: [
         cardStyleSelector(),
         iconStyleSelector(),
-        boldValueSelector(),
         namePositionSelector(),
         nameAlignSelector(),
+        fontsSection([
+          ["value", "Value"],
+          ["name", "Name"],
+          ["unit", "Unit"],
+        ]),
       ],
     },
   ],
@@ -918,7 +997,17 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector(),
+        fontsSection([
+          ["title", "Title"],
+          ["row_primary", "Row primary"],
+          ["row_secondary", "Row secondary"],
+          ["value", "Value"],
+          ["section", "Section"],
+        ]),
+      ],
     },
   ],
 
@@ -971,6 +1060,10 @@ export const SCHEMAS: Record<
         cardStyleSelector(),
         iconStyleSelector("none"),
         headingAlignSelector(),
+        fontsSection([
+          ["heading", "Heading"],
+          ["badge", "Badge"],
+        ]),
       ],
     },
   ],
@@ -1015,7 +1108,11 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [colorSelector(), cardStyleSelector(), boldValueSelector()],
+      schema: [
+        colorSelector(),
+        cardStyleSelector(),
+        fontsSection([["label", "Label"]]),
+      ],
     },
   ],
 
@@ -1124,7 +1221,15 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), iconStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        iconStyleSelector(),
+        fontsSection([
+          ["name", "Name"],
+          ["value", "Value"],
+          ["unit", "Unit"],
+        ]),
+      ],
     },
   ],
 
@@ -1180,7 +1285,15 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        fontsSection([
+          ["title", "Title"],
+          ["primary", "Primary"],
+          ["secondary", "Secondary"],
+          ["value", "Value"],
+        ]),
+      ],
     },
   ],
   calendar: (d) => [
@@ -1229,7 +1342,15 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        fontsSection([
+          ["title", "Title"],
+          ["primary", "Primary"],
+          ["secondary", "Secondary"],
+          ["value", "Value"],
+        ]),
+      ],
     },
   ],
   gauge: (d) => [
@@ -1325,7 +1446,15 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        fontsSection([
+          ["value", "Value"],
+          ["unit", "Unit"],
+          ["name", "Name"],
+          ["segment", "Segment"],
+        ]),
+      ],
     },
   ],
   graph: (d) => [
@@ -1616,7 +1745,15 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector(), boldValueSelector()],
+      schema: [
+        cardStyleSelector(),
+        fontsSection([
+          ["name", "Name"],
+          ["value", "Value"],
+          ["unit", "Unit"],
+          ["axis", "Axis"],
+        ]),
+      ],
     },
   ],
   meteogram: (d) => [
@@ -1649,6 +1786,21 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
+        {
+          name: "day_label_format",
+          default: "weekday_month_day",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "weekday_month_day", label: "Sun Oct 18" },
+                { value: "weekday_abbrev", label: "Sun" },
+                { value: "weekday_wide", label: "Sunday" },
+                { value: "month_day", label: "Oct 18" },
+              ],
+            },
+          },
+        },
       ],
     },
     {
@@ -1665,7 +1817,31 @@ export const SCHEMAS: Record<
       flatten: true,
       title: "Appearance",
       icon: "mdi:palette",
-      schema: [cardStyleSelector()],
+      schema: [
+        {
+          name: "line_width",
+          selector: {
+            number: { min: 1, max: 10, mode: "box" },
+          },
+        },
+        {
+          name: "smoothing",
+          default: true,
+          selector: { boolean: {} },
+        },
+        {
+          name: "show_fill",
+          default: false,
+          selector: { boolean: {} },
+        },
+        cardStyleSelector(),
+        fontsSection([
+          ["day", "Day"],
+          ["hour", "Hour"],
+          ["grid", "Grid"],
+          ["precip", "Precipitation"],
+        ]),
+      ],
     },
   ],
 };
@@ -1694,6 +1870,8 @@ export const LABELS: Record<string, string> = {
   border_radius: "Corner radius",
   direction: "Direction", style: "Style", length: "Length",
   font_size: "Font size",
+  size: "Size",
+  weight: "Weight",
   color: "Color",
   attribute: "Attribute",
   unit: "Unit",
@@ -1703,7 +1881,6 @@ export const LABELS: Record<string, string> = {
   badges: "Badges",
   card_style: "Card style",
   icon_style: "Icon style",
-  bold_value: "Bold value",
   layout: "Layout",
   show_all: "Show all upcoming dates",
   entries: "Entries",
@@ -1746,6 +1923,7 @@ export const LABELS: Record<string, string> = {
   show_icon: "Show icon",
   show_legend: "Show legend",
   smoothing: "Smoothing",
+  day_label_format: "Date format",
   show_labels: "Show labels",
   show_extrema: "Show extrema",
   group_by: "Group by",

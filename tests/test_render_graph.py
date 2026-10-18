@@ -36,6 +36,7 @@ from tests.helpers import (
     assert_has_dark_pixels,
     assert_has_gray_pixels,
     assert_scales_proportionally,
+    content_bbox,
     make_config,
     render_to_image,
 )
@@ -258,16 +259,8 @@ class TestRenderGraph:
         )
         assert "<polyline" in svg
 
-    def test_graph_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the header value text with a
-        # bold font-weight attribute in the SVG.
-        svg = render_widget_svg(
-            self._base_widget(bold_value=True), self._config()
-        )
-        assert 'font-weight="bold"' in svg
-
     def test_graph_default_value_not_bold(self) -> None:
-        # Without bold_value, the header value text has no bold
+        # By default, the header value text has no bold
         # font-weight attribute.
         svg = render_widget_svg(self._base_widget(), self._config())
         assert 'font-weight="bold"' not in svg
@@ -314,6 +307,133 @@ class TestRenderGraph:
             self._base_widget(state_font_size=48), self._config()
         )
         assert ctx_large["unit_x"] > ctx_default["unit_x"]
+
+    # ── Font customization tests ──────────────────────────────────────
+
+    def test_graph_fonts_value_size_enlarges_header_value(self) -> None:
+        # fonts.value.size enlarges the header state text relative to
+        # the widget's derived default.  Name and icon are hidden so
+        # the measured header region holds the value (and its unit)
+        # alone.
+        base = self._base_widget(show_name=False, show_icon=False)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"value": {"size": 30}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, 0, 0, 400, DEFAULT_ROW_H)
+        bbox_bigger = content_bbox(bigger, 0, 0, 400, DEFAULT_ROW_H)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_graph_fonts_name_size_enlarges_header_name(self) -> None:
+        # fonts.name.size enlarges the header name text.  The state
+        # text and icon are hidden so the measured region holds the
+        # name alone.
+        base = self._base_widget(show_state=False, show_icon=False)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"name": {"size": 30}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, 0, 0, 400, DEFAULT_ROW_H)
+        bbox_bigger = content_bbox(bigger, 0, 0, 400, DEFAULT_ROW_H)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_graph_fonts_axis_size_enlarges_axis_labels(self) -> None:
+        # fonts.axis.size enlarges the Y-axis labels, which are the
+        # only content drawn left of the graph area's left edge.
+        base = self._base_widget(show_state=False, show_name=False)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"axis": {"size": 30}}}],
+            self._config(),
+        )
+        # Left of the graph area only the axis labels draw.  The
+        # Y-axis max label hangs from the graph area's top edge
+        # (header row + 2× stroke inset), so a band 48 px below the
+        # header row holds it and is clear of the min label at the
+        # bottom of the graph.
+        top = DEFAULT_ROW_H
+        bbox_default = content_bbox(default, 0, top, 40, top + 48)
+        bbox_bigger = content_bbox(bigger, 0, top, 40, top + 48)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_graph_fonts_value_size_beats_state_font_size(self) -> None:
+        # state_font_size is only the fallback for the value/unit size:
+        # an explicit fonts.value.size wins over it.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx = _build_graph_context(
+            self._base_widget(
+                state_font_size=24, fonts={"value": {"size": 32}}
+            ),
+            self._config(),
+        )
+        assert ctx["value_font_sz"] == 32
+
+    def test_graph_fonts_unit_size_beats_state_font_size(self) -> None:
+        # Same fallback rule for the unit role, which shares
+        # state_font_size with the value role by default.
+        from custom_components.eink_dashboard.widgets.graph import (
+            _build_graph_context,
+        )
+
+        ctx = _build_graph_context(
+            self._base_widget(
+                state_font_size=24, fonts={"unit": {"size": 20}}
+            ),
+            self._config(),
+        )
+        assert ctx["value_font_sz"] == 24
+        assert ctx["unit_font_sz"] == 20
+
+    def test_graph_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" renders the header value in bold.
+        widget = self._base_widget(fonts={"value": {"weight": "bold"}})
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_graph_fonts_axis_weight_bold(self) -> None:
+        # fonts.axis.weight="bold" renders the axis, extrema, and
+        # legend labels in bold; nothing else in the widget is bold.
+        widget = self._base_widget(fonts={"axis": {"weight": "bold"}})
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_graph_default_weights_are_unchanged(self) -> None:
+        # Without overrides the header name keeps the medium (500)
+        # weight it has always used, and value, unit, and axis labels
+        # render regular (400) rather than omitting the attribute.
+        svg = render_widget_svg(self._base_widget(), self._config())
+        assert 'font-weight="500"' in svg
+        assert 'font-weight="400"' in svg
+        assert 'font-weight="bold"' not in svg
+
+    def test_graph_fonts_axis_weight_applies_to_legend(self) -> None:
+        # The legend text is measured with the axis role's face, so
+        # the rendered legend must carry that same weight.  The header
+        # name is hidden so the entity name appears only in the legend.
+        widget = self._multi_widget(
+            show_name=False, fonts={"axis": {"weight": "bold"}}
+        )
+        svg = render_widget_svg(widget, self._config())
+        legend = re.search(r"<text[^>]*>Living Room</text>", svg)
+        assert legend is not None
+        assert 'font-weight="bold"' in legend.group(0)
 
     def test_graph_fill_shown_by_default(self) -> None:
         # With show_fill not set (default true) and smoothing off,
@@ -659,13 +779,19 @@ class TestRenderGraph:
         value_text = str(ctx["value_text"])
         assert value_text.endswith("…")
         assert "1,013.0hPa" not in value_text
-        # Truncated text must still end before the icon's left edge.
-        from custom_components.eink_dashboard.render import _load_font
-
-        font = _load_font(
-            int(ctx["value_font_sz"]),  # type: ignore[arg-type]
-            bold=bool(ctx["value_bold"]),
+        # Truncated text must still end before the icon's left edge
+        # when measured with the face the template renders.
+        from custom_components.eink_dashboard.const import FontWeight
+        from custom_components.eink_dashboard.render import (
+            _load_role_font,
         )
+
+        weight = {
+            "400": FontWeight.REGULAR,
+            "500": FontWeight.MEDIUM,
+            "bold": FontWeight.BOLD,
+        }[str(ctx["value_weight"])]
+        font = _load_role_font(int(ctx["value_font_sz"]), weight)
         text_end = int(ctx["value_x"]) + round(font.getlength(value_text))
         assert text_end <= int(ctx["icon_cx"]) - int(ctx["icon_r"])
 

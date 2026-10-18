@@ -21,6 +21,7 @@ from ..const import (
     DEFAULT_CARD_STYLE,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -54,8 +55,14 @@ def _build_device_battery_context(
     Args:
         widget: Widget config dict.  Recognised keys: ``x``,
             ``y``, ``w``, ``h`` (default 40), ``layout``,
-            ``card_style``, ``color``, ``bold_value`` (render the
-            percentage label in bold; default ``False``).
+            ``card_style``, ``color``, ``fonts``
+            (per-role font overrides — a mapping of role name to
+            ``{"size": int, "weight": str}``; the only role is
+            ``"label"`` (the percentage text).  An omitted ``size``
+            keeps the widget's derived size scaled by the
+            display-level ``font_scale``; an explicit ``size`` is
+            absolute.  An omitted ``weight`` keeps the role's
+            default: ``"regular"``).
         config: Display config with ``device_battery_level``
             (int 0–100) and ``display_levels``.
 
@@ -65,7 +72,12 @@ def _build_device_battery_context(
         ``{"w": …, "h": …, "has_level": False}`` when
         ``device_battery_level`` is absent from config.
     """
-    from ..render import _compute_metrics, _load_font
+    from ..render import (
+        _compute_metrics,
+        _font_weight_svg,
+        _load_role_font,
+        resolve_font,
+    )
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -89,7 +101,8 @@ def _build_device_battery_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     display_levels = config.get("display_levels", 16)
     color: int = widget.get("color", COLOR_BLACK)
-    value_bold: bool = widget.get("bold_value", False)
+
+    font_scale: float = config.get("font_scale", 1.0)
     # Force black below 20% for visual emphasis.
     if pct < 20:
         color = COLOR_BLACK
@@ -118,9 +131,19 @@ def _build_device_battery_context(
         bar_h = h * 36 // 100
         bar_border = max(1, m.border // 2)
         font_sz = max(10, h * 46 // 100)
+        # The label role resolves through the shared API so the
+        # widget's ``fonts.label`` overrides and the display-level
+        # ``font_scale`` apply.
+        font_sz, label_weight = resolve_font(
+            widget,
+            "label",
+            font_sz,
+            FontWeight.REGULAR,
+            scale=font_scale,
+        )
         # PIL font for text measurement only — resvg does not
         # expose text metrics, so widths are pre-computed here.
-        font = _load_font(font_sz, bold=value_bold)
+        font = _load_role_font(font_sz, label_weight)
         text_w = round(font.getlength(label))
 
         chip_w = min(
@@ -155,7 +178,7 @@ def _build_device_battery_context(
             "color_hex": color_hex,
             "label": label,
             "font_sz": font_sz,
-            "value_bold": value_bold,
+            "font_weight": _font_weight_svg(label_weight),
             "chip_x": content_left,
             "chip_w": chip_w,
             "chip_radius": chip_radius,
@@ -182,7 +205,14 @@ def _build_device_battery_context(
     nub_gap = max(1, round(h * 0.025))
     gap = round(h * 0.10)
     font_sz = max(10, round(h * 0.60))
-    font = _load_font(font_sz, bold=value_bold)
+    font_sz, label_weight = resolve_font(
+        widget,
+        "label",
+        font_sz,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    font = _load_role_font(font_sz, label_weight)
     # 'la' (left-ascender) is the default anchor for
     # FreeTypeFont.getbbox(), centring the battery body on the
     # visible text glyph ink rather than the full EM square.
@@ -225,7 +255,7 @@ def _build_device_battery_context(
         "color_hex": color_hex,
         "label": label,
         "font_sz": font_sz,
-        "value_bold": value_bold,
+        "font_weight": _font_weight_svg(label_weight),
         "body_x": content_left,
         "icon_y": icon_y,
         "body_w": body_w,

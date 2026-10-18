@@ -4,11 +4,11 @@
 {%- if has_entity -%}
 {#- Temperature gradient for the curve, sampled from its own
     values -- mirrors graph.svg.j2's threshold-gradient <defs>. -#}
-{%- if curve_path and curve_stops -%}
+{%- if (curve_path or curve_points) and curve_stops -%}
 <defs>
 <linearGradient id="mgTempGradient"
   gradientUnits="userSpaceOnUse"
-  x1="{{ content_left }}" y1="0"
+  x1="{{ plot_left }}" y1="0"
   x2="{{ content_right }}" y2="0">
 {%- for stop in curve_stops -%}
 <stop offset="{{ stop.offset }}" stop-color="{{ stop.color }}"/>
@@ -35,6 +35,7 @@
 <text x="{{ marker.x }}" y="{{ day_label_y }}"
   font-family="Roboto"
   font-size="{{ day_label_font_sz }}"
+  font-weight="{{ day_label_font_weight }}"
   dominant-baseline="hanging"
   fill="{{ hex_black }}">{{ marker.label }}</text>
 {%- endfor -%}
@@ -43,15 +44,25 @@
 <path d="{{ cloud_band_path }}"
   fill="{{ hex_light_gray }}" fill-opacity="0.6" stroke="none"/>
 {%- endif -%}
-{#- Y-axis gridlines and labels. -#}
+{#- Temperature fill: area under the curve down to the plot
+    baseline, drawn before the gridlines so they stay readable. -#}
+{%- if fill_path -%}
+<path d="{{ fill_path }}" fill="{{ hex_light_gray }}" stroke="none"/>
+{%- elif fill_points -%}
+<polygon points="{{ fill_points }}"
+  fill="{{ hex_light_gray }}" stroke="none"/>
+{%- endif -%}
+{#- Y-axis gridlines and labels.  The line spans the plot, which
+    starts at plot_left to clear the labels anchored at content_left. -#}
 {%- for grid in grid_lines -%}
-<line x1="{{ content_left }}" y1="{{ grid.y }}"
+<line x1="{{ plot_left }}" y1="{{ grid.y }}"
       x2="{{ content_right }}" y2="{{ grid.y }}"
       stroke="{{ hex_light_gray }}"
       stroke-width="{{ grid_stroke_w }}"/>
 <text x="{{ content_left }}" y="{{ grid.label_y }}"
   font-family="Roboto"
   font-size="{{ grid_font_sz }}"
+  font-weight="{{ grid_font_weight }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ grid.label }}</text>
 {%- endfor -%}
@@ -68,18 +79,28 @@
 <text x="{{ bar.label_x }}" y="{{ bar.label_y }}"
   font-family="Roboto"
   font-size="{{ precip_font_sz }}"
-  font-weight="bold"
+  font-weight="{{ precip_font_weight }}"
   text-anchor="middle"
   dominant-baseline="auto"
   fill="{{ hex_black }}">{{ bar.label }}</text>
 {%- endif -%}
 {%- endfor -%}
 {%- endif -%}
-{#- Temperature curve, colored along its length by value. -#}
+{#- Temperature curve, colored along its length by value, or a
+    solid black line when no gradient applies (2-level displays).
+    Smoothing off switches the path to a straight-segment polyline,
+    mirroring graph.svg.j2's line/polyline split. -#}
 {%- if curve_path -%}
 <path d="{{ curve_path }}"
   fill="none"
-  stroke="url(#mgTempGradient)"
+  stroke="{{ 'url(#mgTempGradient)' if curve_stops else hex_black }}"
+  stroke-width="{{ curve_stroke_w }}"
+  stroke-linejoin="round"
+  stroke-linecap="round"/>
+{%- elif curve_points -%}
+<polyline points="{{ curve_points }}"
+  fill="none"
+  stroke="{{ 'url(#mgTempGradient)' if curve_stops else hex_black }}"
   stroke-width="{{ curve_stroke_w }}"
   stroke-linejoin="round"
   stroke-linecap="round"/>
@@ -93,6 +114,7 @@
 <text x="{{ tick.x }}" y="{{ hour_row_y }}"
   font-family="Roboto"
   font-size="{{ hour_font_sz }}"
+  font-weight="{{ hour_font_weight }}"
   text-anchor="{{ tick.anchor }}"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ tick.label }}</text>

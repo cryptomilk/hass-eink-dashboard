@@ -201,6 +201,31 @@ describe("SCHEMAS", () => {
     expect(field?.selector).toHaveProperty("boolean");
   });
 
+  it("meteogram line options preserve the existing defaults", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const lineWidth = findField(schema, "line_width");
+    // No default: omitting the field keeps the height-derived width.
+    expect(lineWidth?.default).toBeUndefined();
+    expect(lineWidth?.selector?.number).toMatchObject({
+      min: 1,
+      max: 10,
+    });
+    expect(findField(schema, "smoothing")?.default).toBe(true);
+    expect(findField(schema, "show_fill")?.default).toBe(false);
+  });
+
+  it("meteogram day_label_format offers the four formats", () => {
+    const schema = SCHEMAS.meteogram(DISPLAY);
+    const field = findField(schema, "day_label_format");
+    expect(field?.default).toBe("weekday_month_day");
+    expect(field?.selector?.select?.options?.map((o) => o.value)).toEqual([
+      "weekday_month_day",
+      "weekday_abbrev",
+      "weekday_wide",
+      "month_day",
+    ]);
+  });
+
   it("weather mode field offers full, forecast, and current options", () => {
     const schema = SCHEMAS.weather(DISPLAY);
     const field = findField(schema, "mode");
@@ -503,6 +528,76 @@ describe("SCHEMAS form grouping", () => {
     )!;
     const fields = flattenFields(appearance.schema!);
     expect(fields).toContain("font_size");
+  });
+
+  it("entity appearance section exposes nested font overrides", () => {
+    // The entity widget exposes per-role font size and weight
+    // overrides under a nested "fonts" section (value/name/unit).
+    // It must not flatten, so ha-form nests the values into a
+    // fonts object matching what resolve_font reads in Python.
+    const schema = SCHEMAS.entity(DISPLAY);
+    const appearance = getExpandableSections(schema).find(
+      (s) => s.name === "appearance"
+    )!;
+    const fonts = findField(appearance.schema!, "fonts");
+    expect(fonts).toBeDefined();
+    expect(fonts!.flatten).toBeFalsy();
+    const roles = getExpandableSections(fonts!.schema!);
+    expect(roles.map((r) => r.name)).toEqual(["value", "name", "unit"]);
+    for (const role of roles) {
+      const fields = flattenFields(role.schema!);
+      expect(fields).toContain("size");
+      expect(fields).toContain("weight");
+    }
+  });
+
+  it("every widget appearance section exposes its font roles", () => {
+    // Each widget exposes per-role font size and weight overrides
+    // under a nested "fonts" section. The role names are fixed by
+    // the Python renderer's resolve_font API.
+    const expected: [string, string[], boolean][] = [
+      ["entity", ["value", "name", "unit"], false],
+      ["tile", ["primary", "secondary"], false],
+      ["calendar", ["title", "primary", "secondary", "value"], false],
+      [
+        "entities",
+        ["title", "row_primary", "row_secondary", "value", "section"],
+        false,
+      ],
+      ["waste_schedule", ["title", "primary", "secondary", "value"], false],
+      ["heading", ["heading", "badge"], false],
+      ["device_battery", ["label"], false],
+      ["gauge", ["value", "unit", "name", "segment"], false],
+      ["meteogram", ["day", "hour", "grid", "precip"], false],
+      // Weather's geometry is coupled to font_size, so it exposes
+      // weight-only overrides and omits the per-role size selector.
+      ["weather", ["temp", "detail", "precip"], true],
+      ["sensor", ["name", "value", "unit"], false],
+      ["graph", ["name", "value", "unit", "axis"], false],
+    ];
+    for (const [type, roles, weightOnly] of expected) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const appearance = getExpandableSections(schema).find(
+        (s) => s.name === "appearance"
+      );
+      expect(appearance, `${type} has an appearance section`).toBeDefined();
+      const fonts = findField(appearance!.schema!, "fonts");
+      expect(fonts, `${type} has a fonts section`).toBeDefined();
+      expect(fonts!.flatten, `${type} fonts does not flatten`).toBeFalsy();
+      const roleFields = getExpandableSections(fonts!.schema!);
+      expect(roleFields.map((r) => r.name), `${type} font roles`).toEqual(
+        roles
+      );
+      for (const role of roleFields) {
+        const fields = flattenFields(role.schema!);
+        expect(fields, `${type}.${role.name} weight`).toContain("weight");
+        if (weightOnly) {
+          expect(fields, `${type}.${role.name} size`).not.toContain("size");
+        } else {
+          expect(fields, `${type}.${role.name} size`).toContain("size");
+        }
+      }
+    }
   });
 
   it("device_battery appearance section contains color", () => {

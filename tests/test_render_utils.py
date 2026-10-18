@@ -23,6 +23,7 @@ import pytest
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_ROW_H,
+    FontWeight,
     NumberFormat,
     color_to_hex,
 )
@@ -30,10 +31,13 @@ from custom_components.eink_dashboard.render import (
     DEFAULT_METRICS,
     WidgetMetrics,
     _compute_metrics,
+    _font_weight_svg,
     _load_font,
+    _load_role_font,
     _month_abbrev,
     _weekday_abbrev,
     format_number,
+    resolve_font,
     resolve_number_format,
 )
 from custom_components.eink_dashboard.widgets._helpers import (
@@ -370,6 +374,88 @@ class TestLoadFont:
         assert _load_font(-5) is not None
         assert _load_font(0, medium=True) is not None
         assert _load_font(-5, medium=True) is not None
+
+
+class TestResolveFont:
+    def test_defaults_when_no_fonts_key(self) -> None:
+        # A widget without a fonts mapping returns the derived size
+        # and the role's default weight unchanged.
+        size, weight = resolve_font(
+            {"type": "entity"}, "value", 24, FontWeight.MEDIUM
+        )
+        assert size == 24
+        assert weight is FontWeight.MEDIUM
+
+    def test_explicit_size_overrides_default(self) -> None:
+        # An explicit per-role size replaces the derived default.
+        widget = {"fonts": {"value": {"size": 40}}}
+        size, weight = resolve_font(widget, "value", 24, FontWeight.MEDIUM)
+        assert size == 40
+        assert weight is FontWeight.MEDIUM
+
+    def test_explicit_weight_overrides_default(self) -> None:
+        # An explicit per-role weight replaces the role default.
+        widget = {"fonts": {"name": {"weight": "bold"}}}
+        size, weight = resolve_font(widget, "name", 12, FontWeight.MEDIUM)
+        assert size == 12
+        assert weight is FontWeight.BOLD
+
+    def test_scale_applies_to_default_size_only(self) -> None:
+        # The display-level scale multiplies derived sizes but must
+        # leave an explicitly pinned size untouched.
+        scaled, _ = resolve_font({"type": "entity"}, "value", 20, scale=1.5)
+        assert scaled == 30
+        pinned, _ = resolve_font(
+            {"fonts": {"value": {"size": 20}}}, "value", 20, scale=1.5
+        )
+        assert pinned == 20
+
+    def test_invalid_weight_falls_back(self) -> None:
+        # An unrecognised weight string must not raise; the role
+        # default is used instead.
+        widget = {"fonts": {"value": {"weight": "heavy"}}}
+        _, weight = resolve_font(widget, "value", 24, FontWeight.REGULAR)
+        assert weight is FontWeight.REGULAR
+
+    def test_non_numeric_size_falls_back(self) -> None:
+        # A non-numeric size must not raise; the scaled default is
+        # used instead.
+        widget = {"fonts": {"value": {"size": "big"}}}
+        size, _ = resolve_font(widget, "value", 24)
+        assert size == 24
+
+    def test_numeric_string_size_accepted(self) -> None:
+        # Sizes arriving as numeric strings (e.g. from ha-form)
+        # are coerced to int.
+        widget = {"fonts": {"value": {"size": "36"}}}
+        size, _ = resolve_font(widget, "value", 24)
+        assert size == 36
+
+    def test_malformed_fonts_key_ignored(self) -> None:
+        # A non-mapping fonts value (bad hand-edited config) must
+        # fall back to defaults rather than raising.
+        widget = {"fonts": "nonsense"}
+        size, weight = resolve_font(widget, "value", 24, FontWeight.MEDIUM)
+        assert size == 24
+        assert weight is FontWeight.MEDIUM
+
+    def test_weight_svg_mapping(self) -> None:
+        # Each weight maps to the SVG font-weight literal the
+        # templates emit.
+        assert _font_weight_svg(FontWeight.REGULAR) == "400"
+        assert _font_weight_svg(FontWeight.MEDIUM) == "500"
+        assert _font_weight_svg(FontWeight.BOLD) == "bold"
+
+    def test_load_role_font_matches_weight(self) -> None:
+        # _load_role_font must select the same face the SVG weight
+        # renders, so measurement and rendering agree.
+        assert _load_role_font(18, FontWeight.REGULAR) is _load_font(18)
+        assert _load_role_font(18, FontWeight.MEDIUM) is _load_font(
+            18, medium=True
+        )
+        assert _load_role_font(18, FontWeight.BOLD) is _load_font(
+            18, bold=True
+        )
 
 
 class TestComputeMetrics:

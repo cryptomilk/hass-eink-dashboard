@@ -27,6 +27,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -100,9 +101,18 @@ def _build_heading_context(
             ``"outlined"``),
             ``badges`` (list of entity ID strings or badge config
             dicts),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"heading"`` (the heading text) and ``"badge"`` (the
+            badge value text).  An omitted ``size`` keeps the
+            widget's derived size scaled by the display-level
+            ``font_scale``; an explicit ``size`` is absolute.  An
+            omitted ``weight`` keeps the role's default: heading
+            ``"medium"`` for the title style and ``"regular"`` for
+            the subtitle style, badge ``"regular"``),
             ``card_style``, ``x``, ``w``, ``h``.
-        config: Display config with ``width``, ``states``, and
-            ``display_levels``.
+        config: Display config with ``width``, ``states``,
+            ``display_levels``, and ``font_scale``.
 
     Returns:
         Template context dict consumed by ``heading.svg.j2``.
@@ -114,7 +124,9 @@ def _build_heading_context(
     """
     from ..render import (
         _compute_metrics,
-        _load_font,
+        _font_weight_svg,
+        _load_role_font,
+        resolve_font,
     )
 
     x = widget.get("x", PADDING)
@@ -129,6 +141,7 @@ def _build_heading_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
+    font_scale: float = config.get("font_scale", 1.0)
 
     m = _compute_metrics(svg_h)
     x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
@@ -136,11 +149,19 @@ def _build_heading_context(
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
-    # Heading style: title (default) = large black;
-    # subtitle = small gray.
+    # Heading style: title (default) = large black at the medium
+    # weight; subtitle = small gray at the regular weight.  Both
+    # resolve through the shared API so the widget's ``fonts``
+    # overrides and the display-level ``font_scale`` apply.
     is_title = heading_style != "subtitle"
-    font_sz = m.font_primary if is_title else m.font_secondary
-    font_weight = "500" if is_title else "400"
+    font_sz, heading_weight = resolve_font(
+        widget,
+        "heading",
+        m.font_primary if is_title else m.font_secondary,
+        FontWeight.MEDIUM if is_title else FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    font_weight = _font_weight_svg(heading_weight)
     colors = _color_context()
     text_fill = colors["hex_black"] if is_title else colors["hex_gray"]
 
@@ -188,9 +209,17 @@ def _build_heading_context(
 
     text_y = svg_h // 2
 
-    # Badge font and icon sizing.
-    badge_font_sz = m.font_secondary
-    badge_font = _load_font(badge_font_sz)
+    # Badge font and icon sizing.  The badge value text resolves
+    # through the shared API; the icon glyph tracks the resolved
+    # size so both stay visually matched.
+    badge_font_sz, badge_weight = resolve_font(
+        widget,
+        "badge",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    badge_font = _load_role_font(badge_font_sz, badge_weight)
     badge_icon_sz = badge_font_sz
 
     # Resolve badge states and compute widths.
@@ -285,7 +314,7 @@ def _build_heading_context(
         text_anchor = "end"
         text_x = badge_right
         if heading_text:
-            heading_font = _load_font(font_sz, medium=is_title)
+            heading_font = _load_role_font(font_sz, heading_weight)
             text_w = round(heading_font.getlength(heading_text))
             text_x = max(text_x - text_w, min_text_x) + text_w
 
@@ -330,4 +359,5 @@ def _build_heading_context(
         # Badges (pre-positioned, empty list when none fit).
         "badges": rendered_badges,
         "badge_font_sz": badge_font_sz,
+        "badge_font_weight": _font_weight_svg(badge_weight),
     }

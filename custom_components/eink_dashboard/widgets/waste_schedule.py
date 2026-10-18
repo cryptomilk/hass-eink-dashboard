@@ -23,6 +23,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -74,11 +75,19 @@ def _build_waste_schedule_context(
             ``entries`` (list of ``{"attribute": …, "label": …}``
             dicts), ``layout`` (``"list"`` or ``"card"``),
             ``show_all`` (``bool``, default ``False``),
-            ``bold_value`` (render the date text in bold; default
-            ``False``),
+            ``fonts`` (per-role font overrides — a mapping of
+            role name to ``{"size": int, "weight": str}``; roles
+            are ``"title"``, ``"primary"``, ``"secondary"``, and
+            ``"value"``.  An omitted ``size`` keeps the widget's
+            derived size scaled by the display-level
+            ``font_scale``; an explicit ``size`` is absolute.  An
+            omitted ``weight`` keeps the role's default: title
+            ``"regular"``, primary ``"medium"``, secondary and
+            value ``"regular"``),
             ``card_style``, ``title``, ``x``, ``w``, ``h``.
         config: Display config with ``states`` (entity ID →
-            state dict), ``display_levels``, and ``language``.
+            state dict), ``display_levels``, ``font_scale``, and
+            ``language``.
 
     Returns:
         Template context dict consumed by
@@ -89,9 +98,11 @@ def _build_waste_schedule_context(
     """
     from ..render import (
         _compute_metrics,
+        _font_weight_svg,
         _format_relative_date,
         _get_today,
         _parse_days_until,
+        resolve_font,
     )
 
     x = widget.get("x", PADDING)
@@ -103,7 +114,7 @@ def _build_waste_schedule_context(
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")
     show_all: bool = bool(widget.get("show_all", False))
-    value_bold: bool = widget.get("bold_value", False)
+
     language: str = config.get("language", "en")
     states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
@@ -164,12 +175,55 @@ def _build_waste_schedule_context(
         _auto_row_height(title, num_display_rows),
     )
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+    font_scale = config.get("font_scale", 1.0)
+    if title:
+        title_font_sz, title_weight = resolve_font(
+            widget,
+            "title",
+            title_font_sz,
+            FontWeight.REGULAR,
+            scale=font_scale,
+        )
+        # _title_layout reserves the band from the *default* title
+        # size (advance = 1.4 × size); re-derive it from the resolved
+        # size so an enlarged title keeps its clearance from the card
+        # content instead of overlapping the first row.
+        content_y = round(title_font_sz * 1.4)
+        content_h = svg_h - content_y
+    else:
+        title_weight = FontWeight.REGULAR
     # card layout always trims visible to one entry above, so
     # num_display_rows == 1 and the division is equivalent to
     # content_h.
     row_h = content_h // num_display_rows
 
     m = _compute_metrics(row_h)
+
+    # Per-role font resolution.  The defaults reproduce what the
+    # template rendered before the overrides existed: the title and
+    # the date text were Roboto Regular, the label Roboto Medium.
+    primary_font_sz, primary_weight = resolve_font(
+        widget,
+        "primary",
+        m.font_primary,
+        FontWeight.MEDIUM,
+        scale=font_scale,
+    )
+    secondary_font_sz, secondary_weight = resolve_font(
+        widget,
+        "secondary",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    value_font_sz, value_weight = resolve_font(
+        widget,
+        "value",
+        m.font_secondary,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+
     icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
     divider_stroke_w = m.divider * 3 if display_levels <= 2 else m.divider
     x_off, r_inset, bar_width = _card_insets(m, card_style, display_levels)
@@ -218,6 +272,7 @@ def _build_waste_schedule_context(
         "has_rows": True,
         "title": title,
         "title_font_sz": title_font_sz,
+        "title_weight": _font_weight_svg(title_weight),
         "content_y": content_y,
         "content_h": content_h,
         "card_style": card_style,
@@ -232,5 +287,12 @@ def _build_waste_schedule_context(
         "rpad": rpad,
         "icon_stroke_w": icon_stroke_w,
         "divider_stroke_w": divider_stroke_w,
-        "value_bold": value_bold,
+        # Per-role text sizes and SVG weight strings; ``card_row``
+        # renders the weights verbatim.
+        "primary_font_sz": primary_font_sz,
+        "primary_weight": _font_weight_svg(primary_weight),
+        "secondary_font_sz": secondary_font_sz,
+        "secondary_weight": _font_weight_svg(secondary_weight),
+        "value_font_sz": value_font_sz,
+        "value_weight": _font_weight_svg(value_weight),
     }

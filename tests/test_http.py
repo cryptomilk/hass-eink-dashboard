@@ -683,6 +683,30 @@ class TestEinkLayoutViewPost:
 
         assert hass.data[DOMAIN][entry.entry_id]["widgets"] == new_widgets
 
+    async def test_post_accepts_nested_object_field(
+        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
+    ) -> None:
+        # Nested objects are valid field values: the per-role "fonts"
+        # overrides are stored as an object and must round-trip.
+        widgets = [
+            {
+                "type": "entity",
+                "entity": "sensor.temperature",
+                "fonts": {"value": {"size": 40, "weight": "bold"}},
+            }
+        ]
+        entry = await _setup_entry(hass)
+        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity.async_request_refresh = AsyncMock()
+        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store.async_save = AsyncMock()
+
+        client = await hass_client()
+        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
+
+        assert resp.status == 200
+        store.async_save.assert_called_once_with(widgets)
+
     async def test_post_missing_entry_raises_404(
         self, hass: HomeAssistant, hass_client: ClientSessionGenerator
     ) -> None:
@@ -797,18 +821,6 @@ class TestEinkLayoutViewPost:
     ) -> None:
         # More than MAX_WIDGETS (200) entries returns 400.
         widgets = [{"type": "separator", "y": i} for i in range(201)]
-        entry = await _setup_entry(hass)
-
-        client = await hass_client()
-        resp = await client.post(_layout_url(entry.entry_id), json=widgets)
-
-        assert resp.status == 400
-
-    async def test_post_nested_dict_field_raises_400(
-        self, hass: HomeAssistant, hass_client: ClientSessionGenerator
-    ) -> None:
-        # A widget field value that is a nested dict returns 400.
-        widgets = [{"type": "heading", "heading": {"nested": "bad"}}]
         entry = await _setup_entry(hass)
 
         client = await hass_client()

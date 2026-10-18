@@ -38,6 +38,7 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -729,31 +730,91 @@ class TestRenderWasteSchedule:
 
     # ── Bold value tests ───────────────────────────────
 
-    def test_bold_value_list_layout(self) -> None:
-        # bold_value=True renders the right-aligned date value
-        # (list layout) with a bold font-weight attribute.
-        w = self._widget(bold_value=True)
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' in svg
-
-    def test_bold_value_card_layout(self) -> None:
-        # bold_value=True renders the secondary date line (card
-        # layout) with a bold font-weight attribute.
-        w = self._widget(layout="card", bold_value=True)
-        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
-            mock_dt.today.return_value = _TODAY
-            svg = render_widget_svg(w, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_default_value_not_bold(self) -> None:
-        # Without bold_value, neither layout renders a bold value.
+        # By default, neither layout renders a bold value.
         w = self._widget()
         with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
             mock_dt.today.return_value = _TODAY
             svg = render_widget_svg(w, self._config())
         assert 'font-weight="bold"' not in svg
+
+    # ── Font customization tests ───────────────────────
+
+    def test_waste_value_font_size_override(self) -> None:
+        # fonts.value.size enlarges the right-aligned date value in
+        # list layout relative to the widget's derived default size.
+        base = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            bigger = render_to_image(
+                [{**base, "fonts": {"value": {"size": 40}}}],
+                self._config(),
+            )
+        # The right half of the first row holds only the date value;
+        # the row divider below it sits at y = row_h.
+        region = (200, 0, 400, 48)
+        bbox_default = content_bbox(default, *region)
+        bbox_bigger = content_bbox(bigger, *region)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_waste_font_scale_enlarges_value(self) -> None:
+        # A display-level font_scale multiplies the derived date size
+        # without any per-widget override.
+        base = self._widget()
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            default = render_to_image([base], self._config())
+            scaled = render_to_image([base], self._config(font_scale=1.8))
+        region = (200, 0, 400, 48)
+        bbox_default = content_bbox(default, *region)
+        bbox_scaled = content_bbox(scaled, *region)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_waste_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" bolds the list-layout date value.
+        w = self._widget(fonts={"value": {"weight": "bold"}})
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_waste_fonts_secondary_weight_bold(self) -> None:
+        # fonts.secondary.weight="bold" bolds the card-layout date
+        # line and leaves the primary label at its medium face.
+        w = self._widget(
+            layout="card", fonts={"secondary": {"weight": "bold"}}
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert 'font-weight="bold"' in svg
+        assert 'font-weight="500"' in svg
+
+    def test_waste_title_font_override(self) -> None:
+        # fonts.title drives both the size and the weight of the
+        # title text rendered above the card.
+        w = self._widget(
+            title="Waste",
+            fonts={"title": {"size": 40, "weight": "bold"}},
+        )
+        with patch(_PATCH_NOW, wraps=dt.date) as mock_dt:
+            mock_dt.today.return_value = _TODAY
+            svg = render_widget_svg(w, self._config())
+        assert re.search(
+            r'<text[^>]*font-weight="bold"[^>]*font-size="40"[^>]*>'
+            r"Waste</text>",
+            svg,
+            re.S,
+        )
 
     # ── Auto-sizing tests ─────────────────────────────
 

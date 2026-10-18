@@ -672,23 +672,8 @@ class TestRenderEntity:
         name_h = name_bbox[3] - name_bbox[1]
         assert value_h > name_h
 
-    def test_entity_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the state value with a bold
-        # font-weight attribute in the SVG.
-        widget = {
-            "type": "entity",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 112,
-            "entity": "sensor.temperature",
-            "bold_value": True,
-        }
-        svg = render_widget_svg(widget, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_entity_default_value_not_bold(self) -> None:
-        # Without bold_value, the state value has no bold
+        # By default, the state value has no bold
         # font-weight attribute.
         widget = {
             "type": "entity",
@@ -1481,3 +1466,149 @@ class TestRenderEntity:
         m = re.search(r'height="(\d+)"', svg)
         assert m is not None
         assert int(m.group(1)) == 200
+
+    # ── Font customization tests ──────────────────────
+
+    def test_entity_value_font_size_override(self) -> None:
+        # fonts.value.size enlarges the black value glyphs relative
+        # to the widget's derived default size.
+        h = 224
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+            "hide_name": True,
+        }
+        text_x0, text_x1 = _content_x_range(400, h)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"value": {"size": 96}}}],
+            self._config(),
+        )
+        bbox_default = _band_bbox(default, text_x0, 0, text_x1, h, 0, 60)
+        bbox_bigger = _band_bbox(bigger, text_x0, 0, text_x1, h, 0, 60)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_entity_name_font_size_override(self) -> None:
+        # fonts.name.size enlarges the gray name glyphs.
+        h = 224
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+        }
+        text_x0, text_x1 = _content_x_range(400, h)
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"name": {"size": 40}}}],
+            self._config(),
+        )
+        bbox_default = _band_bbox(default, text_x0, 0, text_x1, h, 100, 140)
+        bbox_bigger = _band_bbox(bigger, text_x0, 0, text_x1, h, 100, 140)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_entity_fonts_value_weight_bold(self) -> None:
+        # fonts.value.weight="bold" renders the value in bold.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.temperature",
+            "fonts": {"value": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_entity_fonts_name_weight_bold(self) -> None:
+        # fonts.name.weight="bold" overrides the name's default
+        # medium weight.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.temperature",
+            "fonts": {"name": {"weight": "bold"}},
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="bold"' in svg
+
+    def test_entity_name_default_weight_is_medium(self) -> None:
+        # Without overrides the name renders at the medium (500)
+        # weight the template has always used.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 224,
+            "entity": "sensor.temperature",
+        }
+        svg = render_widget_svg(widget, self._config())
+        assert 'font-weight="500"' in svg
+
+    def test_entity_font_scale_enlarges_value(self) -> None:
+        # A display-level font_scale multiplies the derived value
+        # size without any per-widget override.
+        h = 224
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.no_class",
+            "hide_name": True,
+        }
+        text_x0, text_x1 = _content_x_range(400, h)
+        default = render_to_image([base], self._config())
+        scaled = render_to_image([base], self._config(font_scale=1.8))
+        bbox_default = _band_bbox(default, text_x0, 0, text_x1, h, 0, 60)
+        bbox_scaled = _band_bbox(scaled, text_x0, 0, text_x1, h, 0, 60)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_entity_explicit_size_ignores_font_scale(self) -> None:
+        # An explicit fonts.value.size is absolute: the display-level
+        # font_scale must not multiply it.
+        h = 224
+        base = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.no_class",
+            "hide_name": True,
+            "fonts": {"value": {"size": 40}},
+        }
+        text_x0, text_x1 = _content_x_range(400, h)
+        plain = render_to_image([base], self._config())
+        scaled = render_to_image([base], self._config(font_scale=1.8))
+        bbox_plain = _band_bbox(plain, text_x0, 0, text_x1, h, 0, 60)
+        bbox_scaled = _band_bbox(scaled, text_x0, 0, text_x1, h, 0, 60)
+        assert bbox_plain is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) == (
+            bbox_plain[3] - bbox_plain[1]
+        )

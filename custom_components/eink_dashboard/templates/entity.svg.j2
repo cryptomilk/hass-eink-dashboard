@@ -42,9 +42,7 @@
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
-{%- if value_bold %}
-  font-weight="bold"
-{%- endif %}
+  font-weight="{{ value_weight }}"
   font-size="{{ value_font_sz }}"
   dominant-baseline="auto"
   fill="{{ hex_white if invert else hex_black }}">{{ value_text }}</text>
@@ -52,6 +50,7 @@
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
   font-family="Roboto"
+  font-weight="{{ unit_weight }}"
   font-size="{{ unit_font_sz }}"
   dominant-baseline="auto"
   fill="{{ hex_white if invert else hex_black }}">{{ unit_text }}</text>
@@ -62,7 +61,7 @@
 <text
   x="{{ name_x }}" y="{{ name_y }}"
   font-family="Roboto"
-  font-weight="500"
+  font-weight="{{ name_weight }}"
   font-size="{{ name_font_sz }}"
   text-anchor="{{ name_anchor }}"
   dominant-baseline="central"

@@ -50,14 +50,14 @@
 <g transform="translate({{ icon_x }}, {{ icon_y }})"
   style="color: {{ hex_black }}">{{ icon_svg }}</g>
 {%- endif -%}
-{# Value text centred at the arc centre. Unlike other widgets, the
-   default (non-bold) weight here is medium (500), not the browser
-   default, so the fallback must be explicit rather than omitted. #}
+{# Value text centred at the arc centre.  Unlike other widgets, the
+   default weight here is medium (500), not the browser default, so
+   the context always supplies an explicit weight string. #}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
   font-family="Roboto"
   font-size="{{ value_font_sz }}"
-  font-weight="{{ 'bold' if value_bold else '500' }}"
+  font-weight="{{ value_weight }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_black }}">{{ formatted_val }}</text>
@@ -67,6 +67,7 @@
   x="{{ unit_x }}" y="{{ unit_y }}"
   font-family="Roboto"
   font-size="{{ unit_font_sz }}"
+  font-weight="{{ unit_weight }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
@@ -77,6 +78,7 @@
   x="{{ seg_label_x }}" y="{{ seg_label_y }}"
   font-family="Roboto"
   font-size="{{ seg_label_font_sz }}"
+  font-weight="{{ seg_label_weight }}"
   text-anchor="middle"
   dominant-baseline="hanging"
   fill="{{ hex_gray }}">{{ segment_label }}</text>
@@ -86,6 +88,7 @@
   x="{{ name_x }}" y="{{ name_y }}"
   font-family="Roboto"
   font-size="{{ name_font_sz }}"
+  font-weight="{{ name_weight }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>

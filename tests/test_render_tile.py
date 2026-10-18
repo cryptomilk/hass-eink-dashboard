@@ -37,6 +37,7 @@ from tests.helpers import (
     assert_has_gray_pixels,
     assert_scales_proportionally,
     assert_vertically_centered,
+    content_bbox,
     make_config,
     pixel,
     render_to_image,
@@ -491,23 +492,8 @@ class TestRenderTile:
             for x in range(text_left, 300)
         ), "state value text should be black (< 64)"
 
-    def test_tile_bold_value_renders_bold_weight(self) -> None:
-        # bold_value=True renders the secondary state line with a
-        # bold font-weight attribute in the SVG.
-        widget = {
-            "type": "tile",
-            "x": 0,
-            "y": 0,
-            "w": 400,
-            "h": 80,
-            "entity": "sensor.temperature",
-            "bold_value": True,
-        }
-        svg = render_widget_svg(widget, self._config())
-        assert 'font-weight="bold"' in svg
-
     def test_tile_default_value_not_bold(self) -> None:
-        # Without bold_value, the secondary state line has no bold
+        # By default, the secondary state line has no bold
         # font-weight attribute.
         widget = {
             "type": "tile",
@@ -1173,3 +1159,123 @@ class TestRenderTile:
             assert ctx["invert"] is False, (
                 f"state {excluded_state!r} must not invert"
             )
+
+    # ── Font customization tests ──────────────────────
+
+    def test_tile_fonts_primary_size_override(self) -> None:
+        # fonts.primary.size enlarges the entity name label.  The
+        # state line is hidden so the measured region isolates the
+        # primary text.
+        h = 80
+        m = _compute_metrics(h)
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+            "hide_state": True,
+        }
+        text_left = m.padding + m.icon_dia + m.inner_gap
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"primary": {"size": 40}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, text_left, 0, 400, h)
+        bbox_bigger = content_bbox(bigger, text_left, 0, 400, h)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_tile_fonts_primary_weight_bold(self) -> None:
+        # The entity name keeps its historical medium weight by
+        # default and honours a bold override.
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.temperature",
+        }
+        plain = render_widget_svg(base, self._config())
+        bold = render_widget_svg(
+            {**base, "fonts": {"primary": {"weight": "bold"}}},
+            self._config(),
+        )
+        assert 'font-weight="500"' in plain
+        assert 'font-weight="bold"' in bold
+
+    def test_tile_fonts_secondary_weight_bold(self) -> None:
+        # fonts.secondary.weight="bold" bolds the state line, and
+        # the primary label keeps its own weight.
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.temperature",
+        }
+        svg = render_widget_svg(
+            {**base, "fonts": {"secondary": {"weight": "bold"}}},
+            self._config(),
+        )
+        assert 'font-weight="bold"' in svg
+        assert 'font-weight="500"' in svg
+
+    def test_tile_fonts_secondary_size_override(self) -> None:
+        # fonts.secondary.size enlarges the state line below the
+        # entity name.  The band below the primary text's baseline
+        # holds only the state line.
+        h = 80
+        m = _compute_metrics(h)
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+        }
+        text_left = m.padding + m.icon_dia + m.inner_gap
+        default = render_to_image([base], self._config())
+        bigger = render_to_image(
+            [{**base, "fonts": {"secondary": {"size": 40}}}],
+            self._config(),
+        )
+        bbox_default = content_bbox(default, text_left, 40, 400, h)
+        bbox_bigger = content_bbox(bigger, text_left, 40, 400, h)
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_tile_font_scale_enlarges_state_line(self) -> None:
+        # A display-level font_scale multiplies both derived role
+        # sizes without any per-widget override.
+        h = 80
+        m = _compute_metrics(h)
+        base = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": h,
+            "entity": "sensor.temperature",
+        }
+        text_left = m.padding + m.icon_dia + m.inner_gap
+        default = render_to_image([base], self._config())
+        scaled = render_to_image([base], self._config(font_scale=1.8))
+        bbox_default = content_bbox(default, text_left, 0, 400, h)
+        bbox_scaled = content_bbox(scaled, text_left, 0, 400, h)
+        assert bbox_default is not None
+        assert bbox_scaled is not None
+        assert (bbox_scaled[3] - bbox_scaled[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )

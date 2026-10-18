@@ -20,11 +20,16 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
 from custom_components.eink_dashboard.const import (
+    COLOR_BLACK,
     COLOR_GRAY,
+    COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
+    FontWeight,
+    color_to_hex,
 )
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
+    _load_role_font,
     _month_abbrev,
     _weekday_abbrev,
     render_dashboard,
@@ -407,6 +412,123 @@ class TestRenderMeteogram:
         # match elsewhere in the SVG can't produce a false pass.
         assert re.search(r'<path[^>]*fill="none"', svg) is not None
 
+    def test_meteogram_curve_black_on_2level(self) -> None:
+        # Regression test: on a 2-level (B&W) display every stop of
+        # the temperature gradient quantizes to white, which left
+        # the curve invisible. It must fall back to a solid black
+        # stroke with no gradient defined -- the same fallback the
+        # GRAPH widget uses for its lines on 2-level displays.
+        black_hex = color_to_hex(COLOR_BLACK)
+        svg = render_widget_svg(self._widget(), self._config(display_levels=2))
+        assert "<linearGradient" not in svg
+        assert (
+            re.search(rf'<path[^>]*fill="none"[^>]*stroke="{black_hex}"', svg)
+            is not None
+        )
+
+    def test_meteogram_curve_keeps_gradient_on_grayscale(self) -> None:
+        # On a grayscale display (>2 levels) the temperature
+        # gradient still applies, converted to gray stops by
+        # _maybe_grayscale_stops() -- only 2-level displays lose it.
+        svg = render_widget_svg(self._widget(), self._config())
+        assert '<linearGradient id="mgTempGradient"' in svg
+        assert 'stroke="url(#mgTempGradient)"' in svg
+
+    def test_meteogram_line_width_default_is_height_derived(self) -> None:
+        # Omitting line_width keeps the original height-proportional
+        # stroke, so existing configs render unchanged: 3px at the
+        # default h=260.
+        svg = render_widget_svg(self._widget(), self._config())
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="3"', svg)
+            is not None
+        )
+
+    def test_meteogram_line_width_override(self) -> None:
+        # line_width sets the curve stroke width in pixels, like the
+        # GRAPH widget's option of the same name.
+        svg = render_widget_svg(self._widget(line_width=5), self._config())
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="5"', svg)
+            is not None
+        )
+
+    def test_meteogram_line_width_doubled_on_2level(self) -> None:
+        # 2-level displays double the stroke, as GRAPH's do.
+        svg = render_widget_svg(
+            self._widget(line_width=3), self._config(display_levels=2)
+        )
+        assert (
+            re.search(r'<path[^>]*fill="none"[^>]*stroke-width="6"', svg)
+            is not None
+        )
+
+    def test_meteogram_smoothing_false_draws_polyline(self) -> None:
+        # smoothing=false replaces the midpoint Q-curve path with a
+        # straight-segment polyline, mirroring GRAPH's option.
+        svg = render_widget_svg(self._widget(smoothing=False), self._config())
+        assert "<polyline" in svg
+        assert re.search(r'<path[^>]*fill="none"', svg) is None
+
+    def test_meteogram_show_fill_toggle(self) -> None:
+        # No fill is drawn by default -- the pre-option rendering --
+        # and show_fill=true adds the light-gray area below the
+        # curve. The cloud band shares the color but carries a
+        # fill-opacity attribute, so the attribute-free fill is the
+        # curve's own.
+        fill = rf'fill="{color_to_hex(COLOR_LIGHT_GRAY)}"\s+stroke="none"'
+        default_svg = render_widget_svg(self._widget(), self._config())
+        filled = render_widget_svg(
+            self._widget(show_fill=True), self._config()
+        )
+        assert re.search(fill, default_svg) is None
+        assert re.search(fill, filled) is not None
+        assert re.search(r'<path[^>]*fill="none"', filled) is not None
+
+    def test_meteogram_day_label_format_weekday_abbrev(self) -> None:
+        # day_label_format="weekday_abbrev" renders just the short
+        # weekday ("Sat"), dropping the month and day number.
+        svg = render_widget_svg(
+            self._widget(day_label_format="weekday_abbrev"),
+            self._config(),
+        )
+        assert ">Sat</text>" in svg
+        assert "May 2" not in svg
+
+    def test_meteogram_day_label_format_weekday_wide(self) -> None:
+        # day_label_format="weekday_wide" renders the full weekday
+        # ("Saturday").
+        svg = render_widget_svg(
+            self._widget(day_label_format="weekday_wide"),
+            self._config(),
+        )
+        assert ">Saturday</text>" in svg
+        assert "May 2" not in svg
+
+    def test_meteogram_day_label_format_month_day(self) -> None:
+        # day_label_format="month_day" renders the month and day
+        # without the weekday ("May 2").
+        svg = render_widget_svg(
+            self._widget(day_label_format="month_day"),
+            self._config(),
+        )
+        assert ">May 2</text>" in svg
+        assert ">Sat" not in svg
+
+    def test_meteogram_day_label_format_localized(self) -> None:
+        # The full weekday and month-day formats resolve through
+        # CLDR data, so a German display reads "Samstag" / "Mai 2".
+        wide_svg = render_widget_svg(
+            self._widget(day_label_format="weekday_wide"),
+            self._config(language="de"),
+        )
+        assert ">Samstag</text>" in wide_svg
+        month_day_svg = render_widget_svg(
+            self._widget(day_label_format="month_day"),
+            self._config(language="de"),
+        )
+        assert ">Mai 2</text>" in month_day_svg
+
     def test_meteogram_grid_labels_clear_their_gridline(self) -> None:
         # Each Y-axis gridline label's baseline must sit above its
         # own gridline (smaller y, since SVG y grows downward), not
@@ -423,6 +545,27 @@ class TestRenderMeteogram:
         for line_y, label_y in pairs:
             assert int(label_y) < int(line_y)
 
+    def test_meteogram_grid_labels_clear_the_plot(self) -> None:
+        # Regression test: the chart (gridlines, curve, icons) used
+        # to be anchored at the same left edge as the Y-axis labels,
+        # so the labels rendered on top of it. Every gridline must
+        # now start to the right of the widest label's right edge.
+        svg = render_widget_svg(self._widget(), self._config())
+        pairs = re.findall(
+            r'<line x1="(\d+)" y1="\d+"\s+x2="\d+" y2="\d+"\s+'
+            r'stroke="[^"]*"\s+stroke-width="[^"]*"/>\s*'
+            r'<text x="(\d+)" y="\d+"\s+'
+            r'font-family="Roboto"\s+font-size="(\d+)"\s+'
+            r'font-weight="[^"]*"\s+dominant-baseline="auto"[^>]*>'
+            r"([^<]*)</text>",
+            svg,
+        )
+        assert pairs, "expected at least one Y-axis gridline/label pair"
+        for line_x, text_x, font_sz, label in pairs:
+            font = _load_role_font(int(font_sz), FontWeight.REGULAR)
+            right_edge = int(text_x) + round(font.getlength(label))
+            assert right_edge < int(line_x)
+
     def test_meteogram_icons_every_two_to_three_hours(self) -> None:
         # Condition icons appear every 2-3h, not once per hour, for
         # a 24h window. Weather icons are inlined with a fixed
@@ -438,8 +581,8 @@ class TestRenderMeteogram:
         assert 6 <= icon_count <= 12
 
     def test_meteogram_edge_hour_ticks_anchor_inward(self) -> None:
-        # The first/last hour tick always maps exactly to
-        # content_left/content_right, regardless of widget height --
+        # The first/last hour tick always maps exactly to the
+        # plot's left/right edges, regardless of widget height --
         # they anchor "start"/"end" instead of "middle" so their
         # label grows inward rather than straddling the plot edge.
         # Distinguishes them from every other label in the SVG (only
@@ -657,7 +800,7 @@ class TestRenderMeteogram:
 
     def test_meteogram_precip_bars_stay_within_content_bounds(self) -> None:
         # Precipitation at the very first/last plotted hour maps to
-        # content_left/content_right exactly; the bar must be
+        # the plot's left/right edges exactly; the bar must be
         # clamped so it doesn't overhang past those edges into the
         # card border.
         widget = self._widget(entity="weather.edge_precip")
@@ -774,8 +917,8 @@ class TestRenderMeteogram:
         )
 
     def test_meteogram_precip_labels_within_content_bounds(self) -> None:
-        # Precipitation at hours 0 and 24 places bars right at
-        # content_left/content_right, centered exactly on the
+        # Precipitation at hours 0 and 24 places bars right at the
+        # plot's left/right edges, centered exactly on the
         # boundary. A center-anchored label there is wider than the
         # bar itself, so it would overhang past the card border --
         # both edge labels must be suppressed while their bars still
@@ -793,6 +936,96 @@ class TestRenderMeteogram:
         )
         assert bar_count == 2
         assert label_count == 0
+
+    # ── Font customization tests ──────────────────────
+
+    def _lowest_gridline_ys(self, svg: str) -> tuple[int, int]:
+        """Return the lowest Y-axis gridline's y and the next one up.
+
+        Args:
+            svg: Rendered meteogram SVG.
+
+        Returns:
+            ``(lowest_y, next_y_up)``, both from the gridline
+            elements the template emits (day-boundary lines carry a
+            ``stroke-dasharray`` and are therefore not matched).
+        """
+        ys = sorted(
+            int(y)
+            for y in re.findall(
+                r'<line x1="\d+" y1="(\d+)"\s+x2="\d+" y2="\d+"\s+'
+                r'stroke="[^"]*"\s+stroke-width="[^"]*"/>',
+                svg,
+            )
+        )
+        assert len(ys) >= 2, "expected at least two Y-axis gridlines"
+        return ys[-1], ys[-2]
+
+    def test_meteogram_grid_font_size_override(self) -> None:
+        # fonts.grid.size enlarges the Y-axis gridline labels. The
+        # band between the lowest gridline and the one above it
+        # isolates that gridline's own label: no other text, curve,
+        # bar, or band draws there (the lowest gridline sits below
+        # the temperature minimum by construction).
+        base = self._widget()
+        override = {**base, "fonts": {"grid": {"size": 40}}}
+        grid_y, next_y_up = self._lowest_gridline_ys(
+            render_widget_svg(base, self._config())
+        )
+        m = _compute_metrics(DEFAULT_ROW_H)
+        x_off, _r_inset, _bar_width = _card_insets(m, "none", 16)
+        content_left = x_off + (m.padding if x_off == 0 else 0)
+        # Stop 9px above the gridline itself (the label's baseline
+        # sits one row_gap above it) so the line's own pixels stay
+        # out of the bbox.
+        region = (content_left, next_y_up + 2, content_left + 200, grid_y - 9)
+        bbox_default = content_bbox(
+            render_to_image([base], self._config()), *region
+        )
+        bbox_bigger = content_bbox(
+            render_to_image([override], self._config()), *region
+        )
+        assert bbox_default is not None
+        assert bbox_bigger is not None
+        assert (bbox_bigger[2] - bbox_bigger[0]) > (
+            bbox_default[2] - bbox_default[0]
+        )
+        assert (bbox_bigger[3] - bbox_bigger[1]) > (
+            bbox_default[3] - bbox_default[1]
+        )
+
+    def test_meteogram_fonts_day_weight_bold(self) -> None:
+        # fonts.day.weight="bold" renders the day labels bold.
+        # weather.no_precip draws no precipitation labels, the only
+        # role that is bold by default, so the baseline SVG proves
+        # the attribute comes from the override and not from precip.
+        base = self._widget(entity="weather.no_precip")
+        default_svg = render_widget_svg(base, self._config())
+        assert 'font-weight="bold"' not in default_svg
+        bold_svg = render_widget_svg(
+            {**base, "fonts": {"day": {"weight": "bold"}}}, self._config()
+        )
+        assert 'font-weight="bold"' in bold_svg
+
+    def test_meteogram_fonts_precip_weight_regular(self) -> None:
+        # fonts.precip.weight="regular" drops the bold weight the
+        # precipitation amount labels render with by default, while
+        # the labels themselves still draw.
+        default_svg = render_widget_svg(self._widget(), self._config())
+        assert 'font-weight="bold"' in default_svg
+        regular_svg = render_widget_svg(
+            self._widget(fonts={"precip": {"weight": "regular"}}),
+            self._config(),
+        )
+        assert 'font-weight="bold"' not in regular_svg
+        assert (
+            re.search(
+                r'<text[^>]*font-weight="400"[^>]*text-anchor="middle"[^>]*'
+                r'dominant-baseline="auto"[^>]*>1.5</text>',
+                regular_svg,
+            )
+            is not None
+        )
 
 
 class TestPruneOverlappingDayMarkers:
