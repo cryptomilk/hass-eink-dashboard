@@ -135,6 +135,21 @@ loads `fonts/Roboto/Roboto-Regular.ttf` (or `Roboto-Medium.ttf` when
 `medium=True`, or `Roboto-Bold.ttf` when `bold=True`; `bold` takes
 precedence over `medium`), falling back to PIL's built-in default.
 
+**Font customization**: every widget supports per-role font overrides
+via a `fonts` widget key — a mapping of role name to
+`{"size": int, "weight": str}` where weight is
+`"regular"`/`"medium"`/`"bold"` (`FontWeight` in `const.py`). Role names
+are widget-specific (e.g. entity uses `value`/`name`/`unit`). Resolve
+them with `resolve_font(widget, role, default_size, default_weight,
+scale=…)` in `render.py`; an explicit `size` is absolute, an omitted
+size is multiplied by the display-level `font_scale`. Always measure
+with `_load_role_font(size, weight)` so PIL's measured advance matches
+the rendered SVG face, and pass `_font_weight_svg(weight)` into the
+template's `font-weight`. The legacy `bold_value` boolean remains the
+default BOLD weight for the value role. The `card_row`/`widget_title`
+macros take SVG weight strings (`primary_weight`/`secondary_weight`/
+`value_weight`/`weight`), where `""` omits the attribute.
+
 **Localization**: Weekday/month abbreviations (`_weekday_abbrev`,
 `_month_abbrev` in `render.py`) use `babel.dates.format_date` against
 CLDR data, falling back from the full locale to its primary subtag

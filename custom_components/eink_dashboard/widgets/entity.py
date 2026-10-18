@@ -28,6 +28,7 @@ from ..const import (
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
+    FontWeight,
     Widget,
     color_to_hex,
 )
@@ -82,7 +83,16 @@ def _build_entity_context(
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
             ``"none"``),
             ``bold_value`` (render the state value in bold;
-            default ``False``),
+            default ``False``; legacy alias for
+            ``fonts.value.weight: "bold"``),
+            ``fonts`` (per-role font overrides — a mapping of role
+            name to ``{"size": int, "weight": str}``; roles are
+            ``"value"``, ``"name"``, and ``"unit"``.  An omitted
+            ``size`` keeps the widget's derived size scaled by the
+            display-level ``font_scale``; an explicit ``size`` is
+            absolute.  An omitted ``weight`` keeps the role's
+            default: value ``"regular"``, name ``"medium"``, unit
+            ``"regular"``),
             ``name_position`` (``"top"`` / ``"bottom"``; default
             ``"bottom"`` — position of the name relative to the
             value+unit line),
@@ -105,7 +115,12 @@ def _build_entity_context(
         metrics, colors, icon geometry, value/unit/name text and
         geometry, and the ``invert`` flag.
     """
-    from ..render import _compute_metrics, _load_font
+    from ..render import (
+        _compute_metrics,
+        _font_weight_svg,
+        _load_role_font,
+        resolve_font,
+    )
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -233,11 +248,32 @@ def _build_entity_context(
     # Font ratios are expressed against the same single-row-equivalent
     # height as the icon (see m_icon above) so the value reads as a
     # headline number sized comparably to the icon next to it, not a
-    # small caption dwarfed by it.
+    # small caption dwarfed by it.  Each role then passes through
+    # resolve_font so the widget's ``fonts`` overrides and the
+    # display-level ``font_scale`` can adjust size and weight.
     row_ref = svg_h // 2
-    value_font_sz = max(10, round(row_ref * 0.42))
-    unit_font_sz = max(10, round(row_ref * 0.22))
-    name_font_sz = max(10, round(row_ref * 0.20))
+    font_scale = config.get("font_scale", 1.0)
+    value_font_sz, value_weight = resolve_font(
+        widget,
+        "value",
+        max(10, round(row_ref * 0.42)),
+        FontWeight.BOLD if value_bold else FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    unit_font_sz, unit_weight = resolve_font(
+        widget,
+        "unit",
+        max(10, round(row_ref * 0.22)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    name_font_sz, name_weight = resolve_font(
+        widget,
+        "name",
+        max(10, round(row_ref * 0.20)),
+        FontWeight.MEDIUM,
+        scale=font_scale,
+    )
 
     # Value and name are stacked tightly (small line gap, mirroring
     # card_row's primary/secondary spacing) and the whole two-line
@@ -259,9 +295,7 @@ def _build_entity_context(
     value_x = text_x0
     unit_x = value_x
     if unit_text:
-        value_font = _load_font(
-            value_font_sz, medium=not value_bold, bold=value_bold
-        )
+        value_font = _load_role_font(value_font_sz, value_weight)
         text_w = round(value_font.getlength(value_text))
         unit_gap = max(2, round(svg_h * 0.02))
         unit_x = value_x + text_w + unit_gap
@@ -301,16 +335,18 @@ def _build_entity_context(
         "value_x": value_x,
         "value_y": value_y,
         "value_font_sz": value_font_sz,
-        "value_bold": value_bold,
+        "value_weight": _font_weight_svg(value_weight),
         "unit_text": unit_text,
         "unit_x": unit_x,
         "unit_y": unit_y,
         "unit_font_sz": unit_font_sz,
+        "unit_weight": _font_weight_svg(unit_weight),
         # Name.
         "hide_name": hide_name,
         "name_text": name_text,
         "name_x": name_x,
         "name_y": name_y,
         "name_font_sz": name_font_sz,
+        "name_weight": _font_weight_svg(name_weight),
         "name_anchor": name_anchor,
     }
