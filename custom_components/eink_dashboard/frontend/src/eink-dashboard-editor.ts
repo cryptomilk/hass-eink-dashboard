@@ -432,6 +432,23 @@ function boldValueSelector(): HaFormSchema {
 }
 
 /**
+ * Decimal-places number input.
+ *
+ * Overrides HA's `display_precision` and device-class defaults when
+ * set; left empty, the widget falls back to those.
+ *
+ * @returns A single ha-form schema entry.
+ */
+function decimalsSelector(): HaFormSchema {
+  return {
+    name: "decimals",
+    selector: {
+      number: { min: 0, max: 4, mode: "box" },
+    },
+  };
+}
+
+/**
  * Maximum list row height in pixels.
  *
  * Rows never grow beyond this, and it sets the row size when the
@@ -858,6 +875,7 @@ export const SCHEMAS: Record<
           selector: { boolean: {} },
         },
         { name: "state_content", selector: { text: {} } },
+        decimalsSelector(),
       ],
     },
     {
@@ -909,6 +927,7 @@ export const SCHEMAS: Record<
         },
         { name: "attribute", selector: { text: {} } },
         { name: "unit", selector: { text: {} } },
+        decimalsSelector(),
       ],
     },
     {
@@ -950,6 +969,7 @@ export const SCHEMAS: Record<
           name: "entities",
           selector: { entity: { multiple: true } },
         },
+        decimalsSelector(),
       ],
     },
     {
@@ -1103,6 +1123,7 @@ export const SCHEMAS: Record<
           selector: { boolean: {} },
         },
         { name: "unit", selector: { text: {} } },
+        decimalsSelector(),
         {
           name: "graph",
           selector: {
@@ -1343,12 +1364,7 @@ export const SCHEMAS: Record<
           default: true,
           selector: { boolean: {} },
         },
-        {
-          name: "decimals",
-          selector: {
-            number: { min: 0, max: 4, mode: "box" },
-          },
-        },
+        decimalsSelector(),
         {
           name: "gauge_type",
           default: "standard",
@@ -1430,6 +1446,7 @@ export const SCHEMAS: Record<
         { name: "name", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
         { name: "unit", selector: { text: {} } },
+        decimalsSelector(),
         {
           name: "data_source",
           default: "history",

@@ -29,6 +29,9 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import _card_insets
+from custom_components.eink_dashboard.widgets.sensor import (
+    _build_sensor_context,
+)
 from tests.helpers import (
     _right_icon_ring_region,
     assert_all_white,
@@ -516,6 +519,49 @@ class TestRenderSensor:
         assert with_unit != without_unit, (
             "unit_of_measurement should change rendered output"
         )
+
+    def test_sensor_decimals_overrides_default_precision(self) -> None:
+        # decimals=0 rounds the displayed value to a whole number,
+        # overriding the default capped-at-1 formatting.
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.temperature",
+            "decimals": 0,
+        }
+        ctx = _build_sensor_context(widget, self._config())
+        assert ctx["value_text"] == "22"
+
+    def test_sensor_humidity_uses_device_class_default_precision(
+        self,
+    ) -> None:
+        # With no widget decimals= and no HA display_precision, a
+        # humidity entity falls back to the device-class default of
+        # 0 decimals, matching HA's own whole-percent display.
+        states = {
+            **MOCK_SENSOR_CARD_STATES,
+            "sensor.humidity": {
+                "state": "48.2",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+            },
+        }
+        widget = {
+            "type": "sensor",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.humidity",
+        }
+        ctx = _build_sensor_context(widget, self._config(states=states))
+        assert ctx["value_text"] == "48"
 
     def test_sensor_unit_override(self) -> None:
         # unit= overrides the automatically detected unit.

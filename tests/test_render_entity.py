@@ -797,6 +797,75 @@ class TestRenderEntity:
             "unit= override should change rendered output"
         )
 
+    def test_entity_decimals_overrides_default_precision(self) -> None:
+        # decimals=0 rounds the displayed value to a whole number,
+        # overriding the default capped-at-1 formatting.
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.temperature",
+            "decimals": 0,
+        }
+        ctx = _build_entity_context(widget, self._config())
+        assert ctx["value_text"] == "22"
+
+    def test_entity_decimals_allows_more_than_one(self) -> None:
+        # decimals=2 preserves two decimal places, bypassing the
+        # default 1-decimal cap.
+        states = {
+            **MOCK_ENTITY_STATES,
+            "sensor.temperature": {
+                "state": "22.456",
+                "attributes": {
+                    "friendly_name": "Living Room",
+                    "device_class": "temperature",
+                    "unit_of_measurement": "°C",
+                },
+            },
+        }
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.temperature",
+            "decimals": 2,
+        }
+        ctx = _build_entity_context(widget, self._config(states=states))
+        assert ctx["value_text"] == "22.46"
+
+    def test_entity_humidity_uses_device_class_default_precision(
+        self,
+    ) -> None:
+        # With no widget decimals= and no HA display_precision, a
+        # humidity entity falls back to the device-class default of
+        # 0 decimals, matching HA's own whole-percent display.
+        states = {
+            **MOCK_ENTITY_STATES,
+            "sensor.humidity": {
+                "state": "48.2",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+            },
+        }
+        widget = {
+            "type": "entity",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 112,
+            "entity": "sensor.humidity",
+        }
+        ctx = _build_entity_context(widget, self._config(states=states))
+        assert ctx["value_text"] == "48"
+
     def test_entity_unit_positioned_right_of_value(self) -> None:
         # The unit extends the black value+unit block further right
         # than the value renders alone — proving the unit is placed

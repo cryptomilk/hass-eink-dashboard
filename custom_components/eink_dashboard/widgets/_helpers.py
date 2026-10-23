@@ -325,6 +325,49 @@ def _resolve_precision(
     return None
 
 
+def _format_value_unit(
+    state_val: str,
+    attrs: dict[str, Any],
+    config: DisplayConfig,
+    precision: int | None,
+    attribute: str | None,
+    unit_override: object,
+) -> tuple[str, str]:
+    """Format an entity's display value and unit strings.
+
+    Shows an attribute's value instead of the entity state when
+    ``attribute`` is given, falling back to ``"unknown"`` when that
+    attribute is absent or empty.
+
+    Args:
+        state_val: The entity's raw state string.
+        attrs: The entity's ``attributes`` dict.
+        config: Display config, passed through to :func:`_fmt`.
+        precision: Exact decimal places to show, or ``None`` for
+            :func:`_fmt`'s default capped-at-1 rule.
+        attribute: HA attribute key to display instead of state, or
+            ``None`` to use the entity state.
+        unit_override: Widget-configured unit override, or ``None``
+            to auto-detect ``unit_of_measurement`` from ``attrs``.
+
+    Returns:
+        A ``(value_text, unit_text)`` tuple.
+    """
+    if attribute is not None:
+        raw_val = attrs.get(attribute)
+        value_text = (
+            _fmt(str(raw_val), config, precision)
+            if raw_val is not None and raw_val != ""
+            else "unknown"
+        )
+        auto_unit = ""
+    else:
+        value_text = _fmt(state_val, config, precision)
+        auto_unit = attrs.get("unit_of_measurement", "")
+    unit_text = str(unit_override) if unit_override is not None else auto_unit
+    return value_text, unit_text
+
+
 def _card_insets(
     m: WidgetMetrics,
     card_style: str,
@@ -726,7 +769,7 @@ def _entity_info_context(
         widget: Widget config dict.  Recognised keys: ``entity``,
             ``name``, ``icon``, ``unit``, ``hide_icon``,
             ``hide_name``, ``icon_style``, ``card_style``,
-            ``bold_value``.
+            ``bold_value``, ``decimals``.
         config: Display config with ``states`` and
             ``display_levels``.
         section_h: Height of the entity info section in pixels.
@@ -783,6 +826,7 @@ def _entity_info_context(
     attrs = state.get("attributes", {})
     domain = entity_id.split(".")[0]
     state_val: str = state.get("state", "")
+    precision = _resolve_precision(widget, state)
 
     name_text: str = (
         str(name_override)
@@ -790,20 +834,8 @@ def _entity_info_context(
         else attrs.get("friendly_name", entity_id)
     )
 
-    # Value: show attribute value when requested, else entity state.
-    if attribute is not None:
-        raw_val = attrs.get(attribute)
-        value_text = (
-            _fmt(str(raw_val), config)
-            if raw_val is not None and raw_val != ""
-            else "unknown"
-        )
-        auto_unit = ""
-    else:
-        value_text = _fmt(state_val, config)
-        auto_unit = attrs.get("unit_of_measurement", "")
-    unit_text: str = (
-        str(unit_override) if unit_override is not None else auto_unit
+    value_text, unit_text = _format_value_unit(
+        state_val, attrs, config, precision, attribute, unit_override
     )
 
     # Icon resolution: explicit override → device_class → attrs icon.

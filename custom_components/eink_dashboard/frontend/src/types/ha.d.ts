@@ -580,6 +580,12 @@ export interface TileWidget extends WidgetBase {
   /** When true, renders the secondary state line in bold. */
   bold_value?: boolean;
   /**
+   * Exact number of decimal places to show for the secondary
+   * state value. Overrides HA's `display_precision` and
+   * device-class defaults when set.
+   */
+  decimals?: number;
+  /**
    * HA conditions that trigger inverted rendering (black card,
    * white text) as an e-ink attention signal. Same condition
    * format as `visibility`. The tile renders inverted when the
@@ -713,6 +719,12 @@ export interface EntitiesWidget extends WidgetBase {
   /** When true, renders each row's state value in bold. */
   bold_value?: boolean;
   /**
+   * Exact number of decimal places to show for every row's value.
+   * Overrides HA's `display_precision` and device-class defaults
+   * when set.
+   */
+  decimals?: number;
+  /**
    * Stroke width in pixels of the light-gray dividers between rows,
    * applied on every display type.  ``0`` hides the dividers.
    * Default: 1.
@@ -767,6 +779,12 @@ export interface EntityWidget extends WidgetBase {
   icon_style?: IconStyle;
   /** When true, renders the state value in bold. */
   bold_value?: boolean;
+  /**
+   * Exact number of decimal places to show for the value.
+   * Overrides HA's `display_precision` and device-class defaults
+   * when set.
+   */
+  decimals?: number;
   /**
    * Position of the name relative to the value+unit line.
    * Defaults to `"bottom"`.
@@ -857,6 +875,12 @@ export interface SensorWidget extends WidgetBase {
   icon_style?: IconStyle;
   /** When true, renders the state value in bold. */
   bold_value?: boolean;
+  /**
+   * Exact number of decimal places to show for the value.
+   * Overrides HA's `display_precision` and device-class defaults
+   * when set.
+   */
+  decimals?: number;
 }
 
 /** One threshold-based color band on the gauge track. */
@@ -1280,6 +1304,12 @@ export interface GraphWidget extends WidgetBase {
   threshold_4_shade?: "black" | "dark" | "medium" | "light";
   /** When true, renders the header value text in bold. */
   bold_value?: boolean;
+  /**
+   * Exact number of decimal places to show for the header
+   * value(s). Overrides HA's `display_precision` and device-class
+   * defaults when set.
+   */
+  decimals?: number;
 }
 
 /** Hourly temperature curve with forecast icons and day markers. */

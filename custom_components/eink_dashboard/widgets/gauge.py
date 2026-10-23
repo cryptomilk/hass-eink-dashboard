@@ -36,6 +36,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_precision,
     _widget_dim,
 )
 
@@ -191,7 +192,9 @@ def _build_gauge_context(
             ``max`` (maximum value; default 100),
             ``unit`` (unit string override),
             ``show_unit`` (display unit; default ``True``),
-            ``decimals`` (decimal places to display),
+            ``decimals`` (exact number of decimal places to
+            display; overrides HA's ``display_precision`` and
+            device-class defaults),
             ``attribute`` (HA attribute key to display instead of
             state),
             ``needle`` (needle-dot mode; default ``False``),
@@ -232,7 +235,6 @@ def _build_gauge_context(
     icon_override = widget.get("icon")
     unit_override = widget.get("unit")
     show_unit: bool = bool(widget.get("show_unit", True))
-    decimals = widget.get("decimals")
     attribute: str | None = widget.get("attribute")
     value_bold: bool = widget.get("bold_value", False)
 
@@ -255,15 +257,8 @@ def _build_gauge_context(
     else:
         state_val = str(state.get("state", "0"))
 
-    # Apply optional decimal rounding before locale formatting.
-    if decimals is not None:
-        try:
-            rounded = f"{float(state_val):.{int(decimals)}f}"
-        except (ValueError, TypeError):
-            rounded = state_val
-    else:
-        rounded = state_val
-    formatted_val = _fmt(rounded, config)
+    precision = _resolve_precision(widget, state)
+    formatted_val = _fmt(state_val, config, precision)
 
     # --- Unit ---
     if show_unit:

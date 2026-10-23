@@ -27,6 +27,9 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets.entities import (
+    _build_entities_context,
+)
 from tests.helpers import (
     _icon_ring_region,
     assert_all_white,
@@ -587,6 +590,49 @@ class TestRenderEntities:
         # Right quarter of the widget (x > 300) should contain
         # dark pixels from the state value text.
         assert_has_dark_pixels(img, 300, 0, 390, 56)
+
+    def test_entities_decimals_overrides_default_precision(self) -> None:
+        # decimals=0 rounds every row's value to a whole number,
+        # overriding the default capped-at-1 formatting.
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entities": ["sensor.temperature"],
+            "decimals": 0,
+        }
+        ctx = _build_entities_context(widget, self._config())
+        assert ctx["rows"][0]["value"] == "22°C"
+
+    def test_entities_humidity_uses_device_class_default_precision(
+        self,
+    ) -> None:
+        # With no widget decimals= and no HA display_precision, a
+        # humidity entity falls back to the device-class default of
+        # 0 decimals, matching HA's own whole-percent display.
+        states = {
+            **MOCK_ENTITIES_STATES,
+            "sensor.humidity": {
+                "state": "48.2",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+            },
+        }
+        widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entities": ["sensor.humidity"],
+        }
+        ctx = _build_entities_context(widget, self._config(states=states))
+        assert ctx["rows"][0]["value"] == "48%"
 
     def test_entities_object_row_entity_key(self) -> None:
         # Entity row given as an object {entity, name?, icon?}

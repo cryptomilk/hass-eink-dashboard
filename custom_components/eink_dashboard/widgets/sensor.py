@@ -70,6 +70,9 @@ def _build_sensor_context(
             the info section; default ``False``),
             ``bold_value`` (render the value text in bold; default
             ``False``),
+            ``decimals`` (exact number of decimal places to show;
+            overrides HA's ``display_precision`` and device-class
+            defaults),
             ``hide_icon`` (suppress the icon; default ``False``),
             ``hide_name`` (suppress the entity name text; default
             ``False``),

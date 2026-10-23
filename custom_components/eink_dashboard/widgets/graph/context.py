@@ -32,6 +32,7 @@ from .._helpers import (
     _color_context,
     _entity_info_context,
     _fmt,
+    _resolve_precision,
     _widget_dim,
 )
 from .colors import _BAR_FILL_COLORS, _normalize_thresholds
@@ -179,6 +180,9 @@ def _combined_state_text(
             override key. When set, it replaces every entity's
             auto-detected ``unit_of_measurement``, matching the
             single-entity behaviour in ``_entity_info_context``.
+            Also consulted for ``decimals``, which overrides each
+            entity's HA ``display_precision`` and device-class
+            default.
 
     Returns:
         The joined string of every entity with a usable (non-empty,
@@ -206,7 +210,8 @@ def _combined_state_text(
         )
         if unit_override is not None:
             unit = str(unit_override)
-        formatted = _fmt(state_val, config)
+        precision = _resolve_precision(widget, st)
+        formatted = _fmt(state_val, config, precision)
         parts.append(f"{formatted}{unit}" if unit else formatted)
     return " / ".join(parts) if parts else None
 
@@ -545,6 +550,9 @@ def _build_graph_context(
             ``smoothing`` and ``show_fill`` are ignored),
             ``bold_value`` (render the header value in bold;
             default ``False``),
+            ``decimals`` (exact number of decimal places to show
+            for the header value(s); overrides HA's
+            ``display_precision`` and device-class defaults),
             ``card_style``, ``x``, ``w``, ``h``.
         config: Display config with ``width``, ``states``,
             ``display_levels``, and optionally ``time_format``

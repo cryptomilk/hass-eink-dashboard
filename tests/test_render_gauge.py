@@ -23,6 +23,9 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets.gauge import (
+    _build_gauge_context,
+)
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
@@ -411,6 +414,60 @@ class TestRenderGauge:
         svg = render_widget_svg(widget, self._config())
         # 22.5 with 0 decimals is "22" or "23" depending on rounding.
         assert re.search(r"\b2[23]\b", svg) is not None
+
+    def test_gauge_decimals_allows_more_than_one(self) -> None:
+        # decimals=3 bypasses the default 1-decimal cap.
+        widget = self._base_widget(decimals=3)
+        ctx = _build_gauge_context(widget, self._config())
+        assert ctx["formatted_val"] == "22.500"
+
+    def test_gauge_respects_ha_display_precision(self) -> None:
+        # Without an explicit widget decimals=, HA's display_precision
+        # (injected into the state dict) controls rounding.
+        states = {
+            **MOCK_GAUGE_STATES,
+            "sensor.temperature": {
+                **MOCK_GAUGE_STATES["sensor.temperature"],
+                "display_precision": 0,
+            },
+        }
+        widget = self._base_widget()
+        ctx = _build_gauge_context(widget, self._config(states=states))
+        assert ctx["formatted_val"] == "22"
+
+    def test_gauge_decimals_overrides_ha_display_precision(self) -> None:
+        # Widget decimals= always wins over HA's display_precision.
+        states = {
+            **MOCK_GAUGE_STATES,
+            "sensor.temperature": {
+                **MOCK_GAUGE_STATES["sensor.temperature"],
+                "display_precision": 0,
+            },
+        }
+        widget = self._base_widget(decimals=2)
+        ctx = _build_gauge_context(widget, self._config(states=states))
+        assert ctx["formatted_val"] == "22.50"
+
+    def test_gauge_humidity_uses_device_class_default_precision(
+        self,
+    ) -> None:
+        # With no widget decimals= and no HA display_precision, a
+        # humidity entity falls back to the device-class default of
+        # 0 decimals, matching HA's own whole-percent display.
+        states = {
+            **MOCK_GAUGE_STATES,
+            "sensor.humidity": {
+                "state": "48.2",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+            },
+        }
+        widget = self._base_widget(entity="sensor.humidity")
+        ctx = _build_gauge_context(widget, self._config(states=states))
+        assert ctx["formatted_val"] == "48"
 
     def test_gauge_custom_min_max(self) -> None:
         # Custom min/max change the fill_pct calculation.

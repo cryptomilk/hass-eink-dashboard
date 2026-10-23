@@ -35,6 +35,7 @@ from ._helpers import (
     _metrics_context,
     _resolve_icon_style,
     _resolve_icon_svg,
+    _resolve_precision,
     _title_layout,
     _widget_dim,
 )
@@ -93,6 +94,9 @@ def _build_entities_context(
             the left padding; default ``False``),
             ``divider_width`` (fixed stroke in px for auto and
             explicit dividers; ``0`` hides the lines; default 1),
+            ``decimals`` (exact number of decimal places to show
+            for every row's value; overrides HA's
+            ``display_precision`` and device-class defaults),
             ``card_style``, ``x``, ``w``, ``h``.
             Entity rows never grow beyond ``row_height``; extra
             height is left blank below the rows.
@@ -279,7 +283,8 @@ def _build_entities_context(
             )
 
             unit = attrs.get("unit_of_measurement", "")
-            fmtd = _fmt(state_val, config)
+            precision = _resolve_precision(widget, state)
+            fmtd = _fmt(state_val, config, precision)
             value = f"{fmtd}{unit}" if unit else fmtd
 
             # Icon: explicit override → device_class →

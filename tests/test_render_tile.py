@@ -591,6 +591,49 @@ class TestRenderTile:
             "state_content= should change rendered output"
         )
 
+    def test_tile_decimals_overrides_default_precision(self) -> None:
+        # decimals=0 rounds the secondary state+unit text to a whole
+        # number, overriding the default capped-at-1 formatting.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.temperature",
+            "decimals": 0,
+        }
+        ctx = _build_tile_context(widget, self._config())
+        assert ctx["secondary"] == "22°C"
+
+    def test_tile_humidity_uses_device_class_default_precision(
+        self,
+    ) -> None:
+        # With no widget decimals= and no HA display_precision, a
+        # humidity entity falls back to the device-class default of
+        # 0 decimals, matching HA's own whole-percent display.
+        states = {
+            **MOCK_TILE_STATES,
+            "sensor.humidity": {
+                "state": "48.2",
+                "attributes": {
+                    "friendly_name": "Humidity",
+                    "device_class": "humidity",
+                    "unit_of_measurement": "%",
+                },
+            },
+        }
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 80,
+            "entity": "sensor.humidity",
+        }
+        ctx = _build_tile_context(widget, self._config(states=states))
+        assert ctx["secondary"] == "48%"
+
     def test_tile_icon_override(self) -> None:
         # icon= overrides the MDI icon resolved from device_class.
         # A custom icon may differ from the device_class default.

@@ -620,10 +620,11 @@ class TestRenderGraph:
         # With show_state (default True) and more than one entity
         # configured, the header shows every entity's current state
         # concatenated with " / ", not just the first entity's.
-        # (Humidity's raw "8.41" is capped to 1 decimal by _fmt,
-        # matching the single-value formatting used elsewhere.)
+        # (Humidity's raw "8.41" is rounded to 0 decimals by the
+        # device-class default, matching HA's own whole-percent
+        # display for humidity sensors.)
         svg = render_widget_svg(self._multi_widget(), self._config())
-        assert "22.5°C / 8.4%" in svg
+        assert "22.5°C / 8%" in svg
 
     def test_graph_multi_entity_show_state_false_hides_all_states(
         self,
@@ -634,7 +635,7 @@ class TestRenderGraph:
             self._multi_widget(show_state=False), self._config()
         )
         assert "22.5" not in svg
-        assert "8.4%" not in svg
+        assert "8%" not in svg
 
     def test_graph_multi_entity_combined_state_truncates_before_icon(
         self,
@@ -676,7 +677,7 @@ class TestRenderGraph:
         # unit in the combined header text, matching the
         # single-entity override behaviour.
         svg = render_widget_svg(self._multi_widget(unit="X"), self._config())
-        assert "22.5X / 8.4X" in svg
+        assert "22.5X / 8X" in svg
 
     def test_graph_multi_entity_single_usable_state_shown(self) -> None:
         # When only one of several configured entities has a usable

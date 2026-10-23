@@ -34,10 +34,11 @@ from ..const import (
 from ._helpers import (
     _card_insets,
     _color_context,
-    _fmt,
+    _format_value_unit,
     _metrics_context,
     _resolve_icon_style,
     _resolve_icon_svg,
+    _resolve_precision,
     _widget_dim,
 )
 
@@ -83,6 +84,9 @@ def _build_entity_context(
             ``"none"``),
             ``bold_value`` (render the state value in bold;
             default ``False``),
+            ``decimals`` (exact number of decimal places to show;
+            overrides HA's ``display_precision`` and device-class
+            defaults),
             ``name_position`` (``"top"`` / ``"bottom"``; default
             ``"bottom"`` — position of the name relative to the
             value+unit line),
@@ -149,6 +153,7 @@ def _build_entity_context(
     attrs = state.get("attributes", {})
     domain = entity_id.split(".")[0]
     state_val: str = state.get("state", "")
+    precision = _resolve_precision(widget, state)
 
     name_text: str = (
         str(name_override)
@@ -156,20 +161,8 @@ def _build_entity_context(
         else attrs.get("friendly_name", entity_id)
     )
 
-    # Value: show attribute value when requested, else entity state.
-    if attribute is not None:
-        raw_val = attrs.get(attribute)
-        value_text = (
-            _fmt(str(raw_val), config)
-            if raw_val is not None and raw_val != ""
-            else "unknown"
-        )
-        auto_unit = ""
-    else:
-        value_text = _fmt(state_val, config)
-        auto_unit = attrs.get("unit_of_measurement", "")
-    unit_text: str = (
-        str(unit_override) if unit_override is not None else auto_unit
+    value_text, unit_text = _format_value_unit(
+        state_val, attrs, config, precision, attribute, unit_override
     )
 
     # Icon resolution: explicit override → device_class → attrs icon.

@@ -34,6 +34,7 @@ from ._helpers import (
     _metrics_context,
     _resolve_icon_style,
     _resolve_icon_svg,
+    _resolve_precision,
     _widget_dim,
 )
 
@@ -73,7 +74,10 @@ def _build_tile_context(
             used when a list is provided),
             ``icon_style`` (``"filled"`` / ``"outlined"`` /
             ``"none"``), ``bold_value`` (render the secondary
-            state line in bold; default ``False``), ``card_style``,
+            state line in bold; default ``False``), ``decimals``
+            (exact number of decimal places to show; overrides
+            HA's ``display_precision`` and device-class defaults),
+            ``card_style``,
             ``invert_condition`` (list of Lovelace condition dicts,
             same format as ``visibility``; when non-empty and all
             conditions are met the tile renders inverted — solid
@@ -138,6 +142,7 @@ def _build_tile_context(
     attrs = state.get("attributes", {})
     domain = entity_id.split(".")[0] if entity_id else ""
     state_val = state.get("state", "")
+    precision = _resolve_precision(widget, state)
 
     # Primary text: name override or entity friendly_name.
     primary: str = (
@@ -155,10 +160,12 @@ def _build_tile_context(
             if isinstance(state_content, list) and state_content
             else (state_content if not isinstance(state_content, list) else "")
         )
-        secondary = _fmt(str(attrs.get(sc, "")), config) if sc else ""
+        secondary = (
+            _fmt(str(attrs.get(sc, "")), config, precision) if sc else ""
+        )
     else:
         unit = attrs.get("unit_of_measurement", "")
-        fmtd = _fmt(state_val, config)
+        fmtd = _fmt(state_val, config, precision)
         secondary = f"{fmtd}{unit}" if unit else fmtd
 
     # Icon: explicit override → device_class → letter fallback.
