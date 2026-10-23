@@ -2982,14 +2982,20 @@ class EinkDashboardEditor extends HTMLElement {
   /**
    * Handle a drag-reorder event from ha-sortable.
    *
-   * Clears keyboard sort mode (pointer drag takes over),
-   * then delegates to _moveWidget.
+   * Stops propagation first: ha-sortable fires "item-moved"
+   * with bubbles/composed true, so left unchecked it crosses
+   * our shadow boundaries and reaches any ancestor ha-sortable
+   * (e.g. a Sections dashboard's own card-reorder list), which
+   * misreads our widget indices as its own card indices.
+   * Then clears keyboard sort mode (pointer drag takes over)
+   * and delegates to _moveWidget.
    *
    * @param ev - Custom event with oldIndex and newIndex.
    */
   private _onItemMoved(
     ev: CustomEvent<{ oldIndex: number; newIndex: number }>,
   ): void {
+    ev.stopPropagation();
     const { oldIndex, newIndex } = ev.detail;
     if (oldIndex === newIndex) return;
     this._sortSelectedIndex = undefined;

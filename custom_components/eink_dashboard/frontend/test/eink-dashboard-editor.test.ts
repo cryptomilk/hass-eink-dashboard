@@ -1009,3 +1009,79 @@ describe("Invert condition panel", () => {
     },
   );
 });
+
+// ── Widget reorder event propagation ────────────────────────────
+
+describe("Widget reorder", () => {
+  it(
+    "stops propagation of item-moved so an ancestor sortable " +
+      "cannot misread it",
+    async () => {
+      // Regression test for issue #105: ha-sortable fires
+      // "item-moved" with bubbles/composed true, so without
+      // stopPropagation it escapes the editor's shadow DOM and
+      // reaches any ancestor ha-sortable (e.g. a Home Assistant
+      // Sections dashboard's own card-reorder list), which then
+      // misinterprets our widget indices as its own card indices
+      // and corrupts the dashboard config.
+      const editor = await mountEditor([
+        { type: "separator" },
+        { type: "separator" },
+      ]);
+
+      let escaped = false;
+      const onEscape = () => {
+        escaped = true;
+      };
+      document.addEventListener("item-moved", onEscape);
+
+      const sortable =
+        editor.shadowRoot!.querySelector("ha-sortable")!;
+      sortable.dispatchEvent(
+        new CustomEvent("item-moved", {
+          detail: { oldIndex: 0, newIndex: 1 },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      document.removeEventListener("item-moved", onEscape);
+      expect(escaped).toBe(false);
+    },
+  );
+
+  it("still reorders the widget list itself", async () => {
+    // stopPropagation must not prevent the editor's own
+    // reorder logic from running.
+    const editor = await mountEditor([
+      { type: "heading", heading: "first" },
+      { type: "heading", heading: "second" },
+    ]);
+
+    let received: Widget[] | undefined;
+    editor.addEventListener(
+      "widget-change",
+      ((ev: CustomEvent<{ widgets: Widget[] }>) => {
+        received = ev.detail.widgets;
+      }) as EventListener,
+    );
+
+    const sortable =
+      editor.shadowRoot!.querySelector("ha-sortable")!;
+    sortable.dispatchEvent(
+      new CustomEvent("item-moved", {
+        detail: { oldIndex: 0, newIndex: 1 },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+    expect(received).toBeDefined();
+    expect(
+      (received![0] as Widget & { heading?: string }).heading,
+    ).toBe("second");
+    expect(
+      (received![1] as Widget & { heading?: string }).heading,
+    ).toBe("first");
+  });
+});
