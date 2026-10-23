@@ -217,13 +217,19 @@ def resolve_number_format(number_format: str, language: str) -> str:
     return NumberFormat.COMMA_DECIMAL
 
 
-def format_number(value: str, number_format: str, language: str) -> str:
+def format_number(
+    value: str,
+    number_format: str,
+    language: str,
+    precision: int | None = None,
+) -> str:
     """Format a numeric string according to the given locale settings.
 
     Non-numeric strings (e.g. ``"on"``, ``"off"``, ``"unavailable"``,
-    ``"--"``) are returned unchanged.  The number of decimal places
-    present in ``value`` is preserved so that ``"8.41"`` stays two
-    decimal places and ``"22"`` stays an integer.
+    ``"--"``) are returned unchanged.  When ``precision`` is not
+    given, the number of decimal places present in ``value`` is
+    preserved, capped at 1, so that ``"8.41"`` becomes one decimal
+    place and ``"22"`` stays an integer.
 
     Thousands grouping is applied for values ≥ 1000, matching HA's
     ``Intl.NumberFormat`` behaviour.
@@ -233,6 +239,9 @@ def format_number(value: str, number_format: str, language: str) -> str:
         number_format: A :class:`~const.NumberFormat` string value.
         language: BCP 47 language code used when ``number_format``
             is ``"language"``.
+        precision: Exact number of decimal places to show. When
+            ``None``, falls back to the default capped-at-1 rule.
+            Negative values are clamped to 0.
 
     Returns:
         Locale-formatted string, or ``value`` unchanged if not
@@ -243,13 +252,16 @@ def format_number(value: str, number_format: str, language: str) -> str:
     except (ValueError, TypeError):
         return value
 
-    # Cap at 1 decimal place — e-ink displays are small and extra
-    # precision is noise.  Raw HA state strings can have many trailing
-    # digits (e.g. "15.600000") that should not be shown.
-    decimal_places = min(
-        len(value.split(".")[1]) if "." in value else 0,
-        1,
-    )
+    if precision is not None:
+        decimal_places = max(precision, 0)
+    else:
+        # Cap at 1 decimal place — e-ink displays are small and extra
+        # precision is noise.  Raw HA state strings can have many
+        # trailing digits (e.g. "15.600000") that should not be shown.
+        decimal_places = min(
+            len(value.split(".")[1]) if "." in value else 0,
+            1,
+        )
 
     # Round via Python's float formatter so carry (e.g. 9.9995 → 10)
     # is handled correctly, then split on "." for grouping.

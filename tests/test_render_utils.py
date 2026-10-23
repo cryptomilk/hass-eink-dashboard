@@ -41,6 +41,7 @@ from custom_components.eink_dashboard.widgets._helpers import (
     _card_insets,
     _metrics_context,
     _resolve_icon_style,
+    _resolve_precision,
     _resolve_tz,
     _temp_gradient_stops,
     _temp_to_rgb,
@@ -776,6 +777,52 @@ class TestFormatNumber:
         # Negative numbers should preserve the minus sign.
         assert format_number("-8.41", "decimal_comma", "de") == "-8,4"
 
+    def test_explicit_precision_zero_rounds_to_integer(self) -> None:
+        # An explicit precision overrides the capped-at-1 default,
+        # rounding away all decimals when precision=0.
+        assert (
+            format_number("22.5", "comma_decimal", "en", precision=0) == "22"
+        )
+
+    def test_explicit_precision_above_cap_is_not_truncated(self) -> None:
+        # Explicit precision bypasses the default 1-decimal cap,
+        # unlike the capped default behaviour.
+        assert (
+            format_number("8.4100", "comma_decimal", "en", precision=2)
+            == "8.41"
+        )
+
+    def test_explicit_precision_pads_with_zeros(self) -> None:
+        # Precision higher than the value's natural decimals pads
+        # with trailing zeros, matching Python's float formatting.
+        assert (
+            format_number("22.5", "comma_decimal", "en", precision=3)
+            == "22.500"
+        )
+
+    def test_explicit_precision_with_locale(self) -> None:
+        # Explicit precision still applies locale-specific decimal
+        # and thousands separators.
+        assert (
+            format_number("1234.5", "decimal_comma", "de", precision=2)
+            == "1.234,50"
+        )
+
+    def test_precision_none_keeps_default_cap(self) -> None:
+        # Explicitly passing precision=None is equivalent to omitting
+        # it: the default capped-at-1 rule still applies.
+        assert (
+            format_number("8.410", "decimal_comma", "de", precision=None)
+            == "8,4"
+        )
+
+    def test_negative_precision_clamped_to_zero(self) -> None:
+        # A negative precision is clamped to 0 instead of raising,
+        # matching the behaviour of an explicit precision=0.
+        assert (
+            format_number("22.5", "comma_decimal", "en", precision=-1) == "22"
+        )
+
 
 class TestResolveIconStyle:
     def test_auto_active_multilevel_filled(self) -> None:
@@ -826,3 +873,62 @@ class TestResolveIconStyle:
         )
         assert icon_outline
         assert not icon_no_circle
+
+
+class TestResolvePrecision:
+    def test_widget_decimals_wins_over_display_precision(self) -> None:
+        # An explicit widget decimals= always takes priority over
+        # HA's display_precision.
+        state = {"display_precision": 0, "attributes": {}}
+        assert _resolve_precision({"decimals": 2}, state) == 2
+
+    def test_display_precision_used_when_no_widget_decimals(self) -> None:
+        # HA's display_precision applies when the widget has no
+        # explicit decimals override.
+        state = {"display_precision": 3, "attributes": {}}
+        assert _resolve_precision({}, state) == 3
+
+    def test_humidity_device_class_defaults_to_zero(self) -> None:
+        # Humidity sensors default to 0 decimals when neither the
+        # widget nor HA specify a precision.
+        state = {"attributes": {"device_class": "humidity"}}
+        assert _resolve_precision({}, state) == 0
+
+    def test_display_precision_overrides_device_class_default(self) -> None:
+        # HA's display_precision takes priority over the device-class
+        # default, even for humidity.
+        state = {
+            "display_precision": 1,
+            "attributes": {"device_class": "humidity"},
+        }
+        assert _resolve_precision({}, state) == 1
+
+    def test_none_when_no_decimals_source(self) -> None:
+        # No widget decimals, no display_precision, and a
+        # device class without a default all fall back to None.
+        state = {"attributes": {"device_class": "temperature"}}
+        assert _resolve_precision({}, state) is None
+
+    def test_none_when_state_is_none(self) -> None:
+        # A missing entity (state=None) has no precision source
+        # unless the widget sets decimals explicitly.
+        assert _resolve_precision({}, None) is None
+
+    def test_widget_decimals_used_when_state_is_none(self) -> None:
+        # Widget decimals still applies even without entity state.
+        assert _resolve_precision({"decimals": 1}, None) == 1
+
+    def test_non_numeric_widget_decimals_falls_through(self) -> None:
+        # A non-numeric widget decimals value can't be cast to int,
+        # so resolution falls through to the next priority tier.
+        state = {"display_precision": 2, "attributes": {}}
+        assert _resolve_precision({"decimals": "abc"}, state) == 2
+
+    def test_non_numeric_display_precision_falls_through(self) -> None:
+        # A non-numeric display_precision can't be cast to int, so
+        # resolution falls through to the device-class default.
+        state = {
+            "display_precision": [],
+            "attributes": {"device_class": "humidity"},
+        }
+        assert _resolve_precision({}, state) == 0

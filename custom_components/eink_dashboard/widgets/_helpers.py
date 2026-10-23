@@ -33,7 +33,7 @@ import zoneinfo
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from itertools import pairwise
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import markupsafe
@@ -237,7 +237,11 @@ def _temp_gradient_stops(values: list[float]) -> list[dict[str, str]]:
     return stops
 
 
-def _fmt(value: str, config: DisplayConfig) -> str:
+def _fmt(
+    value: str,
+    config: DisplayConfig,
+    precision: int | None = None,
+) -> str:
     """Format a numeric string using the locale settings in ``config``.
 
     Non-numeric strings pass through unchanged.  Extracts
@@ -248,6 +252,9 @@ def _fmt(value: str, config: DisplayConfig) -> str:
         value: Numeric string (e.g. ``"8.41"``).
         config: Display config dict containing ``number_format`` and
             ``language`` keys.
+        precision: Exact number of decimal places to show. When
+            ``None``, falls back to :func:`~render.format_number`'s
+            default capped-at-1 rule.
 
     Returns:
         Locale-formatted string, or ``value`` unchanged if not
@@ -259,7 +266,63 @@ def _fmt(value: str, config: DisplayConfig) -> str:
         value,
         config.get("number_format", "language"),
         config.get("language", "en"),
+        precision,
     )
+
+
+# Device classes with a sensible default decimal count differing from
+# the general capped-at-1 fallback. Humidity sensors are commonly
+# reported with spurious sub-percent precision (e.g. "48.2") that
+# users find noisier than the whole-percent value shown in HA's own
+# UI by default.
+_DEVICE_CLASS_DEFAULT_PRECISION: dict[str, int] = {"humidity": 0}
+
+
+def _resolve_precision(
+    widget: Widget,
+    state: dict[str, Any] | None,
+) -> int | None:
+    """Resolve the decimal precision to display for a widget's value.
+
+    Priority order:
+
+    1. The widget's own ``decimals`` config (explicit override).
+    2. The entity's HA ``display_precision``, injected into ``state``
+       by state enrichment from the entity registry.
+    3. A device-class default (see
+       :data:`_DEVICE_CLASS_DEFAULT_PRECISION`).
+    4. ``None``, meaning callers should fall back to
+       :func:`~render.format_number`'s default capped-at-1 rule.
+
+    Args:
+        widget: Widget config dict, checked for a ``decimals`` key.
+        state: Entity state dict from ``config["states"]``, checked
+            for ``display_precision`` and ``attributes.device_class``.
+            May be ``None`` for a missing entity.
+
+    Returns:
+        The resolved precision, or ``None`` to use the default rule.
+    """
+    decimals = widget.get("decimals")
+    if decimals is not None:
+        try:
+            return int(decimals)
+        except (ValueError, TypeError):
+            pass
+    if state is not None:
+        display_precision = state.get("display_precision")
+        if display_precision is not None:
+            try:
+                return int(display_precision)
+            except (ValueError, TypeError):
+                pass
+        attrs = state.get("attributes", {})
+        device_class = attrs.get("device_class")
+        if isinstance(device_class, str):
+            default = _DEVICE_CLASS_DEFAULT_PRECISION.get(device_class)
+            if default is not None:
+                return default
+    return None
 
 
 def _card_insets(
