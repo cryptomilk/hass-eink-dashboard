@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.eink_dashboard import (
     _async_get_locale,
+    _enrich_display_precision,
     _enrich_entity_icons,
     async_setup,
     async_setup_entry,
@@ -874,3 +875,93 @@ class TestEnrichEntityIcons:
 
         assert states["sensor.phase"]["attributes"]["icon"] == "mdi:moon-full"
         assert "icon" not in states["sensor.solar_elevation"]["attributes"]
+
+
+class TestEnrichDisplayPrecision:
+    async def test_user_display_precision_injected(
+        self, hass: HomeAssistant
+    ) -> None:
+        # A user-configured display_precision in the entity registry
+        # is copied into the state dict.
+        er.async_get(hass).async_get_or_create(
+            "sensor", "test", "unique_1", suggested_object_id="temp"
+        )
+        er.async_get(hass).async_update_entity_options(
+            "sensor.temp", "sensor", {"display_precision": 0}
+        )
+        states = {"sensor.temp": {"state": "22.5", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert states["sensor.temp"]["display_precision"] == 0
+
+    async def test_suggested_display_precision_used_as_fallback(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Without a user override, the integration's
+        # suggested_display_precision is used instead.
+        er.async_get(hass).async_get_or_create(
+            "sensor", "test", "unique_2", suggested_object_id="temp2"
+        )
+        er.async_get(hass).async_update_entity_options(
+            "sensor.temp2",
+            "sensor",
+            {"suggested_display_precision": 1},
+        )
+        states = {"sensor.temp2": {"state": "22.456", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert states["sensor.temp2"]["display_precision"] == 1
+
+    async def test_user_precision_overrides_suggested(
+        self, hass: HomeAssistant
+    ) -> None:
+        # The user's display_precision takes priority over the
+        # integration's suggested_display_precision.
+        er.async_get(hass).async_get_or_create(
+            "sensor", "test", "unique_3", suggested_object_id="temp3"
+        )
+        er.async_get(hass).async_update_entity_options(
+            "sensor.temp3",
+            "sensor",
+            {"display_precision": 2, "suggested_display_precision": 0},
+        )
+        states = {"sensor.temp3": {"state": "22.456", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert states["sensor.temp3"]["display_precision"] == 2
+
+    async def test_no_precision_configured_key_absent(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Entities with neither precision option configured are left
+        # untouched -- no display_precision key is added.
+        er.async_get(hass).async_get_or_create(
+            "sensor", "test", "unique_4", suggested_object_id="temp4"
+        )
+        states = {"sensor.temp4": {"state": "22.5", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert "display_precision" not in states["sensor.temp4"]
+
+    async def test_entity_without_registry_entry_skipped(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Entities missing from the registry entirely are left
+        # untouched rather than raising.
+        states = {"sensor.unregistered": {"state": "22.5", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert "display_precision" not in states["sensor.unregistered"]
+
+    async def test_non_sensor_domain_skipped(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Only sensor.* entities are consulted; display_precision is
+        # a sensor-specific HA option.
+        er.async_get(hass).async_get_or_create(
+            "number", "test", "unique_5", suggested_object_id="setpoint"
+        )
+        states = {"number.setpoint": {"state": "22.5", "attributes": {}}}
+        await _enrich_display_precision(hass, states)
+
+        assert "display_precision" not in states["number.setpoint"]

@@ -275,6 +275,7 @@ async def _build_display_config(
             "attributes": dict(state.attributes),
         }
     await _enrich_entity_icons(hass, states)
+    await _enrich_display_precision(hass, states)
     (
         number_format,
         language,
@@ -382,6 +383,45 @@ async def _enrich_entity_icons(
         )
         if icon:
             states[entity_id]["attributes"]["icon"] = icon
+
+
+async def _enrich_display_precision(
+    hass: HomeAssistant,
+    states: dict[str, Any],
+) -> None:
+    """Inject HA's configured display precision into sensor states.
+
+    Reads each sensor entity's registry entry for the ``sensor``
+    options block and copies its decimal-place precision into the
+    state dict as ``display_precision``, so widget renderers can
+    respect the same precision HA's own frontend shows instead of
+    always falling back to a generic cap.  Priority mirrors HA core:
+    the user-set ``display_precision`` wins over the integration's
+    ``suggested_display_precision``.
+
+    Entities with neither option configured, or missing from the
+    registry, are left untouched (no key is added).
+
+    Args:
+        hass: Home Assistant instance.
+        states: Mutable states dict built by ``_build_display_config``
+            or ``EinkDashboardImage._build_states``; ``sensor.*``
+            entries gain a ``display_precision`` key in-place when
+            HA has one configured.
+    """
+    registry = er.async_get(hass)
+    for entity_id, data in states.items():
+        if not entity_id.startswith("sensor."):
+            continue
+        entry = registry.async_get(entity_id)
+        if entry is None:
+            continue
+        sensor_options = entry.options.get("sensor", {})
+        precision = sensor_options.get("display_precision")
+        if precision is None:
+            precision = sensor_options.get("suggested_display_precision")
+        if precision is not None:
+            data["display_precision"] = precision
 
 
 async def _fetch_forecasts(

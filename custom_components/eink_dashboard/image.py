@@ -44,6 +44,7 @@ if TYPE_CHECKING:
 
 from . import (
     _async_get_locale,
+    _enrich_display_precision,
     _enrich_entity_icons,
     _fetch_calendar_events,
     _fetch_forecasts,
@@ -239,6 +240,7 @@ class EinkDashboardImage(ImageEntity):
             async with self._refresh_lock:
                 states = self._build_states()
                 await self._async_enrich_entity_icons(states)
+                await self._async_enrich_display_precision(states)
                 await self._async_fetch_forecasts(states)
                 await self._async_fetch_history(states)
                 await self._async_fetch_calendar_events(states)
@@ -386,6 +388,21 @@ class EinkDashboardImage(ImageEntity):
                 in-place into each entity's ``attributes``.
         """
         await _enrich_entity_icons(self.hass, states)
+
+    async def _async_enrich_display_precision(
+        self, states: dict[str, Any]
+    ) -> None:
+        """Inject HA's configured display precision into sensor states.
+
+        Delegates to the module-level ``_enrich_display_precision``
+        so the logic is shared with the WebSocket preview handlers.
+
+        Args:
+            states: Mutable states dict; ``display_precision`` is
+                injected in-place for sensor entities that have one
+                configured in HA.
+        """
+        await _enrich_display_precision(self.hass, states)
 
     async def _async_fetch_forecasts(self, states: dict[str, Any]) -> None:
         """Fetch forecasts for weather/meteogram widgets into states.
