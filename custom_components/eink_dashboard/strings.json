@@ -160,6 +160,8 @@
           "update_interval": "Update interval (seconds)",
           "optimize": "E-ink optimization",
           "display_levels": "Display levels",
+          "font_family": "Font family",
+          "pixel_fonts": "Pixel-perfect text",
           "black_text": "Black text",
           "black_dividers": "Black dividers",
           "use_system_fonts": "Use system fonts"
@@ -167,6 +169,8 @@
         "data_description": {
           "optimize": "Apply autocontrast and quantization for e-ink displays",
           "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
+          "font_family": "Primary font used for dashboard text. The default depends on the device: TRMNL for low-resolution panels such as the TRMNL OG, Roboto for higher-resolution displays. The other bundled font remains available as a glyph fallback.",
+          "pixel_fonts": "Render the TRMNL font only at its native pixel sizes (12, 16, 21 px or whole multiples) without anti-aliasing, so text stays sharp on black-and-white displays. Font sizes may shift by a pixel or two. Has no effect with Roboto.",
           "black_text": "Render all text in black instead of gray, so labels stay crisp instead of being dithered into dot patterns on displays with few gray levels. White text on dark backgrounds is kept.",
           "black_dividers": "Draw list dividers, separators and left card bars in solid black instead of gray, so thin lines stay solid instead of being dithered into dotted lines on displays with few gray levels.",
           "use_system_fonts": "Also use fonts already installed on this Home Assistant host as a fallback for characters the bundled font and custom font directory do not cover. Off by default so dashboards render identically across HA OS, Docker, and other machines; enabling it can make text look different depending on what is installed on the host."
@@ -182,7 +186,7 @@
               "saturation": "Saturation"
             },
             "data_description": {
-              "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled Roboto font does not cover, such as Hebrew, Arabic, or CJK. The directory must be reachable by Home Assistant (mount it into the container on HA OS or Docker). Leave empty to use only the bundled font.",
+              "font_dir": "Path to a directory containing additional font files (.ttf/.otf) for scripts the bundled fonts do not cover, such as Hebrew, Arabic, or CJK. The directory must be reachable by Home Assistant (mount it into the container on HA OS or Docker).",
               "dither_algorithm": "Algorithm used to reduce the image to the display's colors. None (nearest color) maps each pixel to the closest available color without dithering; light grays may disappear on black-and-white displays. Black and white (every non-white pixel black) keeps all gray text and lines visible by turning anything that is not pure white black (grayscale displays only; ignored at 256 levels).",
               "measured_palette": "Photographically calibrated palette for your specific display model. Auto uses the idealized palette.",
               "exposure": "1.0 = unchanged, higher = brighter (0.0–10.0)",

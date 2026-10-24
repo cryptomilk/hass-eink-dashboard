@@ -1,5 +1,5 @@
 {%- from "_macros.svg.j2" import widget_title, card_container,
-    card_row -%}
+    card_row with context -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_rows -%}
@@ -65,8 +65,8 @@
 <text
   x="{{ x_off + lpad }}"
   y="{{ row.text_y }}"
-  font-family="Roboto"
-  font-size="{{ row.font_sz }}"
+  font-family="{{ row.font_sz | font_family(font_family_name) }}"
+  font-size="{{ row.font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ row.label }}</text>
 {%- endif -%}

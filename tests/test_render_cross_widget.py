@@ -186,7 +186,7 @@ class TestConsistencyContract:
         # Two card_row widgets at the same row_h place primary text at
         # the same x offset.  Tolerance of 1px accounts for glyph-edge
         # variation between different first characters (e.g. 'L' vs 'R'
-        # have slightly different leftmost ink pixels in Roboto).
+        # have slightly different leftmost ink pixels in TRMNL).
         m = _compute_metrics(self._ROW_H)
         # Expected text x: lpad + icon_dia + inner_gap with no card frame.
         tx = m.padding + m.icon_dia + m.inner_gap

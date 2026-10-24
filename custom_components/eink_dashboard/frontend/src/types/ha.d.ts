@@ -638,8 +638,8 @@ export interface HeadingWidget extends WidgetBase {
   heading?: string;
   /**
    * Visual style for the heading text.
-   * - ``"title"`` — large Roboto Medium in black (default).
-   * - ``"subtitle"`` — smaller Roboto Regular in gray.
+   * - ``"title"`` — large regular-weight text in black (default).
+   * - ``"subtitle"`` — smaller regular text in gray.
    */
   heading_style?: "title" | "subtitle";
   /**
@@ -1185,9 +1185,9 @@ export interface GraphWidget extends WidgetBase {
    */
   smoothing?: boolean;
   /**
-   * Show Y-axis min/max value labels on the left edge and X-axis
-   * time labels (oldest and newest timestamps) at the bottom of
-   * the graph area.  Default: ``true``.
+   * Show Y-axis value labels on the left edge and X-axis time
+   * labels at the bottom of the graph area (see ``x_axis_ticks``
+   * and ``y_axis_ticks``).  Default: ``true``.
    */
   show_labels?: boolean;
   /**
@@ -1196,6 +1196,39 @@ export interface GraphWidget extends WidgetBase {
    * Default: ``false``.
    */
   show_extrema?: boolean;
+  /**
+   * Maximum number of X-axis (time) labels.  ``2`` shows only the
+   * oldest and newest time at the graph edges; larger values add
+   * labels at round times (bar charts label evenly spaced bars),
+   * reduced automatically so labels never overlap.  Default: ``2``.
+   */
+  x_axis_ticks?: number;
+  /**
+   * Maximum number of Y-axis (value) labels.  ``2`` shows only the
+   * min and max; larger values use round steps (1, 2, 2.5, 5 × 10ⁿ).
+   * Also applies to the secondary axis.  Default: ``2``.
+   */
+  y_axis_ticks?: number;
+  /** Draw short tick marks below the graph at each X label. */
+  x_axis_tick_marks?: boolean;
+  /** Draw short tick marks beside the graph at each Y label. */
+  y_axis_tick_marks?: boolean;
+  /**
+   * Draw vertical grid lines at each X label (light gray; dotted
+   * black on 2-level displays).  Default: ``false``.
+   */
+  x_axis_grid?: boolean;
+  /**
+   * Draw horizontal grid lines at each Y label (light gray; dotted
+   * black on 2-level displays).  Default: ``false``.
+   */
+  y_axis_grid?: boolean;
+  /**
+   * Append the unit to every Y label: the ``unit`` override or the
+   * first primary entity's unit on the left axis, the first
+   * secondary entity's unit on the right axis.  Default: ``false``.
+   */
+  y_axis_unit?: boolean;
   /**
    * Data grouping strategy applied before bucketing.
    * ``"interval"`` uses the configured ``points_per_hour``;

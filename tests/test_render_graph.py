@@ -14,11 +14,11 @@
 
 from __future__ import annotations
 
+import itertools
 import re
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
-if TYPE_CHECKING:
-    import pytest
+import pytest
 
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
@@ -3076,11 +3076,11 @@ class TestRenderGraph:
 
 
 class TestRenderGraphAxes:
-    """Verify graph axis layout below the plot and local-time labels.
+    """Verify graph axis layout, ticks, units, and tick lines.
 
-    Covers the bottom band layout: x-axis labels, extrema, and legend
-    must stack below the plot without overlapping.  Time labels must
-    be shown in HA's configured time zone.
+    Covers the bottom band layout (x-axis labels, extrema, legend must
+    not overlap), configurable tick counts on both axes, optional
+    tick marks and grid lines, y-axis units, and local-time labels.
     """
 
     _DEFAULTS: ClassVar[dict[str, object]] = {
@@ -3159,6 +3159,330 @@ class TestRenderGraphAxes:
         assert ctx["gy2"] <= ctx["x_label_y"]
         assert ctx["x_label_y"] - ctx["gy2"] <= ctx["label_font_sz"]
 
+    # ── X-axis ticks ──────────────────────────────────────────────────
+
+    def test_default_x_ticks_are_oldest_and_newest(self) -> None:
+        # Without x_axis_ticks the axis keeps its two labels at the
+        # left and right edge of the plot.
+        ctx = self._ctx(self._single(), self._config())
+        ticks = ctx["x_ticks"]
+        assert len(ticks) == 2
+        assert ticks[0]["x"] == ctx["x_label_left"]
+        assert ticks[-1]["x"] == ctx["x_label_right"]
+
+    def test_x_axis_ticks_adds_round_time_labels(self) -> None:
+        # x_axis_ticks=5 places up to five labels at round times
+        # (full hours for a ~22 h window) inside the plot.
+        ctx = self._ctx(self._single(x_axis_ticks=5), self._config())
+        ticks = ctx["x_ticks"]
+        assert 3 <= len(ticks) <= 5, ticks
+        for tick in ticks:
+            assert re.fullmatch(r"\d{2}:00", str(tick["label"])), tick
+            assert ctx["x_label_left"] <= tick["x"] <= ctx["x_label_right"]
+        xs = [t["x"] for t in ticks]
+        assert xs == sorted(xs)
+
+    def test_x_axis_ticks_thinned_to_fit(self) -> None:
+        # On a narrow graph a large tick count is reduced so the
+        # labels never overlap.
+        from custom_components.eink_dashboard.render import _load_font
+
+        ctx = self._ctx(self._single(w=160, x_axis_ticks=12), self._config())
+        ticks = ctx["x_ticks"]
+        font = _load_font(ctx["label_font_sz"])
+        widths = [font.getlength(str(t["label"])) for t in ticks]
+        for i in range(len(ticks) - 1):
+            gap = ticks[i + 1]["x"] - ticks[i]["x"]
+            assert gap >= (widths[i] + widths[i + 1]) / 2, ticks
+
+    def test_x_axis_ticks_rendered_in_svg(self) -> None:
+        # Every tick label appears as text in the rendered SVG.
+        widget = self._single(x_axis_ticks=5)
+        ctx = self._ctx(widget, self._config())
+        svg = render_widget_svg(widget, self._config())
+        for tick in ctx["x_ticks"]:
+            assert f">{tick['label']}</text>" in svg
+
+    def test_bar_x_ticks_on_bar_centres(self) -> None:
+        # In bar mode x ticks label individual bars at their centres.
+        widget = self._single(graph="bar", x_axis_ticks=4)
+        ctx = self._ctx(widget, self._config())
+        centres = {b["x"] + b["w"] / 2 for b in ctx["series"][0]["bars"]}
+        assert len(ctx["x_ticks"]) >= 2
+        for tick in ctx["x_ticks"]:
+            assert any(abs(tick["x"] - c) <= 1 for c in centres), tick
+
+    # ── Y-axis ticks ──────────────────────────────────────────────────
+
+    def test_default_y_ticks_are_min_and_max(self) -> None:
+        # Without y_axis_ticks the axis shows only its min and max.
+        ctx = self._ctx(self._single(), self._config())
+        labels = [t["label"] for t in ctx["y_ticks"]]
+        assert labels == ["20.0", "23.0"]
+
+    def test_y_axis_ticks_use_round_values(self) -> None:
+        # y_axis_ticks=5 on a 20–23 range gives labels at whole
+        # numbers, positioned on the plot's value scale.
+        ctx = self._ctx(self._single(y_axis_ticks=5), self._config())
+        labels = [t["label"] for t in ctx["y_ticks"]]
+        assert labels == ["20", "21", "22", "23"]
+        gy1, gy2 = ctx["gy1"], ctx["gy2"]
+        for tick in ctx["y_ticks"]:
+            v = float(str(tick["label"]))
+            expected = gy2 - (v - 20.0) / 3.0 * (gy2 - gy1)
+            assert abs(tick["y"] - expected) <= 1, tick
+
+    def test_y_axis_ticks_locale_formatted(self) -> None:
+        # Fractional tick values use the locale decimal separator.
+        ctx = self._ctx(
+            self._single(y_axis_ticks=8),
+            self._config(number_format="decimal_comma", language="de"),
+        )
+        labels = [str(t["label"]) for t in ctx["y_ticks"]]
+        assert "20,5" in labels, labels
+
+    def test_y_axis_unit_appended(self) -> None:
+        # y_axis_unit=True appends the entity unit to every y label.
+        ctx = self._ctx(self._single(y_axis_unit=True), self._config())
+        assert [t["label"] for t in ctx["y_ticks"]] == [
+            "20.0 °C",
+            "23.0 °C",
+        ]
+
+    def test_y_axis_unit_uses_unit_override(self) -> None:
+        # A widget-level unit override is used on the axis too.
+        ctx = self._ctx(
+            self._single(y_axis_unit=True, unit="K"), self._config()
+        )
+        assert all(str(t["label"]).endswith(" K") for t in ctx["y_ticks"])
+
+    def test_y_axis_unit_off_by_default(self) -> None:
+        # Without y_axis_unit the labels are plain numbers.
+        ctx = self._ctx(self._single(), self._config())
+        assert all("°C" not in str(t["label"]) for t in ctx["y_ticks"])
+
+    @staticmethod
+    def _y_label_boxes(
+        ticks: list[dict[str, Any]], font_sz: int
+    ) -> list[tuple[float, float]]:
+        """Return the (top, bottom) em box of every y label."""
+        boxes = []
+        for t in ticks:
+            ly = float(t["label_y"])
+            if t["baseline"] == "auto":
+                boxes.append((ly - font_sz, ly))
+            elif t["baseline"] == "hanging":
+                boxes.append((ly, ly + font_sz))
+            else:
+                boxes.append((ly - font_sz / 2, ly + font_sz / 2))
+        return boxes
+
+    def test_y_axis_ticks_thinned_to_fit(self) -> None:
+        # On a short graph a large tick count is reduced so the
+        # value labels never overlap vertically.
+        ctx = self._ctx(
+            self._single(h=110, y_axis_ticks=12, show_name=False),
+            self._config(),
+        )
+        ticks = ctx["y_ticks"]
+        assert len(ticks) < 12
+        boxes = self._y_label_boxes(ticks, ctx["label_font_sz"])
+        for lower, upper in itertools.pairwise(boxes):
+            assert lower[0] >= upper[1], ticks
+
+    def test_y_axis_ticks_keep_count_on_tall_graph(self) -> None:
+        # A tall graph keeps the requested number of value labels.
+        ctx = self._ctx(
+            self._single(h=400, y_axis_ticks=4), self._config(height=600)
+        )
+        assert [t["label"] for t in ctx["y_ticks"]] == ["20", "21", "22", "23"]
+
+    @pytest.mark.parametrize("value", ["abc", None, "nan", "inf", [3], ""])
+    def test_malformed_tick_count_falls_back(self, value: object) -> None:
+        # A malformed stored tick count does not crash rendering and
+        # falls back to the default min/max labels.
+        ctx = self._ctx(
+            self._single(x_axis_ticks=value, y_axis_ticks=value),
+            self._config(),
+        )
+        assert len(ctx["x_ticks"]) == 2
+        assert len(ctx["y_ticks"]) == 2
+
+    def test_out_of_range_tick_count_clamped(self) -> None:
+        # Tick counts outside 2-12 are clamped instead of misbehaving.
+        from custom_components.eink_dashboard.widgets.graph.context import (
+            _tick_count,
+        )
+
+        assert _tick_count({"y_axis_ticks": -5}, "y_axis_ticks") == 2
+        assert _tick_count({"y_axis_ticks": 100}, "y_axis_ticks") == 12
+        assert _tick_count({"y_axis_ticks": "7"}, "y_axis_ticks") == 7
+        assert _tick_count({}, "y_axis_ticks") == 2
+
+    def test_secondary_axis_ticks_and_unit(self) -> None:
+        # The secondary axis follows y_axis_ticks and shows its own
+        # entity's unit.
+        widget = self._widget(
+            entities=[
+                {"entity": "sensor.temperature"},
+                {"entity": "sensor.humidity", "y_axis": "secondary"},
+            ],
+            y_axis_ticks=4,
+            y_axis_unit=True,
+        )
+        ctx = self._ctx(widget, self._config())
+        labels = [str(t["label"]) for t in ctx["y2_ticks"]]
+        assert len(labels) >= 3
+        assert all(lbl.endswith(" %") for lbl in labels), labels
+
+    # ── Tick marks and grid lines ─────────────────────────────────────
+
+    @staticmethod
+    def _lines(svg: str) -> list[dict[str, float]]:
+        """Return the coordinates of every <line> element in ``svg``."""
+        out = []
+        for tag in re.findall(r"<line\b[^>]*>", svg):
+            coords = dict(re.findall(r'\b(x1|y1|x2|y2)="([-\d.]+)"', tag))
+            out.append({k: float(v) for k, v in coords.items()})
+        return out
+
+    def test_tick_marks_off_by_default(self) -> None:
+        # On a 2-level display (no grid) the default graph draws no
+        # lines at all.
+        svg = render_widget_svg(self._single(), self._config(display_levels=2))
+        assert self._lines(svg) == []
+
+    def test_x_axis_tick_marks(self) -> None:
+        # x_axis_tick_marks draws one short vertical mark below the
+        # plot for every x tick.
+        widget = self._single(x_axis_ticks=5, x_axis_tick_marks=True)
+        config = self._config(display_levels=2)
+        ctx = self._ctx(widget, config)
+        lines = self._lines(render_widget_svg(widget, config))
+        marks = [ln for ln in lines if ln["x1"] == ln["x2"]]
+        assert len(marks) == len(ctx["x_ticks"])
+        for mark in marks:
+            assert mark["y1"] >= ctx["gy2"] - 1
+            assert mark["y2"] <= ctx["x_label_y"]
+
+    def test_y_axis_tick_marks(self) -> None:
+        # y_axis_tick_marks draws one short horizontal mark left of the
+        # plot for every y tick.
+        widget = self._single(y_axis_ticks=5, y_axis_tick_marks=True)
+        config = self._config(display_levels=2)
+        ctx = self._ctx(widget, config)
+        lines = self._lines(render_widget_svg(widget, config))
+        marks = [ln for ln in lines if ln["y1"] == ln["y2"]]
+        assert len(marks) == len(ctx["y_ticks"])
+        for mark in marks:
+            assert mark["x2"] <= ctx["x_label_left"] + 1
+
+    def test_y_axis_grid_lines_span_plot(self) -> None:
+        # y_axis_grid draws a horizontal line across the full plot
+        # width at every y tick.
+        widget = self._single(y_axis_ticks=5, y_axis_grid=True)
+        config = self._config(display_levels=2)
+        ctx = self._ctx(widget, config)
+        lines = self._lines(render_widget_svg(widget, config))
+        grid = [
+            ln
+            for ln in lines
+            if ln["y1"] == ln["y2"]
+            and ln["x1"] == ctx["x_label_left"]
+            and ln["x2"] == ctx["x_label_right"]
+        ]
+        assert len(grid) == len(ctx["y_ticks"])
+
+    def test_x_axis_grid_lines_span_plot(self) -> None:
+        # x_axis_grid draws a vertical line across the full plot
+        # height at every x tick.
+        widget = self._single(x_axis_ticks=5, x_axis_grid=True)
+        config = self._config(display_levels=2)
+        ctx = self._ctx(widget, config)
+        lines = self._lines(render_widget_svg(widget, config))
+        grid = [
+            ln
+            for ln in lines
+            if ln["x1"] == ln["x2"]
+            and ln["y1"] == ctx["gy1"]
+            and ln["y2"] == ctx["gy2"]
+        ]
+        assert len(grid) == len(ctx["x_ticks"])
+
+    def test_grid_lines_dotted_on_two_level_display(self) -> None:
+        # On 2-level displays grid lines are drawn dotted in black so
+        # they stay faint instead of turning into solid black lines.
+        svg = render_widget_svg(
+            self._single(y_axis_ticks=5, y_axis_grid=True),
+            self._config(display_levels=2),
+        )
+        grid_tags = [
+            t for t in re.findall(r"<line\b[^>]*>", svg) if "dasharray" in t
+        ]
+        assert grid_tags
+        assert all('stroke="#000000"' in t for t in grid_tags)
+
+    def test_grid_lines_light_gray_on_grayscale(self) -> None:
+        # On grayscale displays grid lines are solid light gray.
+        svg = render_widget_svg(
+            self._single(y_axis_ticks=5, y_axis_grid=True),
+            self._config(display_levels=16),
+        )
+        tags = re.findall(r"<line\b[^>]*>", svg)
+        assert tags
+        assert all("dasharray" not in t for t in tags)
+
+    def test_y_axis_grid_keeps_edge_borders(self) -> None:
+        # Enabling y_axis_grid keeps the plot's top and bottom border
+        # lines on grayscale displays, without duplicating them.
+        widget = self._single(y_axis_ticks=5, y_axis_grid=True)
+        config = self._config(display_levels=16)
+        ctx = self._ctx(widget, config)
+        assert ctx["show_grid"]
+        lines = self._lines(render_widget_svg(widget, config))
+        full_width = [
+            ln["y1"]
+            for ln in lines
+            if ln["y1"] == ln["y2"]
+            and ln["x1"] == ctx["x_label_left"]
+            and ln["x2"] == ctx["x_label_right"]
+        ]
+        assert full_width.count(ctx["gy1"]) == 1
+        assert full_width.count(ctx["gy2"]) == 1
+
+    def test_x_edge_labels_clamped_without_overlap(self) -> None:
+        # Edge labels pushed inward to stay inside the plot keep a
+        # gap to their neighbour instead of crowding it.
+        from custom_components.eink_dashboard.widgets.graph.axes import (
+            _fit_centred_labels,
+        )
+
+        # Ticks 40 px apart with 30 px labels fit unclamped, but the
+        # first label clamped to x=15 would leave only a 0 px gap.
+        assert _fit_centred_labels([0, 40], [30, 30], 0, 200, 5) is None
+        assert _fit_centred_labels([20, 70], [30, 30], 0, 200, 5) == [20, 70]
+
+    def test_x_tick_labels_never_overlap_after_clamping(self) -> None:
+        # For many widths and tick counts the final label boxes of
+        # neighbouring x ticks never overlap.
+        from custom_components.eink_dashboard.render import _load_font
+
+        for w in range(120, 400, 20):
+            for count in (3, 6, 12):
+                for graph in ("line", "bar"):
+                    ctx = self._ctx(
+                        self._single(w=w, x_axis_ticks=count, graph=graph),
+                        self._config(),
+                    )
+                    ticks = ctx["x_ticks"]
+                    if len(ticks) <= 2 and ticks[0]["anchor"] == "start":
+                        continue
+                    font = _load_font(ctx["label_font_sz"])
+                    for a, b in itertools.pairwise(ticks):
+                        a_r = a["label_x"] + font.getlength(a["label"]) / 2
+                        b_l = b["label_x"] - font.getlength(b["label"]) / 2
+                        assert b_l - a_r >= font.size / 2, (w, count, ticks)
+
     # ── Time zone ─────────────────────────────────────────────────────
 
     def test_time_labels_use_configured_time_zone(self) -> None:
@@ -3173,13 +3497,10 @@ class TestRenderGraphAxes:
             hh, mm = str(label).split(":")
             return int(hh) * 60 + int(mm)
 
-        for key in ("x_oldest_str", "x_newest_str"):
-            assert (minutes(berlin[key]) - minutes(utc[key])) % 1440 == 120
+        for u, b in zip(utc["x_ticks"], berlin["x_ticks"], strict=True):
+            assert (minutes(b["label"]) - minutes(u["label"])) % 1440 == 120
 
     def test_invalid_time_zone_falls_back_to_utc(self) -> None:
-        # An unknown time zone name does not crash rendering and keeps
-        # the UTC labels.
-        utc = self._ctx(self._single(), self._config())
+        # An unknown time zone name does not crash rendering.
         ctx = self._ctx(self._single(), self._config(time_zone="Nowhere/X"))
-        assert ctx["x_oldest_str"] == utc["x_oldest_str"]
-        assert ctx["x_newest_str"] == utc["x_newest_str"]
+        assert len(ctx["x_ticks"]) == 2

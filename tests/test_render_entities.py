@@ -22,6 +22,10 @@ from custom_components.eink_dashboard.const import (
     COLOR_LIGHT_GRAY,
     DEFAULT_ROW_H,
 )
+from custom_components.eink_dashboard.fonts import (
+    pixel_font_size,
+    pixel_fonts_context,
+)
 from custom_components.eink_dashboard.render import (
     _compute_metrics,
     render_dashboard,
@@ -684,9 +688,9 @@ class TestRenderEntities:
     def test_entities_value_font_larger_than_name(self) -> None:
         # The state value is the element users scan for at a
         # glance, so it must render in a larger font than the
-        # entity name.  Compare SVG font sizes: at the capped
-        # 56 px row the name's descenders make rendered glyph
-        # boxes equally tall.
+        # entity name.  Compare SVG font sizes, which are snapped
+        # to the TRMNL pixel grid: at the capped 56 px row the
+        # name's descenders make rendered glyph boxes equally tall.
         m = _compute_metrics(DEFAULT_ROW_H)
         widget = {
             "type": "entities",
@@ -700,9 +704,13 @@ class TestRenderEntities:
         sizes = {
             int(sz) for sz in re.findall(r'<text[^>]*font-size="(\d+)"', svg)
         }
-        assert m.font_primary in sizes
-        assert m.font_secondary in sizes
-        assert m.font_primary > m.font_secondary
+        # Sizes are snapped to the TRMNL pixel grid (default on).
+        with pixel_fonts_context(True):
+            primary = pixel_font_size(m.font_primary)
+            secondary = pixel_font_size(m.font_secondary)
+        assert primary in sizes
+        assert secondary in sizes
+        assert primary > secondary
 
     def test_entities_bold_value_renders_bold_weight(self) -> None:
         # bold_value=True renders each row's right-aligned state

@@ -16,10 +16,10 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import TYPE_CHECKING, Any
 
 from .._helpers import _fmt, _resolve_tz
+from .axes import _format_timestamp
 
 if TYPE_CHECKING:
     from ...const import DisplayConfig
@@ -88,192 +88,30 @@ def _smooth_fill(
     return f"{path} L {pts[-1][0]},{gy2} L {pts[0][0]},{gy2} Z"
 
 
-def _format_timestamp(
-    ts: float,
-    time_fmt: str,
-    tz: datetime.tzinfo = datetime.UTC,
-) -> str:
-    """Format a Unix timestamp as a short time string.
-
-    Args:
-        ts: Unix timestamp (seconds since epoch).
-        time_fmt: ``"12"`` for 12-hour with AM/PM, any other value
-            for 24-hour ``HH:MM`` format.
-        tz: Time zone the time is shown in (default UTC).
-
-    Returns:
-        Formatted time string.
-    """
-    dt = datetime.datetime.fromtimestamp(ts, tz=tz)
-    if time_fmt == "12":
-        # %-I is GNU libc-only; lstrip("0") is portable.
-        return dt.strftime("%I:%M %p").lstrip("0")
-    return dt.strftime("%H:%M")
-
-
-def _label_geometry(
-    points: list[tuple[float, float]],
-    y_min: float,
-    y_max: float,
-    gx1: int,
-    gy1: int,
-    gy2: int,
-    config: DisplayConfig,
-    graph_h: int,
-) -> tuple[int, int, int, int, int, str, str, str, str]:
-    """Compute Y-axis and X-axis label geometry.
-
-    Measures formatted label text widths to determine how much
-    horizontal space to reserve on the left (Y-axis labels) and
-    how much vertical space to reserve at the bottom (X-axis labels).
-    If the X-axis label band would leave no usable graph area
-    (``new_gy2 <= gy1``), X-axis labels are suppressed and ``gy2``
-    is left unchanged.
-
-    Args:
-        points: Sorted (timestamp, value) data pairs.
-        y_min: Y-axis lower bound.
-        y_max: Y-axis upper bound.
-        gx1: Current left edge of the graph area (will be shifted).
-        gy1: Top edge of the graph area (used to detect clipping).
-        gy2: Current bottom edge of the graph area (will be shifted).
-        config: Display config for locale formatting and time_format.
-        graph_h: Pixel height of the graph area (gy2 - gy1), used to
-            derive proportional font size.
-
-    Returns:
-        Tuple of
-        ``(new_gx1, new_gy2, y_label_x, x_label_y, label_font_sz,
-           y_min_str, y_max_str, x_oldest_str, x_newest_str)``
-        where ``new_gx1``/``new_gy2`` are the adjusted graph
-        boundaries and the string fields are the formatted label texts.
-        When X-axis labels are suppressed, ``x_label_y`` is 0 and the
-        time strings are empty.
-    """
-    from ...render import _load_font
-
-    label_font_sz = max(10, round(graph_h * 0.06))
-    label_font = _load_font(label_font_sz)
-    y_min_str = _fmt(f"{y_min:.1f}", config)
-    y_max_str = _fmt(f"{y_max:.1f}", config)
-    label_w = max(
-        round(label_font.getlength(y_min_str)),
-        round(label_font.getlength(y_max_str)),
-    )
-    label_gap = label_font_sz // 2
-    y_label_x = gx1
-    new_gx1 = gx1 + label_w + label_gap
-
-    x_label_h = label_font_sz + label_font_sz // 2
-    new_gy2 = gy2 - x_label_h
-
-    # Suppress X-axis labels when the widget is too short to
-    # accommodate them without inverting the graph area.
-    if new_gy2 <= gy1:
-        x_label_y = 0
-        new_gy2 = gy2
-        x_oldest_str = ""
-        x_newest_str = ""
-    else:
-        # Place the hanging baseline just below new_gy2 so the text
-        # body (label_font_sz tall) fits within the original gy2.
-        x_label_y = new_gy2 + label_gap
-        time_fmt = str(config.get("time_format", "24"))
-        tz = _resolve_tz(config)
-        t_oldest = min(t for t, _ in points)
-        t_newest = max(t for t, _ in points)
-        x_oldest_str = _format_timestamp(t_oldest, time_fmt, tz)
-        x_newest_str = _format_timestamp(t_newest, time_fmt, tz)
-
-    return (
-        new_gx1,
-        new_gy2,
-        y_label_x,
-        x_label_y,
-        label_font_sz,
-        y_min_str,
-        y_max_str,
-        x_oldest_str,
-        x_newest_str,
-    )
-
-
-def _secondary_label_geometry(
-    y_min: float,
-    y_max: float,
-    gx2: int,
-    label_font_sz: int,
-    config: DisplayConfig,
-) -> tuple[int, int, str, str]:
-    """Compute secondary Y-axis label geometry on the right side.
-
-    Mirrors ``_label_geometry`` for the right-hand axis.  Measures
-    formatted label text widths and shifts ``gx2`` inward to reserve
-    space for right-aligned secondary Y-axis labels.
-
-    Args:
-        y_min: Secondary Y-axis lower bound.
-        y_max: Secondary Y-axis upper bound.
-        gx2: Current right edge of the graph area.
-        label_font_sz: Font size shared with primary labels.
-        config: Display config for locale formatting.
-
-    Returns:
-        Tuple of ``(new_gx2, y2_label_right_x, y2_min_str,
-        y2_max_str)`` where ``new_gx2`` is the adjusted right
-        edge and the strings are the formatted Y-axis labels.
-    """
-    from ...render import _load_font
-
-    y2_min_str = _fmt(f"{y_min:.1f}", config)
-    y2_max_str = _fmt(f"{y_max:.1f}", config)
-    font = _load_font(label_font_sz)
-    label_w = max(
-        round(font.getlength(y2_min_str)),
-        round(font.getlength(y2_max_str)),
-    )
-    label_gap = label_font_sz // 2
-    y2_label_right_x = gx2
-    new_gx2 = gx2 - label_w - label_gap
-    return new_gx2, y2_label_right_x, y2_min_str, y2_max_str
-
-
 def _extrema_geometry(
     points: list[tuple[float, float]],
-    label_font_sz: int,
+    font_sz: int,
     gy2: int,
     config: DisplayConfig,
-    graph_h: int,
-) -> tuple[int, int, int, str, str, bool]:
-    """Compute extrema text geometry and formatted strings.
+) -> tuple[int, int, str, str]:
+    """Reserve the extrema band and format the min/max strings.
 
-    Finds the data minimum and maximum, formats them with timestamps,
-    and reserves a band directly above ``gy2`` for the text.
+    The band (one text line plus half a line of spacing) is taken
+    from the bottom of the remaining area, directly above ``gy2``.
 
     Args:
         points: Sorted (timestamp, value) data pairs.
-        label_font_sz: Font size already chosen for axis labels; reuse
-            it for extrema so both are the same size.  Pass 0 when
-            axis labels are disabled — the function then falls back to
-            ``max(10, round(graph_h * 0.06))``, the same formula used
-            by ``_label_geometry``.
-        gy2: Bottom edge of the free area; the band is taken from
-            here upward and the returned ``new_gy2`` is its top.
-        config: Display config for locale formatting and time_format.
-        graph_h: Pixel height of the graph area (gy2 - gy1), used to
-            derive a proportional font size when ``label_font_sz`` is 0.
+        font_sz: Font size shared with the axis labels.
+        gy2: Current bottom edge of the free area (shifted up).
+        config: Display config for locale formatting, ``time_format``
+            and ``time_zone``.
 
     Returns:
-        Tuple of
-        ``(new_gy2, extrema_y, extrema_font_sz,
-           extrema_min_str, extrema_max_str, show_extrema)``
-        where ``new_gy2`` is the adjusted graph bottom and the string
-        fields are the formatted extrema labels.
+        Tuple ``(new_gy2, extrema_y, extrema_min_str,
+        extrema_max_str)`` where ``extrema_y`` is the band top used
+        as the text's hanging baseline.
     """
-    efont_sz = label_font_sz or max(10, round(graph_h * 0.06))
-    extrema_h = efont_sz + efont_sz // 2
-    # The text hangs from the band top, so it stays inside the band
-    # instead of running into whatever lies below gy2.
+    extrema_h = font_sz + font_sz // 2
     extrema_y = gy2 - extrema_h
     new_gy2 = extrema_y
 
@@ -289,7 +127,7 @@ def _extrema_geometry(
         f"Max: {_fmt(f'{max_pt[1]:.1f}', config)}"
         f" at {_format_timestamp(max_pt[0], time_fmt, tz)}"
     )
-    return new_gy2, extrema_y, efont_sz, extrema_min_str, extrema_max_str, True
+    return new_gy2, extrema_y, extrema_min_str, extrema_max_str
 
 
 def _truncate_to_width(text: str, font: Any, max_w: float) -> str:
@@ -324,6 +162,11 @@ def _truncate_to_width(text: str, font: Any, max_w: float) -> str:
     return text[:lo] + ellipsis
 
 
+def _legend_band_height(font_sz: int) -> int:
+    """Return the height of the legend band for a given font size."""
+    return font_sz + font_sz // 2
+
+
 def _legend_geometry(
     entity_descs: list[dict[str, object]],
     states: dict[str, Any],
@@ -340,15 +183,16 @@ def _legend_geometry(
     line graphs, each entry shows a short dash-pattern line sample;
     for bar charts, a small filled rectangle swatch in the entity's
     fill color is shown instead.  The legend occupies a band
-    directly above ``gy2``, whose top is returned as the new
-    ``gy2``.  When entity names are long enough that entries would
-    overflow the graph width (and overlap each other), names are
-    truncated with an ellipsis to fit.  Each entry's fair share is
-    an equal split of the available width; entries whose name
-    already fits that share keep it in full, and the width they
-    don't use is handed to the remaining (over-budget) entries
-    before those are truncated, so one long name doesn't needlessly
-    shrink short ones.
+    directly above ``gy2``, and that boundary is shifted upward to
+    the band's top.  When
+    entity names are long enough that entries would overflow the
+    graph width (and overlap each other), names are truncated with
+    an ellipsis to fit.  Each entry's fair share is an equal split
+    of the available width; entries whose name already fits that
+    share keep it in full, and the width they don't use is handed
+    to the remaining (over-budget) entries before those are
+    truncated, so one long name doesn't needlessly shrink short
+    ones.
 
     Args:
         entity_descs: Normalized entity descriptor list from
@@ -357,10 +201,9 @@ def _legend_geometry(
         gx1: Left edge of the graph area.
         gx2: Right edge of the graph area, used to cap total legend
             width and truncate names that would otherwise overflow.
-        gy2: Bottom edge of the free area; the band is taken from
-            here upward.
-        label_font_sz: Font size from axis labels; 0 triggers the
-            same fallback formula as ``_label_geometry``.
+        gy2: Current bottom edge of the graph area (shifted up).
+        label_font_sz: Font size from axis labels; 0 falls back to
+            ``max(10, round(graph_h * 0.06))``.
         graph_h: Graph area pixel height used when
             ``label_font_sz`` is 0.
         bar_fills: Tuple of hex fill colors for bar chart entities
@@ -383,9 +226,9 @@ def _legend_geometry(
     legend_font = _load_font(font_sz)
     line_sample_w = font_sz * 2
     gap = font_sz // 2
-    legend_h = font_sz + gap
-    # The band is taken from the bottom of the free area, so it never
-    # overlaps bands reserved below it earlier.
+    legend_h = _legend_band_height(font_sz)
+    # The band is taken from the bottom of the remaining area, so it
+    # never overlaps bands reserved below it earlier.
     legend_y = gy2 - legend_h
     new_gy2 = legend_y
 

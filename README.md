@@ -266,4 +266,12 @@ Apache 2.0 -- see [LICENSE](LICENSE).
 Weather icons from [erikflowers/weather-icons](https://github.com/erikflowers/weather-icons),
 licensed under SIL Open Font License 1.1.
 
+TRMNL pixel font (TRMNL12, TRMNL16, TRMNL21) designed by
+[Renegade Fonts](https://renegadefonts.com) /
+[Heavyweight Digital Type Foundry](http://www.heavyweight-type.com),
+© 2026 Heavyweight Digital Type Foundry s.r.o., licensed under SIL Open
+Font License 1.1 -- see
+[fonts/TRMNL/OFL.txt](custom_components/eink_dashboard/fonts/TRMNL/OFL.txt).
+The font files are bundled unmodified.
+
 Roboto font by Google, licensed under Apache 2.0.

@@ -26,6 +26,9 @@ from custom_components.eink_dashboard.render import (
     render_dashboard,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets.device_battery import (
+    _build_device_battery_context,
+)
 from tests.helpers import (
     assert_all_white,
     assert_card_border,
@@ -134,15 +137,30 @@ class TestRenderDeviceBattery:
         )
 
     def test_icon_zero_percent(self) -> None:
-        # Verify 0% shows outline only, no fill.
+        # Verify the actual battery body interior is white at zero percent.
         widgets = [{"type": "device_battery", "x": PADDING, "y": 20}]
-        img = render_to_image(widgets, self._config(device_battery_level=0))
+        config = self._config(device_battery_level=0)
+        img = render_to_image(widgets, config)
         # Outline is present (gray, threshold=200); body_x=lpad=8
         assert_has_dark_pixels(
             img, PADDING + 8, 30, PADDING + 42, 44, threshold=200
         )
-        # Interior should be white (no fill bar)
-        assert_all_white(img, PADDING + 10, 32, PADDING + 36, 42)
+        context = _build_device_battery_context(widgets[0], config)
+        body_x = context["body_x"]
+        body_y = context["icon_y"]
+        body_w = context["body_w"]
+        body_h = context["body_h"]
+        assert all(
+            isinstance(value, int)
+            for value in (body_x, body_y, body_w, body_h)
+        )
+        assert_all_white(
+            img,
+            body_x + 2,
+            body_y + 2,
+            body_x + body_w - 2,
+            body_y + body_h - 2,
+        )
 
     def test_icon_100_percent(self) -> None:
         # Verify 100% fills the entire battery body interior.
