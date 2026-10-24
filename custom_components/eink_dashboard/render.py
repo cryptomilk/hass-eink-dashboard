@@ -30,7 +30,6 @@ import io
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
-from pathlib import Path
 from typing import Any
 
 from babel import UnknownLocaleError
@@ -46,6 +45,7 @@ from .const import (
     NumberFormat,
     Widget,
 )
+from .fonts import current_font_family, font_path, pixel_font_size
 from .optimize import optimize_for_eink
 from .svg_render import (
     _SVG_RENDERERS,
@@ -55,44 +55,47 @@ from .svg_render import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
-
 
 def _load_font(
-    size: int, medium: bool = False, bold: bool = False
+    size: int,
+    medium: bool = False,
+    bold: bool = False,
+    family: str | None = None,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load Roboto at the given pixel size, falling back to PIL default.
+    """Load a bundled font at the given size.
 
     Args:
-        size: Font size in pixels (clamped to a minimum of 1).
-        medium: When True, load Roboto Medium (weight 500) instead of
-            Roboto Regular (weight 400).
-        bold: When True, load Roboto Bold (weight 700). Takes
+        size: Font size in pixels (clamped to a minimum of 1).  Snapped
+            to the TRMNL pixel grid when pixel fonts are active, so
+            measurements match the size the SVG renders at.
+        medium: When True, load Roboto Medium when available.
+        bold: When True, load the selected font's bold weight. Takes
             precedence over ``medium``.
+        family: Optional family override; otherwise the family selected
+            by the current render context is used.
 
     Returns:
         A FreeTypeFont loaded from the TTF file, or the PIL built-in
         default font if the TTF is not found.
     """
-    return _load_font_cached(max(1, size), medium, bold)
+    return _load_font_cached(
+        max(1, round(pixel_font_size(size))),
+        medium,
+        bold,
+        family or current_font_family(),
+    )
 
 
 @functools.cache
 def _load_font_cached(
-    size: int, medium: bool, bold: bool = False
+    size: int, medium: bool, bold: bool, family: str
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load a font at the given size (unclamped, cached).
 
     Separated from _load_font so that size=0 and size=1 produce distinct
     cache entries instead of colliding after the clamp.
     """
-    if bold:
-        filename = "Roboto-Bold.ttf"
-    elif medium:
-        filename = "Roboto-Medium.ttf"
-    else:
-        filename = "Roboto-Regular.ttf"
-    ttf_path = _FONTS_DIR / filename
+    ttf_path = font_path(size, bold=bold, medium=medium, family=family)
     if ttf_path.exists():
         return ImageFont.truetype(str(ttf_path), size)
     return ImageFont.load_default(size)

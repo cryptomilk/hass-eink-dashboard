@@ -542,8 +542,8 @@ class TestRenderEntity:
         widgets_hidden = [{**widgets_normal[0], "hide_icon": True}]
         img_n = render_to_image(widgets_normal, self._config())
         img_h = render_to_image(widgets_hidden, self._config())
-        bbox_n = _band_bbox(img_n, 0, 0, 400, h, 0, 60)
-        bbox_h = _band_bbox(img_h, 0, 0, 400, h, 0, 60)
+        bbox_n = _band_bbox(img_n, 0, 0, 400, h, -1, 60)
+        bbox_h = _band_bbox(img_h, 0, 0, 400, h, -1, 60)
         assert bbox_n is not None
         assert bbox_h is not None
         assert bbox_h[0] < bbox_n[0], (
@@ -573,18 +573,9 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        # min_pixels is raised well above the default: black value
-        # text anti-aliases through the entire 0-255 range at its
-        # edges, so a handful of those edge pixels can land inside
-        # the gray band by chance. A high threshold ensures only
-        # genuine gray (name) content trips this assertion.
-        assert (
-            _band_bbox(img, text_x0, 0, text_x1, h, 100, 140, min_pixels=200)
-            is None
-        ), "no gray (name) content should render when hide_name=True"
-        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
-            "value must still render when hide_name=True"
-        )
+        svg = render_widget_svg(widgets[0], self._config())
+        assert "Living Room" not in svg
+        assert _band_bbox(img, text_x0, 0, text_x1, h, -1, 60) is not None
 
     def test_entity_hide_name_icon_still_visible(self) -> None:
         # hide_name=True must not affect icon rendering — the icon
@@ -631,7 +622,7 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
+        assert _band_bbox(img, text_x0, 0, text_x1, h, -1, 60) is not None, (
             "value should render in black"
         )
         assert _band_bbox(img, text_x0, 0, text_x1, h, 100, 140) is not None, (
@@ -655,7 +646,7 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        value_bbox = _band_bbox(img, text_x0, 0, text_x1, h, 0, 60)
+        value_bbox = _band_bbox(img, text_x0, 0, text_x1, h, -1, 60)
         assert value_bbox is not None
         # Search for the name band strictly below the value's own
         # bounding box, skipping one extra row. Black text
@@ -894,8 +885,8 @@ class TestRenderEntity:
         img_without = render_to_image(
             [base], self._config(states=states_no_unit)
         )
-        bbox_with = _band_bbox(img_with, text_x0, 0, text_x1, h, 0, 60)
-        bbox_without = _band_bbox(img_without, text_x0, 0, text_x1, h, 0, 60)
+        bbox_with = _band_bbox(img_with, text_x0, 0, text_x1, h, -1, 60)
+        bbox_without = _band_bbox(img_without, text_x0, 0, text_x1, h, -1, 60)
         assert bbox_with is not None
         assert bbox_without is not None
         assert bbox_with[2] > bbox_without[2], (
@@ -908,12 +899,8 @@ class TestRenderEntity:
         )
 
     def test_entity_unit_renders_black_not_gray(self) -> None:
-        # Unit must render black (like the value), not gray. Push the
-        # name to the top so the lower half of the text column
-        # contains only value+unit, then confirm no gray pixels
-        # appear there.
+        # Unit markup must use the same black fill as the value.
         h = 224
-        text_x0, text_x1 = _content_x_range(400, h)
         widgets = [
             {
                 "type": "entity",
@@ -925,19 +912,9 @@ class TestRenderEntity:
                 "name_position": "top",
             }
         ]
-        img = render_to_image(widgets, self._config())
-        lower = (text_x0, h // 2, text_x1, h)
-        # min_pixels is raised well above the default: black
-        # value+unit text anti-aliases through the entire 0-255
-        # range at its edges, so a handful of those edge pixels can
-        # land inside the gray band by chance. A high threshold
-        # ensures only genuine gray content trips this assertion.
-        assert _band_bbox(img, *lower, 100, 140, min_pixels=200) is None, (
-            "value+unit row must contain no gray pixels"
-        )
-        assert _band_bbox(img, *lower, 0, 60) is not None, (
-            "value+unit row must contain black pixels"
-        )
+        svg = render_widget_svg(widgets[0], self._config())
+        assert 'fill="#000000">°C</text>' in svg
+        assert 'fill="#787878">°C</text>' not in svg
 
     def test_entity_attribute_display(self) -> None:
         # attribute= shows the specified attribute value instead of the
@@ -1111,7 +1088,7 @@ class TestRenderEntity:
             }
         ]
         img = render_to_image(widgets, self._config())
-        assert _band_bbox(img, text_x0, 0, text_x1, h, 0, 60) is not None, (
+        assert _band_bbox(img, text_x0, 0, text_x1, h, -1, 60) is not None, (
             "value must render right of the icon column"
         )
 

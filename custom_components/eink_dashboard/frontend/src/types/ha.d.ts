@@ -638,8 +638,8 @@ export interface HeadingWidget extends WidgetBase {
   heading?: string;
   /**
    * Visual style for the heading text.
-   * - ``"title"`` — large Roboto Medium in black (default).
-   * - ``"subtitle"`` — smaller Roboto Regular in gray.
+   * - ``"title"`` — large regular-weight text in black (default).
+   * - ``"subtitle"`` — smaller regular text in gray.
    */
   heading_style?: "title" | "subtitle";
   /**

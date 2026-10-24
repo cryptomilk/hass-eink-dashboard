@@ -539,7 +539,14 @@ class TestOptimizeIntegration:
             render_dashboard,
         )
 
-        config = {"width": 200, "height": 100, "optimize": False}
+        # Pixel fonts render text without anti-aliasing, so disable
+        # them to get the anti-aliased gray edges this test counts.
+        config = {
+            "width": 200,
+            "height": 100,
+            "optimize": False,
+            "pixel_fonts": False,
+        }
         widgets = [{"type": "heading", "x": 10, "y": 10, "heading": "Hi"}]
         png = render_dashboard(widgets, config)
         img = Image.open(io.BytesIO(png))

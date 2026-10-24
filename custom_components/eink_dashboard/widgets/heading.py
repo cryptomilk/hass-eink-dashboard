@@ -64,9 +64,9 @@ def _build_heading_context(
 
     Heading style controls font size and fill:
 
-    - ``"title"`` — Roboto Medium at ``font_primary``, black fill
-      (default).
-    - ``"subtitle"`` — Roboto Regular at ``font_secondary``, gray
+    - ``"title"`` — regular-weight text at ``font_primary``, black
+      fill (default).
+    - ``"subtitle"`` — regular text at ``font_secondary``, gray
       fill.
 
     Icon style controls circle rendering:

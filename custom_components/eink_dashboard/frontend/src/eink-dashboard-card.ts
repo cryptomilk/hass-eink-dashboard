@@ -45,6 +45,63 @@ const HANDLE_SIZE = 12;
 const _CARD_VERSION =
   new URL(import.meta.url).searchParams.get("v") ?? "";
 
+// ── Bundled fonts ─────────────────────────────────────────────────────────────
+
+/** ID of the document-level style element holding the font faces. */
+export const FONT_STYLE_ID = "eink-dashboard-fonts";
+
+/** Native optical sizes of the bundled TRMNL pixel font. */
+const TRMNL_SIZES = [12, 16, 21] as const;
+
+/**
+ * Build the `@font-face` rules for the bundled TRMNL font.
+ *
+ * Server-rendered widget SVGs reference the families `TRMNL12`,
+ * `TRMNL16` and `TRMNL21`, which browsers do not have.  The font
+ * files are served by the integration at `/eink_dashboard/fonts`.
+ * Only Regular (400) and Bold (700) faces exist, so weight 500
+ * resolves to Regular in the browser just as it does in resvg.
+ *
+ * @param version - Cache-busting query value appended to each URL.
+ * @returns CSS text with one `@font-face` rule per face.
+ */
+export function buildFontFaceCss(version: string): string {
+  const query = version ? `?v=${encodeURIComponent(version)}` : "";
+  const faces: string[] = [];
+  for (const size of TRMNL_SIZES) {
+    for (const [style, weight] of [
+      ["Regular", 400],
+      ["Bold", 700],
+    ] as const) {
+      const url = `/eink_dashboard/fonts/TRMNL/TRMNL${size}-${style}.ttf`;
+      faces.push(
+        `@font-face { font-family: "TRMNL${size}"; ` +
+          `src: url("${url}${query}") format("truetype"); ` +
+          `font-weight: ${weight}; font-style: normal; ` +
+          `font-display: block; }`,
+      );
+    }
+  }
+  return faces.join("\n");
+}
+
+/**
+ * Register the bundled fonts with the document once.
+ *
+ * `@font-face` rules inside a shadow root are ignored by browsers,
+ * so the style element must live in the main document's `<head>`.
+ * Calling this more than once is a no-op.
+ *
+ * @param doc - Document to register the fonts in.
+ */
+export function ensureBundledFonts(doc: Document = document): void {
+  if (doc.getElementById(FONT_STYLE_ID)) return;
+  const style = doc.createElement("style");
+  style.id = FONT_STYLE_ID;
+  style.textContent = buildFontFaceCss(_CARD_VERSION);
+  doc.head.appendChild(style);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function buildHeaderText(device: { name: string }): string {
@@ -203,6 +260,7 @@ class EinkDashboardCard extends HTMLElement {
 
   connectedCallback(): void {
     this._connected = true;
+    ensureBundledFonts();
     if (this._layout) {
       void this._fetchWidgetSvgs();
     } else if (this._hass && this._config) {

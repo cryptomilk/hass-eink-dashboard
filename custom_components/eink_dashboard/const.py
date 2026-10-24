@@ -27,6 +27,22 @@ type DisplayConfig = dict[str, Any]
 
 DOMAIN = "eink_dashboard"
 
+
+class FontFamily(StrEnum):
+    """Bundled font families selectable for dashboard text.
+
+    The selected family is listed first in every SVG ``font-family``
+    stack; the other one stays available as a glyph fallback.
+    """
+
+    TRMNL = "TRMNL"
+    """Pixel font with 12, 16 and 21 px optical sizes, for
+    low-resolution panels."""
+    ROBOTO = "Roboto"
+    """Outline font with Regular, Medium and Bold weights, for
+    high-resolution panels."""
+
+
 DEFAULT_WIDTH = 758
 DEFAULT_HEIGHT = 1024
 DEFAULT_UPDATE_INTERVAL = 60
@@ -38,10 +54,20 @@ DEFAULT_MEASURED_PALETTE = "auto"
 DEFAULT_EXPOSURE = 1.0
 DEFAULT_SATURATION = 1.0
 DEFAULT_USE_SYSTEM_FONTS = False
+# Snap TRMNL text to its pixel grid and disable text anti-aliasing.
+DEFAULT_PIXEL_FONTS = True
 # Render every non-white text colour (gray labels etc.) as black.
 DEFAULT_BLACK_TEXT = False
 # Render dividers, separators and left card bars in solid black.
 DEFAULT_BLACK_DIVIDERS = False
+# Font for high-resolution displays and the renderer's fallback.
+DEFAULT_FONT_FAMILY = FontFamily.ROBOTO
+# Pixel font for low-resolution displays, where small anti-aliased text
+# breaks up into gray fringes.
+LOW_RES_FONT_FAMILY = FontFamily.TRMNL
+# Custom displays whose shorter side is at most this many pixels default
+# to LOW_RES_FONT_FAMILY, matching the 800 x 480 presets.
+LOW_RES_MAX_SHORT_SIDE = 480
 DEFAULT_ROW_H = 56
 # Pixel density the DEFAULT_ROW_H baseline was designed for (Kindle
 # Paperwhite 1/2, 6" at 758x1024).  List rows default to the same
@@ -117,6 +143,10 @@ class DevicePreset:
     panel diagonal.  Scales the default list row height so rows have
     the same physical size on every device.  ``None`` when the panel
     size is unknown; the default then stays at ``DEFAULT_ROW_H``."""
+    font_family: FontFamily = DEFAULT_FONT_FAMILY
+    """Default font family for this device.  Low-resolution panels use
+    the TRMNL pixel font; the others use Roboto.  Users can override it
+    in Display settings."""
 
 
 DEVICE_PRESETS: dict[str, DevicePreset] = {
@@ -165,6 +195,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "TRMNL",
         native_landscape=True,
         ppi=124,
+        font_family=LOW_RES_FONT_FAMILY,
     ),
     "trmnl_x": DevicePreset(
         "TRMNL X",
@@ -195,6 +226,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         native_landscape=True,
         integration_dithers=True,
         ppi=124,
+        font_family=LOW_RES_FONT_FAMILY,
     ),
     "reterminal_e1002": DevicePreset(
         "reTerminal E1002",
@@ -207,6 +239,7 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         integration_dithers=True,
         color_scheme="bwgbry",
         ppi=128,
+        font_family=LOW_RES_FONT_FAMILY,
     ),
     "reterminal_e1003": DevicePreset(
         "reTerminal E1003",
@@ -228,6 +261,50 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
         "",
     ),
 }
+
+
+def default_font_family(options: Mapping[str, Any]) -> FontFamily:
+    """Return the default font family for a display.
+
+    Device presets carry their own default.  Custom displays (and
+    entries without a device model) use the TRMNL pixel font when the
+    shorter side of the canvas is at most ``LOW_RES_MAX_SHORT_SIDE``
+    pixels, and Roboto otherwise.
+
+    Args:
+        options: Config entry options with ``device_model``, ``width``
+            and ``height``.
+
+    Returns:
+        The ``FontFamily`` to render with.
+    """
+    model = options.get("device_model", "custom")
+    preset = DEVICE_PRESETS.get(model)
+    if preset is not None and model != "custom":
+        return preset.font_family
+    width = options.get("width", DEFAULT_WIDTH)
+    height = options.get("height", DEFAULT_HEIGHT)
+    if min(width, height) <= LOW_RES_MAX_SHORT_SIDE:
+        return LOW_RES_FONT_FAMILY
+    return DEFAULT_FONT_FAMILY
+
+
+def resolve_font_family(options: Mapping[str, Any]) -> FontFamily:
+    """Return the font family selected for a display.
+
+    Uses the ``font_family`` option when it is set to a known family,
+    otherwise the display's default from ``default_font_family()``.
+
+    Args:
+        options: Config entry options.
+
+    Returns:
+        The ``FontFamily`` to render with.
+    """
+    family = options.get("font_family")
+    if family in FontFamily:
+        return FontFamily(family)
+    return default_font_family(options)
 
 
 def resolve_display(

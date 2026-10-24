@@ -8,7 +8,12 @@
 
   Usage:
     {%- from "_macros.svg.j2" import widget_title, card_container,
-        card_row, chip -%}
+        card_row, chip with context -%}
+
+  ``with context`` is required: the macros read ``font_family_name``
+  from the caller's render context.  Without it the variable is
+  undefined inside the macros and text silently falls back to the
+  wrong font family.
 #}
 
 {#
@@ -27,8 +32,8 @@
 {%- if title -%}
 <text
   x="{{ x }}" y="0"
-  font-family="Roboto"
-  font-size="{{ font_sz }}"
+  font-family="{{ font_sz | font_family(font_family_name) }}"
+  font-size="{{ font_sz | font_px }}"
   dominant-baseline="hanging"
   fill="{{ fill }}">{{ title }}</text>
 {%- endif -%}
@@ -151,8 +156,8 @@
 {%- elif letter -%}
 <text
   x="{{ cx }}" y="{{ cy }}"
-  font-family="Roboto"
-  font-size="{{ letter_font_sz }}"
+  font-family="{{ letter_font_sz | font_family(font_family_name) }}"
+  font-size="{{ letter_font_sz | font_px }}"
   text-anchor="middle"
   dominant-baseline="central"
   fill="{{ icon_color }}">{{ letter }}</text>
@@ -182,7 +187,7 @@
     icon_dia  -- circle diameter
     inner_gap -- gap between circle right edge and text
     border    -- stroke width for outlined icon circle
-    font_primary   -- Roboto Medium font size for the main label
+    font_primary   -- font size for the main label
     font_secondary -- font size for secondary text (sub-label)
     icon_fill      -- hex fill color for solid icon circle
     primary_fill   -- hex color for primary text
@@ -289,17 +294,17 @@
 {%- set sy = bt + font_primary + lg + font_secondary // 2 -%}
 <text
   x="{{ tx }}" y="{{ py }}"
-  font-family="Roboto" font-weight="500"
-  font-size="{{ font_primary }}"
+  font-family="{{ font_primary | font_family(font_family_name) }}" font-weight="500"
+  font-size="{{ font_primary | font_px }}"
   dominant-baseline="central"
   fill="{{ primary_fill }}">{{ primary }}</text>
 <text
   x="{{ tx }}" y="{{ sy }}"
-  font-family="Roboto"
+  font-family="{{ font_secondary | font_family(font_family_name) }}"
 {%- if secondary_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ font_secondary }}"
+  font-size="{{ font_secondary | font_px }}"
   dominant-baseline="central"
   fill="{{ secondary_fill }}">{{ secondary }}</text>
 {%- else -%}
@@ -308,8 +313,8 @@
    (bb[1]).  The difference is a few pixels and acceptable for e-ink. #}
 <text
   x="{{ tx }}" y="{{ y + row_h // 2 }}"
-  font-family="Roboto" font-weight="500"
-  font-size="{{ font_primary }}"
+  font-family="{{ font_primary | font_family(font_family_name) }}" font-weight="500"
+  font-size="{{ font_primary | font_px }}"
   dominant-baseline="central"
   fill="{{ primary_fill }}">{{ primary }}</text>
 {%- endif -%}
@@ -317,11 +322,11 @@
 {%- if value -%}
 <text
   x="{{ x + w - rpad }}" y="{{ y + row_h // 2 }}"
-  font-family="Roboto"
+  font-family="{{ font_value | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ font_value }}"
+  font-size="{{ font_value | font_px }}"
   text-anchor="end"
   dominant-baseline="central"
   fill="{{ value_fill }}">{{ value }}</text>
@@ -415,8 +420,8 @@
     + (chip_icon_dia + chip_icon_gap if icon_svg else 0) -%}
 <text
   x="{{ tx }}" y="{{ y + h // 2 }}"
-  font-family="Roboto"
-  font-size="{{ chip_font_sz }}"
+  font-family="{{ chip_font_sz | font_family(font_family_name) }}"
+  font-size="{{ chip_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ text_fill }}">{{ text }}</text>
 {%- endmacro -%}
