@@ -31,6 +31,8 @@ from custom_components.eink_dashboard import (
     _async_get_locale,
     _enrich_display_precision,
     _enrich_entity_icons,
+    _fetch_calendar_events,
+    _fetch_week_calendar_events,
     _frontend_asset_version,
     async_setup,
     async_setup_entry,
@@ -661,6 +663,89 @@ _MOON_ICONS = {
         }
     }
 }
+
+
+class TestCalendarFetchers:
+    """The calendar and week calendar widgets each have their own fetcher."""
+
+    @staticmethod
+    def _hass() -> MagicMock:
+        """Return a mocked hass whose calendar service returns no events."""
+        hass = MagicMock()
+        hass.services.async_call = AsyncMock(
+            return_value={"calendar.home": {"events": []}}
+        )
+        return hass
+
+    @staticmethod
+    def _states() -> dict[str, Any]:
+        """Return a states snapshot holding one calendar entity."""
+        return {"calendar.home": {"state": "off", "attributes": {}}}
+
+    async def test_calendar_fetcher_ignores_week_calendar_widgets(
+        self,
+    ) -> None:
+        # The calendar fetcher only serves calendar widgets; a week
+        # calendar widget causes no call and no events.
+        hass, states = self._hass(), self._states()
+        widgets = [{"type": "week_calendar", "entity": "calendar.home"}]
+
+        await _fetch_calendar_events(hass, widgets, states)
+
+        hass.services.async_call.assert_not_awaited()
+        assert "events" not in states["calendar.home"]["attributes"]
+
+    async def test_calendar_fetcher_writes_events(self) -> None:
+        # A calendar widget gets its upcoming events under "events".
+        hass, states = self._hass(), self._states()
+        widgets = [{"type": "calendar", "entity": "calendar.home"}]
+
+        await _fetch_calendar_events(hass, widgets, states)
+
+        assert hass.services.async_call.await_count == 1
+        attrs = states["calendar.home"]["attributes"]
+        assert "events" in attrs
+        assert "week_events" not in attrs
+
+    async def test_week_fetcher_ignores_calendar_widgets(self) -> None:
+        # The week fetcher only serves week calendar widgets; a calendar
+        # widget causes no call and no events.
+        hass, states = self._hass(), self._states()
+        widgets = [{"type": "calendar", "entity": "calendar.home"}]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        hass.services.async_call.assert_not_awaited()
+        assert "week_events" not in states["calendar.home"]["attributes"]
+
+    async def test_week_fetcher_writes_week_events(self) -> None:
+        # A week calendar widget gets its events under "week_events",
+        # leaving the upcoming-events key alone.
+        hass, states = self._hass(), self._states()
+        widgets = [{"type": "week_calendar", "entity": "calendar.home"}]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        assert hass.services.async_call.await_count == 1
+        attrs = states["calendar.home"]["attributes"]
+        assert "week_events" in attrs
+        assert "events" not in attrs
+
+    async def test_fetchers_keep_separate_keys_on_one_entity(self) -> None:
+        # With both widget types on one calendar, each fetcher writes
+        # its own key, so neither overwrites the other.
+        hass, states = self._hass(), self._states()
+        widgets = [
+            {"type": "calendar", "entity": "calendar.home"},
+            {"type": "week_calendar", "entity": "calendar.home"},
+        ]
+
+        await _fetch_calendar_events(hass, widgets, states)
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        attrs = states["calendar.home"]["attributes"]
+        assert "events" in attrs
+        assert "week_events" in attrs
 
 
 class TestEnrichEntityIcons:

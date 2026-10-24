@@ -20,6 +20,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import zoneinfo
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -75,6 +76,7 @@ from .data import (
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 from .svg_render import render_widget_svg
+from .widgets.week_calendar import _week_calendar_entity_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -530,7 +532,8 @@ async def _fetch_forecasts(
     for w in widgets:
         # WidgetType is a StrEnum: wire-format strings compare equal.
         eid = w.get("entity", "")
-        if not eid or eid not in states:
+        # Week calendar widgets store a list of IDs, which is unhashable.
+        if not isinstance(eid, str) or not eid or eid not in states:
             continue
         if w.get("type") == WidgetType.WEATHER:
             weather_entities.add(eid)
@@ -692,6 +695,87 @@ async def _fetch_history(
             states[entity_id]["history"] = entries
 
 
+async def _fetch_week_calendar_events(
+    hass: HomeAssistant,
+    widgets: list[dict[str, Any]],
+    states: dict[str, Any],
+) -> None:
+    """Fetch a full week of events for week-calendar widgets.
+
+    The week view needs events from the start of the displayed week,
+    which depends on the first weekday and so can begin up to six
+    days before today.  The fetcher does not know the first weekday,
+    so it requests the widest window any week containing today can
+    span (local midnight six days ago until local midnight seven
+    days ahead) and lets the widget context builder pick the days it
+    shows.  Results go to ``attributes["week_events"]`` so a regular
+    calendar widget on the same entity keeps its own ``events`` list.
+
+    Args:
+        hass: Home Assistant instance.
+        widgets: Widget dicts to scan for week-calendar entity IDs.
+        states: Mutable states dict; events are injected in-place
+            under ``states[entity_id]["attributes"]["week_events"]``.
+    """
+    entity_ids = {
+        eid
+        for w in widgets
+        if w.get("type") == WidgetType.WEEK_CALENDAR
+        for eid in _week_calendar_entity_ids(w)
+    }
+    if not entity_ids:
+        return
+
+    tz_name = _ha_time_zone(hass)
+    try:
+        tz: dt.tzinfo = zoneinfo.ZoneInfo(tz_name) if tz_name else dt.UTC
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        tz = dt.UTC
+    today = dt.datetime.now(tz).date()
+    start_dt = dt.datetime.combine(
+        today - timedelta(days=6), dt.time.min, tzinfo=tz
+    )
+    end_dt = dt.datetime.combine(
+        today + timedelta(days=7), dt.time.min, tzinfo=tz
+    )
+    for entity_id in sorted(entity_ids):
+        if entity_id not in states:
+            _LOGGER.warning(
+                "Calendar entity %r is not in the states snapshot; "
+                "the week calendar will render blank.",
+                entity_id,
+            )
+            continue
+        try:
+            result = await hass.services.async_call(
+                "calendar",
+                "get_events",
+                {
+                    "entity_id": entity_id,
+                    "start_date_time": start_dt.isoformat(),
+                    "end_date_time": end_dt.isoformat(),
+                },
+                blocking=True,
+                return_response=True,
+            )
+            entity_data = result.get(entity_id) if result else None
+            raw = (
+                entity_data.get("events")
+                if isinstance(entity_data, dict)
+                else None
+            )
+            events: list[dict[str, Any]] = cast(
+                "list[dict[str, Any]]",
+                raw if isinstance(raw, list) else [],
+            )
+            events.sort(key=lambda e: str(e.get("start", "")))
+            states[entity_id]["attributes"]["week_events"] = events
+        except Exception:  # noqa: BLE001
+            _LOGGER.debug(
+                "Could not fetch week calendar events for %s", entity_id
+            )
+
+
 async def _fetch_calendar_events(
     hass: HomeAssistant,
     widgets: list[dict[str, Any]],
@@ -831,6 +915,7 @@ async def ws_render_widget(
     await _fetch_forecasts(hass, [widget], config["states"])
     await _fetch_history(hass, [widget], config["states"])
     await _fetch_calendar_events(hass, [widget], config["states"])
+    await _fetch_week_calendar_events(hass, [widget], config["states"])
     try:
         svg = await hass.async_add_executor_job(
             render_widget_svg, widget, config
@@ -897,6 +982,7 @@ async def ws_render_widgets(
     await _fetch_forecasts(hass, widgets, config["states"])
     await _fetch_history(hass, widgets, config["states"])
     await _fetch_calendar_events(hass, widgets, config["states"])
+    await _fetch_week_calendar_events(hass, widgets, config["states"])
 
     # Render all widgets in a single executor job: render_widget_svg
     # is CPU-bound (Jinja2 + resvg), and one thread per widget would

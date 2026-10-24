@@ -545,6 +545,19 @@ class CalendarWidget(WidgetBase, ListFields, total=False):
     """Suppress the row icons."""
 
 
+class WeekCalendarWidget(WidgetBase, total=False):
+    """Week calendar widget config."""
+
+    entity: str | list[str]
+    """Calendar entity ID, or a list of IDs whose events are merged."""
+    title: str
+    """Header text above the grid."""
+    start_hour: int | str
+    """First hour (0-23) shown on the time axis."""
+    end_hour: int | str
+    """Hour (1-24) at which the time axis ends."""
+
+
 class MeteogramWidget(WidgetBase, total=False):
     """Meteogram widget config."""
 

@@ -157,6 +157,29 @@ The `--data` flag accepts a JSON file with two keys:
   objects. Each state has a `state` string and an `attributes` dict,
   mirroring the HA state machine format.
 
+### Previewing the week calendar
+
+`scripts/preview_week_calendar.py` renders the week calendar from a
+fixed mock week (overlaps, events before and after the grid, all-day
+and overnight events, long titles) with a pinned clock, so the output
+only changes when the code does. It writes two PNGs to `.tmp/preview/`:
+the rendered widget and the same image after e-ink dithering at the
+device's gray levels.
+
+```bash
+uv run --group test python scripts/preview_week_calendar.py           # once
+uv run --group test python scripts/preview_week_calendar.py --watch   # re-render on save
+uv run --group test python scripts/preview_week_calendar.py --device reterminal_e1002 --language en --first-weekday sunday
+uv run --group test python scripts/preview_week_calendar.py --data my_events.json
+```
+
+Edit `widgets/week_calendar.py` (sizes, spacing, fonts, layout) or
+`templates/week_calendar.svg.j2` (colors, strokes, shapes) and open the
+PNGs in your editor; most editors refresh an open image on change.
+`--data` takes a JSON list of events shaped like `calendar.get_events`
+results (`start`, `end`, `summary`); keep them in the week of
+2026-10-19 or they will not show.
+
 ## Release
 
 1. Ensure `main` is clean and all CI checks pass.

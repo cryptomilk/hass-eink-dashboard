@@ -50,6 +50,7 @@ from . import (
     _fetch_calendar_events,
     _fetch_forecasts,
     _fetch_history,
+    _fetch_week_calendar_events,
     _ha_time_zone,
     build_display_config,
 )
@@ -235,6 +236,7 @@ class EinkDashboardImage(ImageEntity):
                 await self._async_fetch_forecasts(states)
                 await self._async_fetch_history(states)
                 await self._async_fetch_calendar_events(states)
+                await self._async_fetch_week_calendar_events(states)
                 config = build_display_config(
                     self._entry.options,
                     states,
@@ -398,6 +400,21 @@ class EinkDashboardImage(ImageEntity):
                 in-place for calendar entities.
         """
         await _fetch_calendar_events(self.hass, self._widgets, states)
+
+    async def _async_fetch_week_calendar_events(
+        self, states: dict[str, Any]
+    ) -> None:
+        """Fetch a week of events for week calendar widgets into states.
+
+        Delegates to the module-level ``_fetch_week_calendar_events``
+        so the logic is shared with the WebSocket preview handlers.
+
+        Args:
+            states: Mutable states dict; the events are injected
+                in-place under ``week_events`` for the calendars of
+                week calendar widgets.
+        """
+        await _fetch_week_calendar_events(self.hass, self._widgets, states)
 
     def _build_states(self) -> dict[str, Any]:
         """Snapshot all HA states as a plain dict for the renderer."""

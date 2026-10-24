@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
@@ -435,6 +436,72 @@ class TestEinkDashboardImage:
             await entity._async_fetch_calendar_events(states)
 
         assert "events" not in states["calendar.home"]["attributes"]
+
+    async def test_fetch_forecasts_skips_entity_lists(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # A week calendar widget stores its entity as a list, which
+        # must not crash the forecast scan with an unhashable type.
+        entity, _entry = make_entity()
+        entity.set_widgets(
+            [
+                {
+                    "type": "week_calendar",
+                    "entity": ["calendar.home", "calendar.work"],
+                }
+            ]
+        )
+
+        states = {"calendar.home": {"state": "off", "attributes": {}}}
+        await entity._async_fetch_forecasts(states)
+
+        assert "forecast" not in states["calendar.home"]["attributes"]
+
+    async def test_fetch_week_calendar_events(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        # A week calendar widget stores sorted events under
+        # "week_events", leaving the upcoming-events "events" key to
+        # regular calendar widgets, and requests a window spanning
+        # every possible week start (six days back, seven ahead).
+        backend_order = [
+            {
+                "start": "2026-10-21T10:00:00+02:00",
+                "end": "2026-10-21T11:00:00+02:00",
+                "summary": "Later",
+            },
+            {
+                "start": "2026-10-19T10:00:00+02:00",
+                "end": "2026-10-19T11:00:00+02:00",
+                "summary": "Earlier",
+            },
+        ]
+        entity, _entry = make_entity()
+        entity.set_widgets(
+            [{"type": "week_calendar", "entity": "calendar.home"}]
+        )
+
+        states = {"calendar.home": {"state": "off", "attributes": {}}}
+        mock_call = AsyncMock(
+            return_value={"calendar.home": {"events": backend_order}},
+        )
+        with patch("homeassistant.core.ServiceRegistry.async_call", mock_call):
+            await entity._async_fetch_week_calendar_events(states)
+
+        attrs = states["calendar.home"]["attributes"]
+        assert [e["summary"] for e in attrs["week_events"]] == [
+            "Earlier",
+            "Later",
+        ]
+        assert "events" not in attrs
+        data = mock_call.call_args.args[2]
+        start = dt.datetime.fromisoformat(data["start_date_time"])
+        end = dt.datetime.fromisoformat(data["end_date_time"])
+        # Compare local dates: across a DST change the aware
+        # difference is 13 days plus or minus an hour.
+        assert end.date() - start.date() == dt.timedelta(days=13)
+        assert start.time() == dt.time.min
+        assert end.time() == dt.time.min
 
     async def test_fetch_hourly_forecasts_for_meteogram(
         self, make_entity: Callable[..., Any]

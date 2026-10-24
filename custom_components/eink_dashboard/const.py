@@ -579,3 +579,4 @@ class WidgetType(StrEnum):
     WASTE_SCHEDULE = "waste_schedule"
     CALENDAR = "calendar"
     METEOGRAM = "meteogram"
+    WEEK_CALENDAR = "week_calendar"
