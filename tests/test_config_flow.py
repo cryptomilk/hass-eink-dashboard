@@ -898,6 +898,59 @@ class TestEinkDashboardOptionsFlow:
         assert result["type"] is FlowResultType.CREATE_ENTRY
         assert result["data"]["use_system_fonts"] is True
 
+    async def test_display_settings_saves_font_family(
+        self, hass: HomeAssistant
+    ) -> None:
+        # The selected bundled family is persisted as an option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "font_family": "Roboto"}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["font_family"] == "Roboto"
+
+    @pytest.mark.parametrize(
+        ("options", "expected"),
+        [
+            ({"device_model": "trmnl_og"}, "TRMNL"),
+            ({"device_model": "reterminal_e1001"}, "TRMNL"),
+            ({"device_model": "kindle_pw"}, "Roboto"),
+            ({"device_model": "trmnl_x"}, "Roboto"),
+            (
+                {"device_model": "custom", "width": 400, "height": 300},
+                "TRMNL",
+            ),
+            (
+                {"device_model": "custom", "width": 1200, "height": 825},
+                "Roboto",
+            ),
+            ({"width": 800, "height": 480}, "TRMNL"),
+            ({"device_model": "trmnl_og", "font_family": "Roboto"}, "Roboto"),
+            ({"device_model": "kindle_pw", "font_family": "bogus"}, "Roboto"),
+        ],
+    )
+    async def test_display_settings_default_font_family_follows_device(
+        self,
+        hass: HomeAssistant,
+        options: dict[str, Any],
+        expected: str,
+    ) -> None:
+        # Without a stored choice the form pre-selects the device's
+        # default font: TRMNL for low-resolution panels, Roboto for the
+        # rest.  A stored valid choice always wins.
+        flow = await _make_options_flow(
+            hass, {"update_interval": 60, **options}
+        )
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["font_family"].default() == expected
+
     async def test_display_settings_default_use_system_fonts_is_false(
         self, hass: HomeAssistant
     ) -> None:
@@ -912,6 +965,33 @@ class TestEinkDashboardOptionsFlow:
             if hasattr(k, "schema")
         }
         assert markers["use_system_fonts"].default() is False
+
+    async def test_display_settings_default_pixel_fonts_is_true(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Pixel-perfect text is on by default so the TRMNL pixel font
+        # renders crisply on 1-bit displays.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(None)
+
+        markers = {
+            k.schema: k
+            for k in result["data_schema"].schema
+            if hasattr(k, "schema")
+        }
+        assert markers["pixel_fonts"].default() is True
+
+    async def test_display_settings_saves_pixel_fonts_off(
+        self, hass: HomeAssistant
+    ) -> None:
+        # Disabling pixel-perfect text persists it as a top-level option.
+        flow = await _make_options_flow(hass, {"update_interval": 60})
+        result = await flow.async_step_display_settings(
+            {"update_interval": 60, "pixel_fonts": False}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"]["pixel_fonts"] is False
 
     async def test_display_settings_default_black_text_is_false(
         self, hass: HomeAssistant
@@ -1381,6 +1461,52 @@ class TestEinkDashboardOptionsFlow:
         assert result["data"]["display_levels"] == 16
         assert result["data"]["dither_algorithm"] == "floyd_steinberg"
         assert result["data"]["webhook_urls"] == []
+
+    async def test_device_settings_model_change_resets_font_family(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # A font chosen for the old model is dropped so the new model's
+        # default font applies.
+        flow = await _make_options_flow(
+            hass,
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+                "font_family": "Roboto",
+            },
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "reterminal_e1001", "orientation": "landscape"}
+        )
+
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert "font_family" not in result["data"]
+
+    async def test_device_settings_same_model_keeps_font_family(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        # Changing only the orientation keeps the user's font choice.
+        flow = await _make_options_flow(
+            hass,
+            {
+                "device_model": "kindle_pw",
+                "orientation": "portrait",
+                "width": 758,
+                "height": 1024,
+                "rotation": 0,
+                "font_family": "TRMNL",
+            },
+        )
+        result = await flow.async_step_device_settings(
+            {"device_model": "kindle_pw", "orientation": "landscape"}
+        )
+
+        assert result["data"]["font_family"] == "TRMNL"
 
     async def test_device_settings_orientation_change_recomputes(
         self,

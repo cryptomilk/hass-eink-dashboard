@@ -15,6 +15,7 @@
 """Tests for the SVG rendering pipeline."""
 
 import io
+import re
 
 import jinja2
 import pytest
@@ -22,6 +23,7 @@ import resvg_py
 from PIL import Image
 
 from custom_components.eink_dashboard.svg_render import (
+    _FONTS_DIR,
     _TEMPLATE_DIR,
     _fit_width_filter,
     _jinja_env,
@@ -54,11 +56,11 @@ def test_resvg_rasterises_simple_svg():
 
 
 def test_svg_to_png_produces_valid_png():
-    """Verify _svg_to_png() rasterises Roboto text to a valid PNG."""
+    """Verify _svg_to_png() rasterises bundled TRMNL text to PNG."""
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80)
@@ -71,7 +73,7 @@ def test_svg_to_png_extra_font_dirs_accepted(tmp_path):
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, extra_font_dirs=[str(tmp_path)])
@@ -84,7 +86,7 @@ def test_svg_to_png_no_extra_font_dirs_still_works():
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, extra_font_dirs=None)
@@ -96,7 +98,7 @@ def test_svg_to_png_use_system_fonts_produces_valid_png():
     svg = (
         '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="80">'
         '<rect width="200" height="80" fill="white"/>'
-        '<text x="10" y="50" font-family="Roboto" font-size="24">Test</text>'
+        '<text x="10" y="50" font-family="TRMNL21" font-size="24">Test</text>'
         "</svg>"
     )
     result = _svg_to_png(svg, 200, 80, use_system_fonts=True)
@@ -119,6 +121,10 @@ def test_svg_to_png_default_skips_system_fonts(monkeypatch):
     )
     _svg_to_png("<svg/>", 10, 10)
     assert calls[0]["skip_system_fonts"] is True
+    assert calls[0]["font_dirs"] == [
+        str(_FONTS_DIR / "TRMNL"),
+        str(_FONTS_DIR / "Roboto"),
+    ]
 
 
 def test_svg_to_png_use_system_fonts_disables_skip(monkeypatch):
@@ -533,3 +539,26 @@ def test_chip_with_active_icon_fills_circle(render_macro) -> None:
         low=100,
         high=160,
     )
+
+
+def test_macro_imports_pass_render_context():
+    """Verify every template imports _macros.svg.j2 ``with context``.
+
+    The macros read ``font_family_name`` from the caller's context;
+    without ``with context`` it is undefined and text renders in the
+    wrong font family.
+    """
+    import_re = re.compile(
+        r'\{%-?\s*from\s+"_macros\.svg\.j2"\s+import\s+(.*?)-?%\}',
+        re.DOTALL,
+    )
+    checked = 0
+    for path in sorted(_TEMPLATE_DIR.glob("*.svg.j2")):
+        if path.name == "_macros.svg.j2":
+            continue
+        for match in import_re.finditer(path.read_text()):
+            checked += 1
+            assert match.group(1).rstrip().endswith("with context"), (
+                f"{path.name}: _macros.svg.j2 import lacks 'with context'"
+            )
+    assert checked > 0

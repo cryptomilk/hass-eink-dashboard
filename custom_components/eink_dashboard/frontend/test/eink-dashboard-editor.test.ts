@@ -219,6 +219,33 @@ describe("SCHEMAS", () => {
       { value: "current", label: "Current only" },
     ]);
   });
+
+  it("graph tick count fields are clamped to 2-12 and default to 2", () => {
+    // Tick counts below 2 make no sense; 2 keeps min/max labels.
+    const schema = SCHEMAS.graph(DISPLAY);
+    for (const name of ["x_axis_ticks", "y_axis_ticks"]) {
+      const field = findField(schema, name);
+      expect(field?.default).toBe(2);
+      expect(field?.selector?.number).toMatchObject({ min: 2, max: 12 });
+    }
+  });
+
+  it("graph axis options are labelled booleans defaulting to false", () => {
+    // Every axis toggle is off by default and has a label.
+    const schema = SCHEMAS.graph(DISPLAY);
+    for (const name of [
+      "x_axis_tick_marks",
+      "y_axis_tick_marks",
+      "x_axis_grid",
+      "y_axis_grid",
+      "y_axis_unit",
+    ]) {
+      const field = findField(schema, name);
+      expect(field?.default).toBe(false);
+      expect(field?.selector).toHaveProperty("boolean");
+      expect(LABELS).toHaveProperty(name);
+    }
+  });
 });
 
 // ── LABELS ───────────────────────────────────────────────────────

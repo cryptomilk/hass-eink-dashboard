@@ -21,11 +21,14 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ...const import (
+    COLOR_BLACK,
+    COLOR_LIGHT_GRAY,
     DEFAULT_CARD_STYLE,
     DEFAULT_ROW_H,
     PADDING,
     DisplayConfig,
     Widget,
+    color_to_hex,
 )
 from .._helpers import (
     _card_insets,
@@ -34,6 +37,12 @@ from .._helpers import (
     _fmt,
     _resolve_precision,
     _widget_dim,
+)
+from .axes import (
+    _bar_axis_ticks,
+    _edge_ticks,
+    _time_axis_ticks,
+    _value_axis_ticks,
 )
 from .colors import _BAR_FILL_COLORS, _normalize_thresholds
 from .data import (
@@ -45,12 +54,16 @@ from .data import (
 )
 from .geometry import (
     _extrema_geometry,
-    _label_geometry,
+    _legend_band_height,
     _legend_geometry,
-    _secondary_label_geometry,
     _truncate_to_width,
 )
 from .series import _bar_series, _line_series
+
+# Allowed range for x_axis_ticks / y_axis_ticks; matches the editor's
+# number selector.  The minimum is also the default (min/max labels).
+_MIN_AXIS_TICKS = 2
+_MAX_AXIS_TICKS = 12
 
 
 def _fix_header_layout(
@@ -457,6 +470,130 @@ def _collect_series_data(
     )
 
 
+def _axis_unit(
+    entity_descs: list[dict[str, object]],
+    states: dict[str, object],
+    widget: Widget,
+    *,
+    secondary: bool,
+) -> str:
+    """Return the unit shown on a value axis.
+
+    The primary axis uses the widget's ``unit`` override when set,
+    otherwise the ``unit_of_measurement`` of the first primary-axis
+    entity.  The secondary axis uses its first entity's unit.
+
+    Args:
+        entity_descs: Normalized entity descriptors.
+        states: States dict for reading entity attributes.
+        widget: Widget config, consulted for the ``unit`` override.
+        secondary: ``True`` for the right-hand axis.
+
+    Returns:
+        Unit string, or ``""`` when none is known.
+    """
+    if not secondary and widget.get("unit") is not None:
+        return str(widget.get("unit"))
+    for desc in entity_descs:
+        is_sec = str(desc.get("y_axis", "primary")) == "secondary"
+        if is_sec != secondary:
+            continue
+        st = states.get(str(desc["entity"]))
+        attrs = (
+            cast("dict[str, Any]", st).get("attributes")
+            if isinstance(st, dict)
+            else None
+        )
+        if isinstance(attrs, dict):
+            return str(attrs.get("unit_of_measurement", ""))
+        return ""
+    return ""
+
+
+def _tick_count(widget: Widget, key: str) -> int:
+    """Return a validated axis tick count from the widget config.
+
+    The editor limits tick counts to 2-12, but stored configs may
+    hold anything; malformed values fall back to the default of 2
+    and out-of-range values are clamped.
+
+    Args:
+        widget: Widget configuration dict.
+        key: ``"x_axis_ticks"`` or ``"y_axis_ticks"``.
+
+    Returns:
+        Tick count between ``_MIN_AXIS_TICKS`` and
+        ``_MAX_AXIS_TICKS``.
+    """
+    try:
+        count = int(float(widget.get(key, _MIN_AXIS_TICKS)))
+    except (TypeError, ValueError, OverflowError):
+        return _MIN_AXIS_TICKS
+    return min(max(count, _MIN_AXIS_TICKS), _MAX_AXIS_TICKS)
+
+
+def _x_axis_ticks(
+    series: list[dict[str, object]],
+    per_entity_points: list[list[tuple[float, float]]],
+    primary_points: list[tuple[float, float]],
+    is_bar: bool,
+    count: int,
+    gx1: int,
+    gx2: int,
+    font_sz: int,
+    config: DisplayConfig,
+) -> list[dict[str, object]]:
+    """Return the x-axis ticks for the final plot geometry.
+
+    Two ticks (the default) keep the oldest/newest time of the
+    primary series at the plot edges.  Line graphs place round-time
+    ticks using the same time mapping as the series (all entities'
+    timestamps); bar charts label evenly spaced bars of the first
+    series with data at their centres.
+
+    Args:
+        series: Built series dicts (bar mode reads ``bars``).
+        per_entity_points: Data points per entity, same order.
+        primary_points: Points of the series labelled by default.
+        is_bar: ``True`` for bar charts.
+        count: Requested maximum number of ticks.
+        gx1: Plot left edge.
+        gx2: Plot right edge.
+        font_sz: Label font size.
+        config: Display config.
+
+    Returns:
+        List of x tick dicts (see ``axes._time_axis_ticks``).
+    """
+    from ...render import _load_font
+
+    t_first = min(t for t, _ in primary_points)
+    t_last = max(t for t, _ in primary_points)
+    edge = _edge_ticks(t_first, t_last, gx1, gx2, config)
+    if count <= 2:
+        return edge
+    font = _load_font(font_sz)
+    if is_bar:
+        for s, ep in zip(series, per_entity_points, strict=True):
+            bars = s.get("bars")
+            if ep and isinstance(bars, list) and bars:
+                ticks = _bar_axis_ticks(
+                    cast("list[dict[str, object]]", bars),
+                    [t for t, _ in ep],
+                    count,
+                    gx1,
+                    gx2,
+                    font,
+                    config,
+                )
+                return ticks or edge
+        return edge
+    all_ts = [t for ep in per_entity_points for t, _ in ep]
+    return _time_axis_ticks(
+        min(all_ts), max(all_ts), count, gx1, gx2, font, config
+    )
+
+
 def _build_graph_context(
     widget: Widget,
     config: DisplayConfig,
@@ -693,113 +830,112 @@ def _build_graph_context(
     has_any_data = series_data.has_any_data
     primary_points = series_data.primary_points
 
-    # Label / grid / extrema context — populated inside data guard.
-    label_font_sz = 0
-    y_label_x = gx1
-    y_min_str = ""
-    y_max_str = ""
-    x_oldest_str = ""
-    x_newest_str = ""
-    x_label_y = gy2
-    grid_y_top = gy1
-    grid_y_bot = gy2
-    show_labels_ctx = False
-    show_grid = False
+    # --- Axis options ---
+    x_axis_ticks = _tick_count(widget, "x_axis_ticks")
+    y_axis_ticks = _tick_count(widget, "y_axis_ticks")
+    x_tick_marks = bool(widget.get("x_axis_tick_marks", False))
+    y_tick_marks = bool(widget.get("y_axis_tick_marks", False))
+    x_axis_grid = bool(widget.get("x_axis_grid", False))
+    y_axis_grid = bool(widget.get("y_axis_grid", False))
+    y_axis_unit = bool(widget.get("y_axis_unit", False))
+
+    # One font size for axis labels, extrema and legend, derived from
+    # the full graph allocation before any band is reserved.
+    font_sz = max(10, round((gy2 - gy1) * 0.06))
+    label_gap = font_sz // 2
+    tick_len = max(3, font_sz // 3)
+    show_labels_ctx = bool(primary_points and show_labels)
+    label_font_sz = font_sz if show_labels_ctx else 0
+
+    # --- Bottom bands, reserved bottom-up ---
+    # Each band is cut from the bottom of the remaining area, giving
+    # the top-to-bottom order: plot, x-axis labels, extrema, legend.
+    # Band heights depend only on the font size, so the plot height
+    # is final before the Y-axis gutters (which need it to fit their
+    # labels) narrow the plot horizontally.
+    multi_entity = len(entity_descs) > 1
+    show_legend_ctx = multi_entity and has_any_data and show_legend
+    legend_bottom = gy2
+    if show_legend_ctx:
+        gy2 -= _legend_band_height(font_sz)
+
     extrema_font_sz = 0
     extrema_min_str = ""
     extrema_max_str = ""
     extrema_y = gy2
     show_extrema_ctx = False
+    if primary_points and show_extrema:
+        new_gy2, ex_y, ex_min, ex_max = _extrema_geometry(
+            primary_points, font_sz, gy2, config
+        )
+        # Skip the band when it would leave no room for the plot.
+        if new_gy2 > gy1:
+            gy2, extrema_y = new_gy2, ex_y
+            extrema_min_str, extrema_max_str = ex_min, ex_max
+            extrema_font_sz = font_sz
+            show_extrema_ctx = True
 
-    multi_entity = len(entity_descs) > 1
-    show_legend_ctx = multi_entity and has_any_data and show_legend
-    # Use pre-adjustment height for font sizing so it is proportional
-    # to the widget's total graph allocation.  Labels, extrema and
-    # legend share this size.
-    graph_h = gy2 - gy1
-    band_font_sz = max(10, round(graph_h * 0.06))
-    # Bottom edges of the legend and extrema bands, set below.
-    legend_bottom = gy2
-    extrema_bottom = gy2
+    show_x_labels = False
+    x_label_y = gy2
+    if show_labels_ctx and gy2 - font_sz - label_gap > gy1:
+        gy2 -= font_sz + label_gap
+        # Hanging baseline half a line below the plot; tick marks
+        # (tick_len <= label_gap) fit in the gap above the text.
+        x_label_y = gy2 + label_gap
+        show_x_labels = True
 
-    if primary_points:
-        # Bands below the plot, top to bottom: x-axis labels, extrema,
-        # legend.  Each band is cut from the bottom of the remaining
-        # area, so the legend and extrema bands are reserved first and
-        # the x-axis labels end up directly under the plot.
-        if show_legend_ctx:
-            gy2 -= band_font_sz + band_font_sz // 2
-        extrema_bottom = gy2
-        if show_extrema:
-            gy2 -= band_font_sz + band_font_sz // 2
+    # --- Y-axis ticks and label gutters (shift gx1 / gx2 inward) ---
+    show_secondary_labels = False
+    y_label_x = gx1
+    y2_label_right_x = gx2
+    y_ticks: list[dict[str, object]] = []
+    y2_ticks: list[dict[str, object]] = []
+    if show_labels_ctx:
+        from ...render import _load_font
 
-        if show_labels:
-            (
-                gx1,
-                gy2,
-                y_label_x,
-                x_label_y,
-                label_font_sz,
-                y_min_str,
-                y_max_str,
-                x_oldest_str,
-                x_newest_str,
-            ) = _label_geometry(
-                primary_points,
-                prim_y_min,
-                prim_y_max,
-                gx1,
+        label_font = _load_font(font_sz)
+        mark_w = tick_len if y_tick_marks else 0
+        y_ticks = _value_axis_ticks(
+            prim_y_min,
+            prim_y_max,
+            y_axis_ticks,
+            _axis_unit(entity_descs, states_dict, widget, secondary=False)
+            if y_axis_unit
+            else "",
+            gy1,
+            gy2,
+            font_sz,
+            config,
+        )
+        gx1 += (
+            max(round(label_font.getlength(str(t["label"]))) for t in y_ticks)
+            + label_gap
+            + mark_w
+        )
+        if has_secondary:
+            y2_ticks = _value_axis_ticks(
+                sec_y_min,
+                sec_y_max,
+                y_axis_ticks,
+                _axis_unit(entity_descs, states_dict, widget, secondary=True)
+                if y_axis_unit
+                else "",
                 gy1,
                 gy2,
+                font_sz,
                 config,
-                graph_h,
             )
-            show_labels_ctx = True
-
-        if show_extrema:
-            (
-                _,
-                extrema_y,
-                extrema_font_sz,
-                extrema_min_str,
-                extrema_max_str,
-                show_extrema_ctx,
-            ) = _extrema_geometry(
-                primary_points, band_font_sz, extrema_bottom, config, graph_h
+            gx2 -= (
+                max(
+                    round(label_font.getlength(str(t["label"])))
+                    for t in y2_ticks
+                )
+                + label_gap
+                + mark_w
             )
+            show_secondary_labels = True
 
-        # Grid lines at the final graph-area top and bottom edges.
-        grid_y_top = gy1
-        grid_y_bot = gy2
-        # Suppress fine gray lines on 2-level (B&W) displays.
-        show_grid = show_labels_ctx and display_levels > 2
-
-    # --- Secondary Y-axis labels (shifts gx2 inward) ---
-    show_secondary_labels = False
-    y2_label_right_x = gx2
-    y2_min_str = ""
-    y2_max_str = ""
-    y2_min_label_y = gy2
-    y2_max_label_y = gy1
-    # label_font_sz stays 0 when show_labels is True but primary
-    # data is empty — _secondary_label_geometry needs a positive font
-    # size, so the > 0 guard is not redundant with show_labels.
-    if has_secondary and show_labels and label_font_sz > 0:
-        (
-            gx2,
-            y2_label_right_x,
-            y2_min_str,
-            y2_max_str,
-        ) = _secondary_label_geometry(
-            sec_y_min, sec_y_max, gx2, label_font_sz, config
-        )
-        show_secondary_labels = True
-        y2_min_label_y = gy2
-        y2_max_label_y = gy1
-
-    # --- Legend (shown when >1 entity configured) ---
-    # Its band was reserved above; only the entries are laid out here,
-    # once gx1/gx2 account for the Y-axis labels.
+    # --- Legend entries (need the final plot width) ---
     legend_y = legend_bottom
     legend_entries: list[dict[str, object]] = []
     if show_legend_ctx:
@@ -810,10 +946,16 @@ def _build_graph_context(
             gx1,
             gx2,
             legend_bottom,
-            band_font_sz,
-            graph_h,
+            font_sz,
+            legend_bottom - gy1,
             bar_fills=bar_fills_legend,
         )
+
+    # Classic grid lines at the plot's top and bottom edges.
+    # Suppressed on 2-level (B&W) displays.
+    grid_y_top = gy1
+    grid_y_bot = gy2
+    show_grid = show_labels_ctx and display_levels > 2
 
     # --- Build series list ---
     if is_bar:
@@ -859,25 +1001,88 @@ def _build_graph_context(
             display_levels=display_levels,
         )
 
+    # --- X-axis ticks (need the final series geometry) ---
+    x_ticks: list[dict[str, object]] = []
+    if show_x_labels:
+        x_ticks = _x_axis_ticks(
+            series,
+            per_entity_points,
+            primary_points,
+            is_bar,
+            x_axis_ticks,
+            gx1,
+            gx2,
+            font_sz,
+            config,
+        )
+
+    # --- Tick marks and grid lines ---
+    tick_marks: list[dict[str, object]] = []
+    grid_lines: list[dict[str, object]] = []
+    for t in y_ticks:
+        ty = t["y"]
+        if y_tick_marks:
+            tick_marks.append(
+                {"x1": gx1 - tick_len, "y1": ty, "x2": gx1, "y2": ty}
+            )
+        # The edge borders already draw a line at the plot's top and
+        # bottom, so skip tick grid lines that would coincide.
+        if y_axis_grid and not (show_grid and ty in (gy1, gy2)):
+            grid_lines.append({"x1": gx1, "y1": ty, "x2": gx2, "y2": ty})
+    if y_tick_marks:
+        for t in y2_ticks:
+            ty = t["y"]
+            tick_marks.append(
+                {"x1": gx2, "y1": ty, "x2": gx2 + tick_len, "y2": ty}
+            )
+    for t in x_ticks:
+        tx = t["x"]
+        if x_tick_marks:
+            tick_marks.append(
+                {"x1": tx, "y1": gy2, "x2": tx, "y2": gy2 + tick_len}
+            )
+        if x_axis_grid:
+            grid_lines.append({"x1": tx, "y1": gy1, "x2": tx, "y2": gy2})
+    grid_stroke_w = max(1, graph_stroke_w // 2)
+    # Light gray dithers into noise on 2-level displays, so grid lines
+    # are drawn dotted in black there instead.
+    two_level = display_levels <= 2
+    grid_line_color = color_to_hex(
+        COLOR_BLACK if two_level else COLOR_LIGHT_GRAY
+    )
+    grid_line_dash = (
+        f"{grid_stroke_w} {grid_stroke_w * 3}" if two_level else ""
+    )
+
     return {
         **ctx,
         "has_graph": has_any_data,
         "series": series,
         "graph_stroke_w": graph_stroke_w,
-        "grid_stroke_w": max(1, graph_stroke_w // 2),
+        "grid_stroke_w": grid_stroke_w,
         "hide_state": not show_state,
         "show_name": show_name,
         # Primary axis labels.
         "show_labels": show_labels_ctx,
         "label_font_sz": label_font_sz,
         "y_label_x": y_label_x,
-        "y_min_str": y_min_str,
-        "y_max_str": y_max_str,
+        # Legacy min/max and oldest/newest strings (first and last
+        # tick) kept for callers that read them directly.
+        "y_min_str": y_ticks[0]["label"] if y_ticks else "",
+        "y_max_str": y_ticks[-1]["label"] if y_ticks else "",
         "y_min_label_y": gy2,
         "y_max_label_y": gy1,
-        "x_oldest_str": x_oldest_str,
-        "x_newest_str": x_newest_str,
+        "x_oldest_str": x_ticks[0]["label"] if x_ticks else "",
+        "x_newest_str": x_ticks[-1]["label"] if x_ticks else "",
         "x_label_y": x_label_y,
+        # Tick lists: dicts with position, label and text placement.
+        "y_ticks": y_ticks,
+        "y2_ticks": y2_ticks,
+        "x_ticks": x_ticks,
+        "tick_marks": tick_marks,
+        "grid_lines": grid_lines,
+        "grid_line_color": grid_line_color,
+        "grid_line_dash": grid_line_dash,
         # gx1 is the data area left (shifted right past y-axis labels);
         # gx2 is the right content edge.  Grid lines and x-axis labels
         # intentionally span the data area only, not the label zone.
@@ -898,10 +1103,10 @@ def _build_graph_context(
         # Secondary Y-axis labels.
         "show_secondary_labels": show_secondary_labels,
         "y2_label_right_x": y2_label_right_x,
-        "y2_min_str": y2_min_str,
-        "y2_max_str": y2_max_str,
-        "y2_min_label_y": y2_min_label_y,
-        "y2_max_label_y": y2_max_label_y,
+        "y2_min_str": y2_ticks[0]["label"] if y2_ticks else "",
+        "y2_max_str": y2_ticks[-1]["label"] if y2_ticks else "",
+        "y2_min_label_y": gy2,
+        "y2_max_label_y": gy1,
         # Legend.
         "show_legend": show_legend_ctx,
         "legend_y": legend_y,

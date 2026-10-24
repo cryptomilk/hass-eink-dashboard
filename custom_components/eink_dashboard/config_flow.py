@@ -61,6 +61,7 @@ from .const import (
     DEFAULT_HEIGHT,
     DEFAULT_MEASURED_PALETTE,
     DEFAULT_OPTIMIZE,
+    DEFAULT_PIXEL_FONTS,
     DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_USE_SYSTEM_FONTS,
@@ -68,10 +69,12 @@ from .const import (
     DEVICE_PRESETS,
     DOMAIN,
     DateFormat,
+    FontFamily,
     NumberFormat,
     TimeFormat,
     apply_screen_portion,
     resolve_display,
+    resolve_font_family,
 )
 
 _POSITIVE_INT = vol.All(int, vol.Range(min=1))
@@ -311,6 +314,7 @@ def _build_display_settings_schema(
         preset.display_levels if preset else DEFAULT_DISPLAY_LEVELS
     )
     display_levels = int(opts.get("display_levels", default_display_levels))
+    font_family = resolve_font_family(opts)
     return vol.Schema(
         {
             vol.Required(
@@ -328,6 +332,22 @@ def _build_display_settings_schema(
                     mode=SelectSelectorMode.LIST,
                 )
             ),
+            vol.Optional(
+                "font_family",
+                default=font_family,
+            ): SelectSelector(
+                SelectSelectorConfig(
+                    # No translation_key: the values are font names,
+                    # which hassfest rejects as translation keys
+                    # (uppercase), and they need no translation.
+                    options=[family.value for family in FontFamily],
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional(
+                "pixel_fonts",
+                default=opts.get("pixel_fonts", DEFAULT_PIXEL_FONTS),
+            ): bool,
             vol.Optional(
                 "black_text",
                 default=opts.get("black_text", DEFAULT_BLACK_TEXT),
@@ -864,6 +884,10 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             A create_entry ConfigFlowResult.
         """
         opts = deepcopy(dict(self.config_entry.options))
+        # A font chosen for the old device model may not suit the new
+        # one; drop it so the new model's default font applies.
+        if self._data.get("device_model") != opts.get("device_model"):
+            opts.pop("font_family", None)
         opts.update({**self._data, **extra})
         # ppi only applies to custom displays and is cleared when the
         # form field is left empty.
@@ -1349,12 +1373,12 @@ class EinkDashboardOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Update refresh interval, optimize, and image quality settings.
 
-        Also collects ``black_text`` (top-level, off by default),
+        Also collects ``font_family``, ``pixel_fonts`` (top-level, on
+        by default), ``black_text`` (top-level, off by default),
         ``black_dividers`` (top-level, off by default),
-        ``use_system_fonts`` (top-level, off by default) and, via the
-        Advanced section, ``font_dir``.  The latter two add glyph
-        fallback fonts for scripts the bundled Roboto font does not
-        cover, such as Hebrew, Arabic, or CJK. See docs/fonts.md.
+        ``use_system_fonts`` (top-level, off by default),
+        and, via the Advanced section, ``font_dir``.
+        See docs/fonts.md for font and glyph fallback details.
 
         HA forms are static, so fields that depend on ``optimize`` or
         ``display_levels`` cannot appear while the user edits the form.

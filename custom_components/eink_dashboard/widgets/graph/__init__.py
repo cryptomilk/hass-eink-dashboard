@@ -14,14 +14,15 @@
 
 """Graph widget package.
 
-Split into ``colors``, ``data``, ``geometry``, ``series``, and
-``context`` submodules; this file re-exports the symbols consumed
+Split into ``axes``, ``colors``, ``data``, ``geometry``, ``series``,
+and ``context`` submodules; this file re-exports the symbols consumed
 outside the package (by ``widgets/__init__.py``, tests, and design
 scripts) so existing imports of ``widgets.graph`` keep working.
 """
 
 from __future__ import annotations
 
+from .axes import _format_timestamp
 from .colors import (
     _bar_threshold_fill,
     _lighter_hex,
@@ -41,7 +42,6 @@ from .data import (
     _y_bounds,
 )
 from .geometry import (
-    _format_timestamp,
     _legend_geometry,
     _smooth_fill,
     _smooth_path,

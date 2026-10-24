@@ -1691,6 +1691,56 @@ export const SCHEMAS: Record<
       ],
     },
     {
+      name: "axes",
+      type: "expandable",
+      flatten: true,
+      title: "Axes",
+      icon: "mdi:axis-arrow",
+      schema: [
+        {
+          type: "grid",
+          name: "",
+          schema: [
+            {
+              name: "x_axis_ticks",
+              default: 2,
+              selector: { number: { min: 2, max: 12, mode: "box" } },
+            },
+            {
+              name: "y_axis_ticks",
+              default: 2,
+              selector: { number: { min: 2, max: 12, mode: "box" } },
+            },
+            {
+              name: "x_axis_tick_marks",
+              default: false,
+              selector: { boolean: {} },
+            },
+            {
+              name: "y_axis_tick_marks",
+              default: false,
+              selector: { boolean: {} },
+            },
+            {
+              name: "x_axis_grid",
+              default: false,
+              selector: { boolean: {} },
+            },
+            {
+              name: "y_axis_grid",
+              default: false,
+              selector: { boolean: {} },
+            },
+          ],
+        },
+        {
+          name: "y_axis_unit",
+          default: false,
+          selector: { boolean: {} },
+        },
+      ],
+    },
+    {
       name: "layout",
       type: "expandable",
       flatten: true,
@@ -1769,6 +1819,23 @@ export const HELPERS: Record<string, string> = {
   show_all:
     "When off, the widget is empty if no collection falls "
     + "within the next 3 days.",
+  x_axis_ticks:
+    "Maximum number of time labels. 2 shows only the oldest and "
+    + "newest time; more adds labels at round times (fewer are "
+    + "shown when they would overlap).",
+  y_axis_ticks:
+    "Maximum number of value labels. 2 shows only min and max; "
+    + "more adds labels at round values.",
+  x_axis_tick_marks: "Short marks below the graph at each time label.",
+  y_axis_tick_marks: "Short marks beside the graph at each value label.",
+  x_axis_grid:
+    "Vertical lines across the graph at each time label "
+    + "(dotted on black-and-white displays).",
+  y_axis_grid:
+    "Horizontal lines across the graph at each value label "
+    + "(dotted on black-and-white displays).",
+  y_axis_unit:
+    "Append the unit (or the Unit override) to the value labels.",
 };
 
 export const LABELS: Record<string, string> = {
@@ -1845,6 +1912,13 @@ export const LABELS: Record<string, string> = {
   smoothing: "Smoothing",
   show_labels: "Show labels",
   show_extrema: "Show extrema",
+  x_axis_ticks: "Time labels",
+  y_axis_ticks: "Value labels",
+  x_axis_tick_marks: "Time tick marks",
+  y_axis_tick_marks: "Value tick marks",
+  x_axis_grid: "Vertical grid lines",
+  y_axis_grid: "Horizontal grid lines",
+  y_axis_unit: "Show unit on value axis",
   group_by: "Group by",
   min_bound_range: "Min bound range",
   color_thresholds_transition: "Threshold transition",

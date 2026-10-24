@@ -2,7 +2,7 @@
     name + right-aligned icon, info section below, sparkline
     graph). entity.svg.j2 now uses a different icon-left-aligned
     layout; changes here do not apply there, and vice versa. -#}
-{%- from "_macros.svg.j2" import card_container, icon_circle -%}
+{%- from "_macros.svg.j2" import card_container, icon_circle with context -%}
 <svg xmlns="http://www.w3.org/2000/svg"
      width="{{ w }}" height="{{ h }}">
 {%- if has_entity -%}
@@ -26,9 +26,9 @@
 {%- if not hide_name -%}
 <text
   x="{{ name_x }}" y="{{ name_y }}"
-  font-family="Roboto"
+  font-family="{{ name_font_sz | font_family(font_family_name) }}"
   font-weight="500"
-  font-size="{{ name_font_sz }}"
+  font-size="{{ name_font_sz | font_px }}"
   dominant-baseline="central"
   fill="{{ hex_gray }}">{{ name_text }}</text>
 {%- endif -%}
@@ -36,18 +36,18 @@
 {%- if not hide_state -%}
 <text
   x="{{ value_x }}" y="{{ value_y }}"
-  font-family="Roboto"
+  font-family="{{ value_font_sz | font_family(font_family_name) }}"
 {%- if value_bold %}
   font-weight="bold"
 {%- endif %}
-  font-size="{{ value_font_sz }}"
+  font-size="{{ value_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_black }}">{{ value_text }}</text>
 {%- if unit_text -%}
 <text
   x="{{ unit_x }}" y="{{ unit_y }}"
-  font-family="Roboto"
-  font-size="{{ unit_font_sz }}"
+  font-family="{{ unit_font_sz | font_family(font_family_name) }}"
+  font-size="{{ unit_font_sz | font_px }}"
   dominant-baseline="auto"
   fill="{{ hex_gray }}">{{ unit_text }}</text>
 {%- endif -%}

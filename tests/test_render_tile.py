@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 from typing import ClassVar
 
+import pytest
+
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
     DEFAULT_ROW_H,
@@ -86,6 +88,31 @@ class TestRenderTile:
 
     def _config(self, **overrides: object) -> dict[str, object]:
         return make_config(self._DEFAULTS, **overrides)
+
+    # ── Font family tests ─────────────────────────────
+
+    @pytest.mark.parametrize(
+        ("family", "fallback"), [("Roboto", "TRMNL"), ("TRMNL", "Roboto")]
+    )
+    def test_tile_uses_selected_font_family(
+        self, family: str, fallback: str
+    ) -> None:
+        # Text drawn by the shared macros lists the selected family
+        # first, so resvg does not pick the bundled fallback font.
+        widget = {
+            "type": "tile",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "entity": "sensor.temperature",
+        }
+        svg = render_widget_svg(widget, self._config(font_family=family))
+        stacks = re.findall(r'font-family="([^"]*)"', svg)
+        assert stacks
+        for stack in stacks:
+            primary, secondary = (f.strip() for f in stack.split(","))
+            assert primary.startswith(family), stack
+            assert secondary.startswith(fallback), stack
 
     # ── Structural tests ──────────────────────────────
 

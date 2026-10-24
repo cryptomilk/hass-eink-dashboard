@@ -21,8 +21,7 @@ The font directory is passed explicitly to resvg with system fonts
 disabled so rendering is identical across HA OS, Docker, and dev
 machines regardless of installed system fonts.  An optional
 user-configured directory (``config["font_dir"]``) can be added
-alongside the bundled fonts to cover scripts Roboto lacks glyphs
-for.
+alongside the bundled fonts for additional glyph coverage.
 
 Icon SVG files are inlined as ``<path>`` elements via Jinja2 filters
 (``mdi_svg``, ``weather_svg``).  Path data is cached so file I/O
@@ -49,10 +48,20 @@ from .const import (
     COLOR_WHITE,
     DEFAULT_BLACK_DIVIDERS,
     DEFAULT_BLACK_TEXT,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_PIXEL_FONTS,
     DisplayConfig,
     Widget,
     WidgetType,
     color_to_hex,
+)
+from .fonts import (
+    current_font_family,
+    font_family,
+    font_family_context,
+    pixel_font_size,
+    pixel_fonts_active,
+    pixel_fonts_context,
 )
 
 _hex_white = color_to_hex(COLOR_WHITE)
@@ -86,7 +95,7 @@ _STYLE_PAINT_RE = re.compile(
     r"(?<![\w-])((?:fill|stroke)\s*:\s*)([^;]*?)(\s*(?:;|$))"
 )
 
-_FONTS_DIR = Path(__file__).parent / "fonts" / "Roboto"
+_FONTS_DIR = Path(__file__).parent / "fonts"
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
 _ICONS_DIR = Path(__file__).parent / "icons" / "svg"
 _ICONS_DIR_RESOLVED = _ICONS_DIR.resolve()
@@ -136,12 +145,11 @@ def _svg_to_png(
     Defaults to ``skip_system_fonts=True`` so rendering is identical
     across HA OS, Docker, and dev machines.  Only fonts shipped in the
     ``fonts/`` directory, plus any directories in ``extra_font_dirs``,
-    are available to the renderer.  All templates share the single
-    ``font-family="Roboto"`` declaration; when a character has no
-    glyph in Roboto, resvg falls back to searching every other font
-    loaded into its fontdb, so a user-supplied font covering a script
-    Roboto lacks (e.g. Hebrew) is picked up automatically without any
-    template changes.  Setting ``use_system_fonts=True`` additionally
+    are available to the renderer.  Templates use the ``font_family``
+    filter to select the closest TRMNL optical size.  When a character
+    has no glyph in TRMNL, resvg falls back to searching every other
+    font loaded into its fontdb, so user-supplied fonts are picked up
+    automatically.  Setting ``use_system_fonts=True`` additionally
     loads fonts already installed on the host, trading the
     reproducibility guarantee for convenience on hosts that already
     have broad script coverage installed.
@@ -159,7 +167,7 @@ def _svg_to_png(
         height: Output height in pixels, or ``None`` to use the
             SVG's intrinsic height.
         extra_font_dirs: Additional directories to search for font
-            files, appended after the bundled Roboto directory.
+            files, appended after the bundled TRMNL directory.
             ``None`` or empty means no extra directories.
         use_system_fonts: When ``True``, also load fonts installed on
             the host system.  Defaults to ``False`` for reproducible
@@ -168,7 +176,10 @@ def _svg_to_png(
     Returns:
         PNG image as raw bytes.
     """
-    font_dirs = [str(_FONTS_DIR)]
+    font_dirs = [
+        str(_FONTS_DIR / "TRMNL"),
+        str(_FONTS_DIR / "Roboto"),
+    ]
     if extra_font_dirs:
         font_dirs.extend(extra_font_dirs)
     return bytes(
@@ -510,9 +521,10 @@ def _make_jinja_env(
 ) -> jinja2.Environment:
     """Create a Jinja2 env configured for SVG template rendering.
 
-    Sets ``autoescape=True`` and registers the ``mdi_svg`` and
-    ``weather_svg`` icon-inlining filters plus the ``text_width`` and
-    ``fit_width`` text-measuring filters.
+    Sets ``autoescape=True`` and registers the ``font_family`` and
+    ``font_px`` font filters, the ``mdi_svg`` and ``weather_svg``
+    icon-inlining filters, and the ``text_width`` and ``fit_width``
+    text-measuring filters.
 
     Args:
         loader: Jinja2 template loader to use.
@@ -522,6 +534,8 @@ def _make_jinja_env(
         registered.
     """
     env = jinja2.Environment(loader=loader, autoescape=True)
+    env.filters["font_family"] = font_family
+    env.filters["font_px"] = pixel_font_size
     env.filters["mdi_svg"] = _mdi_svg_filter
     env.filters["weather_svg"] = _weather_svg_filter
     env.filters["text_width"] = _text_width_filter
@@ -684,11 +698,30 @@ def render_widget_svg(
             renderer.
     """
     wtype = widget["type"]
-    ctx = _SVG_RENDERERS[wtype](widget, config)
-    tmpl = _jinja_env.get_template(f"{wtype}.svg.j2")
-    svg = tmpl.render(**ctx)
+    requested_family = config.get("font_family", DEFAULT_FONT_FAMILY)
+    pixel_fonts = config.get("pixel_fonts", DEFAULT_PIXEL_FONTS)
+    # The template is rendered inside both contexts because the
+    # font_family and font_px filters read them too.
+    with (
+        font_family_context(requested_family),
+        pixel_fonts_context(pixel_fonts),
+    ):
+        selected_family = current_font_family()
+        crisp_text = pixel_fonts_active()
+        ctx = _SVG_RENDERERS[wtype](widget, config)
+        ctx["font_family_name"] = selected_family
+        tmpl = _jinja_env.get_template(f"{wtype}.svg.j2")
+        svg = tmpl.render(**ctx)
     if config.get("black_text", DEFAULT_BLACK_TEXT):
         svg = _force_black_text(svg)
     if config.get("black_dividers", DEFAULT_BLACK_DIVIDERS):
         svg = _force_black_dividers(svg)
+    if crisp_text:
+        # Snapped pixel-font glyphs already sit on whole pixels, so
+        # anti-aliasing only adds gray edges that a black/white
+        # threshold would fatten.  The attribute is inherited by every
+        # <text> element.  Templates always start with "<svg ".
+        stripped = svg.lstrip()
+        if stripped.startswith("<svg "):
+            svg = '<svg text-rendering="optimizeSpeed" ' + stripped[5:]
     return svg
