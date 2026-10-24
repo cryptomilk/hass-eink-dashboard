@@ -234,7 +234,7 @@ class EinkDashboardCard extends HTMLElement {
     this.shadowRoot!.innerHTML = `
       <style>
         :host { display: block; }
-        ha-card { display: block; overflow: hidden; }
+        ha-card { display: block; }
         .container {
           position: relative;
           width: 100%;
@@ -342,7 +342,7 @@ class EinkDashboardCard extends HTMLElement {
         }
         .editor-container {
           border-top: 1px solid var(--divider-color, #e0e0e0);
-          max-height: 520px;
+          max-height: 60vh;
           overflow-y: auto;
         }
         .save-error {
