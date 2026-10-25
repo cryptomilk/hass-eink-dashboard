@@ -75,6 +75,7 @@ from .const import (
     NumberFormat,
     TimeFormat,
     apply_screen_portion,
+    resolve_device_preset,
     resolve_display,
     resolve_font_family,
 )
@@ -311,11 +312,8 @@ def _build_display_settings_schema(
         The voluptuous schema for the display settings form.
     """
     optimize = opts.get("optimize", DEFAULT_OPTIMIZE)
-    preset = DEVICE_PRESETS.get(opts.get("device_model", ""))
-    default_display_levels = (
-        preset.display_levels if preset else DEFAULT_DISPLAY_LEVELS
-    )
-    display_levels = int(opts.get("display_levels", default_display_levels))
+    preset = resolve_device_preset(opts)
+    display_levels = int(opts.get("display_levels", preset.display_levels))
     font_family = resolve_font_family(opts)
     return vol.Schema(
         {
@@ -1405,10 +1403,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         # stored options, or the newly revealed fields would be rejected.
         opts = self._display_settings_opts or self.config_entry.options
         expand_advanced = self._display_settings_opts is not None
-        device_model = opts.get("device_model", "")
-        preset = DEVICE_PRESETS.get(device_model)
+        preset = resolve_device_preset(opts)
         schema = _build_display_settings_schema(opts, expand_advanced)
-        if preset and preset.integration_dithers:
+        if preset.integration_dithers:
             optimize_note = (
                 "This device's Home Assistant integration handles image"
                 " optimization. Leave e-ink optimization disabled to"

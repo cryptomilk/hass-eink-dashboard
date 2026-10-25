@@ -45,19 +45,23 @@ from .const import (
     DEFAULT_BLACK_DIVIDERS,
     DEFAULT_BLACK_TEXT,
     DEFAULT_DISPLAY_LEVELS,
+    DEFAULT_DITHER_ALGORITHM,
     DEFAULT_EXPOSURE,
     DEFAULT_HEIGHT,
+    DEFAULT_MEASURED_PALETTE,
+    DEFAULT_OPTIMIZE,
     DEFAULT_PIXEL_FONTS,
     DEFAULT_SATURATION,
     DEFAULT_USE_SYSTEM_FONTS,
     DEFAULT_WIDTH,
-    DEVICE_PRESETS,
     DOMAIN,
     DateFormat,
+    DisplayConfig,
     NumberFormat,
     TimeFormat,
     WidgetType,
     default_list_row_height,
+    resolve_device_preset,
     resolve_display,
     resolve_font_family,
     resolve_pixel_font_max_scale,
@@ -84,16 +88,14 @@ def _area_name(hass: HomeAssistant, area_id: str | None) -> str | None:
 
 def _register_device(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Create or update the HA device registry entry for this config entry."""
-    preset = DEVICE_PRESETS.get(entry.options.get("device_model", "custom"))
+    preset = resolve_device_preset(entry.options)
     device_reg = dr.async_get(hass)
     device_reg.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},
         name=entry.title,
-        manufacturer=(
-            preset.manufacturer if preset and preset.manufacturer else None
-        ),
-        model=preset.label if preset else "Custom",
+        manufacturer=preset.manufacturer or None,
+        model=preset.label,
         suggested_area=_area_name(hass, entry.options.get("area_id")),
     )
 
@@ -243,29 +245,115 @@ def _ha_time_zone(hass: HomeAssistant) -> str:
     return tz if isinstance(tz, str) else ""
 
 
+def build_display_config(
+    options: Mapping[str, Any],
+    states: dict[str, Any],
+    *,
+    number_format: str,
+    language: str,
+    first_weekday: str,
+    date_format: str,
+    time_format: str,
+    time_zone: str,
+    battery_entity_id: str | None = None,
+    battery_sensor: Any = None,
+    for_png: bool = False,
+) -> DisplayConfig:
+    """Build a DisplayConfig from resolved options, states and locale.
+
+    Single source of truth for assembling the dict consumed by
+    ``render_widget_svg()`` (SVG widget preview) and, when
+    ``for_png`` is set, by ``render_dashboard()`` (full PNG
+    rasterisation, which additionally needs rotation and e-ink
+    optimisation settings that the SVG preview path never applies).
+
+    Args:
+        options: Config entry options.
+        states: Snapshot of all HA entity states, already enriched
+            with icons, display precision, and any forecast/history/
+            calendar data the configured widgets need.
+        number_format: Resolved locale number format.
+        language: Resolved locale language.
+        first_weekday: Resolved locale first weekday.
+        date_format: Resolved locale date format.
+        time_format: Resolved locale time format.
+        time_zone: HA's configured IANA time zone name.
+        battery_entity_id: Entity ID configured as the device's
+            battery source, or None when not configured.
+        battery_sensor: The internal EinkDashboardBatterySensor, or
+            None when not registered.
+        for_png: Whether to include the rasterisation-only keys
+            (``rotation``, ``optimize``, ``exposure``, ``saturation``,
+            ``dither_algorithm``, ``measured_palette``) needed by
+            ``render_dashboard()``.
+
+    Returns:
+        A DisplayConfig dict.
+    """
+    config: DisplayConfig = {
+        "width": options.get("width", DEFAULT_WIDTH),
+        "height": options.get("height", DEFAULT_HEIGHT),
+        "row_height": default_list_row_height(options),
+        "display_levels": options.get(
+            "display_levels", DEFAULT_DISPLAY_LEVELS
+        ),
+        "color_scheme": options.get("color_scheme"),
+        "font_family": resolve_font_family(options),
+        "black_text": options.get("black_text", DEFAULT_BLACK_TEXT),
+        "black_dividers": options.get(
+            "black_dividers", DEFAULT_BLACK_DIVIDERS
+        ),
+        "pixel_fonts": options.get("pixel_fonts", DEFAULT_PIXEL_FONTS),
+        "pixel_font_max_scale": resolve_pixel_font_max_scale(options),
+        "font_dir": options.get("font_dir", ""),
+        "use_system_fonts": options.get(
+            "use_system_fonts", DEFAULT_USE_SYSTEM_FONTS
+        ),
+        "number_format": number_format,
+        "language": language,
+        "first_weekday": first_weekday,
+        "date_format": date_format,
+        "time_format": time_format,
+        "time_zone": time_zone,
+        "states": states,
+    }
+    if for_png:
+        config["rotation"] = options.get("rotation", 0)
+        config["optimize"] = options.get("optimize", DEFAULT_OPTIMIZE)
+        config["exposure"] = options.get("exposure", DEFAULT_EXPOSURE)
+        config["saturation"] = options.get("saturation", DEFAULT_SATURATION)
+        config["dither_algorithm"] = options.get(
+            "dither_algorithm", DEFAULT_DITHER_ALGORITHM
+        )
+        config["measured_palette"] = options.get(
+            "measured_palette", DEFAULT_MEASURED_PALETTE
+        )
+    level, is_charging = resolve_battery_level(
+        battery_entity_id, states, battery_sensor
+    )
+    if level is not None:
+        config["device_battery_level"] = level
+        config["device_battery_charging"] = is_charging
+    return config
+
+
 async def _build_display_config(
     hass: HomeAssistant, entry_id: str
-) -> dict[str, Any]:
+) -> DisplayConfig:
     """Build a DisplayConfig for rendering a widget preview.
 
-    Snapshots current HA entity states, reads display dimensions from
-    the config entry options, and reads the owner's locale preferences
-    via :func:`_async_get_locale`.  Caller must ensure
-    ``entry_id`` exists in ``hass.data[DOMAIN]``.
+    Snapshots current HA entity states, enriches them with icons and
+    display precision, reads the owner's locale preferences via
+    :func:`_async_get_locale`, and delegates the rest to
+    :func:`build_display_config`.  Caller must ensure ``entry_id``
+    exists in ``hass.data[DOMAIN]``.
 
     Args:
         hass: Home Assistant instance.
         entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
 
     Returns:
-        Dict with ``width``, ``height``, ``row_height``,
-        ``display_levels``, ``font_dir``, ``use_system_fonts``,
-        ``number_format``, ``language``, ``first_weekday``,
-        ``date_format``, ``time_format``, ``time_zone``,
-        ``states``, and (when
-        battery data is available) ``device_battery_level`` and
-        ``device_battery_charging`` keys suitable for
-        ``render_widget_svg()``.
+        A DisplayConfig dict suitable for ``render_widget_svg()``.
     """
     entry_data = hass.data[DOMAIN][entry_id]
     entry = entry_data["entry"]
@@ -288,42 +376,18 @@ async def _build_display_config(
         date_format,
         time_format,
     ) = await _async_get_locale(hass, entry.options)
-    config: dict[str, Any] = {
-        "width": entry.options.get("width", DEFAULT_WIDTH),
-        "height": entry.options.get("height", DEFAULT_HEIGHT),
-        "row_height": default_list_row_height(entry.options),
-        "display_levels": entry.options.get(
-            "display_levels", DEFAULT_DISPLAY_LEVELS
-        ),
-        "color_scheme": entry.options.get("color_scheme"),
-        "font_family": resolve_font_family(entry.options),
-        "black_text": entry.options.get("black_text", DEFAULT_BLACK_TEXT),
-        "black_dividers": entry.options.get(
-            "black_dividers", DEFAULT_BLACK_DIVIDERS
-        ),
-        "pixel_fonts": entry.options.get("pixel_fonts", DEFAULT_PIXEL_FONTS),
-        "pixel_font_max_scale": resolve_pixel_font_max_scale(entry.options),
-        "font_dir": entry.options.get("font_dir", ""),
-        "use_system_fonts": entry.options.get(
-            "use_system_fonts", DEFAULT_USE_SYSTEM_FONTS
-        ),
-        "number_format": number_format,
-        "language": language,
-        "first_weekday": first_weekday,
-        "date_format": date_format,
-        "time_format": time_format,
-        "time_zone": _ha_time_zone(hass),
-        "states": states,
-    }
-    level, is_charging = resolve_battery_level(
-        entry.options.get("battery_entity_id"),
+    return build_display_config(
+        entry.options,
         states,
-        entry_data.get("battery_sensor"),
+        number_format=number_format,
+        language=language,
+        first_weekday=first_weekday,
+        date_format=date_format,
+        time_format=time_format,
+        time_zone=_ha_time_zone(hass),
+        battery_entity_id=entry.options.get("battery_entity_id"),
+        battery_sensor=entry_data.get("battery_sensor"),
     )
-    if level is not None:
-        config["device_battery_level"] = level
-        config["device_battery_charging"] = is_charging
-    return config
 
 
 async def _enrich_entity_icons(

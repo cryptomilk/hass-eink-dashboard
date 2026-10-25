@@ -50,27 +50,12 @@ from . import (
     _fetch_forecasts,
     _fetch_history,
     _ha_time_zone,
+    build_display_config,
 )
-from .battery import resolve_battery_level
 from .const import (
-    DEFAULT_BLACK_DIVIDERS,
-    DEFAULT_BLACK_TEXT,
-    DEFAULT_DISPLAY_LEVELS,
-    DEFAULT_DITHER_ALGORITHM,
-    DEFAULT_EXPOSURE,
-    DEFAULT_HEIGHT,
-    DEFAULT_MEASURED_PALETTE,
-    DEFAULT_OPTIMIZE,
-    DEFAULT_PIXEL_FONTS,
-    DEFAULT_SATURATION,
     DEFAULT_UPDATE_INTERVAL,
-    DEFAULT_USE_SYSTEM_FONTS,
-    DEFAULT_WIDTH,
     DOMAIN,
     WidgetType,
-    default_list_row_height,
-    resolve_font_family,
-    resolve_pixel_font_max_scale,
 )
 from .push import async_push_image
 from .render import render_dashboard
@@ -249,67 +234,23 @@ class EinkDashboardImage(ImageEntity):
                 await self._async_fetch_forecasts(states)
                 await self._async_fetch_history(states)
                 await self._async_fetch_calendar_events(states)
-                config = {
-                    "width": self._entry.options.get("width", DEFAULT_WIDTH),
-                    "height": self._entry.options.get(
-                        "height", DEFAULT_HEIGHT
-                    ),
-                    "rotation": self._entry.options.get("rotation", 0),
-                    "row_height": default_list_row_height(self._entry.options),
-                    "optimize": self._entry.options.get(
-                        "optimize", DEFAULT_OPTIMIZE
-                    ),
-                    "display_levels": self._entry.options.get(
-                        "display_levels", DEFAULT_DISPLAY_LEVELS
-                    ),
-                    "exposure": self._entry.options.get(
-                        "exposure", DEFAULT_EXPOSURE
-                    ),
-                    "saturation": self._entry.options.get(
-                        "saturation", DEFAULT_SATURATION
-                    ),
-                    "dither_algorithm": self._entry.options.get(
-                        "dither_algorithm", DEFAULT_DITHER_ALGORITHM
-                    ),
-                    "measured_palette": self._entry.options.get(
-                        "measured_palette", DEFAULT_MEASURED_PALETTE
-                    ),
-                    "color_scheme": self._entry.options.get("color_scheme"),
-                    "font_family": resolve_font_family(self._entry.options),
-                    "black_text": self._entry.options.get(
-                        "black_text", DEFAULT_BLACK_TEXT
-                    ),
-                    "black_dividers": self._entry.options.get(
-                        "black_dividers", DEFAULT_BLACK_DIVIDERS
-                    ),
-                    "pixel_fonts": self._entry.options.get(
-                        "pixel_fonts", DEFAULT_PIXEL_FONTS
-                    ),
-                    "pixel_font_max_scale": resolve_pixel_font_max_scale(
-                        self._entry.options
-                    ),
-                    "font_dir": self._entry.options.get("font_dir", ""),
-                    "use_system_fonts": self._entry.options.get(
-                        "use_system_fonts", DEFAULT_USE_SYSTEM_FONTS
-                    ),
-                    "number_format": number_format,
-                    "language": language,
-                    "first_weekday": first_weekday,
-                    "date_format": date_format,
-                    "time_format": time_format,
-                    "time_zone": _ha_time_zone(self.hass),
-                    "states": states,
-                }
-                level, is_charging = resolve_battery_level(
-                    self._entry.options.get("battery_entity_id"),
+                config = build_display_config(
+                    self._entry.options,
                     states,
-                    self.hass.data[DOMAIN][self._entry.entry_id].get(
-                        "battery_sensor"
+                    number_format=number_format,
+                    language=language,
+                    first_weekday=first_weekday,
+                    date_format=date_format,
+                    time_format=time_format,
+                    time_zone=_ha_time_zone(self.hass),
+                    battery_entity_id=self._entry.options.get(
+                        "battery_entity_id"
                     ),
+                    battery_sensor=self.hass.data[DOMAIN][
+                        self._entry.entry_id
+                    ].get("battery_sensor"),
+                    for_png=True,
                 )
-                if level is not None:
-                    config["device_battery_level"] = level
-                    config["device_battery_charging"] = is_charging
                 widgets = self._resolve_templates(self._widgets)
                 _LOGGER.debug(
                     "_async_refresh: rendering %d widgets at %dx%d",

@@ -25,11 +25,11 @@ from .battery import build_entity_state, resolve_battery_level
 from .const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
-    DEVICE_PRESETS,
     DOMAIN,
     MAX_WIDGETS,
     WidgetType,
     default_list_row_height,
+    resolve_device_preset,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ class EinkLayoutView(HomeAssistantView):
         height = entry.options.get("height", DEFAULT_HEIGHT)
 
         device_model = entry.options.get("device_model", "custom")
-        preset = DEVICE_PRESETS.get(device_model, DEVICE_PRESETS["custom"])
+        preset = resolve_device_preset(entry.options)
 
         battery_entity_id = entry.options.get("battery_entity_id")
         states: dict = {}

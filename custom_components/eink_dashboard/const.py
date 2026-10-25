@@ -283,6 +283,24 @@ DEVICE_PRESETS: dict[str, DevicePreset] = {
 }
 
 
+def resolve_device_preset(options: Mapping[str, Any]) -> DevicePreset:
+    """Return the device preset selected by ``device_model``.
+
+    A missing or unrecognised ``device_model`` resolves to the
+    ``"custom"`` preset, never ``None``, so callers never need a
+    separate fallback branch.
+
+    Args:
+        options: Config entry options with an optional
+            ``device_model`` key.
+
+    Returns:
+        The matching ``DevicePreset``, or the ``"custom"`` preset.
+    """
+    model = options.get("device_model", "custom")
+    return DEVICE_PRESETS.get(model, DEVICE_PRESETS["custom"])
+
+
 def default_font_family(options: Mapping[str, Any]) -> FontFamily:
     """Return the default font family for a display.
 
@@ -299,9 +317,8 @@ def default_font_family(options: Mapping[str, Any]) -> FontFamily:
         The ``FontFamily`` to render with.
     """
     model = options.get("device_model", "custom")
-    preset = DEVICE_PRESETS.get(model)
-    if preset is not None and model != "custom":
-        return preset.font_family
+    if model != "custom" and model in DEVICE_PRESETS:
+        return resolve_device_preset(options).font_family
     width = options.get("width", DEFAULT_WIDTH)
     height = options.get("height", DEFAULT_HEIGHT)
     if min(width, height) <= LOW_RES_MAX_SHORT_SIDE:
@@ -403,7 +420,11 @@ def default_list_row_height(options: Mapping[str, Any]) -> int:
     Returns:
         Row height in pixels.
     """
-    ppi = display_ppi(options)
+    model = options.get("device_model", "custom")
+    if model == "custom":
+        ppi = options.get("ppi")
+    else:
+        ppi = resolve_device_preset(options).ppi
     if not ppi:
         return DEFAULT_ROW_H
     return max(1, round(DEFAULT_ROW_H * ppi / REFERENCE_PPI))
