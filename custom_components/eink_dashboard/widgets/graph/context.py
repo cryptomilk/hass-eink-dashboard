@@ -292,10 +292,12 @@ def _build_header_context(
 
     Tries each entity in ``entity_descs`` in order until one has a
     usable state, so the header is never blank when the first
-    configured entity is missing from ``states``.  When more than one
-    entity is configured, the entities' states are concatenated into
-    ``ctx["value_text"]`` before laying out the header, so the
-    (possibly much longer) combined text goes through
+    configured entity is missing from ``states``.  An explicit
+    widget-level ``title`` replaces the header name; when it is
+    empty or missing, the first series' name is used.  When more
+    than one entity is configured, the entities' states are
+    concatenated into ``ctx["value_text"]`` before laying out the
+    header, so the (possibly much longer) combined text goes through
     ``_fix_header_layout``'s icon-overlap truncation rather than the
     original single-entity value.
 
@@ -319,13 +321,20 @@ def _build_header_context(
         edges, or ``None`` when no entity has a usable state.
     """
     ctx = None
+    # An explicit widget-level title replaces the header name for
+    # every entity, so a graph title can differ from the first
+    # series' legend label.  An empty title keeps the historical
+    # behaviour of showing the first series' name.
+    title = str(widget.get("title") or "")
     for desc in entity_descs:
         eid = str(desc["entity"])
         name_override = str(desc.get("name", ""))
         hw = widget.copy()
         hw["entity"] = eid
         hw["hide_icon"] = not show_icon
-        if name_override:
+        if title:
+            hw["name"] = title
+        elif name_override:
             hw["name"] = name_override
         ctx = _entity_info_context(hw, config, header_h, svg_w, svg_h)
         if ctx is not None:
@@ -674,6 +683,8 @@ def _build_graph_context(
             ``entities`` (list of dicts, multi-entity mode;
             takes precedence over ``entity``),
             ``name`` (display name override),
+            ``title`` (header title override; when empty or missing,
+            the first series' name is used),
             ``icon`` (MDI icon name, e.g. ``"mdi:thermometer"``),
             ``unit`` (unit string override),
             ``hours_to_show`` (history window in hours; default 24;

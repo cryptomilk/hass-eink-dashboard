@@ -591,6 +591,45 @@ class TestRenderGraph:
         )
         assert default_render != named_render
 
+    def test_graph_single_entity_title(self) -> None:
+        # title= replaces the header name in single-entity mode, so
+        # the graph can be titled independently of the series.
+        svg = render_widget_svg(
+            self._base_widget(title="Climate"), self._config()
+        )
+        assert "Climate" in svg
+        assert "Living Room" not in svg
+
+    def test_graph_title_overrides_first_series_name(self) -> None:
+        # title= supplies the header text while each series keeps its
+        # own label, so the first series' name appears only in the
+        # legend.
+        widget = self._multi_widget(
+            title="Climate",
+            entities=[
+                {"entity": "sensor.temperature", "name": "Temp Override"},
+                {"entity": "sensor.humidity"},
+            ],
+        )
+        svg = render_widget_svg(widget, self._config())
+        assert svg.count("Climate") == 1
+        assert svg.count("Temp Override") == 1
+
+    def test_graph_blank_title_falls_back_to_first_series_name(
+        self,
+    ) -> None:
+        # An empty title keeps the backwards-compatible behaviour:
+        # the header shows the first series' name.
+        widget = self._multi_widget(
+            title="",
+            entities=[
+                {"entity": "sensor.temperature", "name": "Temp Override"},
+                {"entity": "sensor.humidity"},
+            ],
+        )
+        svg = render_widget_svg(widget, self._config())
+        assert svg.count("Temp Override") == 2
+
     def test_graph_unit_override(self) -> None:
         # unit= overrides the auto-detected unit_of_measurement and
         # changes the rendered output.
