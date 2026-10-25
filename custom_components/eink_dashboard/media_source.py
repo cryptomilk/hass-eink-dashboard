@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from homeassistant.components.media_player import (
     BrowseError,
@@ -33,7 +33,10 @@ from homeassistant.components.media_source import (
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+    from .data import EinkDashboardConfigEntry
+
 from .const import DOMAIN
+from .data import get_loaded_entry
 
 
 async def async_get_media_source(
@@ -70,12 +73,12 @@ class EinkDashboardMediaSource(MediaSource):
         Raises:
             Unresolvable: If the entry ID is not found.
         """
-        entry_data = self.hass.data.get(DOMAIN, {}).get(
-            item.identifier,
-        )
-        if not isinstance(entry_data, dict) or "entry" not in entry_data:
+        entry = get_loaded_entry(self.hass, item.identifier)
+        if entry is None:
             raise Unresolvable(f"Unknown dashboard: {item.identifier}")
-        entity = entry_data["entity"]
+        entity = entry.runtime_data.entity
+        if entity is None:
+            raise Unresolvable(f"Unknown dashboard: {item.identifier}")
         return PlayMedia(
             f"/api/image_proxy/{entity.entity_id}",
             "image/png",
@@ -106,20 +109,27 @@ class EinkDashboardMediaSource(MediaSource):
         if item.identifier:
             raise BrowseError(f"Unknown item: {item.identifier}")
 
-        entries = self.hass.data.get(DOMAIN, {})
+        entries: list[EinkDashboardConfigEntry] = []
+        for raw_entry in self.hass.config_entries.async_entries(DOMAIN):
+            if not hasattr(raw_entry, "runtime_data"):
+                continue
+            entries.append(cast("EinkDashboardConfigEntry", raw_entry))
+
         children = [
             BrowseMediaSource(
                 domain=DOMAIN,
-                identifier=entry_id,
+                identifier=entry.entry_id,
                 media_class=MediaClass.IMAGE,
                 media_content_type="image/png",
-                title=entry_data["entry"].title,
-                thumbnail=f"/api/image_proxy/{entry_data['entity'].entity_id}",
+                title=entry.title,
+                thumbnail=(
+                    f"/api/image_proxy/{entry.runtime_data.entity.entity_id}"
+                ),
                 can_play=True,
                 can_expand=False,
             )
-            for entry_id, entry_data in entries.items()
-            if isinstance(entry_data, dict) and "entry" in entry_data
+            for entry in entries
+            if entry.runtime_data.entity is not None
         ]
 
         return BrowseMediaSource(

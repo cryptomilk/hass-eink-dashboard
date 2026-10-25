@@ -66,6 +66,11 @@ from .const import (
     resolve_font_family,
     resolve_pixel_font_max_scale,
 )
+from .data import (
+    EinkDashboardConfigEntry,
+    EinkDashboardRuntimeData,
+    get_loaded_entry,
+)
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 from .svg_render import render_widget_svg
@@ -338,25 +343,23 @@ def build_display_config(
 
 
 async def _build_display_config(
-    hass: HomeAssistant, entry_id: str
+    hass: HomeAssistant, entry: EinkDashboardConfigEntry
 ) -> DisplayConfig:
     """Build a DisplayConfig for rendering a widget preview.
 
     Snapshots current HA entity states, enriches them with icons and
     display precision, reads the owner's locale preferences via
     :func:`_async_get_locale`, and delegates the rest to
-    :func:`build_display_config`.  Caller must ensure ``entry_id``
-    exists in ``hass.data[DOMAIN]``.
+    :func:`build_display_config`.
 
     Args:
         hass: Home Assistant instance.
-        entry_id: Config entry ID present in ``hass.data[DOMAIN]``.
+        entry: Config entry with its runtime data already set up.
 
     Returns:
         A DisplayConfig dict suitable for ``render_widget_svg()``.
     """
-    entry_data = hass.data[DOMAIN][entry_id]
-    entry = entry_data["entry"]
+    data = entry.runtime_data
     states: dict[str, Any] = {}
     for state in hass.states.async_all():
         states[state.entity_id] = {
@@ -386,7 +389,7 @@ async def _build_display_config(
         time_format=time_format,
         time_zone=_ha_time_zone(hass),
         battery_entity_id=entry.options.get("battery_entity_id"),
-        battery_sensor=entry_data.get("battery_sensor"),
+        battery_sensor=data.battery_sensor,
     )
 
 
@@ -802,8 +805,8 @@ async def ws_render_widget(
             (dict) override.
     """
     entry_id = msg["entry_id"]
-    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-    if entry_data is None:
+    entry = get_loaded_entry(hass, entry_id)
+    if entry is None:
         connection.send_error(
             msg["id"],
             websocket_api.ERR_NOT_FOUND,
@@ -813,7 +816,7 @@ async def ws_render_widget(
 
     widget = msg.get("widget")
     if widget is None:
-        widgets = list(entry_data["widgets"])
+        widgets = list(entry.runtime_data.widgets)
         idx = msg["widget_index"]
         if idx < 0 or idx >= len(widgets):
             connection.send_error(
@@ -823,7 +826,7 @@ async def ws_render_widget(
             )
             return
         widget = widgets[idx]
-    config = await _build_display_config(hass, entry_id)
+    config = await _build_display_config(hass, entry)
     await _fetch_forecasts(hass, [widget], config["states"])
     await _fetch_history(hass, [widget], config["states"])
     await _fetch_calendar_events(hass, [widget], config["states"])
@@ -879,8 +882,8 @@ async def ws_render_widgets(
             and an optional ``widgets`` (list) override.
     """
     entry_id = msg["entry_id"]
-    entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-    if entry_data is None:
+    entry = get_loaded_entry(hass, entry_id)
+    if entry is None:
         connection.send_error(
             msg["id"],
             websocket_api.ERR_NOT_FOUND,
@@ -888,8 +891,8 @@ async def ws_render_widgets(
         )
         return
 
-    widgets = msg.get("widgets") or list(entry_data["widgets"])
-    config = await _build_display_config(hass, entry_id)
+    widgets = msg.get("widgets") or list(entry.runtime_data.widgets)
+    config = await _build_display_config(hass, entry)
     await _fetch_forecasts(hass, widgets, config["states"])
     await _fetch_history(hass, widgets, config["states"])
     await _fetch_calendar_events(hass, widgets, config["states"])
@@ -933,7 +936,6 @@ _VERSION = _MANIFEST["version"]
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Register HTTP views and static paths for the integration."""
     _LOGGER.debug("async_setup: registering HTTP views and static paths")
-    hass.data.setdefault(DOMAIN, {})
 
     hass.http.register_view(EinkPublicImageView())
     hass.http.register_view(EinkLayoutView())
@@ -1049,7 +1051,9 @@ async def async_migrate_entry(
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(
+    hass: HomeAssistant, entry: EinkDashboardConfigEntry
+) -> bool:
     """Load persisted widgets and forward setup to the image platform."""
     _LOGGER.debug(
         "async_setup_entry: entry_id=%s title=%r", entry.entry_id, entry.title
@@ -1061,11 +1065,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         len(widgets),
         entry.entry_id,
     )
-    hass.data[DOMAIN][entry.entry_id] = {
-        "store": store,
-        "widgets": widgets,
-        "entry": entry,
-    }
+    entry.runtime_data = EinkDashboardRuntimeData(
+        store=store,
+        widgets=widgets,
+    )
 
     _register_device(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
@@ -1077,11 +1080,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload platforms and clean up runtime data for the entry."""
+async def async_unload_entry(
+    hass: HomeAssistant, entry: EinkDashboardConfigEntry
+) -> bool:
+    """Unload platforms for the entry.
+
+    HA core deletes ``entry.runtime_data`` automatically once this
+    returns successfully.
+    """
     _LOGGER.debug("async_unload_entry: %s", entry.entry_id)
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if ok:
-        hass.data[DOMAIN].pop(entry.entry_id)
     _LOGGER.debug("async_unload_entry: %s ok=%s", entry.entry_id, ok)
     return ok

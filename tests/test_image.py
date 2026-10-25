@@ -29,6 +29,7 @@ from custom_components.eink_dashboard.const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
 )
+from custom_components.eink_dashboard.data import EinkDashboardRuntimeData
 from custom_components.eink_dashboard.image import (
     PUSH_MAX_IMAGE_BYTES,
     EinkDashboardImage,
@@ -87,8 +88,8 @@ def make_entity(
     """Build an EinkDashboardImage backed by a registered config entry.
 
     Returns a factory that creates a MockConfigEntry (registered via
-    add_to_hass), seeds hass.data[DOMAIN][entry.entry_id], and
-    constructs an EinkDashboardImage with async_write_ha_state mocked.
+    add_to_hass), seeds entry.runtime_data, and constructs an
+    EinkDashboardImage with async_write_ha_state mocked.
     """
 
     def _make(
@@ -96,7 +97,9 @@ def make_entity(
     ) -> tuple[EinkDashboardImage, MockConfigEntry]:
         entry = _make_entry(options)
         entry.add_to_hass(hass)
-        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
+        entry.runtime_data = EinkDashboardRuntimeData(
+            store=MagicMock(), widgets=[]
+        )
         entity = EinkDashboardImage(hass, entry)
         entity.async_write_ha_state = MagicMock()
         return entity, entry
@@ -774,7 +777,9 @@ class TestImagePlatformSetup:
         entry = _make_entry()
         entry.add_to_hass(hass)
         widgets = [{"type": "separator", "y": 50}]
-        hass.data[DOMAIN] = {entry.entry_id: {"widgets": widgets}}
+        entry.runtime_data = EinkDashboardRuntimeData(
+            store=MagicMock(), widgets=widgets
+        )
 
         async_add_entities = MagicMock()
         await async_setup_entry(hass, entry, async_add_entities)
@@ -783,7 +788,7 @@ class TestImagePlatformSetup:
         entities = async_add_entities.call_args[0][0]
         assert len(entities) == 1
         assert isinstance(entities[0], EinkDashboardImage)
-        assert hass.data[DOMAIN][entry.entry_id]["entity"] is entities[0]
+        assert entry.runtime_data.entity is entities[0]
         assert entities[0]._widgets == widgets
 
 

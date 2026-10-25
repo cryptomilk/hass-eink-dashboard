@@ -25,12 +25,12 @@ from .battery import build_entity_state, resolve_battery_level
 from .const import (
     DEFAULT_HEIGHT,
     DEFAULT_WIDTH,
-    DOMAIN,
     MAX_WIDGETS,
     WidgetType,
     default_list_row_height,
     resolve_device_preset,
 )
+from .data import get_loaded_entry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -45,12 +45,11 @@ class EinkLayoutView(HomeAssistantView):
     async def get(self, request: web.Request, entry_id: str) -> web.Response:
         """Return the current widget list and display config as JSON."""
         hass = request.app["hass"]
-        entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-        if entry_data is None:
+        entry = get_loaded_entry(hass, entry_id)
+        if entry is None:
             raise web.HTTPNotFound()
 
-        widgets = entry_data["widgets"]
-        entry = entry_data["entry"]
+        widgets = entry.runtime_data.widgets
         width = entry.options.get("width", DEFAULT_WIDTH)
         height = entry.options.get("height", DEFAULT_HEIGHT)
 
@@ -66,7 +65,7 @@ class EinkLayoutView(HomeAssistantView):
         device_battery_level, _ = resolve_battery_level(
             battery_entity_id,
             states,
-            entry_data.get("battery_sensor"),
+            entry.runtime_data.battery_sensor,
         )
 
         return web.json_response(
@@ -97,8 +96,8 @@ class EinkLayoutView(HomeAssistantView):
     async def post(self, request: web.Request, entry_id: str) -> web.Response:
         """Validate and persist a new widget list, then trigger a refresh."""
         hass = request.app["hass"]
-        entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-        if entry_data is None:
+        entry = get_loaded_entry(hass, entry_id)
+        if entry is None:
             raise web.HTTPNotFound()
 
         try:
@@ -127,10 +126,12 @@ class EinkLayoutView(HomeAssistantView):
                         text=f"Invalid value type for field '{key}'"
                     )
 
-        await entry_data["store"].async_save(body)
-        entry_data["widgets"] = body
-        entity = entry_data["entity"]
-        await entity.async_request_refresh(body)
+        data = entry.runtime_data
+        await data.store.async_save(body)
+        data.widgets = body
+        if data.entity is None:
+            raise web.HTTPServiceUnavailable()
+        await data.entity.async_request_refresh(body)
 
         return web.json_response({"status": "ok"})
 
@@ -145,11 +146,13 @@ class EinkPublicImageView(HomeAssistantView):
     async def get(self, request: web.Request, entry_id: str) -> web.Response:
         """Serve the latest rendered PNG, honouring If-None-Match."""
         hass = request.app["hass"]
-        entry_data = hass.data.get(DOMAIN, {}).get(entry_id)
-        if entry_data is None:
+        entry = get_loaded_entry(hass, entry_id)
+        if entry is None:
             raise web.HTTPNotFound()
 
-        entity = entry_data["entity"]
+        entity = entry.runtime_data.entity
+        if entity is None:
+            raise web.HTTPServiceUnavailable()
         image_bytes = await entity.async_image()
         if image_bytes is None:
             raise web.HTTPServiceUnavailable()
@@ -162,7 +165,7 @@ class EinkPublicImageView(HomeAssistantView):
             except (ValueError, TypeError):
                 level = None
             if level is not None:
-                sensor = entry_data.get("battery_sensor")
+                sensor = entry.runtime_data.battery_sensor
                 if sensor is not None:
                     is_charging = request.query.get("isCharging") == "1"
                     sensor.update_battery(level, is_charging)
@@ -175,7 +178,11 @@ class EinkPublicImageView(HomeAssistantView):
         etag = entity.etag
 
         if_none_match = request.headers.get("If-None-Match")
-        if if_none_match is not None and if_none_match in ("*", etag):
+        if (
+            etag is not None
+            and if_none_match is not None
+            and if_none_match in ("*", etag)
+        ):
             _LOGGER.info("ETag hit (%s), returning 304", etag)
             resp = web.Response(status=304)
             resp.headers["ETag"] = etag

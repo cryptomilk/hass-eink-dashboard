@@ -124,10 +124,10 @@ class TestAsyncSetup:
 
 
 class TestAsyncSetupEntry:
-    async def test_populates_hass_data(
+    async def test_populates_runtime_data(
         self, hass: HomeAssistant, mock_store_class: MagicMock
     ) -> None:
-        # Setting up an entry stores its runtime data under hass.data[DOMAIN].
+        # Setting up an entry stores its runtime data on the entry itself.
         await _setup_http(hass)
         entry = MockConfigEntry(domain=DOMAIN)
         entry.add_to_hass(hass)
@@ -135,23 +135,9 @@ class TestAsyncSetupEntry:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-        assert entry.entry_id in hass.data[DOMAIN]
-        data = hass.data[DOMAIN][entry.entry_id]
-        assert "store" in data
-        assert data["widgets"] == []
-
-    async def test_stores_entry_reference(
-        self, hass: HomeAssistant, mock_store_class: MagicMock
-    ) -> None:
-        # The runtime data dict keeps a reference to the config entry itself.
-        await _setup_http(hass)
-        entry = MockConfigEntry(domain=DOMAIN)
-        entry.add_to_hass(hass)
-
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-        assert hass.data[DOMAIN][entry.entry_id]["entry"] is entry
+        assert hasattr(entry, "runtime_data")
+        assert entry.runtime_data.store is not None
+        assert entry.runtime_data.widgets == []
 
     async def test_forwards_to_image_platform(
         self, hass: HomeAssistant, mock_store_class: MagicMock
@@ -193,7 +179,6 @@ class TestAsyncSetupEntry:
         # homeassistant.helpers.device_registry.async_get globally
         # (custom_components.eink_dashboard.dr *is* that module), which
         # would otherwise break real image/sensor entity registration.
-        hass.data.setdefault(DOMAIN, {})
         entry = MockConfigEntry(
             domain=DOMAIN,
             options={"device_model": "kindle_pw4", "area_id": "kitchen"},
@@ -235,7 +220,6 @@ class TestAsyncSetupEntry:
         self, hass: HomeAssistant, mock_store_class: MagicMock
     ) -> None:
         # device_model="custom" with no area falls back to Custom/None.
-        hass.data.setdefault(DOMAIN, {})
         entry = MockConfigEntry(
             domain=DOMAIN, options={"device_model": "custom"}
         )
@@ -268,7 +252,6 @@ class TestAsyncSetupEntry:
         self, hass: HomeAssistant, mock_store_class: MagicMock
     ) -> None:
         # Missing device_model key defaults to the Custom model.
-        hass.data.setdefault(DOMAIN, {})
         entry = MockConfigEntry(domain=DOMAIN)
         entry.add_to_hass(hass)
         mock_dev_reg = MagicMock()
@@ -431,7 +414,6 @@ class TestAsyncUnloadEntry:
         # Unloading forwards to config_entries.async_unload_platforms
         # for both platforms and reports success.
         entry = MockConfigEntry(domain=DOMAIN)
-        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
 
         with patch.object(
             hass.config_entries,
@@ -445,28 +427,13 @@ class TestAsyncUnloadEntry:
         )
         assert result is True
 
-    async def test_removes_entry_data_on_success(
+    async def test_unload_failure_returns_false(
         self, hass: HomeAssistant
     ) -> None:
-        # A successful unload removes the entry's runtime data.
+        # A failed platform unload is reported back to the caller.
+        # HA core preserves entry.runtime_data in this case; cleanup
+        # on success is also handled by HA core, not this function.
         entry = MockConfigEntry(domain=DOMAIN)
-        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
-
-        with patch.object(
-            hass.config_entries,
-            "async_unload_platforms",
-            AsyncMock(return_value=True),
-        ):
-            await async_unload_entry(hass, entry)
-
-        assert entry.entry_id not in hass.data[DOMAIN]
-
-    async def test_keeps_entry_data_on_failure(
-        self, hass: HomeAssistant
-    ) -> None:
-        # A failed unload keeps the entry's runtime data intact.
-        entry = MockConfigEntry(domain=DOMAIN)
-        hass.data[DOMAIN] = {entry.entry_id: {"store": MagicMock()}}
 
         with patch.object(
             hass.config_entries,
@@ -476,7 +443,6 @@ class TestAsyncUnloadEntry:
             result = await async_unload_entry(hass, entry)
 
         assert result is False
-        assert entry.entry_id in hass.data[DOMAIN]
 
 
 _FRONTEND_STORAGE = (

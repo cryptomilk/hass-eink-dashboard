@@ -26,6 +26,7 @@ from custom_components.eink_dashboard.battery_sensor import (
     EinkDashboardBatterySensor,
 )
 from custom_components.eink_dashboard.const import DOMAIN
+from custom_components.eink_dashboard.data import EinkDashboardRuntimeData
 from custom_components.eink_dashboard.sensor import async_setup_entry
 
 if TYPE_CHECKING:
@@ -195,7 +196,9 @@ class TestSensorPlatformSetup:
         # async_setup_entry calls async_add_entities with one battery sensor.
         entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
         entry.add_to_hass(hass)
-        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
+        entry.runtime_data = EinkDashboardRuntimeData(
+            store=MagicMock(), widgets=[]
+        )
         added: list = []
 
         await async_setup_entry(hass, entry, added.append)
@@ -208,12 +211,14 @@ class TestSensorPlatformSetup:
     async def test_async_setup_entry_stores_sensor(
         self, hass: HomeAssistant
     ) -> None:
-        # The sensor is stored in hass.data under the "battery_sensor" key.
+        # The sensor is stored on entry.runtime_data.battery_sensor.
         entry = MockConfigEntry(domain=DOMAIN, entry_id="test_entry_id")
         entry.add_to_hass(hass)
-        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {}
+        entry.runtime_data = EinkDashboardRuntimeData(
+            store=MagicMock(), widgets=[]
+        )
 
         await async_setup_entry(hass, entry, lambda entities: None)
 
-        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor = entry.runtime_data.battery_sensor
         assert isinstance(sensor, EinkDashboardBatterySensor)

@@ -58,8 +58,8 @@ async def _setup_entry(
     integration's own ``async_setup`` and by ``hass_ws_client``),
     registers a config entry, and forwards platform setup so the
     real image and battery sensor entities exist. When ``widgets``
-    is given it is written directly into ``hass.data`` after setup,
-    bypassing the persisted store.
+    is given it is written directly onto ``entry.runtime_data``
+    after setup, bypassing the persisted store.
 
     Args:
         hass: Home Assistant instance.
@@ -80,7 +80,7 @@ async def _setup_entry(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     if widgets is not None:
-        hass.data[DOMAIN][entry.entry_id]["widgets"] = widgets
+        entry.runtime_data.widgets = widgets
     client = await hass_ws_client(hass)
     return client, entry
 
@@ -327,7 +327,7 @@ class TestWsRenderWidget:
         client, entry = await _setup_entry(
             hass, hass_ws_client, widgets=[widget]
         )
-        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor = entry.runtime_data.battery_sensor
         sensor.update_battery(72, True)
 
         with patch(_RENDER_SVG_TARGET, return_value="<svg/>") as mock_render:

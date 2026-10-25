@@ -39,8 +39,9 @@ from PIL import Image
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
+
+    from .data import EinkDashboardConfigEntry
 
 from . import (
     _async_get_locale,
@@ -85,15 +86,14 @@ def _is_image_blank(image_bytes: bytes) -> bool:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: EinkDashboardConfigEntry,
     async_add_entities: Any,
 ) -> None:
     """Create and register the EinkDashboardImage entity."""
     _LOGGER.debug("image async_setup_entry: %s", entry.entry_id)
     entity = EinkDashboardImage(hass, entry)
-    widgets = hass.data[DOMAIN][entry.entry_id]["widgets"]
-    entity.set_widgets(widgets)
-    hass.data[DOMAIN][entry.entry_id]["entity"] = entity
+    entity.set_widgets(entry.runtime_data.widgets)
+    entry.runtime_data.entity = entity
     async_add_entities([entity])
     _LOGGER.debug(
         "image async_setup_entry: entity added for %s", entry.entry_id
@@ -108,7 +108,7 @@ class EinkDashboardImage(ImageEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: ConfigEntry,
+        entry: EinkDashboardConfigEntry,
     ) -> None:
         """Initialise the entity from the config entry."""
         super().__init__(hass)
@@ -246,9 +246,7 @@ class EinkDashboardImage(ImageEntity):
                     battery_entity_id=self._entry.options.get(
                         "battery_entity_id"
                     ),
-                    battery_sensor=self.hass.data[DOMAIN][
-                        self._entry.entry_id
-                    ].get("battery_sensor"),
+                    battery_sensor=self._entry.runtime_data.battery_sensor,
                     for_png=True,
                 )
                 widgets = self._resolve_templates(self._widgets)

@@ -72,7 +72,7 @@ async def _setup_entry(
 
     Brings up the ``http`` component, registers a config entry, and
     forwards platform setup so the real image and battery sensor
-    entities exist at ``hass.data[DOMAIN][entry.entry_id]``.
+    entities exist on ``entry.runtime_data``.
 
     Args:
         hass: Home Assistant instance.
@@ -96,7 +96,7 @@ async def _setup_entry(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     if widgets is not None:
-        hass.data[DOMAIN][entry.entry_id]["widgets"] = widgets
+        entry.runtime_data.widgets = widgets
     return entry
 
 
@@ -141,7 +141,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # Image endpoint serves the rendered PNG with an ETag header.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -158,7 +158,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # ETag value matches the sha256 hash of the image bytes.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -171,7 +171,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # A matching If-None-Match returns 304 with no body.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -190,7 +190,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # A wildcard If-None-Match always returns 304.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -206,7 +206,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # No If-None-Match header means a full 200 response.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -220,7 +220,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # A stale If-None-Match means a full 200 response.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
 
         client = await hass_client_no_auth()
@@ -248,7 +248,7 @@ class TestEinkPublicImageView:
     ) -> None:
         # No rendered image yet means 503.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         entity._rendered = None
 
         client = await hass_client_no_auth()
@@ -261,10 +261,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # Battery query params call update_battery on the sensor.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -279,10 +279,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # isCharging=0 maps to False.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -297,10 +297,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # No battery query params means update_battery is not called.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(_image_url(entry.entry_id))
@@ -312,10 +312,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # Non-numeric batteryLevel is silently ignored.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -329,9 +329,9 @@ class TestEinkPublicImageView:
     ) -> None:
         # Missing sensor does not crash; still returns 200.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
-        del hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        entry.runtime_data.battery_sensor = None
 
         client = await hass_client_no_auth()
         resp = await client.get(
@@ -345,10 +345,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # Missing isCharging defaults to False.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -362,10 +362,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # batteryLevel=150 is clamped to 100.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -379,10 +379,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # batteryLevel=-5 is clamped to 0.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -396,10 +396,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # batteryLevel=78.9 is truncated to 78.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         await client.get(
@@ -413,10 +413,10 @@ class TestEinkPublicImageView:
     ) -> None:
         # Battery is still updated even on a 304 response.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         _seed_rendered(entity)
         sensor = MagicMock()
-        hass.data[DOMAIN][entry.entry_id]["battery_sensor"] = sensor
+        entry.runtime_data.battery_sensor = sensor
 
         client = await hass_client_no_auth()
         resp = await client.get(
@@ -554,7 +554,7 @@ class TestEinkLayoutView:
     ) -> None:
         # Battery level from the internal sensor appears in device metadata.
         entry = await _setup_entry(hass)
-        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor = entry.runtime_data.battery_sensor
         sensor.update_battery(72, True)
 
         client = await hass_client()
@@ -606,7 +606,7 @@ class TestEinkLayoutView:
                 "battery_entity_id": "sensor.trmnl_battery",
             },
         )
-        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor = entry.runtime_data.battery_sensor
         sensor.update_battery(50, False)
         hass.states.async_set("sensor.trmnl_battery", "77")
 
@@ -627,7 +627,7 @@ class TestEinkLayoutView:
                 "battery_entity_id": "sensor.trmnl_battery",
             },
         )
-        sensor = hass.data[DOMAIN][entry.entry_id]["battery_sensor"]
+        sensor = entry.runtime_data.battery_sensor
         sensor.update_battery(40, False)
 
         client = await hass_client()
@@ -657,9 +657,9 @@ class TestEinkLayoutViewPost:
         # POST persists widgets, refreshes the entity, and returns ok.
         widgets = [{"type": "separator", "y": 50}]
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         entity.async_request_refresh = AsyncMock()
-        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store = entry.runtime_data.store
         store.async_save = AsyncMock()
 
         client = await hass_client()
@@ -676,13 +676,13 @@ class TestEinkLayoutViewPost:
         # The in-memory widgets list is updated after a successful POST.
         new_widgets = [{"type": "heading", "heading": "hi"}]
         entry = await _setup_entry(hass, widgets=[])
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         entity.async_request_refresh = AsyncMock()
 
         client = await hass_client()
         await client.post(_layout_url(entry.entry_id), json=new_widgets)
 
-        assert hass.data[DOMAIN][entry.entry_id]["widgets"] == new_widgets
+        assert entry.runtime_data.widgets == new_widgets
 
     async def test_post_missing_entry_raises_404(
         self, hass: HomeAssistant, hass_client: ClientSessionGenerator
@@ -765,9 +765,9 @@ class TestEinkLayoutViewPost:
     ) -> None:
         # An empty widget list is valid.
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         entity.async_request_refresh = AsyncMock()
-        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store = entry.runtime_data.store
         store.async_save = AsyncMock()
 
         client = await hass_client()
@@ -782,9 +782,9 @@ class TestEinkLayoutViewPost:
         # Every WidgetType enum value is accepted.
         widgets = [{"type": t.value} for t in WidgetType]
         entry = await _setup_entry(hass)
-        entity = hass.data[DOMAIN][entry.entry_id]["entity"]
+        entity = entry.runtime_data.entity
         entity.async_request_refresh = AsyncMock()
-        store = hass.data[DOMAIN][entry.entry_id]["store"]
+        store = entry.runtime_data.store
         store.async_save = AsyncMock()
 
         client = await hass_client()
