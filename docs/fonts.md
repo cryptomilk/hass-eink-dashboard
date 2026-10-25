@@ -1,10 +1,12 @@
 # Fonts and non-Latin scripts
 
-The dashboard bundles two font families: the TRMNL pixel font in 12px,
-16px, and 21px optical sizes, each with regular and bold weights, and
-Roboto in regular, medium, and bold weights. Rendering uses the selected
-font family as its primary face and the other bundled family as a glyph
-fallback.
+The dashboard bundles three font families: the TRMNL pixel font in
+12px, 16px, and 21px optical sizes, each with regular and bold
+weights; Roboto in regular, medium, and bold weights; and Inter in
+regular, medium, and bold weights. Rendering uses the selected font
+family as its primary face and the other bundled family as a glyph
+fallback. Inter is not selectable on its own — it is only used as
+the large-text fallback described below.
 
 Choose **TRMNL** or **Roboto** in **Configure → Display settings →
 Font family**. Text widths are measured using the selected primary font
@@ -49,7 +51,7 @@ TRMNL glyphs are built from square font pixels, so scaled up they look
 blocky no matter how they are rasterised. The **Large text font**
 option (**Configure → Display settings**) sets how far TRMNL may be
 scaled; larger text — such as a big weather temperature — renders in
-Roboto with anti-aliasing instead, while smaller text stays in TRMNL.
+Inter with anti-aliasing instead, while smaller text stays in TRMNL.
 
 | Setting | TRMNL used up to |
 |---|---|
@@ -114,7 +116,8 @@ The directory must be reachable by Home Assistant:
 - **Core / venv install**: any path readable by the Home Assistant
   process works directly.
 
-Leave the field empty to use only the bundled TRMNL and Roboto fonts.
+Leave the field empty to use only the bundled TRMNL, Roboto, and
+Inter fonts.
 
 ## Which one should I use?
 
@@ -138,3 +141,9 @@ files are the unmodified originals.
 
 **Roboto** is by Google and licensed under the Apache License 2.0; see
 `custom_components/eink_dashboard/fonts/Roboto/LICENSE`.
+
+**Inter** was designed by [The Inter Project
+Authors](https://github.com/rsms/inter) and is licensed under the
+[SIL Open Font License 1.1](https://openfontlicense.org); the full
+license ships next to the font files in
+`custom_components/eink_dashboard/fonts/Inter/OFL.txt`.

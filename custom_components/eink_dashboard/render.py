@@ -68,12 +68,12 @@ def _load_font(
         size: Font size in pixels (clamped to a minimum of 1).  Snapped
             to the TRMNL pixel grid when pixel fonts are active, so
             measurements match the size the SVG renders at.
-        medium: When True, load Roboto Medium when available.
+        medium: When True, load Roboto or Inter Medium when available.
         bold: When True, load the selected font's bold weight. Takes
             precedence over ``medium``.
         family: Optional family override; otherwise the family that
             draws text at ``size`` in the current render context is used
-            (Roboto for TRMNL text above the large-text limit).
+            (Inter for TRMNL text above the large-text limit).
 
     Returns:
         A FreeTypeFont loaded from the TTF file, or the PIL built-in

@@ -142,9 +142,11 @@ multiples), and `font_family` picks the matching face. `_load_font`
 applies the same snapping so measurements match the rendered text.
 TRMNL text above `resolve_pixel_font_max_scale(entry.options)` × 21
 px (`pixel_font_limit` option; `"auto"` derives it from the display's
-ppi) falls back to anti-aliased Roboto: the `font_family` filter lists
-Roboto first, `font_px` skips snapping, and `_load_font` measures with
-Roboto (see `large_text_fallback()` in `fonts.py`).
+ppi) falls back to anti-aliased Inter: the `font_family` filter lists
+Inter first, `font_px` skips snapping, and `_load_font` measures with
+Inter (see `large_text_fallback()` in `fonts.py`). Inter is not a
+user-selectable primary family (see `FontFamily` in `const.py`), only
+this internal fallback.
 Read the selected family with `resolve_font_family(entry.options)`
 from `const.py`: an unset option falls back to the device's default
 (`DevicePreset.font_family`, or TRMNL for custom displays whose

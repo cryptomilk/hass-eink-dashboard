@@ -82,6 +82,22 @@ export function buildFontFaceCss(version: string): string {
       );
     }
   }
+  // Inter is the TRMNL large-text fallback (see fonts.py), so
+  // server-rendered SVGs reference it directly instead of relying on
+  // the host OS to have it installed like the Roboto primary family.
+  for (const [style, weight] of [
+    ["Regular", 400],
+    ["Medium", 500],
+    ["Bold", 700],
+  ] as const) {
+    const url = `/eink_dashboard/fonts/Inter/Inter-${style}.ttf`;
+    faces.push(
+      `@font-face { font-family: "Inter"; ` +
+        `src: url("${url}${query}") format("truetype"); ` +
+        `font-weight: ${weight}; font-style: normal; ` +
+        `font-display: block; }`,
+    );
+  }
   return faces.join("\n");
 }
 

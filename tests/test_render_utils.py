@@ -465,7 +465,7 @@ class TestPixelFonts:
 
 
 class TestLargeTextFallback:
-    """TRMNL text above the scale limit falls back to Roboto."""
+    """TRMNL text above the scale limit falls back to Inter."""
 
     def test_no_limit_keeps_trmnl(self) -> None:
         # Without a limit, even very large text stays in TRMNL.
@@ -492,20 +492,20 @@ class TestLargeTextFallback:
         with font_family_context("Roboto"), pixel_font_limit_context(1):
             assert not large_text_fallback(100)
 
-    def test_large_text_uses_roboto_unsnapped(self) -> None:
-        # Large text lists Roboto first, keeps its requested size and
-        # is measured with Roboto so layout matches the render.
+    def test_large_text_uses_inter_unsnapped(self) -> None:
+        # Large text lists Inter first, keeps its requested size and
+        # is measured with Inter so layout matches the render.
         with (
             font_family_context("TRMNL"),
             pixel_fonts_context(True),
             pixel_font_limit_context(2),
         ):
-            assert font_family(50, "TRMNL").startswith("Roboto,")
+            assert font_family(50, "TRMNL").startswith("Inter,")
             assert pixel_font_size(50) == 50
             loaded = _load_font(50)
-            assert font_path(50).parent.name == "Roboto"
+            assert font_path(50).parent.name == "Inter"
         assert isinstance(loaded, ImageFont.FreeTypeFont)
-        assert loaded.getname()[0] == "Roboto"
+        assert loaded.getname()[0] == "Inter"
         assert loaded.size == 50
 
     def test_snapping_stays_within_limit(self) -> None:
@@ -533,7 +533,7 @@ class TestLargeTextFallback:
         assert svg.startswith('<svg text-rendering="optimizeSpeed"')
         tags = re.findall(r"<text\b[^>]*>", svg)
         assert tags
-        assert all('font-family="Roboto,' in t for t in tags)
+        assert all('font-family="Inter,' in t for t in tags)
         assert all('text-rendering="geometricPrecision"' in t for t in tags)
 
     def test_widget_svg_small_text_stays_crisp(self) -> None:
@@ -968,9 +968,12 @@ class TestFontFamilyFallback:
             path = font_path(16, family=bogus)  # type: ignore[arg-type]
             assert path == default_path
 
-    @pytest.mark.parametrize("family", list(FontFamily))
+    @pytest.mark.parametrize("family", [FontFamily.TRMNL, FontFamily.ROBOTO])
     def test_known_family_is_kept(self, family: FontFamily) -> None:
         # Valid names, plain strings included, select that family.
+        # INTER is excluded: it is only used internally as the TRMNL
+        # large-text fallback (see TestLargeTextFallback), never as a
+        # selected primary family.
         with font_family_context(str(family)):
             assert current_font_family() is family
         assert font_family(16, str(family)).startswith(str(family))

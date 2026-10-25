@@ -172,7 +172,7 @@
           "display_levels": "Number of shades or colors the display can reproduce (fewer = higher contrast, more banding)",
           "font_family": "Primary font used for dashboard text. The default depends on the device: TRMNL for low-resolution panels such as the TRMNL OG, Roboto for higher-resolution displays. The other bundled font remains available as a glyph fallback.",
           "pixel_fonts": "Render the TRMNL font only at its native pixel sizes (12, 16, 21 px or whole multiples) without anti-aliasing, so text stays sharp on black-and-white displays. Font sizes may shift by a pixel or two. Has no effect with Roboto.",
-          "pixel_font_limit": "The TRMNL pixel font looks blocky when scaled up, so text larger than this renders in Roboto instead. Automatic picks the limit from the display's pixel density (2x on 800 x 480 panels). Has no effect with Roboto.",
+          "pixel_font_limit": "The TRMNL pixel font looks blocky when scaled up, so text larger than this renders in Inter instead. Automatic picks the limit from the display's pixel density (2x on 800 x 480 panels). Has no effect with Roboto.",
           "black_text": "Render all text in black instead of gray, so labels stay crisp instead of being dithered into dot patterns on displays with few gray levels. White text on dark backgrounds is kept.",
           "black_dividers": "Draw list dividers, separators and left card bars in solid black instead of gray, so thin lines stay solid instead of being dithered into dotted lines on displays with few gray levels.",
           "use_system_fonts": "Also use fonts already installed on this Home Assistant host as a fallback for characters the bundled font and custom font directory do not cover. Off by default so dashboards render identically across HA OS, Docker, and other machines; enabling it can make text look different depending on what is installed on the host."
@@ -226,10 +226,10 @@
     "pixel_font_limit": {
       "options": {
         "auto": "Automatic (based on pixel density)",
-        "1": "Roboto above 21 px (1x)",
-        "2": "Roboto above 42 px (2x)",
-        "3": "Roboto above 63 px (3x)",
-        "4": "Roboto above 84 px (4x)",
+        "1": "Inter above 21 px (1x)",
+        "2": "Inter above 42 px (2x)",
+        "3": "Inter above 63 px (3x)",
+        "4": "Inter above 84 px (4x)",
         "never": "Never (always TRMNL)"
       }
     },

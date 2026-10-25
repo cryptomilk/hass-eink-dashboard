@@ -124,6 +124,7 @@ def test_svg_to_png_default_skips_system_fonts(monkeypatch):
     assert calls[0]["font_dirs"] == [
         str(_FONTS_DIR / "TRMNL"),
         str(_FONTS_DIR / "Roboto"),
+        str(_FONTS_DIR / "Inter"),
     ]
 
 

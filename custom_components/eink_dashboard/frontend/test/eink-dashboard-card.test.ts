@@ -48,7 +48,7 @@ describe("buildFontFaceCss", () => {
     // Each optical size needs a 400 and a 700 face so widget SVGs
     // referencing TRMNL12/16/21 render with the bundled font.
     const css = buildFontFaceCss("1.0");
-    expect(css.match(/@font-face/g)).toHaveLength(6);
+    expect(css.match(/@font-face/g)).toHaveLength(9);
     for (const size of [12, 16, 21]) {
       expect(css).toContain(`font-family: "TRMNL${size}"`);
       expect(css).toContain(
@@ -59,6 +59,24 @@ describe("buildFontFaceCss", () => {
       );
     }
     expect(css).toContain("font-weight: 700");
+  });
+
+  it("declares Inter faces for the TRMNL large-text fallback", () => {
+    // Inter is not a system font, so the browser preview needs its
+    // own @font-face rules just like TRMNL, unlike Roboto which
+    // Home Assistant's own frontend already loads.
+    const css = buildFontFaceCss("1.0");
+    expect(css).toContain('font-family: "Inter"');
+    for (const [style, weight] of [
+      ["Regular", 400],
+      ["Medium", 500],
+      ["Bold", 700],
+    ] as const) {
+      expect(css).toContain(
+        `/eink_dashboard/fonts/Inter/Inter-${style}.ttf?v=1.0`,
+      );
+      expect(css).toContain(`font-weight: ${weight}`);
+    }
   });
 
   it("omits the cache buster when no version is known", () => {

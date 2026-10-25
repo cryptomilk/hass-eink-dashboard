@@ -340,7 +340,13 @@ def _build_display_settings_schema(
                     # No translation_key: the values are font names,
                     # which hassfest rejects as translation keys
                     # (uppercase), and they need no translation.
-                    options=[family.value for family in FontFamily],
+                    # INTER is excluded: it is only used internally
+                    # as the TRMNL large-text fallback, not a
+                    # user-selectable primary family.
+                    options=[
+                        FontFamily.TRMNL.value,
+                        FontFamily.ROBOTO.value,
+                    ],
                     mode=SelectSelectorMode.DROPDOWN,
                 )
             ),

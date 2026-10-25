@@ -29,10 +29,12 @@ DOMAIN = "eink_dashboard"
 
 
 class FontFamily(StrEnum):
-    """Bundled font families selectable for dashboard text.
+    """Bundled font families used for dashboard text.
 
-    The selected family is listed first in every SVG ``font-family``
-    stack; the other one stays available as a glyph fallback.
+    TRMNL and ROBOTO are selectable in Display settings; the selected
+    one is listed first in every SVG ``font-family`` stack, and the
+    other stays available as a glyph fallback.  INTER is not
+    selectable: it is only used as the TRMNL large-text fallback.
     """
 
     TRMNL = "TRMNL"
@@ -41,6 +43,10 @@ class FontFamily(StrEnum):
     ROBOTO = "Roboto"
     """Outline font with Regular, Medium and Bold weights, for
     high-resolution panels."""
+    INTER = "Inter"
+    """Outline font with Regular, Medium and Bold weights, used as
+    the TRMNL large-text fallback (see ``large_text_fallback()`` in
+    ``fonts.py``)."""
 
 
 DEFAULT_WIDTH = 758
@@ -57,7 +63,7 @@ DEFAULT_USE_SYSTEM_FONTS = False
 # Snap TRMNL text to its pixel grid and disable text anti-aliasing.
 DEFAULT_PIXEL_FONTS = True
 # Largest TRMNL scale multiple (of its 21 px face) drawn in TRMNL;
-# larger text falls back to Roboto because scaled-up pixel glyphs look
+# larger text falls back to Inter because scaled-up pixel glyphs look
 # blocky.  "auto" derives it from the pixel density, "never" disables
 # the fallback, "1"-"4" are fixed multiples.
 PIXEL_FONT_LIMIT_AUTO = "auto"
@@ -382,7 +388,7 @@ def resolve_pixel_font_max_scale(options: Mapping[str, Any]) -> int | None:
     """Return the largest scale multiple drawn in the TRMNL font.
 
     TRMNL text larger than this multiple of its 21 px face renders in
-    Roboto.  The ``pixel_font_limit`` option selects a fixed multiple,
+    Inter.  The ``pixel_font_limit`` option selects a fixed multiple,
     ``"never"`` for no limit, or ``"auto"`` (the default) to derive it
     from the display's pixel density so one font pixel stays at most
     ``1 / PIXEL_FONT_PPI_PER_SCALE`` inch on the panel.

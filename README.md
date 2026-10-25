@@ -275,3 +275,7 @@ Font License 1.1 -- see
 The font files are bundled unmodified.
 
 Roboto font by Google, licensed under Apache 2.0.
+
+Inter font by [The Inter Project Authors](https://github.com/rsms/inter),
+licensed under SIL Open Font License 1.1 -- see
+[fonts/Inter/OFL.txt](custom_components/eink_dashboard/fonts/Inter/OFL.txt).

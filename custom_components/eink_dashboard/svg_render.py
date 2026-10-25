@@ -181,6 +181,7 @@ def _svg_to_png(
     font_dirs = [
         str(_FONTS_DIR / "TRMNL"),
         str(_FONTS_DIR / "Roboto"),
+        str(_FONTS_DIR / "Inter"),
     ]
     if extra_font_dirs:
         font_dirs.extend(extra_font_dirs)
@@ -676,12 +677,12 @@ def _force_black_dividers(svg: str) -> str:
 
 
 def _smooth_fallback_text(svg: str) -> str:
-    """Re-enable anti-aliasing for large text drawn in Roboto.
+    """Re-enable anti-aliasing for large text drawn in Inter.
 
     Pixel-perfect text turns anti-aliasing off for the whole widget,
     but TRMNL text above the large-text limit falls back to the
-    outline font Roboto, which looks jagged without it.  With TRMNL
-    selected, only those fallback ``<text>`` elements list Roboto
+    outline font Inter, which looks jagged without it.  With TRMNL
+    selected, only those fallback ``<text>`` elements list Inter
     first in their ``font-family``; they get ``geometricPrecision``,
     overriding the inherited ``optimizeSpeed``.
 
@@ -694,7 +695,7 @@ def _smooth_fallback_text(svg: str) -> str:
 
     def _fix_tag(tag: re.Match[str]) -> str:
         text = tag.group(0)
-        if f'font-family="{FontFamily.ROBOTO},' not in text:
+        if f'font-family="{FontFamily.INTER},' not in text:
             return text
         return '<text text-rendering="geometricPrecision"' + text[5:]
 

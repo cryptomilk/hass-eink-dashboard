@@ -35,7 +35,7 @@ _PIXEL_FONTS: ContextVar[bool] = ContextVar(
 # Largest integer multiple of a native TRMNL size considered when
 # snapping; 12 * 20 = 240 px covers every realistic dashboard font.
 _MAX_PIXEL_SCALE = 20
-# Largest TRMNL scale multiple before text falls back to Roboto, or
+# Largest TRMNL scale multiple before text falls back to Inter, or
 # None for no limit.  Unlimited outside a render context so direct
 # measurements keep using TRMNL.
 _PIXEL_FONT_MAX_SCALE: ContextVar[int | None] = ContextVar(
@@ -99,7 +99,7 @@ def pixel_font_limit_context(max_scale: int | None) -> Iterator[None]:
 
     Args:
         max_scale: Largest multiple of the largest native TRMNL size
-            (21 px) still drawn in TRMNL; larger text uses Roboto.
+            (21 px) still drawn in TRMNL; larger text uses Inter.
             ``None`` removes the limit.
     """
     token: Token[int | None] = _PIXEL_FONT_MAX_SCALE.set(max_scale)
@@ -110,11 +110,11 @@ def pixel_font_limit_context(max_scale: int | None) -> Iterator[None]:
 
 
 def large_text_fallback(size: float) -> bool:
-    """Return whether TRMNL text at ``size`` falls back to Roboto.
+    """Return whether TRMNL text at ``size`` falls back to Inter.
 
     TRMNL glyphs are built from square font pixels, so scaled up they
     look blocky however they are rasterised.  Above the limit set by
-    ``pixel_font_limit_context()`` the outline font Roboto is used
+    ``pixel_font_limit_context()`` the outline font Inter is used
     instead, independent of pixel-grid snapping.
 
     Args:
@@ -135,10 +135,10 @@ def text_font_family(size: float) -> FontFamily:
     """Return the family that draws text at ``size`` in this context.
 
     This is the selected family, except for TRMNL text above the
-    large-text limit, which uses Roboto (see ``large_text_fallback()``).
+    large-text limit, which uses Inter (see ``large_text_fallback()``).
     """
     if large_text_fallback(size):
-        return FontFamily.ROBOTO
+        return FontFamily.INTER
     return current_font_family()
 
 
@@ -215,7 +215,7 @@ def font_family(size: float, selected: str | None = None) -> str:
     family per optical size (``TRMNL12``, ``TRMNL16``, ``TRMNL21``), so
     the TRMNL entry always names the face matching ``size`` in the
     current render context (see ``_optical_size()``).  TRMNL text above
-    the large-text limit lists Roboto first (see
+    the large-text limit lists Inter first (see
     ``large_text_fallback()``).
 
     Args:
@@ -233,9 +233,9 @@ def font_family(size: float, selected: str | None = None) -> str:
     trmnl = f"TRMNL{_optical_size(size)}"
     if selected is None:
         return trmnl
-    if coerce_font_family(
-        selected
-    ) == FontFamily.ROBOTO or large_text_fallback(size):
+    if large_text_fallback(size):
+        return f"{FontFamily.INTER}, {trmnl}"
+    if coerce_font_family(selected) == FontFamily.ROBOTO:
         return f"{FontFamily.ROBOTO}, {trmnl}"
     return f"{trmnl}, {FontFamily.ROBOTO}"
 
@@ -275,9 +275,9 @@ def font_path(
 
     Args:
         size: Font size in pixels; selects the TRMNL optical size
-            (Roboto has a single face per weight).
+            (Roboto and Inter each have a single face per weight).
         bold: Return the Bold face.  Takes precedence over ``medium``.
-        medium: Return Roboto Medium; ignored for TRMNL.
+        medium: Return Roboto or Inter Medium; ignored for TRMNL.
         family: Family to use.  ``None`` uses the family that draws
             text at ``size`` in the current render context (see
             ``text_font_family()``); unknown names fall back to
@@ -294,6 +294,9 @@ def font_path(
     if family == FontFamily.ROBOTO:
         weight = "Bold" if bold else "Medium" if medium else "Regular"
         return _FONT_ROOT / "Roboto" / f"Roboto-{weight}.ttf"
+    if family == FontFamily.INTER:
+        weight = "Bold" if bold else "Medium" if medium else "Regular"
+        return _FONT_ROOT / "Inter" / f"Inter-{weight}.ttf"
     weight = "Bold" if bold else "Regular"
     optical_size = _optical_size(size)
     return _FONT_ROOT / "TRMNL" / f"TRMNL{optical_size}-{weight}.ttf"
