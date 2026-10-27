@@ -47,14 +47,13 @@ DEFAULT_END_HOUR = 20
 _MAX_ALL_DAY_LANES = 3
 _MAX_CHIPS = 2
 
-# Event, chip and all-day text uses a small set of fixed pixel sizes
-# instead of scaling with the widget, which keeps small text legible.
-# The start time uses ``_DEFAULT_TIME_SIZE``; a title uses the largest
-# of ``_DEFAULT_TITLE_SIZES`` whose text fits its box without being
-# cut.  Both are multiplied by the display's ``font_scale``, and the
-# ``time`` and ``event`` font roles can pin them.
+# Event, chip and all-day text uses fixed pixel sizes instead of
+# scaling with the widget, which keeps small text legible.  The start
+# time uses ``_DEFAULT_TIME_SIZE`` and a title ``_DEFAULT_EVENT_SIZE``.
+# Both are multiplied by the display's ``font_scale``, and the ``time``
+# and ``event`` font roles can pin them.
 _DEFAULT_TIME_SIZE = 9
-_DEFAULT_TITLE_SIZES = (14, 12)
+_DEFAULT_EVENT_SIZE = 12
 
 
 def _ev_line_h(size: int) -> int:
@@ -478,27 +477,6 @@ def _pack_day(
         multi = now
 
 
-def _pinned_size(widget: Mapping[str, object], role: str) -> bool:
-    """Return whether the ``fonts`` key pins a size for ``role``.
-
-    Args:
-        widget: Widget config.
-        role: Font role name.
-
-    Returns:
-        True when the role has a numeric ``size``.
-    """
-    fonts = widget.get("fonts")
-    entry = fonts.get(role) if isinstance(fonts, dict) else None
-    if not isinstance(entry, dict):
-        return False
-    try:
-        float(str(entry.get("size")))
-    except (TypeError, ValueError):
-        return False
-    return True
-
-
 def _hour_setting(widget: Mapping[str, object], key: str, default: int) -> int:
     """Return an hour setting, or ``default`` when it is empty or invalid.
 
@@ -594,14 +572,14 @@ class _Fonts:
     """Size of the hour labels."""
     time_size: int
     """Size of an event's start time."""
-    title_sizes: tuple[int, ...]
-    """Event title sizes, largest first."""
+    event_size: int
+    """Size of event titles."""
     day: Any
     """PIL font measuring the day headers."""
     time: Any
     """PIL font measuring the start time."""
-    titles: dict[int, Any]
-    """PIL font measuring a title, by size."""
+    event: Any
+    """PIL font measuring an event title."""
     day_weight: str
     """SVG ``font-weight`` of the day headers."""
     hour_weight: str
@@ -703,30 +681,18 @@ def _resolve_fonts(
     event_size, event_weight = resolve_font(
         widget,
         "event",
-        _DEFAULT_TITLE_SIZES[0],
+        _DEFAULT_EVENT_SIZE,
         FontWeight.REGULAR,
         scale=font_scale,
-    )
-    # A pinned event size is used as is.  Otherwise a title tries the
-    # scaled default sizes, largest first (see ``_fit_title``).
-    title_sizes = (
-        (event_size,)
-        if _pinned_size(widget, "event")
-        else tuple(
-            sorted(
-                {max(1, round(s * font_scale)) for s in _DEFAULT_TITLE_SIZES},
-                reverse=True,
-            )
-        )
     )
     return _Fonts(
         day_size=day_size,
         hour_size=hour_size,
         time_size=time_size,
-        title_sizes=title_sizes,
+        event_size=event_size,
         day=_load_role_font(day_size, day_weight),
         time=_load_role_font(time_size, time_weight),
-        titles={s: _load_role_font(s, event_weight) for s in title_sizes},
+        event=_load_role_font(event_size, event_weight),
         day_weight=_font_weight_svg(day_weight),
         hour_weight=_font_weight_svg(hour_weight),
         time_weight=_font_weight_svg(time_weight),
@@ -747,11 +713,10 @@ def _fit_title(
 ) -> dict[str, object]:
     """Lay out ``title`` beside the start ``label`` in a box.
 
-    Tries the title sizes from the largest down and keeps the first
-    whose wrapped text is not cut; when every size cuts the text, the
-    smallest one is used.  The label is drawn in the time font ahead
-    of the first line, so the room it takes there is measured with
-    that font.
+    Text that does not fit the box is wrapped onto as many lines as
+    fit and cut with an ellipsis.  The label is drawn in the time font
+    ahead of the first line, so the room it takes there is measured
+    with that font.
 
     Args:
         fonts: Text sizes and measuring fonts.
@@ -770,35 +735,30 @@ def _fit_title(
     """
     inner_w = w - 6
     time_w = fonts.time.getlength(label) if label else 0
-    chosen = min(fonts.title_sizes)
+    size = fonts.event_size
+    fits = (h - pad) // _ev_line_h(size)
+    if max_lines is not None:
+        fits = min(fits, max_lines)
     lines: list[str] = []
-    for size in sorted(fonts.title_sizes, reverse=True):
-        fits = (h - pad) // _ev_line_h(size)
-        if max_lines is not None:
-            fits = min(fits, max_lines)
-        if inner_w <= 0 or fits < 1:
-            continue
-        gap = fonts.titles[size].getlength(" ")
-        chosen = size
+    if inner_w > 0 and fits >= 1:
+        gap = fonts.event.getlength(" ")
         lines = _wrap_text(
             title,
-            fonts.titles[size],
+            fonts.event,
             inner_w,
             fits,
             first_offset=time_w + gap if label else 0,
         )
-        if " ".join(lines).split() == title.split():
-            break
     # Even with no room for the title, the start time is drawn.
     lines = lines or [""]
-    lh = _ev_line_h(chosen)
+    lh = _ev_line_h(size)
     top = y0 + (h - len(lines) * lh) // 2
     return {
         "x": x0,
         "y": y0,
         "w": w,
         "h": h,
-        "font_sz": chosen,
+        "font_sz": size,
         "lines": [
             {
                 "text": t,
@@ -1113,9 +1073,7 @@ def _build_week_calendar_context(
     fonts = _resolve_fonts(widget, round(header_h * 0.55), font_scale)
     # A larger day font makes the header row grow with it.
     header_h = max(header_h, fonts.day_size + 6)
-    # Boxes are sized for the smallest title font; a roomier box may
-    # still draw its title larger.
-    line_h = _ev_line_h(min(fonts.title_sizes))
+    line_h = _ev_line_h(fonts.event_size)
     gutter_w = round(fonts.hour_size * (3.4 if time_format == "12" else 2.2))
     lane_h = round(fonts.day_size * 1.3)
 
