@@ -20,8 +20,8 @@ from typing import cast
 
 from ..const import DEFAULT_ROW_H, PADDING, DisplayConfig, Widget
 from ._helpers import (
-    _color_context,
     _entity_info_context,
+    _missing_entity_context,
     _widget_dim,
 )
 
@@ -88,8 +88,8 @@ def _build_sensor_context(
 
     Returns:
         Template context dict consumed by ``sensor.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False,
-        **_color_context()}`` when the entity is missing.
+        Returns ``_missing_entity_context(w, h)`` when the
+        entity is missing.
         Full context includes widget dimensions, card style,
         metrics, colors, icon geometry, header text, info section
         value/unit, and graph polyline/fill data.
@@ -129,12 +129,7 @@ def _build_sensor_context(
 
     ctx = _entity_info_context(widget, config, entity_h, svg_w, svg_h)
     if ctx is None:
-        return {
-            "w": svg_w,
-            "h": svg_h,
-            "has_entity": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(svg_w, svg_h)
 
     # name_x = x_off + lpad (left content edge); icon_cx +
     # icon_r = svg_w - r_inset - rpad (right content edge

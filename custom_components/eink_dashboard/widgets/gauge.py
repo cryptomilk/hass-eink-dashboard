@@ -37,6 +37,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _missing_entity_context,
     _resolve_precision,
     _widget_dim,
 )
@@ -218,9 +219,8 @@ def _build_gauge_context(
 
     Returns:
         Template context dict consumed by ``gauge.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False,
-        **_color_context()}`` when the entity is missing from the
-        state dict.
+        Returns ``_missing_entity_context(w, h)`` when the
+        entity is missing from the state dict.
     """
     from ..render import _compute_metrics, _font_weight_svg, resolve_font
 
@@ -249,12 +249,7 @@ def _build_gauge_context(
     # Missing entity → blank white canvas.
     state = states.get(entity_id) if entity_id else None
     if state is None:
-        return {
-            "w": w,
-            "h": h,
-            "has_entity": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(w, h)
 
     attrs: dict[str, object] = state.get("attributes", {})
 

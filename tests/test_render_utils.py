@@ -60,7 +60,9 @@ from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import (
     _auto_row_height,
     _card_insets,
+    _color_context,
     _metrics_context,
+    _missing_entity_context,
     _resolve_icon_style,
     _resolve_precision,
     _resolve_tz,
@@ -1247,6 +1249,26 @@ class TestHelperFunctions:
         ctx = _metrics_context(_compute_metrics(56))
         assert all(k.startswith("m_") for k in ctx)
         assert ctx["m_padding"] == 12
+
+    def test_missing_entity_context_shape(self) -> None:
+        """Fallback passes w/h through, clears has_entity, adds colors."""
+        ctx = _missing_entity_context(320, 56)
+        assert ctx == {
+            "w": 320,
+            "h": 56,
+            "has_entity": False,
+            **_color_context(),
+        }
+        assert "hex_black" in ctx
+
+    @pytest.mark.parametrize("wtype", ["entity", "tile"])
+    def test_missing_entity_renders_blank_svg(self, wtype: str) -> None:
+        """Entity and tile widgets without a state render an empty SVG."""
+        config = {"width": 200, "height": 60, "states": {}}
+        w = {"type": wtype, "entity": "sensor.gone", "w": 200, "h": 60}
+        svg = render_widget_svg(w, config)
+        assert 'width="200"' in svg
+        assert "<text" not in svg
 
     def test_card_insets_border(self) -> None:
         """Border style insets padding on both sides."""

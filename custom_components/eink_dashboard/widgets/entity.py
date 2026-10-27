@@ -37,6 +37,7 @@ from ._helpers import (
     _color_context,
     _format_value_unit,
     _metrics_context,
+    _missing_entity_context,
     _resolve_icon_style,
     _resolve_icon_svg,
     _resolve_precision,
@@ -110,8 +111,8 @@ def _build_entity_context(
 
     Returns:
         Template context dict consumed by ``entity.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False,
-        **_color_context()}`` when the entity is missing.
+        Returns ``_missing_entity_context(w, h)`` when the
+        entity is missing.
         Full context includes widget dimensions, card style,
         metrics, colors, icon geometry, value/unit/name text and
         geometry, and the ``invert`` flag.
@@ -142,13 +143,7 @@ def _build_entity_context(
 
     state = states.get(entity_id) if entity_id else None
     if state is None:
-        return {
-            "w": svg_w,
-            "h": svg_h,
-            "has_entity": False,
-            "invert": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(svg_w, svg_h)
 
     colors = _color_context()
     m = _compute_metrics(svg_h)

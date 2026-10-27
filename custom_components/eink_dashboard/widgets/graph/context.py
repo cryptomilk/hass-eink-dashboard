@@ -33,9 +33,9 @@ from ...const import (
 )
 from .._helpers import (
     _card_insets,
-    _color_context,
     _entity_info_context,
     _fmt,
+    _missing_entity_context,
     _resolve_precision,
     _widget_dim,
 )
@@ -751,8 +751,8 @@ def _build_graph_context(
 
     Returns:
         Template context dict consumed by ``graph.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False,
-        **_color_context()}`` when no entity is present in states.
+        Returns ``_missing_entity_context(w, h)`` when no entity
+        is present in states.
         Full context includes widget dimensions, card style, metrics,
         colors, icon geometry, header text (with resolved role font
         sizes and SVG weight strings), series list, ``is_bar``
@@ -824,12 +824,7 @@ def _build_graph_context(
     # --- Normalize entity list ---
     entity_descs = _normalize_entities(widget)
     if not entity_descs:
-        return {
-            "w": svg_w,
-            "h": svg_h,
-            "has_entity": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(svg_w, svg_h)
 
     states_dict: dict[str, object] = config.get("states", {})
 
@@ -848,12 +843,7 @@ def _build_graph_context(
         show_state=show_state,
     )
     if header_result is None:
-        return {
-            "w": svg_w,
-            "h": svg_h,
-            "has_entity": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(svg_w, svg_h)
     ctx, gx1, gx2 = header_result
 
     # Stroke width: user-configured, widened on 2-level displays.

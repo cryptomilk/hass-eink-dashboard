@@ -93,6 +93,23 @@ def _title_layout(
     return font_sz, advance, svg_h - advance
 
 
+def _missing_entity_context(w: int, h: int) -> dict[str, object]:
+    """Return the blank-canvas context for a widget with no entity.
+
+    Entity-based templates wrap their content in ``{% if has_entity %}``
+    so this context renders an empty, correctly sized SVG.
+
+    Args:
+        w: Widget width in pixels.
+        h: Widget height in pixels.
+
+    Returns:
+        Dict with ``w``, ``h``, ``has_entity=False``, and the
+        ``_color_context()`` hex variables.
+    """
+    return {"w": w, "h": h, "has_entity": False, **_color_context()}
+
+
 def _metrics_context(m: WidgetMetrics) -> dict[str, object]:
     """Return all metric fields for a Jinja2 template context.
 

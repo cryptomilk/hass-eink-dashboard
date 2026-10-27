@@ -42,6 +42,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _fmt,
+    _missing_entity_context,
     _resolve_tz,
     _temp_gradient_stops,
     _widget_dim,
@@ -133,9 +134,9 @@ def _build_meteogram_context(
 
     Returns:
         Template context dict consumed by ``meteogram.svg.j2``.
-        Returns ``{"w": ..., "h": ..., "has_entity": False,
-        **_color_context()}`` when the entity is missing from
-        states or has no usable hourly forecast.
+        Returns ``_missing_entity_context(w, h)`` when the
+        entity is missing from states or has no usable hourly
+        forecast.
     """
     from ..render import (
         _compute_metrics,
@@ -161,15 +162,8 @@ def _build_meteogram_context(
     entity: str = widget.get("entity", "")
     states_dict: dict[str, Any] = config.get("states", {})
 
-    blank: dict[str, object] = {
-        "w": w,
-        "h": h,
-        "has_entity": False,
-        **_color_context(),
-    }
-
     if not entity or entity not in states_dict:
-        return blank
+        return _missing_entity_context(w, h)
 
     desc: dict[str, object] = {
         "entity": entity,
@@ -179,7 +173,7 @@ def _build_meteogram_context(
     }
     points = _extract_attribute_points(desc, states_dict)
     if not points:
-        return blank
+        return _missing_entity_context(w, h)
 
     # Recover per-entry condition/cloud_coverage, which
     # _extract_attribute_points() doesn't carry (it only returns

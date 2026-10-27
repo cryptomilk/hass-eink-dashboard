@@ -33,6 +33,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _missing_entity_context,
     _resolve_icon_style,
     _resolve_icon_svg,
     _resolve_precision,
@@ -97,8 +98,8 @@ def _build_tile_context(
 
     Returns:
         Template context dict consumed by ``tile.svg.j2``.
-        Returns ``{"w": …, "h": …, "has_entity": False}`` when
-        the entity is absent from ``states``.  Full context
+        Returns ``_missing_entity_context(w, h)`` when the
+        entity is absent from ``states``.  Full context
         includes: widget dimensions (``w``, ``h``), layout
         geometry (``row_h``, ``x_off``, ``r_inset``, ``lpad``,
         ``rpad``), metrics fields (``m_*`` prefix), color hex
@@ -132,13 +133,9 @@ def _build_tile_context(
 
     state = states.get(entity_id) if entity_id else None
     if state is None:
-        return {
-            "w": svg_w,
-            "h": _widget_dim(widget, "h", DEFAULT_ROW_H),
-            "has_entity": False,
-            "invert": False,
-            **_color_context(),
-        }
+        return _missing_entity_context(
+            svg_w, _widget_dim(widget, "h", DEFAULT_ROW_H)
+        )
 
     # Single row: row_h equals svg_h.  Kept as a separate
     # variable so card_row receives the same parameter name
