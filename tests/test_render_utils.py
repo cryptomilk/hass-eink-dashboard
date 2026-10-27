@@ -68,13 +68,18 @@ from custom_components.eink_dashboard.widgets import (
 )
 from custom_components.eink_dashboard.widgets._helpers import (
     CardRow,
+    EntityIcon,
+    ResolvedEntity,
     _auto_row_height,
     _card_insets,
     _color_context,
     _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
+    _resolve_entity,
+    _resolve_entity_icon,
     _resolve_icon_style,
+    _resolve_invert,
     _resolve_precision,
     _resolve_tz,
     _row_context,
@@ -1725,6 +1730,125 @@ class TestResolveIconStyle:
         )
         assert icon_outline
         assert not icon_no_circle
+
+
+_LAMP_STATES = {
+    "light.lamp": {"state": "on", "attributes": {"friendly_name": "Lamp"}},
+}
+
+
+class TestResolveEntity:
+    def test_missing_entity_returns_none(self) -> None:
+        # An unset entity ID or one absent from states resolves to
+        # None so callers can emit the missing-entity fallback.
+        config = {"states": _LAMP_STATES}
+        assert _resolve_entity({}, config) is None
+        assert _resolve_entity({"entity": "light.nope"}, config) is None
+
+    def test_resolves_fields_from_state(self) -> None:
+        # Domain, raw state and friendly_name are read from the state.
+        entity = _resolve_entity(
+            {"entity": "light.lamp"}, {"states": _LAMP_STATES}
+        )
+        assert entity is not None
+        assert entity.entity_id == "light.lamp"
+        assert entity.domain == "light"
+        assert entity.state_val == "on"
+        assert entity.name == "Lamp"
+
+    def test_name_override_wins(self) -> None:
+        # The widget's name override takes precedence over
+        # friendly_name.
+        entity = _resolve_entity(
+            {"entity": "light.lamp", "name": "Desk"},
+            {"states": _LAMP_STATES},
+        )
+        assert entity is not None
+        assert entity.name == "Desk"
+
+    def test_name_falls_back_to_entity_id(self) -> None:
+        # Without friendly_name the entity ID is the display name.
+        states = {"switch.x": {"state": "off", "attributes": {}}}
+        entity = _resolve_entity({"entity": "switch.x"}, {"states": states})
+        assert entity is not None
+        assert entity.name == "switch.x"
+
+    def test_precision_from_decimals(self) -> None:
+        # The widget's decimals key resolves into the precision field.
+        entity = _resolve_entity(
+            {"entity": "light.lamp", "decimals": 2},
+            {"states": _LAMP_STATES},
+        )
+        assert entity is not None
+        assert entity.precision == 2
+
+
+class TestResolveEntityIcon:
+    def _entity(self) -> ResolvedEntity:
+        """Resolve the lamp entity shared by the icon tests."""
+        entity = _resolve_entity(
+            {"entity": "light.lamp"}, {"states": _LAMP_STATES}
+        )
+        assert entity is not None
+        return entity
+
+    def test_hide_icon_clears_glyph(self) -> None:
+        # hide_icon yields no glyph, no letter and no circle.
+        icon = _resolve_entity_icon(
+            {"hide_icon": True, "icon": "mdi:home"}, self._entity(), 24, 16
+        )
+        assert icon == EntityIcon(
+            svg="", letter="", outline=False, no_circle=True
+        )
+
+    def test_icon_style_applied(self) -> None:
+        # The widget's icon_style drives the circle flags.
+        icon = _resolve_entity_icon(
+            {"icon": "mdi:home", "icon_style": "outlined"},
+            self._entity(),
+            24,
+            16,
+        )
+        assert icon.svg
+        assert icon.outline
+        assert not icon.no_circle
+
+    def test_invert_forces_flat_glyph(self) -> None:
+        # An inverted widget draws the glyph without a circle, even
+        # when icon_style asks for an outline.
+        icon = _resolve_entity_icon(
+            {"icon": "mdi:home", "icon_style": "outlined"},
+            self._entity(),
+            24,
+            16,
+            invert=True,
+        )
+        assert icon.svg
+        assert not icon.outline
+        assert icon.no_circle
+
+
+class TestResolveInvert:
+    _CONDITION: ClassVar[list[dict[str, str]]] = [
+        {"condition": "state", "entity": "light.lamp", "state": "on"}
+    ]
+
+    def test_absent_or_empty_condition_never_inverts(self) -> None:
+        # check_conditions([]) is True, so an empty list must still
+        # leave the widget uninverted.
+        assert not _resolve_invert({}, _LAMP_STATES)
+        assert not _resolve_invert({"invert_condition": []}, _LAMP_STATES)
+
+    def test_met_condition_inverts(self) -> None:
+        # A non-empty condition that holds inverts the widget.
+        widget = {"invert_condition": self._CONDITION}
+        assert _resolve_invert(widget, _LAMP_STATES)
+
+    def test_unmet_condition_does_not_invert(self) -> None:
+        # A non-empty condition that fails leaves the widget as is.
+        widget = {"invert_condition": self._CONDITION}
+        states = {"light.lamp": {"state": "off", "attributes": {}}}
+        assert not _resolve_invert(widget, states)
 
 
 class TestResolvePrecision:

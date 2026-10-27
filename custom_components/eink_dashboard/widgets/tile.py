@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-from ..conditions import check_conditions
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -35,9 +34,9 @@ from ._helpers import (
     _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
-    _resolve_icon_style,
-    _resolve_icon_svg,
-    _resolve_precision,
+    _resolve_entity,
+    _resolve_entity_icon,
+    _resolve_invert,
     _widget_dim,
 )
 
@@ -119,21 +118,16 @@ def _build_tile_context(
 
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
-    entity_id: str = widget.get("entity", "")
-    name_override = widget.get("name")
-    icon_override = widget.get("icon")
     hide_icon: bool = widget.get("hide_icon", False)
     hide_state: bool = widget.get("hide_state", False)
 
     state_content = widget.get("state_content")
-    icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     font_scale: float = config.get("font_scale", 1.0)
-    states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
-    state = states.get(entity_id) if entity_id else None
-    if state is None:
+    entity = _resolve_entity(widget, config)
+    if entity is None:
         return _missing_entity_context(
             svg_w, _widget_dim(widget, "h", DEFAULT_ROW_H)
         )
@@ -168,18 +162,6 @@ def _build_tile_context(
         scale=font_scale,
     )
 
-    attrs = state.get("attributes", {})
-    domain = entity_id.split(".")[0] if entity_id else ""
-    state_val = state.get("state", "")
-    precision = _resolve_precision(widget, state)
-
-    # Primary text: name override or entity friendly_name.
-    primary: str = (
-        str(name_override)
-        if name_override is not None
-        else attrs.get("friendly_name", entity_id)
-    )
-
     # Secondary text: attribute, default state+unit, or hidden.
     if hide_state:
         secondary: str = ""
@@ -190,51 +172,23 @@ def _build_tile_context(
             else (state_content if not isinstance(state_content, list) else "")
         )
         secondary = (
-            _fmt(str(attrs.get(sc, "")), config, precision) if sc else ""
+            _fmt(str(entity.attrs.get(sc, "")), config, entity.precision)
+            if sc
+            else ""
         )
     else:
-        unit = attrs.get("unit_of_measurement", "")
-        fmtd = _fmt(state_val, config, precision)
+        unit = entity.attrs.get("unit_of_measurement", "")
+        fmtd = _fmt(entity.state_val, config, entity.precision)
         secondary = f"{fmtd}{unit}" if unit else fmtd
 
-    # Icon: explicit override → device_class → letter fallback.
-    # Skipped entirely when hide_icon is set.
-    if hide_icon:
-        icon_svg = ""
-        letter = ""
-        icon_outline = False
-        icon_no_circle = True
-    else:
-        icon_svg, letter = _resolve_icon_svg(
-            icon_override,
-            attrs,
-            state_val,
-            domain,
-            m.icon_inner,
-            entity_id,
-        )
-        icon_outline, icon_no_circle = _resolve_icon_style(
-            icon_style, state_val, display_levels
-        )
+    invert = _resolve_invert(widget, config.get("states", {}))
+    icon = _resolve_entity_icon(
+        widget, entity, m.icon_inner, display_levels, invert=invert
+    )
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)
     icon_stroke_w = _icon_stroke_width(m.border, display_levels)
-
-    # Inverted "needs attention" signal: same condition format and
-    # evaluator as `visibility`, but drives a solid black card with
-    # white text/icon instead of hide/show.  `check_conditions([])`
-    # returns True, so the emptiness check is required — an absent
-    # or empty `invert_condition` must never invert the tile.  The
-    # icon is forced to the flat, no-circle style so the glyph draws
-    # cleanly on the black background.
-    invert_condition = widget.get("invert_condition")
-    invert = bool(invert_condition) and check_conditions(
-        invert_condition, states
-    )
-    if invert:
-        icon_no_circle = True
-        icon_outline = False
 
     ctx: dict[str, object] = {
         "w": svg_w,
@@ -249,18 +203,18 @@ def _build_tile_context(
         "r_inset": r_inset,
         "lpad": lpad,
         "rpad": rpad,
-        "primary": primary,
+        "primary": entity.name,
         "secondary": secondary,
         "primary_font_sz": primary_font_sz,
         "primary_weight": _font_weight_svg(primary_weight),
         "secondary_font_sz": secondary_font_sz,
         "secondary_weight": _font_weight_svg(secondary_weight),
-        "icon_svg": icon_svg,
+        "icon_svg": icon.svg,
         "icon_fill": icon_fill,
-        "icon_outline": icon_outline,
-        "icon_no_circle": icon_no_circle,
+        "icon_outline": icon.outline,
+        "icon_no_circle": icon.no_circle,
         "icon_stroke_w": icon_stroke_w,
-        "letter": letter,
+        "letter": icon.letter,
         "invert": invert,
     }
     # When icon is hidden, collapse the icon column so text starts

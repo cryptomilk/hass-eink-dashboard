@@ -36,10 +36,13 @@ from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import markupsafe
 
     from ..render import WidgetMetrics
 
+from ..conditions import check_conditions
 from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
@@ -393,7 +396,7 @@ def _resolve_precision(
 
 def _format_value_unit(
     state_val: str,
-    attrs: dict[str, Any],
+    attrs: Mapping[str, Any],
     config: DisplayConfig,
     precision: int | None,
     attribute: str | None,
@@ -512,7 +515,7 @@ def _resolve_icon_style(
 
 def _resolve_icon_svg(
     icon_override: str | None,
-    attrs: dict[str, object],
+    attrs: Mapping[str, object],
     state_val: str,
     domain: str,
     size: int,
@@ -604,6 +607,154 @@ def _icon_stroke_width(border: int, display_levels: int) -> int:
         Stroke width in pixels.
     """
     return border * 3 if display_levels <= 2 else border
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedEntity:
+    """The HA entity a single-entity widget displays.
+
+    Attributes:
+        entity_id: Full entity ID, e.g. ``"sensor.temp"``.
+        attrs: The state's ``attributes`` dict.
+        domain: Entity domain, e.g. ``"sensor"``.
+        state_val: Raw state string, e.g. ``"21.5"`` or ``"on"``.
+        name: Display name: the widget's ``name`` override, else the
+            entity's ``friendly_name``, else ``entity_id``.
+        precision: Decimal places to show, or ``None`` for the
+            default rule (see ``_resolve_precision``).
+    """
+
+    entity_id: str
+    attrs: Mapping[str, Any]
+    domain: str
+    state_val: str
+    name: str
+    precision: int | None
+
+
+def _resolve_entity(
+    widget: Widget, config: DisplayConfig
+) -> ResolvedEntity | None:
+    """Look up the widget's ``entity`` in the display states.
+
+    Args:
+        widget: Widget config dict; reads ``entity``, ``name`` and
+            ``decimals``.
+        config: Display config; reads ``states``.
+
+    Returns:
+        The resolved entity, or ``None`` when ``entity`` is unset or
+        absent from ``states`` (callers then return
+        ``_missing_entity_context()``).
+    """
+    entity_id = str(widget.get("entity") or "")
+    state = config.get("states", {}).get(entity_id) if entity_id else None
+    if state is None:
+        return None
+    attrs = state.get("attributes", {})
+    name_override = widget.get("name")
+    return ResolvedEntity(
+        entity_id=entity_id,
+        attrs=attrs,
+        domain=entity_id.split(".")[0],
+        state_val=state.get("state", ""),
+        name=(
+            str(name_override)
+            if name_override is not None
+            else attrs.get("friendly_name", entity_id)
+        ),
+        precision=_resolve_precision(widget, state),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class EntityIcon:
+    """Resolved icon glyph and circle style for an entity widget.
+
+    Attributes:
+        svg: Inline SVG of the glyph; empty when hidden or when no
+            icon resolves.
+        letter: Uppercase fallback letter drawn when ``svg`` is
+            empty; empty when hidden or when an icon resolved.
+        outline: Draw the circle as an outline.
+        no_circle: Draw the bare glyph without a circle.
+    """
+
+    svg: markupsafe.Markup | str
+    letter: str
+    outline: bool
+    no_circle: bool
+
+
+def _resolve_entity_icon(
+    widget: Widget,
+    entity: ResolvedEntity,
+    icon_inner: int,
+    display_levels: int,
+    *,
+    invert: bool = False,
+) -> EntityIcon:
+    """Resolve the icon of a single-entity widget.
+
+    Applies the widget's ``hide_icon``, ``icon`` and ``icon_style``
+    keys on top of ``_resolve_icon_svg`` and ``_resolve_icon_style``.
+
+    Args:
+        widget: Widget config dict.
+        entity: The entity the icon represents.
+        icon_inner: Glyph size in pixels.
+        display_levels: Display grayscale depth.
+        invert: The widget renders inverted (see
+            ``_resolve_invert``).  Forces the flat, no-circle style
+            so the glyph draws cleanly on the black background.
+
+    Returns:
+        The glyph and circle style flags for the template.
+    """
+    if widget.get("hide_icon", False):
+        return EntityIcon(svg="", letter="", outline=False, no_circle=True)
+    svg, letter = _resolve_icon_svg(
+        widget.get("icon"),
+        entity.attrs,
+        entity.state_val,
+        entity.domain,
+        icon_inner,
+        entity.entity_id,
+    )
+    if invert:
+        return EntityIcon(
+            svg=svg, letter=letter, outline=False, no_circle=True
+        )
+    outline, no_circle = _resolve_icon_style(
+        widget.get("icon_style"), entity.state_val, display_levels
+    )
+    return EntityIcon(
+        svg=svg, letter=letter, outline=outline, no_circle=no_circle
+    )
+
+
+def _resolve_invert(widget: Widget, states: dict[str, Any]) -> bool:
+    """Return whether the widget's ``invert_condition`` is met.
+
+    The inverted rendering (solid black card, white text/icon) is an
+    e-ink "needs attention" signal.  It uses the same condition
+    format and evaluator as ``visibility``.
+
+    Args:
+        widget: Widget config dict; reads ``invert_condition``.
+        states: HA entity ID to state dict mapping.
+
+    Returns:
+        ``True`` when ``invert_condition`` is non-empty and all its
+        conditions are met.
+    """
+    invert_condition = widget.get("invert_condition")
+    # check_conditions([]) returns True, so an absent or empty
+    # invert_condition must be rejected first — it must never invert
+    # the widget.
+    return bool(invert_condition) and check_conditions(
+        invert_condition, states
+    )
 
 
 def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
@@ -901,19 +1052,13 @@ def _entity_info_context(
     """
     from ..render import _compute_metrics, _font_weight_svg
 
-    entity_id: str = widget.get("entity", "")
-    name_override = widget.get("name")
-    icon_override = widget.get("icon")
     unit_override = widget.get("unit")
-    hide_icon: bool = widget.get("hide_icon", False)
     hide_name: bool = widget.get("hide_name", False)
-    icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
-    states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
-    state = states.get(entity_id) if entity_id else None
-    if state is None:
+    entity = _resolve_entity(widget, config)
+    if entity is None:
         return None
 
     colors = _color_context()
@@ -935,45 +1080,23 @@ def _entity_info_context(
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
-    attrs = state.get("attributes", {})
-    domain = entity_id.split(".")[0]
-    state_val: str = state.get("state", "")
-    precision = _resolve_precision(widget, state)
-
-    name_text: str = (
-        str(name_override)
-        if name_override is not None
-        else attrs.get("friendly_name", entity_id)
-    )
-
     value_text, unit_text = _format_value_unit(
-        state_val, attrs, config, precision, attribute, unit_override
+        entity.state_val,
+        entity.attrs,
+        config,
+        entity.precision,
+        attribute,
+        unit_override,
     )
 
-    # Icon resolution: explicit override → device_class → attrs icon.
-    # Skipped entirely when hide_icon is set.
-    if hide_icon:
-        icon_svg: markupsafe.Markup | str = ""
-        letter = ""
-        icon_outline = False
-        icon_no_circle = True
-    else:
-        icon_svg, letter = _resolve_icon_svg(
-            icon_override,
-            attrs,
-            state_val,
-            domain,
-            icon_inner,
-            entity_id,
-        )
-        icon_outline, icon_no_circle = _resolve_icon_style(
-            icon_style, state_val, display_levels
-        )
+    # Sensor and Graph do not support invert_condition, so invert is
+    # deliberately not passed.
+    icon = _resolve_entity_icon(widget, entity, icon_inner, display_levels)
     icon_stroke_w = _icon_stroke_width(m.border, display_levels)
     icon_fill = color_to_hex(COLOR_GRAY)
     icon_color = (
         colors["hex_black"]
-        if (icon_outline or icon_no_circle)
+        if (icon.outline or icon.no_circle)
         else colors["hex_white"]
     )
 
@@ -1012,22 +1135,22 @@ def _entity_info_context(
         **_metrics_context(m),
         **colors,
         # Icon geometry.
-        "icon_svg": icon_svg,
+        "icon_svg": icon.svg,
         "icon_cx": icon_cx,
         "icon_cy": icon_cy,
         "icon_r": icon_r,
         "icon_stroke_w": icon_stroke_w,
         "icon_fill": icon_fill,
         "icon_color": icon_color,
-        "icon_outline": icon_outline,
-        "icon_no_circle": icon_no_circle,
+        "icon_outline": icon.outline,
+        "icon_no_circle": icon.no_circle,
         "icon_glyph_x": icon_glyph_x,
         "icon_glyph_y": icon_glyph_y,
-        "letter": letter,
+        "letter": icon.letter,
         "letter_font_sz": letter_font_sz,
         # Header row text.
         "hide_name": hide_name,
-        "name_text": name_text,
+        "name_text": entity.name,
         "name_x": geo.name_x,
         "name_y": geo.name_y,
         "name_font_sz": geo.name_font_sz,

@@ -35,6 +35,10 @@ image entity and a public HTTP endpoint.
   `_color_context()`, `_widget_dim()`, `_card_insets()`, `_metrics_context()`,
   `_title_layout()`, `_auto_row_height()`, `_fmt()`, `_entity_info_context()`,
   `_missing_entity_context()` (blank-canvas fallback for absent entities),
+  `ResolvedEntity` + `_resolve_entity()`, `EntityIcon` +
+  `_resolve_entity_icon()`, `_resolve_invert()` (entity lookup, icon
+  and `invert_condition` resolution shared by Entity, Tile and
+  `_entity_info_context()`),
   `CardRow` + `_row_context()` (per-row contract of the `card_row` macro
   for list widgets), `_icon_stroke_width()` (icon outline width,
   widened on 2-level displays), `_ACTIVE_STATES`

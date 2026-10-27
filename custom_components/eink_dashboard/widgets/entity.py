@@ -16,12 +16,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import markupsafe
-
-from ..conditions import check_conditions
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -39,9 +33,9 @@ from ._helpers import (
     _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
-    _resolve_icon_style,
-    _resolve_icon_svg,
-    _resolve_precision,
+    _resolve_entity,
+    _resolve_entity_icon,
+    _resolve_invert,
     _widget_dim,
 )
 
@@ -128,22 +122,17 @@ def _build_entity_context(
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
     svg_h = _widget_dim(widget, "h", 2 * DEFAULT_ROW_H)
-    entity_id: str = widget.get("entity", "")
-    name_override = widget.get("name")
-    icon_override = widget.get("icon")
     unit_override = widget.get("unit")
     attribute: str | None = widget.get("attribute")
     hide_icon: bool = widget.get("hide_icon", False)
     hide_name: bool = widget.get("hide_name", False)
-    icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     name_position = widget.get("name_position", "bottom")
     name_align = widget.get("name_align", "left")
-    states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
 
-    state = states.get(entity_id) if entity_id else None
-    if state is None:
+    entity = _resolve_entity(widget, config)
+    if entity is None:
         return _missing_entity_context(svg_w, svg_h)
 
     colors = _color_context()
@@ -157,57 +146,21 @@ def _build_entity_context(
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
-    attrs = state.get("attributes", {})
-    domain = entity_id.split(".")[0]
-    state_val: str = state.get("state", "")
-    precision = _resolve_precision(widget, state)
-
-    name_text: str = (
-        str(name_override)
-        if name_override is not None
-        else attrs.get("friendly_name", entity_id)
-    )
-
     value_text, unit_text = _format_value_unit(
-        state_val, attrs, config, precision, attribute, unit_override
+        entity.state_val,
+        entity.attrs,
+        config,
+        entity.precision,
+        attribute,
+        unit_override,
     )
 
-    # Icon resolution: explicit override → device_class → attrs icon.
-    # Skipped entirely when hide_icon is set.
-    if hide_icon:
-        icon_svg: markupsafe.Markup | str = ""
-        letter = ""
-        icon_outline = False
-        icon_no_circle = True
-    else:
-        icon_svg, letter = _resolve_icon_svg(
-            icon_override,
-            attrs,
-            state_val,
-            domain,
-            m_icon.icon_inner,
-            entity_id,
-        )
-        icon_outline, icon_no_circle = _resolve_icon_style(
-            icon_style, state_val, display_levels
-        )
+    invert = _resolve_invert(widget, config.get("states", {}))
+    icon = _resolve_entity_icon(
+        widget, entity, m_icon.icon_inner, display_levels, invert=invert
+    )
     icon_stroke_w = _icon_stroke_width(m_icon.border, display_levels)
     icon_fill = color_to_hex(COLOR_GRAY)
-
-    # Inverted "needs attention" signal: same condition format and
-    # evaluator as `visibility`, but drives a solid black card with
-    # white text/icon instead of hide/show.  `check_conditions([])`
-    # returns True, so the emptiness check is required — an absent
-    # or empty `invert_condition` must never invert the widget.  The
-    # icon is forced to the flat, no-circle style so the glyph draws
-    # cleanly on the black background.
-    invert_condition = widget.get("invert_condition")
-    invert = bool(invert_condition) and check_conditions(
-        invert_condition, states
-    )
-    if invert:
-        icon_no_circle = True
-        icon_outline = False
 
     # Icon: left-aligned, vertically centered against the full
     # widget height (not a header sub-band). Sized off m_icon (see
@@ -301,17 +254,17 @@ def _build_entity_context(
         **_metrics_context(m),
         **colors,
         # Icon geometry.
-        "icon_svg": icon_svg,
+        "icon_svg": icon.svg,
         "icon_cx": icon_cx,
         "icon_cy": icon_cy,
         "icon_r": icon_r,
         "icon_stroke_w": icon_stroke_w,
         "icon_fill": icon_fill,
-        "icon_outline": icon_outline,
-        "icon_no_circle": icon_no_circle,
+        "icon_outline": icon.outline,
+        "icon_no_circle": icon.no_circle,
         "icon_glyph_x": icon_glyph_x,
         "icon_glyph_y": icon_glyph_y,
-        "letter": letter,
+        "letter": icon.letter,
         "letter_font_sz": m_icon.font_letter,
         # Value + unit.
         "value_text": value_text,
@@ -326,7 +279,7 @@ def _build_entity_context(
         "unit_weight": _font_weight_svg(unit_weight),
         # Name.
         "hide_name": hide_name,
-        "name_text": name_text,
+        "name_text": entity.name,
         "name_x": name_x,
         "name_y": name_y,
         "name_font_sz": name_font_sz,

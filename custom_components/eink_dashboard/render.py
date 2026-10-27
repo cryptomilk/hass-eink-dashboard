@@ -30,7 +30,7 @@ import io
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from babel import UnknownLocaleError
 from babel.dates import format_date
@@ -53,6 +53,9 @@ from .svg_render import (
     _svg_to_png,
     render_widget_svg,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -495,7 +498,7 @@ _BINARY_SENSOR_DEVICE_CLASS_ICONS: dict[str, tuple[str, str]] = {
 
 
 def _device_class_icon(
-    attrs: dict[str, Any],
+    attrs: Mapping[str, Any],
     state: str,
     domain: str = "",
 ) -> str | None:
