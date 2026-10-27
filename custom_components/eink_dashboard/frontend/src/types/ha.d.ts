@@ -567,6 +567,8 @@ export interface CalendarWidget extends WidgetBase {
  * showing the events of one or more HA calendar entities for the
  * current week. The first column follows the dashboard's first-weekday
  * setting.
+ *
+ * `fonts` roles: `title`, `day`, `hour`, `time`, `event`.
  */
 export interface WeekCalendarWidget extends WidgetBase {
   type: "week_calendar";

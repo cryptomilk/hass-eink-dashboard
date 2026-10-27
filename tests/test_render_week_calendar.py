@@ -215,10 +215,82 @@ class TestWeekEvents:
         events = [_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Solo")]
         with patch(_NOW, return_value=_MONDAY):
             svg = render_widget_svg(_widget(), _config(events))
-        assert '<tspan font-size="9">9:00</tspan> Solo</text>' in svg
-        assert 'font-family="Roboto"\n  font-size="14"' in svg
+        assert 'font-size="9">9:00</tspan> Solo</text>' in svg
+        assert 'font-weight="400"\n  font-size="14"' in svg
+        assert 'font-family="Roboto' in svg
         assert "text-rendering" not in svg
         assert 'font-weight="700"' not in svg
+
+    def test_default_font_sizes(self) -> None:
+        # Without overrides or scaling the text keeps its fixed sizes.
+        ctx = _ctx([_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Gym")])
+        assert ctx["time_font_sz"] == 9
+        assert ctx["events"][0]["font_sz"] == 14
+        assert ctx["day_weight"] == "500"
+        assert ctx["event_weight"] == "400"
+
+    def test_font_scale_scales_default_sizes(self) -> None:
+        # The display-level font_scale multiplies every default size.
+        ctx = _ctx(
+            [_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Gym")],
+            font_scale=1.5,
+        )
+        base = _ctx([_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Gym")])
+        assert ctx["time_font_sz"] == 14
+        assert ctx["events"][0]["font_sz"] == 21
+        assert ctx["day_font"] > base["day_font"]
+        assert ctx["hour_font"] > base["hour_font"]
+
+    def test_font_roles_set_size_and_weight(self) -> None:
+        # An explicit role size is absolute: font_scale does not apply.
+        ctx = _ctx(
+            [_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Gym")],
+            widget=_widget(
+                title="Week",
+                fonts={
+                    "title": {"size": 20},
+                    "day": {"size": 12, "weight": "bold"},
+                    "hour": {"size": 9},
+                    "time": {"size": 8},
+                    "event": {"size": 11, "weight": "medium"},
+                },
+            ),
+            font_scale=2.0,
+        )
+        assert ctx["title_font_sz"] == 20
+        assert ctx["day_font"] == 12
+        assert ctx["day_weight"] == "bold"
+        assert ctx["hour_font"] == 9
+        assert ctx["time_font_sz"] == 8
+        assert ctx["event_weight"] == "500"
+        assert ctx["events"][0]["font_sz"] == 11
+
+    def test_pinned_event_size_is_not_shrunk(self) -> None:
+        # Without a pinned size a long title falls back to the smaller
+        # size; a pinned size is used as is, even when the text is cut.
+        long_ev = [
+            _ev(
+                "2026-10-19T09:00:00",
+                "2026-10-19T09:30:00",
+                "A very long appointment title that cannot fit",
+            )
+        ]
+        assert _ctx(long_ev)["events"][0]["font_sz"] == 12
+        pinned = _ctx(long_ev, widget=_widget(fonts={"event": {"size": 14}}))
+        assert pinned["events"][0]["font_sz"] == 14
+
+    def test_invalid_pinned_size_uses_default(self) -> None:
+        # A non-numeric size is ignored, so the default sizes apply.
+        ctx = _ctx(
+            [_ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "Gym")],
+            widget=_widget(fonts={"event": {"size": "abc"}}),
+        )
+        assert ctx["events"][0]["font_sz"] == 14
+
+    def test_header_grows_with_day_font(self) -> None:
+        # A day font larger than the header leaves room for itself.
+        ctx = _ctx([], widget=_widget(fonts={"day": {"size": 30}}))
+        assert ctx["header_h"] >= 36
 
     def test_title_uses_largest_size_that_fits(self) -> None:
         # A short title fits the large font; a long one that would be

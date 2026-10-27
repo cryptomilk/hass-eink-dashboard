@@ -607,6 +607,7 @@ describe("SCHEMAS form grouping", () => {
       ["device_battery", ["label"], false],
       ["gauge", ["value", "unit", "name", "segment"], false],
       ["meteogram", ["day", "hour", "grid", "precip"], false],
+      ["week_calendar", ["title", "day", "hour", "time", "event"], false],
       // Weather's geometry is coupled to font_size, so it exposes
       // weight-only overrides and omits the per-role size selector.
       ["weather", ["temp", "detail", "precip"], true],

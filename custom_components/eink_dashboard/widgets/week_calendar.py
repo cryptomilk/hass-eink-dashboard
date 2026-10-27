@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from babel import Locale, UnknownLocaleError
 
-from ..const import COLOR_LIGHT_GRAY, color_to_hex
+from ..const import COLOR_LIGHT_GRAY, FontWeight, color_to_hex
 from ._helpers import (
     _color_context,
     _resolve_tz,
@@ -49,10 +49,12 @@ _MAX_CHIPS = 2
 
 # Event, chip and all-day text uses a small set of fixed pixel sizes
 # instead of scaling with the widget, which keeps small text legible.
-# The start time always uses ``_EV_TIME_SIZE``; a title uses the largest
-# of ``_EV_TITLE_SIZES`` whose text fits its box without being cut.
-_EV_TIME_SIZE = 9
-_EV_TITLE_SIZES = (14, 12)
+# The start time uses ``_DEFAULT_TIME_SIZE``; a title uses the largest
+# of ``_DEFAULT_TITLE_SIZES`` whose text fits its box without being
+# cut.  Both are multiplied by the display's ``font_scale``, and the
+# ``time`` and ``event`` font roles can pin them.
+_DEFAULT_TIME_SIZE = 9
+_DEFAULT_TITLE_SIZES = (14, 12)
 
 
 def _ev_line_h(size: int) -> int:
@@ -476,6 +478,27 @@ def _pack_day(
         multi = now
 
 
+def _pinned_size(widget: Mapping[str, object], role: str) -> bool:
+    """Return whether the ``fonts`` key pins a size for ``role``.
+
+    Args:
+        widget: Widget config.
+        role: Font role name.
+
+    Returns:
+        True when the role has a numeric ``size``.
+    """
+    fonts = widget.get("fonts")
+    entry = fonts.get(role) if isinstance(fonts, dict) else None
+    if not isinstance(entry, dict):
+        return False
+    try:
+        float(str(entry.get("size")))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def _hour_setting(widget: Mapping[str, object], key: str, default: int) -> int:
     """Return an hour setting, or ``default`` when it is empty or invalid.
 
@@ -493,6 +516,524 @@ def _hour_setting(widget: Mapping[str, object], key: str, default: int) -> int:
         return int(float(str(widget.get(key, default))))
     except (ValueError, TypeError, OverflowError):
         return default
+
+
+@dataclass(frozen=True, slots=True)
+class _Geometry:
+    """Horizontal geometry of the seven day columns."""
+
+    gutter_w: int
+    """Width of the hour-label column on the left."""
+    col_w: float
+    """Width of one day column, before rounding."""
+
+    def col_x(self, i: int) -> int:
+        """Return the left pixel edge of day column ``i``."""
+        return self.gutter_w + round(i * self.col_w)
+
+    def edge_px(self, i: int) -> int:
+        """Return the pixel column of the vertical gridline at edge ``i``.
+
+        The template draws each separator on the pixel column
+        ``col_x(i)``, except the last one, which is pulled in by one
+        pixel so it is not clipped at the widget's right edge.
+        """
+        return self.col_x(i) - (1 if i == 7 else 0)
+
+    def day_span(self, first: int, last: int) -> tuple[int, int]:
+        """Return ``(x, width)`` of a box over days ``first``..``last``.
+
+        The box starts on a gridline and ends one pixel before the
+        next, so it never merges into the gridline after it.
+        """
+        x0 = self.edge_px(first)
+        return x0, self.edge_px(last + 1) - x0 - 1
+
+
+@dataclass(frozen=True, slots=True)
+class _Layout:
+    """Vertical layout of the widget, in pixels."""
+
+    content_y: int
+    """Top of the calendar, below the optional title."""
+    content_h: int
+    """Height of the calendar."""
+    header_h: int
+    """Height of the day header row."""
+    lane_h: int
+    """Height of one all-day lane."""
+    chip_h: int
+    """Height of one out-of-grid chip."""
+    strip_h: int
+    """Height of the all-day strip."""
+    top_chips: int
+    """Chip rows reserved above the grid."""
+    bottom_chips: int
+    """Chip rows reserved below the grid."""
+    grid_top: int
+    """Top of the time grid."""
+    grid_bottom: int
+    """Bottom of the time grid."""
+    grid_start: int
+    """Minute of the day at the top of the grid."""
+    px_per_min: float
+    """Vertical pixels per minute."""
+    single_px: int
+    """Minimum box height of an event alone in its lane."""
+    multi_px: int
+    """Minimum box height of an event sharing its column."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Fonts:
+    """Text sizes and the fonts that measure them."""
+
+    day_size: int
+    """Size of the day headers."""
+    hour_size: int
+    """Size of the hour labels."""
+    time_size: int
+    """Size of an event's start time."""
+    title_sizes: tuple[int, ...]
+    """Event title sizes, largest first."""
+    day: Any
+    """PIL font measuring the day headers."""
+    time: Any
+    """PIL font measuring the start time."""
+    titles: dict[int, Any]
+    """PIL font measuring a title, by size."""
+    day_weight: str
+    """SVG ``font-weight`` of the day headers."""
+    hour_weight: str
+    """SVG ``font-weight`` of the hour labels."""
+    time_weight: str
+    """SVG ``font-weight`` of an event's start time."""
+    event_weight: str
+    """SVG ``font-weight`` of event titles."""
+
+    def context(self) -> dict[str, object]:
+        """Return the font entries of the template context."""
+        return {
+            "day_font": self.day_size,
+            "day_weight": self.day_weight,
+            "hour_font": self.hour_size,
+            "hour_weight": self.hour_weight,
+            "time_font_sz": self.time_size,
+            "time_weight": self.time_weight,
+            "event_weight": self.event_weight,
+        }
+
+
+def _title_band(
+    widget: WeekCalendarWidget,
+    title: str,
+    svg_h: int,
+    font_scale: float,
+) -> tuple[int, str, int, int]:
+    """Resolve the title font and the band it takes above the calendar.
+
+    Args:
+        widget: Widget config; its ``fonts`` may override ``title``.
+        title: Header text, or ``""`` for none.
+        svg_h: Total widget height in pixels.
+        font_scale: Display-level font scale.
+
+    Returns:
+        ``(title_font_sz, title_weight, content_y, content_h)``, with
+        the weight as an SVG ``font-weight`` value.
+    """
+    from ..render import _font_weight_svg, resolve_font
+
+    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+    weight = FontWeight.REGULAR
+    if title:
+        title_font_sz, weight = resolve_font(
+            widget,
+            "title",
+            title_font_sz,
+            FontWeight.REGULAR,
+            scale=font_scale,
+        )
+        # Re-derive the title band from the resolved size, as the other
+        # titled widgets do, so a larger title keeps its clearance.
+        content_y = round(title_font_sz * 1.4)
+        content_h = svg_h - content_y
+    return title_font_sz, _font_weight_svg(weight), content_y, content_h
+
+
+def _resolve_fonts(
+    widget: WeekCalendarWidget,
+    day_default: int,
+    font_scale: float,
+) -> _Fonts:
+    """Resolve the text roles of the calendar body.
+
+    Roles resolve through the shared API so the widget's ``fonts``
+    overrides and the display-level ``font_scale`` apply.
+
+    Args:
+        widget: Widget config; its ``fonts`` may override the roles
+            ``day``, ``hour``, ``time`` and ``event``.
+        day_default: Derived default size of the day headers; the
+            hour labels follow it.
+        font_scale: Display-level font scale.
+
+    Returns:
+        The resolved sizes and weights with the fonts that measure them.
+    """
+    from ..render import _font_weight_svg, _load_role_font, resolve_font
+
+    day_size, day_weight = resolve_font(
+        widget, "day", day_default, FontWeight.MEDIUM, scale=font_scale
+    )
+    hour_size, hour_weight = resolve_font(
+        widget,
+        "hour",
+        max(8, round(day_default * 0.8)),
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    time_size, time_weight = resolve_font(
+        widget,
+        "time",
+        _DEFAULT_TIME_SIZE,
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    event_size, event_weight = resolve_font(
+        widget,
+        "event",
+        _DEFAULT_TITLE_SIZES[0],
+        FontWeight.REGULAR,
+        scale=font_scale,
+    )
+    # A pinned event size is used as is.  Otherwise a title tries the
+    # scaled default sizes, largest first (see ``_fit_title``).
+    title_sizes = (
+        (event_size,)
+        if _pinned_size(widget, "event")
+        else tuple(
+            sorted(
+                {max(1, round(s * font_scale)) for s in _DEFAULT_TITLE_SIZES},
+                reverse=True,
+            )
+        )
+    )
+    return _Fonts(
+        day_size=day_size,
+        hour_size=hour_size,
+        time_size=time_size,
+        title_sizes=title_sizes,
+        day=_load_role_font(day_size, day_weight),
+        time=_load_role_font(time_size, time_weight),
+        titles={s: _load_role_font(s, event_weight) for s in title_sizes},
+        day_weight=_font_weight_svg(day_weight),
+        hour_weight=_font_weight_svg(hour_weight),
+        time_weight=_font_weight_svg(time_weight),
+        event_weight=_font_weight_svg(event_weight),
+    )
+
+
+def _fit_title(
+    fonts: _Fonts,
+    title: str,
+    x0: int,
+    y0: int,
+    w: int,
+    h: int,
+    label: str = "",
+    pad: int = 2,
+    max_lines: int | None = None,
+) -> dict[str, object]:
+    """Lay out ``title`` beside the start ``label`` in a box.
+
+    Tries the title sizes from the largest down and keeps the first
+    whose wrapped text is not cut; when every size cuts the text, the
+    smallest one is used.  The label is drawn in the time font ahead
+    of the first line, so the room it takes there is measured with
+    that font.
+
+    Args:
+        fonts: Text sizes and measuring fonts.
+        title: Event title.
+        x0: Left edge of the box.
+        y0: Top edge of the box.
+        w: Box width.
+        h: Box height.
+        label: Start time, or ``""`` for none.
+        pad: Vertical room kept free inside the box.
+        max_lines: Upper limit for the number of lines.
+
+    Returns:
+        The box with its font size and the vertically centred
+        ``lines``, for the template.
+    """
+    inner_w = w - 6
+    time_w = fonts.time.getlength(label) if label else 0
+    chosen = min(fonts.title_sizes)
+    lines: list[str] = []
+    for size in sorted(fonts.title_sizes, reverse=True):
+        fits = (h - pad) // _ev_line_h(size)
+        if max_lines is not None:
+            fits = min(fits, max_lines)
+        if inner_w <= 0 or fits < 1:
+            continue
+        gap = fonts.titles[size].getlength(" ")
+        chosen = size
+        lines = _wrap_text(
+            title,
+            fonts.titles[size],
+            inner_w,
+            fits,
+            first_offset=time_w + gap if label else 0,
+        )
+        if " ".join(lines).split() == title.split():
+            break
+    # Even with no room for the title, the start time is drawn.
+    lines = lines or [""]
+    lh = _ev_line_h(chosen)
+    top = y0 + (h - len(lines) * lh) // 2
+    return {
+        "x": x0,
+        "y": y0,
+        "w": w,
+        "h": h,
+        "font_sz": chosen,
+        "lines": [
+            {
+                "text": t,
+                "time": label if k == 0 else "",
+                "x": x0 + 3,
+                "y": top + k * lh + lh // 2,
+            }
+            for k, t in enumerate(lines)
+        ],
+    }
+
+
+def _day_headers(
+    days: list[date],
+    today: date,
+    geo: _Geometry,
+    fonts: _Fonts,
+    language: str,
+) -> list[dict[str, object]]:
+    """Return the day header cells.
+
+    Args:
+        days: The seven displayed dates.
+        today: The current date, drawn inverted.
+        geo: Column geometry.
+        fonts: Text sizes and measuring fonts.
+        language: BCP 47 language code for the weekday names.
+
+    Returns:
+        One cell per day, for the template.
+    """
+    from ..render import _weekday_abbrev
+
+    headers: list[dict[str, object]] = []
+    for i, day in enumerate(days):
+        w_i = geo.col_x(i + 1) - geo.col_x(i)
+        label = _truncate_to_width(
+            f"{_weekday_abbrev(day, language)} {day.day}",
+            fonts.day,
+            w_i - 4,
+        )
+        headers.append(
+            {
+                "x": geo.col_x(i),
+                "w": w_i,
+                "cx": geo.col_x(i) + w_i // 2,
+                "label": label,
+                "is_today": day == today,
+            }
+        )
+    return headers
+
+
+def _all_day_boxes(
+    spans: list[_AllDaySpan],
+    geo: _Geometry,
+    layout: _Layout,
+    fonts: _Fonts,
+) -> list[dict[str, object]]:
+    """Return the boxes of the placed all-day spans.
+
+    Args:
+        spans: Spans with their lane set.
+        geo: Column geometry.
+        layout: Vertical layout.
+        fonts: Text sizes and measuring fonts.
+
+    Returns:
+        One box per span, for the template.
+    """
+    boxes: list[dict[str, object]] = []
+    for item in spans:
+        bx, bw = geo.day_span(item.first, item.last)
+        by = layout.content_y + layout.header_h + item.lane * layout.lane_h + 1
+        boxes.append(
+            _fit_title(
+                fonts, item.text, bx, by, bw, layout.lane_h - 2, max_lines=1
+            )
+        )
+    return boxes
+
+
+def _chip_boxes(
+    before: list[list[_Segment]],
+    after: list[list[_Segment]],
+    geo: _Geometry,
+    layout: _Layout,
+    fonts: _Fonts,
+    time_format: str,
+) -> list[dict[str, object]]:
+    """Return the chips for events outside the grid.
+
+    Chips are stacked at the top or bottom of their day's column; more
+    than ``_MAX_CHIPS`` collapse into a "+N" chip.
+
+    Args:
+        before: Per day, the segments that end before the grid.
+        after: Per day, the segments that start after the grid.
+        geo: Column geometry.
+        layout: Vertical layout.
+        fonts: Text sizes and measuring fonts.
+        time_format: ``"12"`` for AM/PM, anything else for 24-hour.
+
+    Returns:
+        One box per chip, for the template.
+    """
+    chips: list[dict[str, object]] = []
+    for i in range(7):
+        bx, bw = geo.day_span(i, i)
+        for segs, count, base_y in (
+            (
+                before[i],
+                layout.top_chips,
+                layout.content_y + layout.header_h + layout.strip_h,
+            ),
+            (after[i], layout.bottom_chips, layout.grid_bottom),
+        ):
+            ordered = sorted(segs, key=lambda s: s.sm)
+            shown: list[_Segment | _Overflow] = [*ordered]
+            if len(shown) > _MAX_CHIPS:
+                extra = len(shown) - _MAX_CHIPS + 1
+                shown = [*shown[: _MAX_CHIPS - 1], _Overflow(extra)]
+            for k, chip in enumerate(shown[:count]):
+                cy = base_y + k * layout.chip_h + 1
+                if isinstance(chip, _Overflow):
+                    label = ""
+                    chip_text = f"+{chip.count}"
+                else:
+                    label = _fmt_hm(chip.label_sm, time_format)
+                    chip_text = chip.text
+                chips.append(
+                    _fit_title(
+                        fonts,
+                        chip_text,
+                        bx,
+                        cy,
+                        bw,
+                        layout.chip_h - 2,
+                        label,
+                        pad=0,
+                        max_lines=1,
+                    )
+                )
+    return chips
+
+
+def _event_boxes(
+    timed: list[list[_Segment]],
+    geo: _Geometry,
+    layout: _Layout,
+    fonts: _Fonts,
+    time_format: str,
+) -> list[dict[str, object]]:
+    """Return the boxes of the events inside the grid.
+
+    Args:
+        timed: Per day, the segments inside the grid; lanes are
+            assigned in place.
+        geo: Column geometry.
+        layout: Vertical layout.
+        fonts: Text sizes and measuring fonts.
+        time_format: ``"12"`` for AM/PM, anything else for 24-hour.
+
+    Returns:
+        One box per event segment, for the template.
+    """
+    events: list[dict[str, object]] = []
+    for i in range(7):
+        _pack_day(
+            timed[i], layout.px_per_min, layout.single_px, layout.multi_px
+        )
+        left, right = geo.edge_px(i), geo.edge_px(i + 1)
+        for seg in timed[i]:
+            # Lanes split the span between the gridlines.  Every box
+            # ends one pixel before its right neighbour (the next lane
+            # or the gridline), so boxes never merge into each other
+            # or into the gridline.
+            lanes_n = seg.lanes
+            ex = left + round(seg.lane * (right - left) / lanes_n)
+            ex_right = left + round((seg.lane + 1) * (right - left) / lanes_n)
+            ew = ex_right - ex - 1
+            ey = layout.grid_top + round(
+                (seg.sm - layout.grid_start) * layout.px_per_min
+            )
+            eh = max(
+                layout.multi_px if lanes_n > 1 else layout.single_px,
+                round((seg.em - seg.sm) * layout.px_per_min) - 1,
+            )
+            ey = max(layout.grid_top, min(ey, layout.grid_bottom - eh))
+            label = _fmt_hm(seg.label_sm, time_format)
+            events.append(_fit_title(fonts, seg.text, ex, ey, ew, eh, label))
+    return events
+
+
+def _hour_lines(
+    start_hour: int,
+    end_hour: int,
+    layout: _Layout,
+    fonts: _Fonts,
+    time_format: str,
+) -> list[dict[str, object]]:
+    """Return the hour gridlines with their labels.
+
+    Every other hour is labelled when the rows are tight.
+
+    Args:
+        start_hour: First hour on the time axis.
+        end_hour: Hour at which the axis ends.
+        layout: Vertical layout.
+        fonts: Text sizes and measuring fonts.
+        time_format: ``"12"`` for AM/PM, anything else for 24-hour.
+
+    Returns:
+        One entry per line, for the template.
+    """
+    hour_px = 60 * layout.px_per_min
+    step = 1 if hour_px >= fonts.hour_size * 1.8 else 2
+    hours: list[dict[str, object]] = []
+    for hr in range(start_hour, end_hour + 1):
+        hy = layout.grid_top + round(
+            (hr * 60 - layout.grid_start) * layout.px_per_min
+        )
+        show = (hr - start_hour) % step == 0
+        label = (
+            _fmt_hm(hr * 60, time_format).replace(":00", "") if show else ""
+        )
+        # The baseline puts the digits (cap height about 0.71 em) a
+        # couple of pixels under the line.  A label that would not fit
+        # above the widget's bottom edge, as for the last line, is
+        # dropped.
+        label_y = hy + 3 + round(fonts.hour_size * 0.71)
+        if label_y > layout.content_y + layout.content_h - 1:
+            label = ""
+        hours.append({"y": hy, "label": label, "label_y": label_y})
+    return hours
 
 
 def _build_week_calendar_context(
@@ -515,16 +1056,15 @@ def _build_week_calendar_context(
         widget: Widget config.  Recognised keys: ``entity``
             (calendar entity ID or list of IDs), ``title``,
             ``start_hour`` (default 8), ``end_hour`` (default 20),
-            ``x``, ``y``, ``w``, ``h``.
+            ``fonts`` (roles ``title``, ``day``, ``hour``, ``time``
+            and ``event``), ``x``, ``y``, ``w``, ``h``.
         config: Display config with ``states``, ``language``,
             ``first_weekday``, ``time_format``, ``display_levels``,
-            ``time_zone``, ``width`` and ``height``.
+            ``font_scale``, ``time_zone``, ``width`` and ``height``.
 
     Returns:
         Template context consumed by ``week_calendar.svg.j2``.
     """
-    from ..render import _load_font, _weekday_abbrev
-
     x = widget.get("x", 0)
     y = widget.get("y", 0)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
@@ -533,6 +1073,7 @@ def _build_week_calendar_context(
     time_format: str = config.get("time_format", "24")
     language: str = config.get("language", "en")
     display_levels: int = config.get("display_levels", 16)
+    font_scale: float = config.get("font_scale", 1.0)
 
     start_hour = max(
         0, min(23, _hour_setting(widget, "start_hour", DEFAULT_START_HOUR))
@@ -564,16 +1105,19 @@ def _build_week_calendar_context(
     week = _collect_week_events(raw_events, days, gs, ge)
     timed, before, after = week.timed, week.before, week.after
 
-    # Font sizes and vertical layout.
-    title_font_sz, content_y, content_h = _title_layout(title, svg_h)
+    # Font roles and vertical layout.
+    title_font_sz, title_weight, content_y, content_h = _title_band(
+        widget, title, svg_h, font_scale
+    )
     header_h = max(18, min(40, round(content_h * 0.07)))
-    day_font = round(header_h * 0.55)
+    fonts = _resolve_fonts(widget, round(header_h * 0.55), font_scale)
+    # A larger day font makes the header row grow with it.
+    header_h = max(header_h, fonts.day_size + 6)
     # Boxes are sized for the smallest title font; a roomier box may
-    # still draw its title larger (see ``fit_title``).
-    line_h = _ev_line_h(min(_EV_TITLE_SIZES))
-    hour_font = max(8, round(day_font * 0.8))
-    gutter_w = round(hour_font * (3.4 if time_format == "12" else 2.2))
-    lane_h = round(day_font * 1.3)
+    # still draw its title larger.
+    line_h = _ev_line_h(min(fonts.title_sizes))
+    gutter_w = round(fonts.hour_size * (3.4 if time_format == "12" else 2.2))
+    lane_h = round(fonts.day_size * 1.3)
 
     placed_all_day = _place_all_day(week.all_day)
     n_lanes = max((p.lane + 1 for p in placed_all_day), default=0)
@@ -586,239 +1130,45 @@ def _build_week_calendar_context(
     grid_bottom = max(
         grid_top + 1, content_y + content_h - bottom_chips * chip_h
     )
-    grid_h = grid_bottom - grid_top
-    px_per_min = grid_h / (ge - gs)
-
-    col_w_f = (svg_w - gutter_w) / 7
-
-    def col_x(i: int) -> int:
-        """Return the left pixel edge of day column ``i``."""
-        return gutter_w + round(i * col_w_f)
-
-    def edge_px(i: int) -> int:
-        """Pixel column of the vertical gridline at column edge ``i``.
-
-        The template draws each separator on the pixel column
-        ``col_x(i)``, except the last one, which is pulled in by one
-        pixel so it is not clipped at the widget's right edge.
-        """
-        return col_x(i) - (1 if i == 7 else 0)
-
-    def day_span(first: int, last: int) -> tuple[int, int]:
-        """Return ``(x, width)`` of a box over days ``first``..``last``.
-
-        The box starts on a gridline and ends one pixel before the
-        next, so it never merges into the gridline after it.
-        """
-        x0 = edge_px(first)
-        return x0, edge_px(last + 1) - x0 - 1
-
-    day_font_obj = _load_font(day_font, medium=True)
-    time_font = _load_font(_EV_TIME_SIZE)
-    title_fonts = {s: _load_font(s) for s in _EV_TITLE_SIZES}
-
-    def fit_title(
-        title: str,
-        x0: int,
-        y0: int,
-        w: int,
-        h: int,
-        label: str = "",
-        pad: int = 2,
-        max_lines: int | None = None,
-    ) -> dict[str, object]:
-        """Lay out ``title`` beside the start ``label`` in a box.
-
-        Tries the title sizes from the largest down and keeps the
-        first whose wrapped text is not cut; when every size cuts the
-        text, the smallest one is used.  The label is drawn in the
-        time font ahead of the first line, so the room it takes there
-        is measured with that font.
-
-        Args:
-            title: Event title.
-            x0: Left edge of the box.
-            y0: Top edge of the box.
-            w: Box width.
-            h: Box height.
-            label: Start time, or ``""`` for none.
-            pad: Vertical room kept free inside the box.
-            max_lines: Upper limit for the number of lines.
-
-        Returns:
-            The box with its font size and the vertically centred
-            ``lines``, for the template.
-        """
-        inner_w = w - 6
-        time_w = time_font.getlength(label) if label else 0
-        chosen = min(_EV_TITLE_SIZES)
-        lines: list[str] = []
-        for size in sorted(_EV_TITLE_SIZES, reverse=True):
-            fits = (h - pad) // _ev_line_h(size)
-            if max_lines is not None:
-                fits = min(fits, max_lines)
-            if inner_w <= 0 or fits < 1:
-                continue
-            gap = title_fonts[size].getlength(" ")
-            chosen = size
-            lines = _wrap_text(
-                title,
-                title_fonts[size],
-                inner_w,
-                fits,
-                first_offset=time_w + gap if label else 0,
-            )
-            if " ".join(lines).split() == title.split():
-                break
-        # Even with no room for the title, the start time is drawn.
-        lines = lines or [""]
-        lh = _ev_line_h(chosen)
-        top = y0 + (h - len(lines) * lh) // 2
-        return {
-            "x": x0,
-            "y": y0,
-            "w": w,
-            "h": h,
-            "font_sz": chosen,
-            "lines": [
-                {
-                    "text": t,
-                    "time": label if k == 0 else "",
-                    "x": x0 + 3,
-                    "y": top + k * lh + lh // 2,
-                }
-                for k, t in enumerate(lines)
-            ],
-        }
-
-    # Day headers.
-    headers: list[dict[str, object]] = []
-    for i, day in enumerate(days):
-        w_i = col_x(i + 1) - col_x(i)
-        label = _truncate_to_width(
-            f"{_weekday_abbrev(day, language)} {day.day}",
-            day_font_obj,
-            w_i - 4,
-        )
-        headers.append(
-            {
-                "x": col_x(i),
-                "w": w_i,
-                "cx": col_x(i) + w_i // 2,
-                "label": label,
-                "is_today": day == today,
-            }
-        )
-
-    # All-day bars.
-    all_day_out: list[dict[str, object]] = []
-    for item in placed_all_day:
-        bx, bw = day_span(item.first, item.last)
-        by = content_y + header_h + item.lane * lane_h + 1
-        all_day_out.append(
-            fit_title(item.text, bx, by, bw, lane_h - 2, max_lines=1)
-        )
-
-    # Out-of-grid chips, stacked at the column's top/bottom.
-    chips: list[dict[str, object]] = []
-    for i in range(7):
-        bx, bw = day_span(i, i)
-        for segs, count, base_y in (
-            (before[i], top_chips, content_y + header_h + strip_h),
-            (after[i], bottom_chips, grid_bottom),
-        ):
-            ordered = sorted(segs, key=lambda s: s.sm)
-            shown: list[_Segment | _Overflow] = [*ordered]
-            if len(shown) > _MAX_CHIPS:
-                extra = len(shown) - _MAX_CHIPS + 1
-                shown = [*shown[: _MAX_CHIPS - 1], _Overflow(extra)]
-            for k, chip in enumerate(shown[:count]):
-                cy = base_y + k * chip_h + 1
-                if isinstance(chip, _Overflow):
-                    label = ""
-                    chip_text = f"+{chip.count}"
-                else:
-                    label = _fmt_hm(chip.label_sm, time_format)
-                    chip_text = chip.text
-                chips.append(
-                    fit_title(
-                        chip_text,
-                        bx,
-                        cy,
-                        bw,
-                        chip_h - 2,
-                        label,
-                        pad=0,
-                        max_lines=1,
-                    )
-                )
-
-    # In-grid events.
-    events: list[dict[str, object]] = []
-    # Minimum box heights: one line alone in a lane; time plus one
-    # title line (two lines) when sharing a column.
-    single_px = line_h + 2
-    multi_px = 2 * line_h + 2
-    for i in range(7):
-        _pack_day(timed[i], px_per_min, single_px, multi_px)
-        left, right = edge_px(i), edge_px(i + 1)
-        for seg in timed[i]:
-            # Lanes split the span between the gridlines.  Every box
-            # ends one pixel before its right neighbour (the next lane
-            # or the gridline), so boxes never merge into each other
-            # or into the gridline.
-            lanes_n = seg.lanes
-            ex = left + round(seg.lane * (right - left) / lanes_n)
-            ex_right = left + round((seg.lane + 1) * (right - left) / lanes_n)
-            ew = ex_right - ex - 1
-            ey = grid_top + round((seg.sm - gs) * px_per_min)
-            eh = max(
-                multi_px if lanes_n > 1 else single_px,
-                round((seg.em - seg.sm) * px_per_min) - 1,
-            )
-            ey = max(grid_top, min(ey, grid_bottom - eh))
-            label = _fmt_hm(seg.label_sm, time_format)
-            events.append(fit_title(seg.text, ex, ey, ew, eh, label))
-
-    # Hour gridlines; label every other hour when rows are tight.
-    hour_px = 60 * px_per_min
-    step = 1 if hour_px >= hour_font * 1.8 else 2
-    hours: list[dict[str, object]] = []
-    for hr in range(start_hour, end_hour + 1):
-        hy = grid_top + round((hr * 60 - gs) * px_per_min)
-        show = (hr - start_hour) % step == 0
-        label = (
-            _fmt_hm(hr * 60, time_format).replace(":00", "") if show else ""
-        )
-        # The baseline puts the digits (cap height about 0.71 em) a
-        # couple of pixels under the line.  A label that would not fit
-        # above the widget's bottom edge, as for the last line, is
-        # dropped.
-        label_y = hy + 3 + round(hour_font * 0.71)
-        if label_y > content_y + content_h - 1:
-            label = ""
-        hours.append({"y": hy, "label": label, "label_y": label_y})
+    layout = _Layout(
+        content_y=content_y,
+        content_h=content_h,
+        header_h=header_h,
+        lane_h=lane_h,
+        chip_h=chip_h,
+        strip_h=strip_h,
+        top_chips=top_chips,
+        bottom_chips=bottom_chips,
+        grid_top=grid_top,
+        grid_bottom=grid_bottom,
+        grid_start=gs,
+        px_per_min=(grid_bottom - grid_top) / (ge - gs),
+        # One line alone in a lane; time plus one title line (two
+        # lines) when sharing a column.
+        single_px=line_h + 2,
+        multi_px=2 * line_h + 2,
+    )
+    geo = _Geometry(gutter_w=gutter_w, col_w=(svg_w - gutter_w) / 7)
 
     return {
         "w": svg_w,
         "h": svg_h,
         "title": title,
         "title_font_sz": title_font_sz,
+        "title_weight": title_weight,
         "content_y": content_y,
         "content_bottom": content_y + content_h,
         "header_h": header_h,
-        "day_font": day_font,
-        "time_font_sz": _EV_TIME_SIZE,
-        "hour_font": hour_font,
+        **fonts.context(),
         "gutter_w": gutter_w,
         "grid_top": grid_top,
         "grid_bottom": grid_bottom,
-        "col_xs": [col_x(i) for i in range(8)],
-        "headers": headers,
-        "hours": hours,
-        "all_day": all_day_out,
-        "chips": chips,
-        "events": events,
+        "col_xs": [geo.col_x(i) for i in range(8)],
+        "headers": _day_headers(days, today, geo, fonts, language),
+        "hours": _hour_lines(start_hour, end_hour, layout, fonts, time_format),
+        "all_day": _all_day_boxes(placed_all_day, geo, layout, fonts),
+        "chips": _chip_boxes(before, after, geo, layout, fonts, time_format),
+        "events": _event_boxes(timed, geo, layout, fonts, time_format),
         "grid_line_color": _snap_gray(COLOR_LIGHT_GRAY, display_levels),
         "corner_r": max(3, round(line_h * 0.33)),
         **_color_context(),

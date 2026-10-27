@@ -1429,6 +1429,22 @@ export const SCHEMAS: Record<
       icon: "mdi:move-resize",
       schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
     },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [
+        fontsSection([
+          ["title", "Title"],
+          ["day", "Day"],
+          ["hour", "Hour"],
+          ["time", "Time"],
+          ["event", "Event"],
+        ]),
+      ],
+    },
   ],
   calendar: (d) => [
     identitySection(),
