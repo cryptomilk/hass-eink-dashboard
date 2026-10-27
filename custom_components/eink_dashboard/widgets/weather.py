@@ -523,8 +523,12 @@ def _build_weather_context(
         temp_text = f"{format_number(f'{temp:.1f}', nf, lang)}{temp_unit}"
     else:
         temp_text = f"{_fmt_temp(temp, nf, lang)}{temp_unit}"
+    # Pillow types getbbox() as floats; the layout below is integer
+    # pixel math.
     temp_bbox = font_xl.getbbox(temp_text)
-    temp_h = temp_bbox[3] - temp_bbox[1]
+    temp_top = round(temp_bbox[1])
+    temp_bottom = round(temp_bbox[3])
+    temp_h = temp_bottom - temp_top
 
     top_pad = m.padding
 
@@ -631,10 +635,10 @@ def _build_weather_context(
 
     # row1_bottom mirrors PIL's max() between icon bottom and
     # the bottom of the temperature glyph.
-    temp_y_pil = icon_cy - temp_bbox[1] - temp_h // 2
+    temp_y_pil = icon_cy - temp_top - temp_h // 2
     row1_bottom = max(
         content_top + icon_size,
-        temp_y_pil + temp_bbox[3],
+        temp_y_pil + temp_bottom,
     )
 
     # Condition icon SVG and detail row are only needed when the
