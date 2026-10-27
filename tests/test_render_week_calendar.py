@@ -370,6 +370,16 @@ class TestWeekEvents:
         assert ctx["events"] == []
         assert len(ctx["chips"]) == 1
 
+    def test_cleared_hours_use_defaults(self) -> None:
+        # A cleared editor field arrives as "" or None and must not
+        # abort the render; the default 8-20 axis applies instead.
+        ctx = _ctx(
+            [_ev("2026-10-19T10:00:00", "2026-10-19T11:00:00", "X")],
+            widget=_widget(start_hour="", end_hour=None),
+        )
+        assert len(ctx["events"]) == 1
+        assert ctx["chips"] == []
+
     def test_no_current_time_marker(self) -> None:
         # The display refreshes too rarely for a "now" line to be
         # accurate, so none is drawn.

@@ -428,6 +428,25 @@ def _pack_day(
         multi = now
 
 
+def _hour_setting(widget: Mapping[str, object], key: str, default: int) -> int:
+    """Return an hour setting, or ``default`` when it is empty or invalid.
+
+    The editor can store a cleared field as an empty string or ``None``.
+
+    Args:
+        widget: Widget config.
+        key: Setting key, ``"start_hour"`` or ``"end_hour"``.
+        default: Value used when the setting cannot be read as a number.
+
+    Returns:
+        The setting as an int, not yet clamped to the time axis.
+    """
+    try:
+        return int(float(str(widget.get(key, default))))
+    except (ValueError, TypeError, OverflowError):
+        return default
+
+
 def _build_week_calendar_context(
     widget: WeekCalendarWidget,
     config: DisplayConfig,
@@ -468,10 +487,11 @@ def _build_week_calendar_context(
     display_levels: int = config.get("display_levels", 16)
 
     start_hour = max(
-        0, min(23, int(widget.get("start_hour", DEFAULT_START_HOUR)))
+        0, min(23, _hour_setting(widget, "start_hour", DEFAULT_START_HOUR))
     )
     end_hour = max(
-        start_hour + 1, min(24, int(widget.get("end_hour", DEFAULT_END_HOUR)))
+        start_hour + 1,
+        min(24, _hour_setting(widget, "end_hour", DEFAULT_END_HOUR)),
     )
     gs, ge = start_hour * 60, end_hour * 60
 
