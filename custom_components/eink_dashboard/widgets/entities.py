@@ -36,9 +36,8 @@ from ._helpers import (
     _icon_stroke_width,
     _max_row_height,
     _metrics_context,
-    _resolve_icon_style,
-    _resolve_icon_svg,
-    _resolve_precision,
+    _resolve_entity,
+    _resolve_entity_icon,
     _row_context,
     _title_layout,
     _widget_dim,
@@ -133,7 +132,6 @@ def _build_entities_context(
     x = widget.get("x", PADDING)
     svg_w = _widget_dim(widget, "w", config["width"] - x)
     title: str = widget.get("title", "")
-    icon_style = widget.get("icon_style")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     hide_icon: bool = bool(widget.get("hide_icon", False))
     max_row_h = _max_row_height(widget, config)
@@ -337,41 +335,28 @@ def _build_entities_context(
             y += section_h
 
         else:
-            entity_id = str(cls["entity_id"])
-            name_override = cls["name_override"]
             _raw_icon = cls["icon_override"]
-            icon_override: str | None = (
-                str(_raw_icon) if _raw_icon is not None else None
-            )
-            state = states[entity_id]
-            attrs = state.get("attributes", {})
-            domain = entity_id.split(".")[0]
-            state_val: str = state.get("state", "")
+            # Per-row view of the widget: the row's entity, name and
+            # icon replace the widget-level keys, while decimals,
+            # icon_style and hide_icon still apply to every row.
+            row_widget = {
+                **widget,
+                "entity": cls["entity_id"],
+                "name": cls["name_override"],
+                "icon": str(_raw_icon) if _raw_icon is not None else None,
+            }
+            entity = _resolve_entity(row_widget, config)
+            if entity is None:
+                # Unreachable: absent entities were filtered out
+                # during classification.
+                continue
 
-            primary: str = (
-                str(name_override)
-                if name_override is not None
-                else attrs.get("friendly_name", entity_id)
-            )
-
-            unit = attrs.get("unit_of_measurement", "")
-            precision = _resolve_precision(widget, state)
-            fmtd = _fmt(state_val, config, precision)
+            unit = entity.attrs.get("unit_of_measurement", "")
+            fmtd = _fmt(entity.state_val, config, entity.precision)
             value = f"{fmtd}{unit}" if unit else fmtd
 
-            # Icon: explicit override → device_class →
-            # attrs["icon"] → letter fallback.
-            icon_svg, letter = _resolve_icon_svg(
-                icon_override,
-                attrs,
-                state_val,
-                domain,
-                m.icon_inner,
-                entity_id,
-            )
-
-            icon_outline, icon_no_circle = _resolve_icon_style(
-                icon_style, state_val, display_levels
+            icon = _resolve_entity_icon(
+                row_widget, entity, m.icon_inner, display_levels
             )
 
             # Auto-divider: draw after this entity row only
@@ -393,13 +378,13 @@ def _build_entities_context(
                     **_row_context(
                         CardRow(
                             y=row_y,
-                            primary=primary,
+                            primary=entity.name,
                             value=value,
-                            icon_svg=icon_svg,
+                            icon_svg=icon.svg,
                             icon_fill=icon_fill,
-                            icon_outline=icon_outline,
-                            icon_no_circle=icon_no_circle,
-                            letter=letter,
+                            icon_outline=icon.outline,
+                            icon_no_circle=icon.no_circle,
+                            letter=icon.letter,
                         )
                     ),
                     "draw_divider": draw_divider,

@@ -38,7 +38,7 @@ from ._helpers import (
     _fmt,
     _metrics_context,
     _missing_entity_context,
-    _resolve_precision,
+    _resolve_entity,
     _widget_dim,
 )
 
@@ -229,8 +229,6 @@ def _build_gauge_context(
     # Default: square gauge (height equals width).
     h = _widget_dim(widget, "h", w)
 
-    entity_id: str = widget.get("entity", "")
-    states = config.get("states", {})
     display_levels = config.get("display_levels", 16)
     font_scale: float = config.get("font_scale", 1.0)
     card_style: str = widget.get("card_style", DEFAULT_CARD_STYLE)
@@ -240,28 +238,26 @@ def _build_gauge_context(
     min_val: float = float(widget.get("min", 0))
     max_val: float = float(widget.get("max", 100))
     segments_raw: list[object] = list(widget.get("segments", []))
-    name_override = widget.get("name")
     icon_override = widget.get("icon")
     unit_override = widget.get("unit")
     show_unit: bool = bool(widget.get("show_unit", True))
     attribute: str | None = widget.get("attribute")
 
     # Missing entity → blank white canvas.
-    state = states.get(entity_id) if entity_id else None
-    if state is None:
+    entity = _resolve_entity(widget, config)
+    if entity is None:
         return _missing_entity_context(w, h)
 
-    attrs: dict[str, object] = state.get("attributes", {})
+    attrs = entity.attrs
 
     # --- Value ---
     if attribute is not None:
         raw_attr = attrs.get(attribute)
         state_val = str(raw_attr) if raw_attr is not None else "0"
     else:
-        state_val = str(state.get("state", "0"))
+        state_val = entity.state_val
 
-    precision = _resolve_precision(widget, state)
-    formatted_val = _fmt(state_val, config, precision)
+    formatted_val = _fmt(state_val, config, entity.precision)
 
     # --- Unit ---
     if show_unit:
@@ -271,13 +267,6 @@ def _build_gauge_context(
         )
     else:
         unit_text = ""
-
-    # --- Name ---
-    name_text: str = (
-        str(name_override)
-        if name_override is not None
-        else str(attrs.get("friendly_name", entity_id))
-    )
 
     # --- Card insets ---
     # Use DEFAULT_ROW_H for consistent border proportions across
@@ -530,7 +519,7 @@ def _build_gauge_context(
         "icon_x": icon_x,
         "icon_y": icon_y,
         # Name label.
-        "name_text": name_text,
+        "name_text": entity.name,
         "name_x": cx,
         "name_y": name_y,
         "name_font_sz": name_font_sz,
