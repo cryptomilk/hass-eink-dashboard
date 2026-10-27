@@ -17,8 +17,9 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from babel import Locale, UnknownLocaleError
 
@@ -75,6 +76,61 @@ _WEEKDAY_INDEX = {
     "saturday": 5,
     "sunday": 6,
 }
+
+
+@dataclass(frozen=True, slots=True)
+class _AllDaySpan:
+    """An all-day event, as a run of day columns."""
+
+    first: int
+    """Index of the first day column it covers."""
+    last: int
+    """Index of the last day column it covers."""
+    text: str
+    """Event title."""
+    lane: int = 0
+    """Horizontal strip lane, set by ``_place_all_day``."""
+
+
+@dataclass(slots=True)
+class _Segment:
+    """One day's slice of a timed event, in minutes since midnight."""
+
+    sm: int
+    """Start minute of the slice."""
+    em: int
+    """End minute of the slice."""
+    text: str
+    """Event title."""
+    label_sm: int
+    """Start minute of the whole event, shown as the time label."""
+    end: int = 0
+    """Minute the drawn box reaches; set by ``_pack_day``."""
+    lane: int = 0
+    """Side-by-side lane; set by ``_assign_lanes``."""
+    lanes: int = 1
+    """Lane count of the cluster; set by ``_assign_lanes``."""
+
+
+@dataclass(frozen=True, slots=True)
+class _Overflow:
+    """Stand-in chip for the out-of-grid events a column cannot list."""
+
+    count: int
+    """Number of events it stands for."""
+
+
+class _WeekEvents(NamedTuple):
+    """The events of one week, sorted by where they are drawn."""
+
+    all_day: list[_AllDaySpan]
+    """All-day spans in the strip under the day headers."""
+    timed: list[list[_Segment]]
+    """Per day, the segments inside the grid, clipped to it."""
+    before: list[list[_Segment]]
+    """Per day, the segments that end before the grid starts."""
+    after: list[list[_Segment]]
+    """Per day, the segments that start after the grid ends."""
 
 
 def _snap_gray(value: int, levels: int) -> str:
@@ -244,7 +300,7 @@ def _wrap_text(
     return lines
 
 
-def _assign_lanes(segs: list[dict[str, Any]]) -> None:
+def _assign_lanes(segs: list[_Segment]) -> None:
     """Assign side-by-side lanes to overlapping event segments.
 
     Segments are grouped into clusters of transitively overlapping
@@ -256,32 +312,32 @@ def _assign_lanes(segs: list[dict[str, Any]]) -> None:
             where ``end`` is the minute the drawn box reaches.  Sorted
             and annotated in place with ``lane`` and ``lanes``.
     """
-    segs.sort(key=lambda s: (s["sm"], -s["end"]))
-    clusters: list[list[dict[str, Any]]] = []
-    cur: list[dict[str, Any]] = []
+    segs.sort(key=lambda s: (s.sm, -s.end))
+    clusters: list[list[_Segment]] = []
+    cur: list[_Segment] = []
     cur_end = -1
     for seg in segs:
-        if cur and seg["sm"] >= cur_end:
+        if cur and seg.sm >= cur_end:
             clusters.append(cur)
             cur = []
             cur_end = -1
         cur.append(seg)
-        cur_end = max(cur_end, seg["end"])
+        cur_end = max(cur_end, seg.end)
     if cur:
         clusters.append(cur)
     for cluster in clusters:
         lane_ends: list[int] = []
         for seg in cluster:
             for li, end in enumerate(lane_ends):
-                if end <= seg["sm"]:
-                    seg["lane"] = li
-                    lane_ends[li] = seg["end"]
+                if end <= seg.sm:
+                    seg.lane = li
+                    lane_ends[li] = seg.end
                     break
             else:
-                seg["lane"] = len(lane_ends)
-                lane_ends.append(seg["end"])
+                seg.lane = len(lane_ends)
+                lane_ends.append(seg.end)
         for seg in cluster:
-            seg["lanes"] = len(lane_ends)
+            seg.lanes = len(lane_ends)
 
 
 def _collect_week_events(
@@ -289,12 +345,7 @@ def _collect_week_events(
     days: list[date],
     gs: int,
     ge: int,
-) -> tuple[
-    list[dict[str, Any]],
-    list[list[dict[str, Any]]],
-    list[list[dict[str, Any]]],
-    list[list[dict[str, Any]]],
-]:
+) -> _WeekEvents:
     """Sort raw events into all-day spans, grid segments and chips.
 
     Timed events are split at midnight so multi-day events appear on
@@ -309,14 +360,13 @@ def _collect_week_events(
         ge: Grid end in minutes since midnight.
 
     Returns:
-        ``(all_day, timed, before, after)``.  ``all_day`` holds
-        ``first``/``last`` day indices and ``text``; the other three
-        hold one list of ``sm``/``em`` segments per day.
+        The all-day spans and, per day, the in-grid, before-grid and
+        after-grid segments.
     """
-    all_day: list[dict[str, Any]] = []
-    timed: list[list[dict[str, Any]]] = [[] for _ in days]
-    before: list[list[dict[str, Any]]] = [[] for _ in days]
-    after: list[list[dict[str, Any]]] = [[] for _ in days]
+    all_day: list[_AllDaySpan] = []
+    timed: list[list[_Segment]] = [[] for _ in days]
+    before: list[list[_Segment]] = [[] for _ in days]
+    after: list[list[_Segment]] = [[] for _ in days]
     week_start = days[0]
     for ev in raw_events:
         summary = str(ev.get("summary", ""))
@@ -328,9 +378,7 @@ def _collect_week_events(
             first_i = max(0, (start_dt.date() - week_start).days)
             last_i = min(len(days) - 1, (last - week_start).days)
             if first_i <= last_i:
-                all_day.append(
-                    {"first": first_i, "last": last_i, "text": summary}
-                )
+                all_day.append(_AllDaySpan(first_i, last_i, summary))
             continue
         for i, day in enumerate(days):
             day_start = datetime.combine(day, time.min)
@@ -348,18 +396,18 @@ def _collect_week_events(
             # Label with the event's real start, not the midnight cut
             # of a continuation segment.
             label_sm = start_dt.hour * 60 + start_dt.minute
-            seg = {"sm": sm, "em": em, "text": summary, "label_sm": label_sm}
+            seg = _Segment(sm, em, summary, label_sm)
             if em <= gs:
                 before[i].append(seg)
             elif sm >= ge:
                 after[i].append(seg)
             else:
-                seg["sm"], seg["em"] = max(sm, gs), min(em, ge)
+                seg.sm, seg.em = max(sm, gs), min(em, ge)
                 timed[i].append(seg)
-    return all_day, timed, before, after
+    return _WeekEvents(all_day, timed, before, after)
 
 
-def _place_all_day(all_day: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _place_all_day(all_day: list[_AllDaySpan]) -> list[_AllDaySpan]:
     """Assign all-day spans to horizontal lanes.
 
     Each span takes the first lane whose days are all free.  Spans
@@ -367,15 +415,15 @@ def _place_all_day(all_day: list[dict[str, Any]]) -> list[dict[str, Any]]:
     dropped.
 
     Args:
-        all_day: Spans with ``first``/``last`` day indices.
+        all_day: Spans to place.
 
     Returns:
-        The placed spans, each with an added ``lane`` index.
+        The placed spans, each with its ``lane`` set.
     """
     lanes: list[list[bool]] = []
-    placed: list[dict[str, Any]] = []
-    for item in sorted(all_day, key=lambda a: (a["first"], -a["last"])):
-        span = range(item["first"], item["last"] + 1)
+    placed: list[_AllDaySpan] = []
+    for item in sorted(all_day, key=lambda a: (a.first, -a.last)):
+        span = range(item.first, item.last + 1)
         lane = next(
             (
                 li
@@ -390,12 +438,12 @@ def _place_all_day(all_day: list[dict[str, Any]]) -> list[dict[str, Any]]:
             lanes.append([False] * 7)
         for d in span:
             lanes[lane][d] = True
-        placed.append({**item, "lane": lane})
+        placed.append(replace(item, lane=lane))
     return placed
 
 
 def _pack_day(
-    segs: list[dict[str, Any]],
+    segs: list[_Segment],
     px_per_min: float,
     single_px: int,
     multi_px: int,
@@ -420,9 +468,9 @@ def _pack_day(
     for _ in range(_PACK_PASSES):
         for seg in segs:
             px = multi_px if id(seg) in multi else single_px
-            seg["end"] = max(seg["em"], seg["sm"] + math.ceil(px / px_per_min))
+            seg.end = max(seg.em, seg.sm + math.ceil(px / px_per_min))
         _assign_lanes(segs)
-        now = {id(seg) for seg in segs if seg["lanes"] > 1}
+        now = {id(seg) for seg in segs if seg.lanes > 1}
         if now == multi:
             return
         multi = now
@@ -513,9 +561,8 @@ def _build_week_calendar_context(
             raw_events.extend(
                 entity_state.get("attributes", {}).get("week_events", [])
             )
-    all_day, timed, before, after = _collect_week_events(
-        raw_events, days, gs, ge
-    )
+    week = _collect_week_events(raw_events, days, gs, ge)
+    timed, before, after = week.timed, week.before, week.after
 
     # Font sizes and vertical layout.
     title_font_sz, content_y, content_h = _title_layout(title, svg_h)
@@ -528,8 +575,8 @@ def _build_week_calendar_context(
     gutter_w = round(hour_font * (3.4 if time_format == "12" else 2.2))
     lane_h = round(day_font * 1.3)
 
-    placed_all_day = _place_all_day(all_day)
-    n_lanes = max((p["lane"] + 1 for p in placed_all_day), default=0)
+    placed_all_day = _place_all_day(week.all_day)
+    n_lanes = max((p.lane + 1 for p in placed_all_day), default=0)
     strip_h = n_lanes * lane_h
     chip_h = line_h + 2
     top_chips = min(max(len(c) for c in before), _MAX_CHIPS)
@@ -579,7 +626,7 @@ def _build_week_calendar_context(
         label: str = "",
         pad: int = 2,
         max_lines: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, object]:
         """Lay out ``title`` beside the start ``label`` in a box.
 
         Tries the title sizes from the largest down and keeps the
@@ -599,8 +646,8 @@ def _build_week_calendar_context(
             max_lines: Upper limit for the number of lines.
 
         Returns:
-            The font size (``font_sz``) and the vertically centred
-            ``lines`` for the template.
+            The box with its font size and the vertically centred
+            ``lines``, for the template.
         """
         inner_w = w - 6
         time_w = time_font.getlength(label) if label else 0
@@ -628,6 +675,10 @@ def _build_week_calendar_context(
         lh = _ev_line_h(chosen)
         top = y0 + (h - len(lines) * lh) // 2
         return {
+            "x": x0,
+            "y": y0,
+            "w": w,
+            "h": h,
             "font_sz": chosen,
             "lines": [
                 {
@@ -660,61 +711,50 @@ def _build_week_calendar_context(
         )
 
     # All-day bars.
-    all_day_out: list[dict[str, Any]] = []
+    all_day_out: list[dict[str, object]] = []
     for item in placed_all_day:
-        bx, bw = day_span(item["first"], item["last"])
-        by = content_y + header_h + item["lane"] * lane_h + 1
+        bx, bw = day_span(item.first, item.last)
+        by = content_y + header_h + item.lane * lane_h + 1
         all_day_out.append(
-            {
-                "x": bx,
-                "y": by,
-                "w": bw,
-                "h": lane_h - 2,
-                **fit_title(item["text"], bx, by, bw, lane_h - 2, max_lines=1),
-            }
+            fit_title(item.text, bx, by, bw, lane_h - 2, max_lines=1)
         )
 
     # Out-of-grid chips, stacked at the column's top/bottom.
-    chips: list[dict[str, Any]] = []
+    chips: list[dict[str, object]] = []
     for i in range(7):
         bx, bw = day_span(i, i)
         for segs, count, base_y in (
             (before[i], top_chips, content_y + header_h + strip_h),
             (after[i], bottom_chips, grid_bottom),
         ):
-            shown = sorted(segs, key=lambda s: s["sm"])
+            ordered = sorted(segs, key=lambda s: s.sm)
+            shown: list[_Segment | _Overflow] = [*ordered]
             if len(shown) > _MAX_CHIPS:
                 extra = len(shown) - _MAX_CHIPS + 1
-                shown = [*shown[: _MAX_CHIPS - 1], {"overflow": extra}]
-            for k, seg in enumerate(shown[:count]):
+                shown = [*shown[: _MAX_CHIPS - 1], _Overflow(extra)]
+            for k, chip in enumerate(shown[:count]):
                 cy = base_y + k * chip_h + 1
-                if "overflow" in seg:
+                if isinstance(chip, _Overflow):
                     label = ""
-                    chip_text = f"+{seg['overflow']}"
+                    chip_text = f"+{chip.count}"
                 else:
-                    label = _fmt_hm(seg["label_sm"], time_format)
-                    chip_text = str(seg["text"])
+                    label = _fmt_hm(chip.label_sm, time_format)
+                    chip_text = chip.text
                 chips.append(
-                    {
-                        "x": bx,
-                        "y": cy,
-                        "w": bw,
-                        "h": chip_h - 2,
-                        **fit_title(
-                            chip_text,
-                            bx,
-                            cy,
-                            bw,
-                            chip_h - 2,
-                            label,
-                            pad=0,
-                            max_lines=1,
-                        ),
-                    }
+                    fit_title(
+                        chip_text,
+                        bx,
+                        cy,
+                        bw,
+                        chip_h - 2,
+                        label,
+                        pad=0,
+                        max_lines=1,
+                    )
                 )
 
     # In-grid events.
-    events: list[dict[str, Any]] = []
+    events: list[dict[str, object]] = []
     # Minimum box heights: one line alone in a lane; time plus one
     # title line (two lines) when sharing a column.
     single_px = line_h + 2
@@ -727,28 +767,18 @@ def _build_week_calendar_context(
             # ends one pixel before its right neighbour (the next lane
             # or the gridline), so boxes never merge into each other
             # or into the gridline.
-            lanes_n = seg["lanes"]
-            ex = left + round(seg["lane"] * (right - left) / lanes_n)
-            ex_right = left + round(
-                (seg["lane"] + 1) * (right - left) / lanes_n
-            )
+            lanes_n = seg.lanes
+            ex = left + round(seg.lane * (right - left) / lanes_n)
+            ex_right = left + round((seg.lane + 1) * (right - left) / lanes_n)
             ew = ex_right - ex - 1
-            ey = grid_top + round((seg["sm"] - gs) * px_per_min)
+            ey = grid_top + round((seg.sm - gs) * px_per_min)
             eh = max(
                 multi_px if lanes_n > 1 else single_px,
-                round((seg["em"] - seg["sm"]) * px_per_min) - 1,
+                round((seg.em - seg.sm) * px_per_min) - 1,
             )
             ey = max(grid_top, min(ey, grid_bottom - eh))
-            label = _fmt_hm(seg["label_sm"], time_format)
-            events.append(
-                {
-                    "x": ex,
-                    "y": ey,
-                    "w": ew,
-                    "h": eh,
-                    **fit_title(seg["text"], ex, ey, ew, eh, label),
-                }
-            )
+            label = _fmt_hm(seg.label_sm, time_format)
+            events.append(fit_title(seg.text, ex, ey, ew, eh, label))
 
     # Hour gridlines; label every other hour when rows are tight.
     hour_px = 60 * px_per_min
