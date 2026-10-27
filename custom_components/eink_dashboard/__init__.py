@@ -16,11 +16,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import hashlib
 import json
 import logging
-import zoneinfo
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
@@ -35,6 +35,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.icon import async_get_icons
+from homeassistant.util import dt as dt_util
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -727,10 +728,10 @@ async def _fetch_week_calendar_events(
         return
 
     tz_name = _ha_time_zone(hass)
-    try:
-        tz: dt.tzinfo = zoneinfo.ZoneInfo(tz_name) if tz_name else dt.UTC
-    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
-        tz = dt.UTC
+    tz: dt.tzinfo = dt.UTC
+    if tz_name:
+        with contextlib.suppress(ValueError):
+            tz = await dt_util.async_get_time_zone(tz_name) or dt.UTC
     today = dt.datetime.now(tz).date()
     start_dt = dt.datetime.combine(
         today - timedelta(days=6), dt.time.min, tzinfo=tz

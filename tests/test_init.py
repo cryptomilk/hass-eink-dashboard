@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -730,6 +731,25 @@ class TestCalendarFetchers:
         attrs = states["calendar.home"]["attributes"]
         assert "week_events" in attrs
         assert "events" not in attrs
+
+    @pytest.mark.parametrize(
+        ("time_zone", "is_utc"),
+        [("Europe/Zurich", False), ("Nowhere/Land", True), ("", True)],
+    )
+    async def test_week_fetcher_queries_in_ha_time_zone(
+        self, time_zone: str, is_utc: bool
+    ) -> None:
+        # The query window starts at local midnight in HA's zone; an
+        # unknown or empty zone falls back to UTC.
+        hass, states = self._hass(), self._states()
+        hass.config.time_zone = time_zone
+        widgets = [{"type": "week_calendar", "entity": "calendar.home"}]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        data = hass.services.async_call.await_args.args[2]
+        start = dt.datetime.fromisoformat(data["start_date_time"])
+        assert (start.utcoffset() == dt.timedelta(0)) is is_utc
 
     async def test_week_fetcher_warns_when_fetch_fails(
         self, caplog: pytest.LogCaptureFixture
