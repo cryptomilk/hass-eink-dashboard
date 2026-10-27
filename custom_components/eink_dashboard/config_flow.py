@@ -74,6 +74,7 @@ from .const import (
     FontFamily,
     NumberFormat,
     TimeFormat,
+    WebhookTarget,
     apply_screen_portion,
     resolve_device_preset,
     resolve_display,
@@ -847,6 +848,10 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["webhook_url"] = "invalid_url"
             else:
                 name = validated["label"] or self._name
+                target: WebhookTarget = {
+                    "name": name,
+                    "url": validated["webhook_url"],
+                }
                 return self.async_create_entry(
                     title=self._name,
                     data={},
@@ -854,12 +859,7 @@ class EinkDashboardConfigFlow(ConfigFlow, domain=DOMAIN):
                         **self._data,
                         "exposure": DEFAULT_EXPOSURE,
                         "saturation": DEFAULT_SATURATION,
-                        "webhook_urls": [
-                            {
-                                "name": name,
-                                "url": validated["webhook_url"],
-                            }
-                        ],
+                        "webhook_urls": [target],
                     },
                 )
         return self.async_show_form(
@@ -919,7 +919,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Show the options menu, adding remove_webhook if webhooks exist."""
-        webhooks = self.config_entry.options.get("webhook_urls", [])
+        webhooks: list[WebhookTarget] = self.config_entry.options.get(
+            "webhook_urls", []
+        )
         menu_options: list[str] = [
             "device_settings",
             "display_settings",
@@ -983,19 +985,17 @@ class EinkDashboardOptionsFlow(OptionsFlow):
             if not _is_valid_url(validated["webhook_url"]):
                 errors["webhook_url"] = "invalid_url"
             else:
-                existing = self.config_entry.options.get("webhook_urls", [])
+                existing: list[WebhookTarget] = self.config_entry.options.get(
+                    "webhook_urls", []
+                )
                 url = validated["webhook_url"]
                 if any(wh["url"] == url for wh in existing):
                     errors["webhook_url"] = "already_configured"
                 else:
                     opts = deepcopy(dict(self.config_entry.options))
                     name = validated["label"] or self.config_entry.title
-                    opts.setdefault("webhook_urls", []).append(
-                        {
-                            "name": name,
-                            "url": url,
-                        }
-                    )
+                    target: WebhookTarget = {"name": name, "url": url}
+                    opts.setdefault("webhook_urls", []).append(target)
                     return self.async_create_entry(data=opts)
         return self.async_show_form(
             step_id="add_webhook",
@@ -1014,7 +1014,9 @@ class EinkDashboardOptionsFlow(OptionsFlow):
                 wh for wh in opts["webhook_urls"] if wh["url"] != url_to_remove
             ]
             return self.async_create_entry(data=opts)
-        webhooks = self.config_entry.options.get("webhook_urls", [])
+        webhooks: list[WebhookTarget] = self.config_entry.options.get(
+            "webhook_urls", []
+        )
         options: list[SelectOptionDict] = [
             SelectOptionDict(value=wh["url"], label=wh["name"])
             for wh in webhooks

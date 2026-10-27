@@ -56,6 +56,7 @@ from . import (
 from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
+    WebhookTarget,
     WidgetType,
 )
 from .push import async_push_image
@@ -280,7 +281,9 @@ class EinkDashboardImage(ImageEntity):
                     self._etag = f'"{hashlib.sha256(new_bytes).hexdigest()}"'
                     self._attr_image_last_updated = dt_util.utcnow()
                     self.async_write_ha_state()
-                    webhook_urls = self._entry.options.get("webhook_urls", [])
+                    webhook_urls: list[WebhookTarget] = (
+                        self._entry.options.get("webhook_urls", [])
+                    )
                     now = time.monotonic()
                     if (
                         not first_render

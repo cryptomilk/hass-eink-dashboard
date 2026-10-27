@@ -17,13 +17,26 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, TypedDict
 
 type Widget = dict[str, Any]
 """Widget configuration dict passed to context builders."""
 
 type DisplayConfig = dict[str, Any]
 """Display configuration dict with dimensions, states, etc."""
+
+
+class WebhookTarget(TypedDict):
+    """A named webhook that receives the rendered image.
+
+    Stored as a plain dict in the ``webhook_urls`` config entry option.
+    """
+
+    name: str
+    """Label shown in the options flow when removing the target."""
+    url: str
+    """Endpoint that receives the PNG via HTTP POST."""
+
 
 DOMAIN = "eink_dashboard"
 
