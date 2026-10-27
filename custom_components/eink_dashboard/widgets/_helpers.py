@@ -589,6 +589,23 @@ def _resolve_icon_svg(
     return icon_svg, letter
 
 
+def _icon_stroke_width(border: int, display_levels: int) -> int:
+    """Return the icon circle outline width for a display.
+
+    The outline is widened threefold on 2-level displays: a thin
+    stroke would otherwise be anti-aliased to gray and dithered
+    into a broken dot pattern.
+
+    Args:
+        border: Base border width in pixels (WidgetMetrics.border).
+        display_levels: Display grayscale depth.
+
+    Returns:
+        Stroke width in pixels.
+    """
+    return border * 3 if display_levels <= 2 else border
+
+
 def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
     """Return a widget dimension, clamped to >= 1.
 
@@ -952,8 +969,7 @@ def _entity_info_context(
         icon_outline, icon_no_circle = _resolve_icon_style(
             icon_style, state_val, display_levels
         )
-    # Widen outline stroke on 2-level displays to avoid dithering.
-    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    icon_stroke_w = _icon_stroke_width(m.border, display_levels)
     icon_fill = color_to_hex(COLOR_GRAY)
     icon_color = (
         colors["hex_black"]

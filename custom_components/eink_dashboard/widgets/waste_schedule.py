@@ -34,6 +34,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _divider_stroke_width,
+    _icon_stroke_width,
     _list_row_height,
     _max_row_height,
     _metrics_context,
@@ -242,7 +243,7 @@ def _build_waste_schedule_context(
         scale=font_scale,
     )
 
-    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    icon_stroke_w = _icon_stroke_width(m.border, display_levels)
     divider_stroke_w = _divider_stroke_width(widget)
     # SVG strokes are centred on the path; shift odd widths by half a
     # pixel so the line covers whole pixel rows instead of blurring

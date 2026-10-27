@@ -35,6 +35,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _fmt,
+    _icon_stroke_width,
     _metrics_context,
     _resolve_icon_style,
     _resolve_icon_svg,
@@ -169,9 +170,7 @@ def _build_heading_context(
     icon_outline, icon_no_circle = _resolve_icon_style(
         icon_style, display_levels=display_levels
     )
-    # Widen the outline stroke on 2-level displays to avoid
-    # dithering.
-    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    icon_stroke_w = _icon_stroke_width(m.border, display_levels)
     glyph_sz = max(10, font_sz) if icon_no_circle else m.icon_inner
     icon_svg, _ = _resolve_icon_svg(
         icon_override,

@@ -18,10 +18,13 @@ import dataclasses
 import re
 import zoneinfo
 from datetime import UTC, date
-from typing import ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
 from PIL import ImageFont
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from custom_components.eink_dashboard.const import (
     DEFAULT_FONT_FAMILY,
@@ -57,11 +60,18 @@ from custom_components.eink_dashboard.render import (
     resolve_number_format,
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.widgets import (
+    _build_entities_context,
+    _build_entity_context,
+    _build_heading_context,
+    _build_tile_context,
+)
 from custom_components.eink_dashboard.widgets._helpers import (
     CardRow,
     _auto_row_height,
     _card_insets,
     _color_context,
+    _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
     _resolve_icon_style,
@@ -1294,6 +1304,48 @@ class TestHelperFunctions:
         row = CardRow(y=0, primary="x", icon_fill="#000000")
         with pytest.raises(dataclasses.FrozenInstanceError):
             row.primary = "y"  # type: ignore[misc]
+
+    @pytest.mark.parametrize(
+        ("levels", "expected"),
+        [(1, 3), (2, 3), (3, 1), (4, 1), (16, 1)],
+    )
+    def test_icon_stroke_width_threshold(
+        self, levels: int, expected: int
+    ) -> None:
+        """Icon outline is tripled up to 2 levels, unchanged above."""
+        assert _icon_stroke_width(1, levels) == expected
+
+    @pytest.mark.parametrize(
+        ("builder", "widget"),
+        [
+            (_build_tile_context, {"type": "tile", "entity": "sensor.t"}),
+            (_build_entity_context, {"type": "entity", "entity": "sensor.t"}),
+            (
+                _build_entities_context,
+                {"type": "entities", "entities": ["sensor.t"]},
+            ),
+            (
+                _build_heading_context,
+                {"type": "heading", "heading": "Hi", "icon": "mdi:home"},
+            ),
+        ],
+    )
+    def test_widgets_use_shared_icon_stroke_width(
+        self, builder: Callable[..., dict[str, Any]], widget: dict[str, Any]
+    ) -> None:
+        """Widget contexts take icon_stroke_w from the shared helper."""
+        widget = {**widget, "x": 0, "y": 0, "w": 400, "h": 80}
+        states = {"sensor.t": {"state": "1", "attributes": {}}}
+        strokes = {}
+        for levels in (2, 16):
+            cfg = {
+                "width": 400,
+                "height": 300,
+                "states": states,
+                "display_levels": levels,
+            }
+            strokes[levels] = builder(widget, cfg)["icon_stroke_w"]
+        assert strokes[2] == 3 * strokes[16]
 
     def test_card_insets_border(self) -> None:
         """Border style insets padding on both sides."""

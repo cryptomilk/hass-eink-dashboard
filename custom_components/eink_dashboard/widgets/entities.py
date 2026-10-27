@@ -33,6 +33,7 @@ from ._helpers import (
     _color_context,
     _divider_stroke_width,
     _fmt,
+    _icon_stroke_width,
     _max_row_height,
     _metrics_context,
     _resolve_icon_style,
@@ -263,9 +264,7 @@ def _build_entities_context(
     lpad = m.padding if x_off == 0 else 0
     rpad = m.padding if r_inset == 0 else 0
 
-    # Widen outline stroke on 2-level displays to avoid
-    # dithering.
-    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    icon_stroke_w = _icon_stroke_width(m.border, display_levels)
     divider_stroke_w = _divider_stroke_width(widget)
     # SVG strokes are centred on the path; shift odd widths by half a
     # pixel so the line covers whole pixel rows instead of blurring

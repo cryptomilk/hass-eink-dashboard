@@ -36,6 +36,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _format_value_unit,
+    _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
     _resolve_icon_style,
@@ -190,9 +191,7 @@ def _build_entity_context(
         icon_outline, icon_no_circle = _resolve_icon_style(
             icon_style, state_val, display_levels
         )
-    # Widened on 2-level displays to avoid dithering, matching the
-    # pattern other widgets use.
-    icon_stroke_w = m_icon.border * 3 if display_levels <= 2 else m_icon.border
+    icon_stroke_w = _icon_stroke_width(m_icon.border, display_levels)
     icon_fill = color_to_hex(COLOR_GRAY)
 
     # Inverted "needs attention" signal: same condition format and

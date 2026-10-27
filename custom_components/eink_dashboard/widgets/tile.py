@@ -32,6 +32,7 @@ from ._helpers import (
     _card_insets,
     _color_context,
     _fmt,
+    _icon_stroke_width,
     _metrics_context,
     _missing_entity_context,
     _resolve_icon_style,
@@ -218,9 +219,7 @@ def _build_tile_context(
     # Filled style always uses gray; state is conveyed by
     # icon_style (filled vs outlined), not fill colour.
     icon_fill = color_to_hex(COLOR_GRAY)
-    # Widen the outline stroke on 2-level displays to avoid
-    # dithering.
-    icon_stroke_w = m.border * 3 if display_levels <= 2 else m.border
+    icon_stroke_w = _icon_stroke_width(m.border, display_levels)
 
     # Inverted "needs attention" signal: same condition format and
     # evaluator as `visibility`, but drives a solid black card with
