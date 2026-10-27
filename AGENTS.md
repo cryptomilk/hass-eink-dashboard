@@ -35,7 +35,8 @@ image entity and a public HTTP endpoint.
   `_color_context()`, `_widget_dim()`, `_card_insets()`, `_metrics_context()`,
   `_title_layout()`, `_auto_row_height()`, `_fmt()`, `_entity_info_context()`,
   `_missing_entity_context()` (blank-canvas fallback for absent entities),
-  `_ACTIVE_STATES`
+  `CardRow` + `_row_context()` (per-row contract of the `card_row` macro
+  for list widgets), `_ACTIVE_STATES`
 - `image.py` — `EinkDashboardImage` (`ImageEntity`), scheduled refresh, ETag tracking
 - `http.py` — unauthenticated HTTP view at `/api/eink_dashboard/{entry_id}/image.png` with ETag/304 support
 - `store.py` — `EinkDashboardStore`, persists widget list via HA's `Store` (`eink_dashboard.{entry_id}`)

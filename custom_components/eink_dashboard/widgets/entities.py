@@ -27,6 +27,7 @@ from ..const import (
     color_to_hex,
 )
 from ._helpers import (
+    CardRow,
     _auto_row_height,
     _card_insets,
     _color_context,
@@ -37,6 +38,7 @@ from ._helpers import (
     _resolve_icon_style,
     _resolve_icon_svg,
     _resolve_precision,
+    _row_context,
     _title_layout,
     _widget_dim,
 )
@@ -389,14 +391,18 @@ def _build_entities_context(
             rows.append(
                 {
                     "row_type": "entity",
-                    "y": row_y,
-                    "primary": primary,
-                    "value": value,
-                    "icon_svg": icon_svg,
-                    "icon_fill": icon_fill,
-                    "icon_outline": icon_outline,
-                    "icon_no_circle": icon_no_circle,
-                    "letter": letter,
+                    **_row_context(
+                        CardRow(
+                            y=row_y,
+                            primary=primary,
+                            value=value,
+                            icon_svg=icon_svg,
+                            icon_fill=icon_fill,
+                            icon_outline=icon_outline,
+                            icon_no_circle=icon_no_circle,
+                            letter=letter,
+                        )
+                    ),
                     "draw_divider": draw_divider,
                 }
             )

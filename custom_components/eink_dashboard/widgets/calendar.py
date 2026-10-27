@@ -31,6 +31,7 @@ from ..const import (
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
+    CardRow,
     _auto_row_height,
     _card_insets,
     _color_context,
@@ -38,6 +39,7 @@ from ._helpers import (
     _list_row_height,
     _max_row_height,
     _metrics_context,
+    _row_context,
     _title_layout,
     _widget_dim,
 )
@@ -243,18 +245,18 @@ def _build_calendar_context(
         value_fill = color_to_hex(COLOR_BLACK)
 
         rows.append(
-            {
-                "y": content_y + i * row_h,
-                "primary": summary,
-                "secondary": "",
-                "value": label,
-                "icon_svg": icon_svg,
-                "icon_outline": use_outline,
-                "icon_fill": icon_fill,
-                "secondary_fill": color_to_hex(COLOR_GRAY),
-                "value_fill": value_fill,
-                "letter": "",
-            }
+            _row_context(
+                CardRow(
+                    y=content_y + i * row_h,
+                    primary=summary,
+                    value=label,
+                    icon_svg=icon_svg,
+                    icon_outline=use_outline,
+                    icon_fill=icon_fill,
+                    secondary_fill=color_to_hex(COLOR_GRAY),
+                    value_fill=value_fill,
+                )
+            )
         )
 
     return {

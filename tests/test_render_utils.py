@@ -58,6 +58,7 @@ from custom_components.eink_dashboard.render import (
 )
 from custom_components.eink_dashboard.svg_render import render_widget_svg
 from custom_components.eink_dashboard.widgets._helpers import (
+    CardRow,
     _auto_row_height,
     _card_insets,
     _color_context,
@@ -66,6 +67,7 @@ from custom_components.eink_dashboard.widgets._helpers import (
     _resolve_icon_style,
     _resolve_precision,
     _resolve_tz,
+    _row_context,
     _temp_gradient_stops,
     _temp_to_rgb,
     _title_layout,
@@ -1269,6 +1271,29 @@ class TestHelperFunctions:
         svg = render_widget_svg(w, config)
         assert 'width="200"' in svg
         assert "<text" not in svg
+
+    def test_row_context_defaults(self) -> None:
+        """A minimal CardRow yields every card_row key with defaults."""
+        ctx = _row_context(CardRow(y=0, primary="x", icon_fill="#000000"))
+        assert ctx == {
+            "y": 0,
+            "primary": "x",
+            "icon_fill": "#000000",
+            "secondary": "",
+            "value": "",
+            "icon_svg": "",
+            "icon_outline": False,
+            "icon_no_circle": False,
+            "letter": "",
+            "secondary_fill": "#000000",
+            "value_fill": "#000000",
+        }
+
+    def test_card_row_frozen(self) -> None:
+        """CardRow rejects mutation after construction."""
+        row = CardRow(y=0, primary="x", icon_fill="#000000")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            row.primary = "y"  # type: ignore[misc]
 
     def test_card_insets_border(self) -> None:
         """Border style insets padding on both sides."""

@@ -152,6 +152,54 @@ def _color_context() -> dict[str, str]:
     }
 
 
+_HEX_BLACK = color_to_hex(COLOR_BLACK)
+
+
+@dataclass(frozen=True, slots=True)
+class CardRow:
+    """Per-row data for one ``card_row`` macro call in a list widget.
+
+    Mirrors the row-specific parameters of ``card_row`` in
+    ``_macros.svg.j2``; shared geometry (row height, insets, fonts)
+    stays in the widget-level context.  Serialise with
+    ``_row_context()`` before placing it in a template's ``rows``.
+
+    Attributes:
+        y: Top edge of the row in absolute SVG coordinates.
+        primary: Main label text.
+        icon_fill: Hex fill color of a solid icon circle.
+        secondary: Sub-label below ``primary``; empty for a
+            single-line row.
+        value: Right-aligned value text; empty omits it.
+        icon_svg: Pre-built icon SVG string; empty falls back to
+            ``letter``.
+        icon_outline: Draw a white circle with a black stroke
+            instead of a solid ``icon_fill`` circle.
+        icon_no_circle: Hide the circle and draw only the glyph.
+        letter: Fallback glyph drawn in the circle when
+            ``icon_svg`` is empty.
+        secondary_fill: Hex color of the secondary text.
+        value_fill: Hex color of the value text.
+    """
+
+    y: int
+    primary: str
+    icon_fill: str
+    secondary: str = ""
+    value: str = ""
+    icon_svg: str = ""
+    icon_outline: bool = False
+    icon_no_circle: bool = False
+    letter: str = ""
+    secondary_fill: str = _HEX_BLACK
+    value_fill: str = _HEX_BLACK
+
+
+def _row_context(row: CardRow) -> dict[str, object]:
+    """Return ``row`` as a dict for a template's ``rows`` list."""
+    return {f.name: getattr(row, f.name) for f in dc_fields(row)}
+
+
 def _resolve_tz(config: DisplayConfig) -> datetime.tzinfo:
     """Return the display time zone from ``config``, defaulting to UTC.
 

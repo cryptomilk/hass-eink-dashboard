@@ -29,6 +29,7 @@ from ..const import (
 )
 from ..svg_render import _mdi_svg_filter
 from ._helpers import (
+    CardRow,
     _auto_row_height,
     _card_insets,
     _color_context,
@@ -36,6 +37,7 @@ from ._helpers import (
     _list_row_height,
     _max_row_height,
     _metrics_context,
+    _row_context,
     _title_layout,
     _widget_dim,
 )
@@ -270,20 +272,21 @@ def _build_waste_schedule_context(
             else color_to_hex(COLOR_GRAY)
         )
         rows.append(
-            {
-                "y": content_y + i * row_h,
-                "primary": label,
-                # Card layout: date as secondary (below primary).
-                # List layout: date as right-aligned value.
-                "secondary": (date_str if layout == "card" else ""),
-                "value": ("" if layout == "card" else date_str),
-                "icon_svg": icon_svg,
-                "icon_outline": use_outline,
-                "icon_fill": icon_fill,
-                "secondary_fill": date_fill,
-                "value_fill": date_fill,
-                "letter": "",
-            }
+            _row_context(
+                CardRow(
+                    y=content_y + i * row_h,
+                    primary=label,
+                    # Card layout: date as secondary (below primary).
+                    # List layout: date as right-aligned value.
+                    secondary=(date_str if layout == "card" else ""),
+                    value=("" if layout == "card" else date_str),
+                    icon_svg=icon_svg,
+                    icon_outline=use_outline,
+                    icon_fill=icon_fill,
+                    secondary_fill=date_fill,
+                    value_fill=date_fill,
+                )
+            )
         )
 
     return {
