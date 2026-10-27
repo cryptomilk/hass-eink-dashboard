@@ -16,15 +16,21 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ...const import (
     COLOR_BLACK,
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
     COLOR_MEDIUM_GRAY,
     DisplayConfig,
-    Widget,
     color_to_hex,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from ...widget_config import GraphWidget
 
 # Fill colors for bar chart entity series: first entity is black,
 # second is gray, third is light gray.  E-ink displays distinguish
@@ -276,7 +282,7 @@ def _bar_threshold_fill(
 
 
 def _normalize_thresholds(
-    widget: Widget,
+    widget: GraphWidget,
 ) -> list[dict[str, object]]:
     """Normalize widget config into a canonical threshold list.
 
@@ -312,9 +318,12 @@ def _normalize_thresholds(
         return sorted(result, key=lambda t: float(str(t["value"])))
 
     # Flat editor keys: threshold_1_value ... threshold_4_value.
+    # Numbered keys built with f-strings can't be checked against
+    # GraphWidget, so read them through an untyped view.
+    flat: Mapping[str, object] = widget
     result = []
     for n in range(1, 5):
-        raw_v = widget.get(f"threshold_{n}_value")
+        raw_v = flat.get(f"threshold_{n}_value")
         if raw_v is None:
             continue
         try:
@@ -324,8 +333,8 @@ def _normalize_thresholds(
         result.append(
             {
                 "value": v,
-                "color": str(widget.get(f"threshold_{n}_color", "")),
-                "shade": str(widget.get(f"threshold_{n}_shade", "")),
+                "color": str(flat.get(f"threshold_{n}_color", "")),
+                "shade": str(flat.get(f"threshold_{n}_shade", "")),
             }
         )
     return sorted(result, key=lambda t: float(str(t["value"])))

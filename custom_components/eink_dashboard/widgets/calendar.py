@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from ..const import (
     COLOR_BLACK,
@@ -26,7 +27,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
@@ -45,9 +45,12 @@ from ._helpers import (
     _widget_dim,
 )
 
+if TYPE_CHECKING:
+    from ..widget_config import CalendarWidget
+
 
 def _build_calendar_context(
-    widget: Widget,
+    widget: CalendarWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the calendar widget.

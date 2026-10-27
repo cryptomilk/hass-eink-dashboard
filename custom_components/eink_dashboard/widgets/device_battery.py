@@ -16,13 +16,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..const import (
     COLOR_BLACK,
     DEFAULT_CARD_STYLE,
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ._helpers import (
@@ -32,9 +33,12 @@ from ._helpers import (
     _widget_dim,
 )
 
+if TYPE_CHECKING:
+    from ..widget_config import DeviceBatteryWidget
+
 
 def _build_device_battery_context(
-    widget: Widget,
+    widget: DeviceBatteryWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the device_battery widget.

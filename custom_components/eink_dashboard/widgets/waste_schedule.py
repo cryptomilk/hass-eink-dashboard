@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
@@ -24,7 +26,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
@@ -43,9 +44,12 @@ from ._helpers import (
     _widget_dim,
 )
 
+if TYPE_CHECKING:
+    from ..widget_config import WasteScheduleEntry, WasteScheduleWidget
+
 
 def _build_waste_schedule_context(
-    widget: Widget,
+    widget: WasteScheduleWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the waste_schedule widget.
@@ -123,7 +127,7 @@ def _build_waste_schedule_context(
     svg_w = _widget_dim(widget, "w", config["width"] - x)
 
     entity_id: str = widget.get("entity", "")
-    entries: list[dict[str, str]] = widget.get("entries", [])
+    entries: list[WasteScheduleEntry] = widget.get("entries", [])
     layout: str = widget.get("layout", "list")
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     title: str = widget.get("title", "")

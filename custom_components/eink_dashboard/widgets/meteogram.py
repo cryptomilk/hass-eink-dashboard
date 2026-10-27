@@ -35,7 +35,6 @@ from ..const import (
     DayLabelFormat,
     DisplayConfig,
     FontWeight,
-    Widget,
 )
 from ..svg_render import _weather_svg_filter
 from ._helpers import (
@@ -58,6 +57,8 @@ from .graph import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from ..widget_config import MeteogramWidget
 
 # Hourly forecast window, in hours, clamped to this range regardless
 # of what the widget config requests.
@@ -94,7 +95,7 @@ _PRECIP_BAR_MAX_FRAC = 0.5
 
 
 def _build_meteogram_context(
-    widget: Widget,
+    widget: MeteogramWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the meteogram widget.
@@ -576,7 +577,7 @@ def _y_axis_layout(
     return grid_values, plot_left, plot_w
 
 
-def _line_width(widget: Widget, h: int) -> int:
+def _line_width(widget: MeteogramWidget, h: int) -> int:
     """Resolve the temperature curve's stroke width.
 
     An explicit ``line_width`` is an absolute pixel value.  When it
@@ -1017,7 +1018,7 @@ def _sample_by_time(points: list[tuple[float, float]], frac: float) -> float:
     return points[-1][1]
 
 
-def _day_label_format(widget: Widget) -> DayLabelFormat:
+def _day_label_format(widget: MeteogramWidget) -> DayLabelFormat:
     """Resolve the day-boundary label format option.
 
     Args:

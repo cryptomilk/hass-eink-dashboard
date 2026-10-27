@@ -22,7 +22,9 @@ import math
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...const import Widget
+    from collections.abc import Mapping
+
+    from ...widget_config import GraphWidget
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -249,7 +251,7 @@ def _extract_attribute_points(
 
 
 def _normalize_entities(
-    widget: Widget,
+    widget: GraphWidget,
 ) -> list[dict[str, object]]:
     """Normalize widget config into a canonical entity descriptor list.
 
@@ -284,7 +286,7 @@ def _normalize_entities(
     entities_cfg = widget.get("entities")
     if isinstance(entities_cfg, list) and entities_cfg:
         raw.extend(
-            item
+            {**item}
             for item in entities_cfg
             if isinstance(item, dict) and item.get("entity")
         )
@@ -311,16 +313,17 @@ def _normalize_entities(
                     ),
                 }
             )
+        # Suffixed keys built with f-strings can't be checked against
+        # GraphWidget, so read them through an untyped view.
+        flat: Mapping[str, object] = widget
         for suffix in ("_2", "_3"):
-            eid2 = str(widget.get(f"entity{suffix}", ""))
+            eid2 = str(flat.get(f"entity{suffix}", ""))
             if eid2:
                 raw.append(
                     {
                         "entity": eid2,
-                        "name": str(widget.get(f"name{suffix}") or ""),
-                        "y_axis": str(
-                            widget.get(f"y_axis{suffix}", "primary")
-                        ),
+                        "name": str(flat.get(f"name{suffix}") or ""),
+                        "y_axis": str(flat.get(f"y_axis{suffix}", "primary")),
                     }
                 )
 

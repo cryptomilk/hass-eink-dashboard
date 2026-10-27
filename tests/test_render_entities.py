@@ -579,6 +579,26 @@ class TestRenderEntities:
             "name override should change rendered text"
         )
 
+    def test_entities_ignores_widget_level_name_and_icon(self) -> None:
+        # Stray widget-level ``name``/``icon`` keys in stored JSON must
+        # not override the per-row entity defaults.
+        base_widget = {
+            "type": "entities",
+            "x": 0,
+            "y": 0,
+            "w": 400,
+            "h": 56,
+            "entities": ["sensor.temperature"],
+        }
+        stray_widget = {
+            **base_widget,
+            "name": "Kitchen Sensor",
+            "icon": "mdi:lightbulb",
+        }
+        img_base = render_to_image([base_widget], self._config())
+        img_stray = render_to_image([stray_widget], self._config())
+        assert img_base.tobytes() == img_stray.tobytes()
+
     def test_entities_value_right_aligned(self) -> None:
         # The state value is rendered near the right edge of the row.
         widgets = [

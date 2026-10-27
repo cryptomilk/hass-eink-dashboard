@@ -28,7 +28,12 @@ from __future__ import annotations
 import datetime
 import logging
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from .widget_config import Condition
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +96,7 @@ def _resolve_entity_state(value: str, states: dict[str, Any]) -> str:
 
 
 def _check_state_condition(
-    condition: dict[str, Any], states: dict[str, Any]
+    condition: Condition, states: dict[str, Any]
 ) -> bool:
     """Evaluate a state or legacy state condition.
 
@@ -142,7 +147,7 @@ def _check_state_condition(
 
 
 def _check_numeric_state_condition(
-    condition: dict[str, Any], states: dict[str, Any]
+    condition: Condition, states: dict[str, Any]
 ) -> bool:
     """Evaluate a numeric_state condition.
 
@@ -210,7 +215,7 @@ def _parse_time_string(time_str: str) -> datetime.time:
 
 
 def _check_time_condition(
-    condition: dict[str, Any],
+    condition: Condition,
     _states: dict[str, Any],
 ) -> bool:
     """Evaluate a time condition.
@@ -279,9 +284,7 @@ def _check_time_condition(
     return True  # unreachable
 
 
-def _check_condition(
-    condition: dict[str, Any], states: dict[str, Any]
-) -> bool:
+def _check_condition(condition: Condition, states: dict[str, Any]) -> bool:
     """Dispatch a single condition to its evaluator.
 
     Conditions without a ``condition`` key are treated as legacy state
@@ -326,7 +329,7 @@ def _check_condition(
 
 
 def check_conditions(
-    conditions: list[dict[str, Any]],
+    conditions: Sequence[Condition],
     states: dict[str, Any],
 ) -> bool:
     """Return True only when all conditions are met.

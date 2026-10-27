@@ -15,7 +15,9 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import re
+import typing
 import zoneinfo
 from datetime import UTC, date
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -26,6 +28,7 @@ from PIL import ImageFont
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+from custom_components.eink_dashboard import widget_config
 from custom_components.eink_dashboard.const import (
     DEFAULT_FONT_FAMILY,
     DEFAULT_PIXEL_FONT_MAX_SCALE,
@@ -33,6 +36,7 @@ from custom_components.eink_dashboard.const import (
     FontFamily,
     FontWeight,
     NumberFormat,
+    WidgetType,
     color_to_hex,
     resolve_pixel_font_max_scale,
 )
@@ -59,7 +63,10 @@ from custom_components.eink_dashboard.render import (
     resolve_font,
     resolve_number_format,
 )
-from custom_components.eink_dashboard.svg_render import render_widget_svg
+from custom_components.eink_dashboard.svg_render import (
+    _SVG_RENDERERS,
+    render_widget_svg,
+)
 from custom_components.eink_dashboard.widgets import (
     _build_entities_context,
     _build_entity_context,
@@ -1908,3 +1915,47 @@ class TestResolvePrecision:
             "attributes": {"device_class": "humidity"},
         }
         assert _resolve_precision({}, state) == 0
+
+
+def _widget_config_name(widget_type: WidgetType) -> str:
+    """Return the ``widget_config`` class name for a widget type."""
+    name = "".join(p.title() for p in widget_type.value.split("_"))
+    return f"{name}Widget"
+
+
+class TestWidgetConfigTypes:
+    """Every widget type has a typed config in ``widget_config``."""
+
+    @pytest.mark.parametrize("widget_type", list(WidgetType))
+    def test_widget_type_has_typed_dict(self, widget_type: WidgetType) -> None:
+        # A widget type added without a ``<Name>Widget`` TypedDict
+        # would leave its builder untyped, so fail until one exists.
+        name = _widget_config_name(widget_type)
+        config_type = getattr(widget_config, name, None)
+        assert config_type is not None, f"missing {name}"
+        assert "type" in config_type.__optional_keys__
+
+    @pytest.mark.parametrize(
+        "config_type",
+        [
+            obj
+            for obj in vars(widget_config).values()
+            if typing.is_typeddict(obj)
+        ],
+        ids=lambda obj: obj.__name__,
+    )
+    def test_typed_dict_has_no_required_keys(self, config_type: type) -> None:
+        # Stored JSON may omit any key, and ``total=False`` is not
+        # inherited, so every class must declare it itself.
+        assert not config_type.__required_keys__
+
+    @pytest.mark.parametrize(
+        ("widget_type", "builder"), list(_SVG_RENDERERS.items())
+    )
+    def test_builder_registered_under_matching_type(
+        self, widget_type: WidgetType, builder: Callable[..., object]
+    ) -> None:
+        # The registry takes ``Any`` widgets, so only this test catches
+        # a builder registered under another widget type's key.
+        annotation = inspect.signature(builder).parameters["widget"].annotation
+        assert annotation == _widget_config_name(WidgetType(widget_type))

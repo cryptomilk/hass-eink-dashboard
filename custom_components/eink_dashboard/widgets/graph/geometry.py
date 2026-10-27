@@ -23,11 +23,12 @@ from .._helpers import _fmt, _resolve_tz
 from .axes import _format_timestamp
 
 if TYPE_CHECKING:
-    from ...const import DisplayConfig, Widget
+    from ...const import DisplayConfig
+    from ...widget_config import WidgetBase
 
 
 def _axis_font(
-    widget: Widget | None,
+    widget: WidgetBase | None,
     graph_h: int,
     scale: float,
 ) -> tuple[int, FontWeight]:

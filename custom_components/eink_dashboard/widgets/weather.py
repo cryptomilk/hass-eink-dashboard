@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import markupsafe
 
@@ -28,7 +28,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
 )
 from ..svg_render import (
     _ICONS_DIR,
@@ -45,6 +44,9 @@ from ._helpers import (
     _widget_dim,
 )
 from .graph import _maybe_grayscale_stops
+
+if TYPE_CHECKING:
+    from ..widget_config import WeatherWidget
 
 # Weather base geometry at scale=1.0
 # (font_size == FONT_SIZE_WEATHER == 32).  Each value is multiplied
@@ -329,7 +331,7 @@ def _forecast_divider_extra(
 
 
 def _build_weather_context(
-    widget: Widget,
+    widget: WeatherWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the weather widget.

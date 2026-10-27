@@ -16,19 +16,23 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..const import (
     COLOR_BLACK,
     COLOR_GRAY,
     PADDING,
     DisplayConfig,
-    Widget,
     color_to_hex,
 )
 from ._helpers import _color_context, _widget_dim
 
+if TYPE_CHECKING:
+    from ..widget_config import SeparatorWidget
+
 
 def _build_separator_context(
-    widget: Widget,
+    widget: SeparatorWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the separator widget.

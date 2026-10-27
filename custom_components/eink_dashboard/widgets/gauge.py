@@ -28,7 +28,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
@@ -44,6 +43,8 @@ from ._helpers import (
 
 if TYPE_CHECKING:
     import markupsafe
+
+    from ..widget_config import GaugeWidget
 
 # Gauge type arc configuration: (start_deg, end_deg, arc_angle).
 # Standard: 270° arc with gap at the bottom (lower-left to
@@ -171,7 +172,7 @@ def _match_segment(
 
 
 def _build_gauge_context(
-    widget: Widget,
+    widget: GaugeWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the gauge widget.

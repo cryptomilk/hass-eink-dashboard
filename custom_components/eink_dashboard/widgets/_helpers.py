@@ -33,7 +33,7 @@ import zoneinfo
 from dataclasses import dataclass
 from dataclasses import fields as dc_fields
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -41,6 +41,15 @@ if TYPE_CHECKING:
     import markupsafe
 
     from ..render import WidgetMetrics
+    from ..widget_config import (
+        DecimalsFields,
+        EntityFields,
+        EntityInfoWidget,
+        IconFields,
+        InvertFields,
+        ListFields,
+        WidgetBase,
+    )
 
 from ..conditions import check_conditions
 from ..const import (
@@ -53,7 +62,6 @@ from ..const import (
     DEFAULT_ROW_H,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ..svg_render import _mdi_svg_filter
@@ -348,7 +356,7 @@ _DEVICE_CLASS_DEFAULT_PRECISION: dict[str, int] = {"humidity": 0}
 
 
 def _resolve_precision(
-    widget: Widget,
+    widget: DecimalsFields,
     state: dict[str, Any] | None,
 ) -> int | None:
     """Resolve the decimal precision to display for a widget's value.
@@ -633,7 +641,7 @@ class ResolvedEntity:
 
 
 def _resolve_entity(
-    widget: Widget, config: DisplayConfig
+    widget: EntityFields, config: DisplayConfig
 ) -> ResolvedEntity | None:
     """Look up the widget's ``entity`` in the display states.
 
@@ -687,7 +695,7 @@ class EntityIcon:
 
 
 def _resolve_entity_icon(
-    widget: Widget,
+    widget: IconFields,
     entity: ResolvedEntity,
     icon_inner: int,
     display_levels: int,
@@ -733,7 +741,7 @@ def _resolve_entity_icon(
     )
 
 
-def _resolve_invert(widget: Widget, states: dict[str, Any]) -> bool:
+def _resolve_invert(widget: InvertFields, states: dict[str, Any]) -> bool:
     """Return whether the widget's ``invert_condition`` is met.
 
     The inverted rendering (solid black card, white text/icon) is an
@@ -757,7 +765,9 @@ def _resolve_invert(widget: Widget, states: dict[str, Any]) -> bool:
     )
 
 
-def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
+def _widget_dim(
+    widget: WidgetBase, key: Literal["w", "h"], fallback: int
+) -> int:
     """Return a widget dimension, clamped to >= 1.
 
     Uses the explicit ``widget[key]`` value when present,
@@ -776,7 +786,7 @@ def _widget_dim(widget: Widget, key: str, fallback: int) -> int:
     return max(1, widget.get(key, fallback))
 
 
-def _max_row_height(widget: Widget, config: DisplayConfig) -> int:
+def _max_row_height(widget: ListFields, config: DisplayConfig) -> int:
     """Return the maximum list row height for a widget.
 
     Reads the widget's ``row_height`` (pixels), falling back to the
@@ -816,7 +826,7 @@ def _list_row_height(
     return max(1, min(max_row_h, content_h // max(1, num_rows)))
 
 
-def _divider_stroke_width(widget: Widget) -> int:
+def _divider_stroke_width(widget: ListFields) -> int:
     """Return the stroke width of the dividers between list rows.
 
     Uses the widget's ``divider_width`` as a fixed pixel width on
@@ -928,7 +938,7 @@ def _entity_text_geometry(
     *,
     value_text: str,
     unit_text: str,
-    widget: Widget | None = None,
+    widget: WidgetBase | None = None,
     scale: float = 1.0,
 ) -> EntityTextGeometry:
     """Compute name/value/unit font sizes and positions.
@@ -963,7 +973,7 @@ def _entity_text_geometry(
     """
     from ..render import _load_role_font, resolve_font
 
-    source = widget if widget is not None else {}
+    source: WidgetBase = widget if widget is not None else {}
     name_font_sz, name_weight = resolve_font(
         source,
         "name",
@@ -1014,7 +1024,7 @@ def _entity_text_geometry(
 
 
 def _entity_info_context(
-    widget: Widget,
+    widget: EntityInfoWidget,
     config: DisplayConfig,
     section_h: int,
     svg_w: int,

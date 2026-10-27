@@ -16,17 +16,21 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..const import (
     COLOR_BLACK,
     DisplayConfig,
-    Widget,
     color_to_hex,
 )
 from ._helpers import _color_context, _widget_dim
 
+if TYPE_CHECKING:
+    from ..widget_config import FrameWidget
+
 
 def _build_frame_context(
-    widget: Widget,
+    widget: FrameWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the frame widget.

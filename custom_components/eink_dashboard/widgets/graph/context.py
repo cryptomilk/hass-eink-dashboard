@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import datetime
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ...const import (
     COLOR_BLACK,
@@ -28,7 +28,6 @@ from ...const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from .._helpers import (
@@ -62,6 +61,9 @@ from .geometry import (
 )
 from .series import _bar_series, _line_series
 
+if TYPE_CHECKING:
+    from ...widget_config import GraphWidget
+
 # Allowed range for x_axis_ticks / y_axis_ticks; matches the editor's
 # number selector.  The minimum is also the default (min/max labels).
 _MIN_AXIS_TICKS = 2
@@ -70,7 +72,7 @@ _MAX_AXIS_TICKS = 12
 
 def _fix_header_layout(
     ctx: dict[str, object],
-    widget: Widget,
+    widget: GraphWidget,
     header_h: int,
     svg_w: int,
     display_levels: int,
@@ -221,7 +223,7 @@ def _combined_state_text(
     states: dict[str, Any],
     config: DisplayConfig,
     show_state: bool,
-    widget: Widget,
+    widget: GraphWidget,
 ) -> str | None:
     """Build a " / "-joined state string for multi-entity headers.
 
@@ -275,7 +277,7 @@ def _combined_state_text(
 
 def _build_header_context(
     entity_descs: list[dict[str, object]],
-    widget: Widget,
+    widget: GraphWidget,
     config: DisplayConfig,
     states_dict: dict[str, object],
     header_h: int,
@@ -320,11 +322,9 @@ def _build_header_context(
     for desc in entity_descs:
         eid = str(desc["entity"])
         name_override = str(desc.get("name", ""))
-        hw: dict[str, object] = {
-            **widget,
-            "entity": eid,
-            "hide_icon": not show_icon,
-        }
+        hw = widget.copy()
+        hw["entity"] = eid
+        hw["hide_icon"] = not show_icon
         if name_override:
             hw["name"] = name_override
         ctx = _entity_info_context(hw, config, header_h, svg_w, svg_h)
@@ -518,7 +518,7 @@ def _collect_series_data(
 def _axis_unit(
     entity_descs: list[dict[str, object]],
     states: dict[str, object],
-    widget: Widget,
+    widget: GraphWidget,
     *,
     secondary: bool,
 ) -> str:
@@ -555,7 +555,9 @@ def _axis_unit(
     return ""
 
 
-def _tick_count(widget: Widget, key: str) -> int:
+def _tick_count(
+    widget: GraphWidget, key: Literal["x_axis_ticks", "y_axis_ticks"]
+) -> int:
     """Return a validated axis tick count from the widget config.
 
     The editor limits tick counts to 2-12, but stored configs may
@@ -640,7 +642,7 @@ def _x_axis_ticks(
 
 
 def _build_graph_context(
-    widget: Widget,
+    widget: GraphWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the graph widget.

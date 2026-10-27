@@ -21,6 +21,8 @@ from typing import TYPE_CHECKING, NamedTuple
 if TYPE_CHECKING:
     import markupsafe
 
+    from ..widget_config import HeadingWidget
+
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -28,7 +30,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ._helpers import (
@@ -55,7 +56,7 @@ class _HeadingBadgeDatum(NamedTuple):
 
 
 def _build_heading_context(
-    widget: Widget,
+    widget: HeadingWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the heading widget.

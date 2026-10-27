@@ -16,18 +16,21 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from ..const import DEFAULT_ROW_H, PADDING, DisplayConfig, Widget
+from ..const import DEFAULT_ROW_H, PADDING, DisplayConfig
 from ._helpers import (
     _entity_info_context,
     _missing_entity_context,
     _widget_dim,
 )
 
+if TYPE_CHECKING:
+    from ..widget_config import SensorLimits, SensorWidget
+
 
 def _build_sensor_context(
-    widget: Widget,
+    widget: SensorWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the sensor widget.
@@ -101,7 +104,7 @@ def _build_sensor_context(
     graph: str | None = widget.get("graph")
     detail: int = int(float(widget.get("detail", 1)))
     hours_to_show: int = int(float(widget.get("hours_to_show", 24)))
-    limits: dict[str, float] | None = widget.get("limits")
+    limits: SensorLimits | None = widget.get("limits")
     if limits is None:
         # The frontend stores Y-axis bounds as flat keys rather
         # than a nested dict (ha-form does not support nested

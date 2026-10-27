@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from ..const import (
     COLOR_GRAY,
     DEFAULT_CARD_STYLE,
@@ -23,7 +25,6 @@ from ..const import (
     PADDING,
     DisplayConfig,
     FontWeight,
-    Widget,
     color_to_hex,
 )
 from ._helpers import (
@@ -43,9 +44,12 @@ from ._helpers import (
     _widget_dim,
 )
 
+if TYPE_CHECKING:
+    from ..widget_config import EntitiesWidget, EntityInfoWidget
+
 
 def _build_entities_context(
-    widget: Widget,
+    widget: EntitiesWidget,
     config: DisplayConfig,
 ) -> dict[str, object]:
     """Build Jinja2 template context for the entities widget.
@@ -339,12 +343,17 @@ def _build_entities_context(
             # Per-row view of the widget: the row's entity, name and
             # icon replace the widget-level keys, while decimals,
             # icon_style and hide_icon still apply to every row.
-            row_widget = {
-                **widget,
-                "entity": cls["entity_id"],
-                "name": cls["name_override"],
-                "icon": str(_raw_icon) if _raw_icon is not None else None,
-            }
+            row_widget: EntityInfoWidget = {"entity": str(cls["entity_id"])}
+            if "decimals" in widget:
+                row_widget["decimals"] = widget["decimals"]
+            if "icon_style" in widget:
+                row_widget["icon_style"] = widget["icon_style"]
+            if "hide_icon" in widget:
+                row_widget["hide_icon"] = widget["hide_icon"]
+            if cls["name_override"] is not None:
+                row_widget["name"] = str(cls["name_override"])
+            if _raw_icon is not None:
+                row_widget["icon"] = str(_raw_icon)
             entity = _resolve_entity(row_widget, config)
             if entity is None:
                 # Unreachable: absent entities were filtered out

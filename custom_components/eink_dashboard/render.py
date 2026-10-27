@@ -57,6 +57,8 @@ from .svg_render import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from .widget_config import WidgetBase
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -154,7 +156,7 @@ def _load_role_font(
 
 
 def resolve_font(
-    widget: Widget,
+    widget: WidgetBase,
     role: str,
     default_size: int,
     default_weight: FontWeight = FontWeight.REGULAR,

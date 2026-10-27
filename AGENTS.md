@@ -50,6 +50,10 @@ image entity and a public HTTP endpoint.
 - `push.py` — `async_push_image(session, url, image_bytes)`: HTTP POST of PNG bytes to a webhook URL
 - `sensor.py` — `EinkDashboardSensor`, exposes dashboard state as an HA sensor entity
 - `const.py` — enums, shared constants, and defaults
+- `widget_config.py` — static-only `TypedDict` per widget type (`TileWidget`,
+  ...) plus shared mixins (`WidgetBase`, `EntityFields`, ...) that helpers
+  accept; widgets stay plain JSON dicts at runtime. `ty` checks subscripts
+  (`widget["x"]`) but not `.get("x")` keys
 
 **MDI icons**: MDI icons are resolved at runtime by `_mdi_svg_filter()`
 in `svg_render.py` via a two-stage lookup:
@@ -79,12 +83,15 @@ configs): `TEXT` (superseded by `HEADING`), `SENSOR_ROWS`,
 
 **Adding a widget type**:
 1. Add the new value to `WidgetType` in `const.py`
-2. Create `templates/foo.svg.j2` (may import `_macros.svg.j2` helpers)
-3. Write `_build_foo_context(widget, config) -> dict` in `widgets/foo.py`
-4. Re-export from `widgets/__init__.py` and register in
+2. Add a `FooWidget` TypedDict with `total=False` to `widget_config.py`
+   (tests enforce both)
+3. Create `templates/foo.svg.j2` (may import `_macros.svg.j2` helpers)
+4. Write `_build_foo_context(widget: FooWidget, config) -> dict` in
+   `widgets/foo.py`
+5. Re-export from `widgets/__init__.py` and register in
    `_SVG_RENDERERS` in `svg_render.py`
-5. Add the widget type to `frontend/src/types/ha.d.ts`
-6. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
+6. Add the widget type to `frontend/src/types/ha.d.ts`
+7. Add the schema and entry to `WIDGET_TYPES` in `frontend/src/eink-dashboard-editor.ts`
 
 **Converting or redesigning a widget type** (PIL→SVG migration or new
 widget):

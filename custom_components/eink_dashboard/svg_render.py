@@ -36,6 +36,7 @@ import json
 import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from xml.sax.saxutils import quoteattr
 
 import defusedxml.ElementTree as ET
@@ -550,7 +551,10 @@ _jinja_env = _make_jinja_env(
     jinja2.FileSystemLoader(str(_TEMPLATE_DIR)),
 )
 
-type SvgContextFn = Callable[[Widget, DisplayConfig], dict[str, object]]
+# The widget parameter is ``Any``: dispatch on ``widget["type"]`` is
+# where untyped stored JSON becomes one of the per-type widget configs
+# in ``widget_config.py``, so each builder declares its own type.
+type SvgContextFn = Callable[[Any, DisplayConfig], dict[str, object]]
 
 # Import widget builders at module bottom to avoid circular imports:
 # widget modules import from _helpers which imports _mdi_svg_filter
