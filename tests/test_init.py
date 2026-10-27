@@ -731,6 +731,21 @@ class TestCalendarFetchers:
         assert "week_events" in attrs
         assert "events" not in attrs
 
+    async def test_week_fetcher_warns_when_fetch_fails(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A failing calendar service leaves the widget blank, so the
+        # failure must reach the log at warning level.
+        hass, states = self._hass(), self._states()
+        hass.services.async_call.side_effect = Exception("service down")
+        widgets = [{"type": "week_calendar", "entity": "calendar.home"}]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        assert "week_events" not in states["calendar.home"]["attributes"]
+        assert "Could not fetch week calendar events" in caplog.text
+        assert "service down" in caplog.text
+
     async def test_fetchers_keep_separate_keys_on_one_entity(self) -> None:
         # With both widget types on one calendar, each fetcher writes
         # its own key, so neither overwrites the other.

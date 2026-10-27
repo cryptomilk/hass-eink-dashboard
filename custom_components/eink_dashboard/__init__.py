@@ -770,9 +770,11 @@ async def _fetch_week_calendar_events(
             )
             events.sort(key=lambda e: str(e.get("start", "")))
             states[entity_id]["attributes"]["week_events"] = events
-        except Exception:  # noqa: BLE001
-            _LOGGER.debug(
-                "Could not fetch week calendar events for %s", entity_id
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Could not fetch week calendar events for %s: %s",
+                entity_id,
+                err,
             )
 
 
