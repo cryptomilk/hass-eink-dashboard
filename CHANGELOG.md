@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-10-29
+
+### Added
+
+- **Font overrides**: every text widget lets you set the size and
+  weight (regular, medium, bold) of its text parts in the widget
+  editor.
+- **Sharp text on low-resolution displays**: TRMNL displays now use a
+  bundled pixel font. Larger text falls back to Inter. See the new
+  guide for sharp text on low-resolution displays.
+- **"Black text"** and **"Black dividers"** display options.
+- **Dither options "None" and "Black and white"**.
+- **Custom display resolution** can now be edited in Device settings.
+- **Decimal precision**: values follow the precision configured in
+  Home Assistant, with an explicit override.
+- **List widgets**: row height, hide icon, and divider width options.
+- **Graph widget**: configurable axis ticks, tick marks, grid lines,
+  and units.
+- **Meteogram widget**: day label format and line appearance options.
+
+### Changed
+
+- The `bold_value` option is replaced by font overrides. Existing
+  configs are migrated automatically.
+- The fallback font for large text on TRMNL displays is now Inter.
+
+### Fixed
+
+- Graph and Meteogram times now use Home Assistant's time zone.
+- Graph legend and extrema no longer overlap the x-axis labels, and
+  Meteogram grid labels no longer overdraw the plot.
+- Meteogram temperature curve is drawn black on 2-level displays.
+- Long text in list rows is truncated instead of overlapping the
+  value.
+- Calendar events are sorted by start time.
+- Saving a dashboard layout with certain widget options no longer
+  fails.
+- Card and editor updates are loaded after an upgrade without a
+  manual cache refresh.
+- The widget list in the card editor is no longer clipped.
+
 ## [0.8.0] - 2026-09-30
 
 ### Added
@@ -317,6 +358,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial release.
 
+[0.9.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/cryptomilk/hass-eink-dashboard/compare/v0.5.0...v0.6.0
