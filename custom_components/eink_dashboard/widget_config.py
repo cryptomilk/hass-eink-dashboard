@@ -302,6 +302,14 @@ class GraphWidget(EntityInfoWidget, total=False):
 
     entities: list[str | GraphEntityConfig]
     """Series; replaces ``entity`` when set."""
+    title: str
+    """Header title override.
+
+    Replaces the header name independently of the first series'
+    legend label; empty or missing shows the first series' name.
+    Unlike ``ListFields.title`` this is drawn in the entity header,
+    not above a list of rows.
+    """
     data_source: str
     """``"history"`` or ``"attribute"`` for the single series."""
     attribute_timestamp_key: str

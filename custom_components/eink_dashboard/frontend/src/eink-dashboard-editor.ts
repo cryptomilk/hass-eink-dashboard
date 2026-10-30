@@ -1563,6 +1563,7 @@ export const SCHEMAS: Record<
           selector: { entity: {} },
         },
         { name: "name", selector: { text: {} } },
+        { name: "title", selector: { text: {} } },
         { name: "icon", selector: { icon: {} } },
         { name: "unit", selector: { text: {} } },
         decimalsSelector(),

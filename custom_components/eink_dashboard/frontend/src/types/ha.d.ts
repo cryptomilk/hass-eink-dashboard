@@ -1130,6 +1130,13 @@ export interface GraphWidget extends WidgetBase {
   entity?: string;
   /** Override display name; falls back to the entity's friendly_name. */
   name?: string;
+  /**
+   * Header title override.  When set, the header shows this text
+   * instead of the first series' name; an empty or missing title
+   * keeps the first series' name as the header.  Lets the graph
+   * title differ from the first series' legend label.
+   */
+  title?: string;
   /** MDI icon name override (e.g. ``"mdi:thermometer"``). */
   icon?: string;
   /** Unit string override shown next to the current state value. */

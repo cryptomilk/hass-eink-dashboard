@@ -255,6 +255,15 @@ describe("SCHEMAS", () => {
     }
   });
 
+  it("graph title field is a text field without a default", () => {
+    // An empty title falls back to the first series' name, so the
+    // editor must not seed a value that would override it.
+    const field = findField(SCHEMAS.graph(DISPLAY), "title");
+    expect(field?.selector).toHaveProperty("text");
+    expect(field?.default).toBeUndefined();
+    expect(LABELS).toHaveProperty("title");
+  });
+
   it("graph axis options are labelled booleans defaulting to false", () => {
     // Every axis toggle is off by default and has a label.
     const schema = SCHEMAS.graph(DISPLAY);
