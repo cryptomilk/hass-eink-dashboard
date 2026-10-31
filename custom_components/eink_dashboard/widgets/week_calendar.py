@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
@@ -37,6 +38,8 @@ if TYPE_CHECKING:
 
     from ..const import DisplayConfig
     from ..widget_config import WeekCalendarWidget
+
+_LOGGER = logging.getLogger(__name__)
 
 DEFAULT_START_HOUR = 8
 DEFAULT_END_HOUR = 20
@@ -189,7 +192,7 @@ def _first_weekday_index(first_weekday: str, language: str) -> int:
         return 0
 
 
-def _week_calendar_entity_ids(widget: Mapping[str, object]) -> list[str]:
+def week_calendar_entity_ids(widget: Mapping[str, object]) -> list[str]:
     """Return the calendar entity IDs a week calendar widget shows.
 
     Args:
@@ -205,22 +208,29 @@ def _week_calendar_entity_ids(widget: Mapping[str, object]) -> list[str]:
     return list(dict.fromkeys(str(e) for e in items if e))
 
 
-def _to_naive(raw: str) -> datetime:
-    """Parse a calendar start/end string into a naive datetime.
+def _to_naive(raw: object) -> datetime | None:
+    """Parse a calendar start/end value into a naive datetime.
+
+    Unlike the regular calendar widget's parser this one never falls
+    back to today, so a malformed event can be skipped instead of
+    showing up as a bogus one.
 
     Args:
         raw: ``"YYYY-MM-DD"`` or an ISO 8601 datetime; any timezone
             offset is ignored (HA returns local wall-clock values).
 
     Returns:
-        The parsed datetime; date-only strings give midnight.
+        The parsed datetime (date-only strings give midnight), or
+        ``None`` if ``raw`` is not a non-empty, parseable string.
     """
-    from ..render import _parse_calendar_dt
-
-    day, hm = _parse_calendar_dt(raw)
-    if hm is None:
-        return datetime.combine(day, time.min)
-    return datetime.combine(day, time(hm[0], hm[1]))
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        if len(raw) == 10:
+            return datetime.combine(date.fromisoformat(raw), time.min)
+        return datetime.fromisoformat(raw).replace(tzinfo=None)
+    except ValueError:
+        return None
 
 
 def _fmt_hm(minutes: int, time_format: str) -> str:
@@ -370,10 +380,18 @@ def _collect_week_events(
     after: list[list[_Segment]] = [[] for _ in days]
     week_start = days[0]
     for ev in raw_events:
+        if not isinstance(ev, dict):
+            _LOGGER.debug("Skipping week calendar event %r: not a dict", ev)
+            continue
         summary = str(ev.get("summary", ""))
-        start_raw, end_raw = str(ev.get("start", "")), str(ev.get("end", ""))
-        start_dt, end_dt = _to_naive(start_raw), _to_naive(end_raw)
-        if bool(ev.get("all_day")) or len(start_raw) == 10:
+        start_raw = ev.get("start")
+        start_dt, end_dt = _to_naive(start_raw), _to_naive(ev.get("end"))
+        if start_dt is None or end_dt is None:
+            _LOGGER.debug(
+                "Skipping week calendar event %r: invalid start or end", ev
+            )
+            continue
+        if bool(ev.get("all_day")) or len(str(start_raw)) == 10:
             # The end date of an all-day event is exclusive.
             last = max(start_dt.date(), end_dt.date() - timedelta(days=1))
             first_i = max(0, (start_dt.date() - week_start).days)
@@ -1056,12 +1074,12 @@ def _build_week_calendar_context(
     # Sort events into all-day spans, in-grid segments and chips.
     states = config.get("states", {})
     raw_events: list[dict[str, Any]] = []
-    for entity_id in _week_calendar_entity_ids(widget):
+    for entity_id in week_calendar_entity_ids(widget):
         entity_state = states.get(entity_id)
-        if entity_state:
-            raw_events.extend(
-                entity_state.get("attributes", {}).get("week_events", [])
-            )
+        attrs = entity_state.get("attributes") if entity_state else None
+        events = attrs.get("week_events") if isinstance(attrs, dict) else None
+        if isinstance(events, list):
+            raw_events.extend(events)
     week = _collect_week_events(raw_events, days, gs, ge)
     timed, before, after = week.timed, week.before, week.after
 

@@ -77,7 +77,7 @@ from .data import (
 from .http import EinkLayoutView, EinkPublicImageView
 from .store import EinkDashboardStore
 from .svg_render import render_widget_svg
-from .widgets.week_calendar import _week_calendar_entity_ids
+from .widgets.week_calendar import week_calendar_entity_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -722,7 +722,7 @@ async def _fetch_week_calendar_events(
         eid
         for w in widgets
         if w.get("type") == WidgetType.WEEK_CALENDAR
-        for eid in _week_calendar_entity_ids(w)
+        for eid in week_calendar_entity_ids(w)
     }
     if not entity_ids:
         return

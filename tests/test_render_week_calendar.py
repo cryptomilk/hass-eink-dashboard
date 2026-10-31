@@ -536,3 +536,51 @@ class TestRenderWeekCalendar:
         with patch(_NOW, return_value=_MONDAY):
             img = render_to_image([_widget(h=300)], _config([]))
         assert_all_white(img, 0, 320, 758, 480)
+
+
+class TestMalformedEvents:
+    """Bad calendar data is skipped instead of distorting the widget."""
+
+    def test_unparseable_or_missing_bounds_are_skipped(self) -> None:
+        # Empty, missing, null and garbled start/end values would
+        # otherwise land on today; none of them draws anything.
+        good = _ev("2026-10-20T09:00:00", "2026-10-20T10:00:00", "Good")
+        ctx = _ctx(
+            [
+                _ev("", "2026-10-19T10:00:00", "Empty start"),
+                {"start": "2026-10-19T09:00:00", "summary": "No end"},
+                {"start": None, "end": None, "summary": "Null"},
+                _ev("2026-10-19T09:00:00", "garbage", "Bad end"),
+                _ev("2026-13-45", "2026-13-46", "Bad date"),
+                good,
+            ]
+        )
+        assert [len(e["lines"]) for e in ctx["events"]] == [1]
+        assert ctx["all_day"] == []
+        assert ctx["chips"] == []
+
+    def test_non_dict_event_is_skipped(self) -> None:
+        # A stray non-dict entry does not raise.
+        ctx = _ctx(
+            [
+                "oops",
+                None,
+                _ev("2026-10-19T09:00:00", "2026-10-19T10:00:00", "A"),
+            ]  # type: ignore[list-item]
+        )
+        assert len(ctx["events"]) == 1
+
+    def test_non_list_week_events_is_empty(self) -> None:
+        # None or a non-list value (a string, a dict) is treated as no
+        # events instead of raising.
+        for bad in (None, "x", {"a": 1}):
+            ctx = _ctx(bad)  # type: ignore[arg-type]
+            assert ctx["events"] == []
+
+    def test_missing_attributes_is_empty(self) -> None:
+        # A state without attributes renders an empty week.
+        cfg = _config([])
+        cfg["states"]["calendar.test"] = {"state": "off", "attributes": None}
+        with patch(_NOW, return_value=_MONDAY):
+            ctx = _build_week_calendar_context(_widget(), cfg)
+        assert ctx["events"] == []
