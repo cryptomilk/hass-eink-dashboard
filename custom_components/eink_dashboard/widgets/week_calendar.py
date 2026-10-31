@@ -45,8 +45,7 @@ DEFAULT_START_HOUR = 8
 DEFAULT_END_HOUR = 20
 
 # Caps that keep the grid usable when a week is crowded.  Extra
-# all-day lanes are dropped; extra out-of-grid events collapse into
-# a "+N" chip.
+# all-day spans and extra out-of-grid events collapse into "+N" markers.
 _MAX_ALL_DAY_LANES = 3
 _MAX_CHIPS = 2
 
@@ -122,6 +121,17 @@ class _Overflow:
 
     count: int
     """Number of events it stands for."""
+
+
+class _AllDayStrip(NamedTuple):
+    """The all-day spans that fit the strip, and what did not."""
+
+    spans: list[_AllDaySpan]
+    """Spans with their lane set."""
+    hidden: list[int]
+    """Per day, how many spans are folded into a "+N" marker."""
+    lanes: int
+    """Lanes the strip takes, including the one with the markers."""
 
 
 class _WeekEvents(NamedTuple):
@@ -426,18 +436,20 @@ def _collect_week_events(
     return _WeekEvents(all_day, timed, before, after)
 
 
-def _place_all_day(all_day: list[_AllDaySpan]) -> list[_AllDaySpan]:
+def _place_all_day(all_day: list[_AllDaySpan]) -> _AllDayStrip:
     """Assign all-day spans to horizontal lanes.
 
-    Each span takes the first lane whose days are all free.  Spans
-    that would need more than ``_MAX_ALL_DAY_LANES`` lanes are
-    dropped.
+    Each span takes the first lane whose days are all free.  If more
+    than ``_MAX_ALL_DAY_LANES`` lanes would be needed, the last lane
+    and everything below it are not drawn; each day they cover shows
+    a "+N" marker in the last lane instead.
 
     Args:
         all_day: Spans to place.
 
     Returns:
-        The placed spans, each with its ``lane`` set.
+        The spans to draw with their lanes, the per-day counts of
+        hidden spans and the number of lanes the strip takes.
     """
     lanes: list[list[bool]] = []
     placed: list[_AllDaySpan] = []
@@ -451,14 +463,21 @@ def _place_all_day(all_day: list[_AllDaySpan]) -> list[_AllDaySpan]:
             ),
             len(lanes),
         )
-        if lane >= _MAX_ALL_DAY_LANES:
-            continue
         if lane == len(lanes):
             lanes.append([False] * 7)
         for d in span:
             lanes[lane][d] = True
         placed.append(replace(item, lane=lane))
-    return placed
+    hidden = [0] * 7
+    if len(lanes) <= _MAX_ALL_DAY_LANES:
+        return _AllDayStrip(placed, hidden, len(lanes))
+    last = _MAX_ALL_DAY_LANES - 1
+    for item in placed:
+        if item.lane >= last:
+            for d in range(item.first, item.last + 1):
+                hidden[d] += 1
+    shown = [item for item in placed if item.lane < last]
+    return _AllDayStrip(shown, hidden, _MAX_ALL_DAY_LANES)
 
 
 def _pack_day(
@@ -831,31 +850,48 @@ def _day_headers(
 
 
 def _all_day_boxes(
-    spans: list[_AllDaySpan],
+    strip: _AllDayStrip,
     geo: _Geometry,
     layout: _Layout,
     fonts: _Fonts,
 ) -> list[dict[str, object]]:
-    """Return the boxes of the placed all-day spans.
+    """Return the boxes of the all-day strip.
 
     Args:
-        spans: Spans with their lane set.
+        strip: Placed spans and the counts of hidden ones.
         geo: Column geometry.
         layout: Vertical layout.
         fonts: Text sizes and measuring fonts.
 
     Returns:
-        One box per span, for the template.
+        One box per span, then one "+N" box per day with hidden
+        spans, for the template.
     """
+    top = layout.content_y + layout.header_h
     boxes: list[dict[str, object]] = []
-    for item in spans:
+    for item in strip.spans:
         bx, bw = geo.day_span(item.first, item.last)
-        by = layout.content_y + layout.header_h + item.lane * layout.lane_h + 1
+        by = top + item.lane * layout.lane_h + 1
         boxes.append(
             _fit_title(
                 fonts, item.text, bx, by, bw, layout.lane_h - 2, max_lines=1
             )
         )
+    for day, count in enumerate(strip.hidden):
+        if count:
+            bx, bw = geo.day_span(day, day)
+            by = top + (_MAX_ALL_DAY_LANES - 1) * layout.lane_h + 1
+            boxes.append(
+                _fit_title(
+                    fonts,
+                    f"+{count}",
+                    bx,
+                    by,
+                    bw,
+                    layout.lane_h - 2,
+                    max_lines=1,
+                )
+            )
     return boxes
 
 
@@ -1095,9 +1131,8 @@ def _build_week_calendar_context(
     gutter_w = round(fonts.hour_size * (3.4 if time_format == "12" else 2.2))
     lane_h = round(fonts.day_size * 1.3)
 
-    placed_all_day = _place_all_day(week.all_day)
-    n_lanes = max((p.lane + 1 for p in placed_all_day), default=0)
-    strip_h = n_lanes * lane_h
+    all_day_strip = _place_all_day(week.all_day)
+    strip_h = all_day_strip.lanes * lane_h
     chip_h = line_h + 2
     top_chips = min(max(len(c) for c in before), _MAX_CHIPS)
     bottom_chips = min(max(len(c) for c in after), _MAX_CHIPS)
@@ -1142,7 +1177,7 @@ def _build_week_calendar_context(
         "col_xs": [geo.col_x(i) for i in range(8)],
         "headers": _day_headers(days, today, geo, fonts, language),
         "hours": _hour_lines(start_hour, end_hour, layout, fonts, time_format),
-        "all_day": _all_day_boxes(placed_all_day, geo, layout, fonts),
+        "all_day": _all_day_boxes(all_day_strip, geo, layout, fonts),
         "chips": _chip_boxes(before, after, geo, layout, fonts, time_format),
         "events": _event_boxes(timed, geo, layout, fonts, time_format),
         "grid_line_color": _snap_gray(COLOR_LIGHT_GRAY, display_levels),

@@ -584,3 +584,48 @@ class TestMalformedEvents:
         with patch(_NOW, return_value=_MONDAY):
             ctx = _build_week_calendar_context(_widget(), cfg)
         assert ctx["events"] == []
+
+
+class TestAllDayOverflow:
+    """All-day events that do not fit the strip are counted, not lost."""
+
+    @staticmethod
+    def _texts(ctx: dict[str, Any]) -> list[str]:
+        return [ln["text"] for box in ctx["all_day"] for ln in box["lines"]]
+
+    def test_three_lanes_show_everything(self) -> None:
+        # Up to three overlapping all-day events fit, so no marker.
+        ctx = _ctx(
+            [_ev("2026-10-19", "2026-10-20", f"Day {i}") for i in range(3)]
+        )
+        assert len(ctx["all_day"]) == 3
+        assert not any(t.startswith("+") for t in self._texts(ctx))
+
+    def test_extra_all_day_events_become_a_count(self) -> None:
+        # Five on one day: two bars stay and the last lane shows "+3"
+        # for the three that no longer fit.
+        ctx = _ctx(
+            [_ev("2026-10-19", "2026-10-20", f"Day {i}") for i in range(5)]
+        )
+        assert len(ctx["all_day"]) == 3
+        assert sorted(self._texts(ctx))[0] == "+3"
+        assert ctx["grid_top"] == (
+            ctx["content_y"]
+            + ctx["header_h"]
+            + 3 * ctx["all_day"][0]["h"]
+            + 3 * 2
+        )
+
+    def test_hidden_multi_day_event_counts_on_every_day(self) -> None:
+        # A hidden three-day event adds one to each day it covers.
+        ctx = _ctx(
+            [
+                *(
+                    _ev("2026-10-19", "2026-10-22", f"Long {i}")
+                    for i in range(3)
+                ),
+                _ev("2026-10-19", "2026-10-22", "Hidden"),
+            ]
+        )
+        markers = [t for t in self._texts(ctx) if t.startswith("+")]
+        assert markers == ["+2", "+2", "+2"]
