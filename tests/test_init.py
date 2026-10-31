@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -781,6 +782,75 @@ class TestCalendarFetchers:
         attrs = states["calendar.home"]["attributes"]
         assert "events" in attrs
         assert "week_events" in attrs
+
+    async def test_calendars_are_fetched_concurrently(self) -> None:
+        # Several calendars are requested at the same time instead of
+        # one after another.
+        running = peak = 0
+
+        async def call(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            nonlocal running, peak
+            running += 1
+            peak = max(peak, running)
+            await asyncio.sleep(0)
+            running -= 1
+            return {args[2]["entity_id"]: {"events": []}}
+
+        hass = MagicMock()
+        hass.services.async_call = AsyncMock(side_effect=call)
+        ids = ["calendar.a", "calendar.b", "calendar.c"]
+        states = {i: {"state": "off", "attributes": {}} for i in ids}
+        widgets = [
+            {"type": "week_calendar", "entity": ids},
+            *({"type": "calendar", "entity": i} for i in ids),
+        ]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+        assert peak == 3
+        peak = 0
+        await _fetch_calendar_events(hass, widgets, states)
+        assert peak == 3
+        for i in ids:
+            assert "week_events" in states[i]["attributes"]
+            assert "events" in states[i]["attributes"]
+
+    async def test_one_failing_calendar_does_not_block_others(self) -> None:
+        # A calendar whose service call fails stays blank while the
+        # others still get their events.
+        async def call(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            entity_id = args[2]["entity_id"]
+            if entity_id == "calendar.bad":
+                msg = "boom"
+                raise RuntimeError(msg)
+            return {entity_id: {"events": [{"start": "2026-10-19"}]}}
+
+        hass = MagicMock()
+        hass.services.async_call = AsyncMock(side_effect=call)
+        states = {
+            "calendar.bad": {"state": "off", "attributes": {}},
+            "calendar.good": {"state": "off", "attributes": {}},
+        }
+        widgets = [
+            {
+                "type": "week_calendar",
+                "entity": ["calendar.bad", "calendar.good"],
+            }
+        ]
+
+        await _fetch_week_calendar_events(hass, widgets, states)
+
+        assert "week_events" not in states["calendar.bad"]["attributes"]
+        assert states["calendar.good"]["attributes"]["week_events"]
+
+    async def test_processing_errors_are_not_swallowed(self) -> None:
+        # Only the service call is guarded: a snapshot entry without
+        # "attributes" is a bug and must surface.
+        hass = self._hass()
+        states: dict[str, Any] = {"calendar.home": {"state": "off"}}
+        widgets = [{"type": "week_calendar", "entity": "calendar.home"}]
+
+        with pytest.raises(KeyError):
+            await _fetch_week_calendar_events(hass, widgets, states)
 
 
 class TestEnrichEntityIcons:

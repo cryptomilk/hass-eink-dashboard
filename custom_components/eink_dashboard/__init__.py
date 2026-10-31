@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import datetime as dt
 import hashlib
@@ -30,6 +31,7 @@ import probatio as vol
 from homeassistant.components import websocket_api
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -696,6 +698,74 @@ async def _fetch_history(
             states[entity_id]["history"] = entries
 
 
+async def _get_calendar_events(
+    hass: HomeAssistant,
+    entity_id: str,
+    start: dt.datetime,
+    end: dt.datetime,
+    label: str,
+    level: int,
+) -> list[dict[str, Any]] | None:
+    """Return a calendar's events between two times, sorted by start.
+
+    Only the service call is guarded, so a bug in the processing of its
+    result is not swallowed.
+
+    Args:
+        hass: Home Assistant instance.
+        entity_id: Calendar entity ID.
+        start: Start of the window.
+        end: End of the window.
+        label: What is fetched, for the log message.
+        level: Log level used when the call fails.
+
+    Returns:
+        The events, or ``None`` if the call failed or returned nothing.
+    """
+    try:
+        result = await hass.services.async_call(
+            "calendar",
+            "get_events",
+            {
+                "entity_id": entity_id,
+                "start_date_time": start.isoformat(),
+                "end_date_time": end.isoformat(),
+            },
+            blocking=True,
+            return_response=True,
+        )
+    except HomeAssistantError as err:
+        _LOGGER.log(
+            level, "Could not fetch %s for %s: %s", label, entity_id, err
+        )
+        return None
+    except Exception:  # noqa: BLE001
+        # Calendar integrations call third-party libraries that raise
+        # arbitrary errors; one failing calendar must not blank the
+        # others, but keep the traceback for diagnosis.
+        _LOGGER.log(
+            level,
+            "Could not fetch %s for %s",
+            label,
+            entity_id,
+            exc_info=True,
+        )
+        return None
+    if not isinstance(result, dict):
+        return None
+    entity_data = result.get(entity_id)
+    raw = entity_data.get("events") if isinstance(entity_data, dict) else None
+    events: list[dict[str, Any]] = cast(
+        "list[dict[str, Any]]", raw if isinstance(raw, list) else []
+    )
+    # calendar.get_events returns events in backend order (CalDAV puts
+    # recurring occurrences first), so sort by start before a widget
+    # truncates to max_events.  ISO strings sort chronologically; an
+    # all-day "YYYY-MM-DD" sorts before timed events on the same day.
+    events.sort(key=lambda e: str(e.get("start", "")))
+    return events
+
+
 async def _fetch_week_calendar_events(
     hass: HomeAssistant,
     widgets: list[dict[str, Any]],
@@ -739,44 +809,31 @@ async def _fetch_week_calendar_events(
     end_dt = dt.datetime.combine(
         today + timedelta(days=7), dt.time.min, tzinfo=tz
     )
+
+    async def fetch(entity_id: str) -> None:
+        """Fetch one calendar's week into its state."""
+        events = await _get_calendar_events(
+            hass,
+            entity_id,
+            start_dt,
+            end_dt,
+            "week calendar events",
+            logging.WARNING,
+        )
+        if events is not None:
+            states[entity_id]["attributes"]["week_events"] = events
+
+    known: list[str] = []
     for entity_id in sorted(entity_ids):
-        if entity_id not in states:
+        if entity_id in states:
+            known.append(entity_id)
+        else:
             _LOGGER.warning(
                 "Calendar entity %r is not in the states snapshot; "
                 "the week calendar will render blank.",
                 entity_id,
             )
-            continue
-        try:
-            result = await hass.services.async_call(
-                "calendar",
-                "get_events",
-                {
-                    "entity_id": entity_id,
-                    "start_date_time": start_dt.isoformat(),
-                    "end_date_time": end_dt.isoformat(),
-                },
-                blocking=True,
-                return_response=True,
-            )
-            entity_data = result.get(entity_id) if result else None
-            raw = (
-                entity_data.get("events")
-                if isinstance(entity_data, dict)
-                else None
-            )
-            events: list[dict[str, Any]] = cast(
-                "list[dict[str, Any]]",
-                raw if isinstance(raw, list) else [],
-            )
-            events.sort(key=lambda e: str(e.get("start", "")))
-            states[entity_id]["attributes"]["week_events"] = events
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(
-                "Could not fetch week calendar events for %s: %s",
-                entity_id,
-                err,
-            )
+    await asyncio.gather(*(fetch(entity_id) for entity_id in known))
 
 
 async def _fetch_calendar_events(
@@ -828,41 +885,23 @@ async def _fetch_calendar_events(
         return
 
     now = dt.datetime.now(dt.UTC)
-    for entity_id, days in calendar_entities.items():
-        end_dt = now + timedelta(days=days)
-        try:
-            result = await hass.services.async_call(
-                "calendar",
-                "get_events",
-                {
-                    "entity_id": entity_id,
-                    "start_date_time": now.isoformat(),
-                    "end_date_time": end_dt.isoformat(),
-                },
-                blocking=True,
-                return_response=True,
-            )
-            if result is None:
-                continue
-            entity_data = result.get(entity_id)
-            raw = (
-                entity_data.get("events")
-                if isinstance(entity_data, dict)
-                else None
-            )
-            events: list[dict[str, Any]] = cast(
-                "list[dict[str, Any]]",
-                raw if isinstance(raw, list) else [],
-            )
-            # calendar.get_events returns events in backend order
-            # (CalDAV puts recurring occurrences first), so sort by
-            # start before the widget truncates to max_events.  ISO
-            # strings sort chronologically; an all-day "YYYY-MM-DD"
-            # sorts before timed events on the same day.
-            events.sort(key=lambda e: str(e.get("start", "")))
+
+    async def fetch(entity_id: str, days: int) -> None:
+        """Fetch one calendar's upcoming events into its state."""
+        events = await _get_calendar_events(
+            hass,
+            entity_id,
+            now,
+            now + timedelta(days=days),
+            "calendar events",
+            logging.DEBUG,
+        )
+        if events is not None:
             states[entity_id]["attributes"]["events"] = events
-        except Exception:  # noqa: BLE001
-            _LOGGER.debug("Could not fetch calendar events for %s", entity_id)
+
+    await asyncio.gather(
+        *(fetch(eid, days) for eid, days in calendar_entities.items())
+    )
 
 
 @websocket_api.websocket_command(
