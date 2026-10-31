@@ -49,6 +49,11 @@ DEFAULT_END_HOUR = 20
 _MAX_ALL_DAY_LANES = 3
 _MAX_CHIPS = 2
 
+# The time grid needs at least this many pixels per hour.  A widget too
+# short to guarantee that, even with every strip and chip row used,
+# shows the agenda layout instead (see ``_grid_fits``).
+_MIN_PX_PER_HOUR = 6
+
 # Event, chip and all-day text uses fixed pixel sizes instead of
 # scaling with the widget, which keeps small text legible.  The start
 # time uses ``_DEFAULT_TIME_SIZE`` and a title ``_DEFAULT_EVENT_SIZE``.
@@ -874,7 +879,13 @@ def _all_day_boxes(
         by = top + item.lane * layout.lane_h + 1
         boxes.append(
             _fit_title(
-                fonts, item.text, bx, by, bw, layout.lane_h - 2, max_lines=1
+                fonts,
+                item.text,
+                bx,
+                by,
+                bw,
+                layout.lane_h - 2,
+                max_lines=1,
             )
         )
     for day, count in enumerate(strip.hidden):
@@ -1050,6 +1061,94 @@ def _hour_lines(
     return hours
 
 
+def _grid_fits(
+    content_h: int,
+    header_h: int,
+    lane_h: int,
+    chip_h: int,
+    hours: int,
+) -> bool:
+    """Return whether the time grid is guaranteed to fit the widget.
+
+    The all-day strip and the chip rows are capped, so the tallest the
+    rows above and below the grid can get is known without looking at
+    any event.  Deciding on that worst case keeps the layout from
+    changing when events are added or removed.
+
+    Args:
+        content_h: Height of the calendar.
+        header_h: Height of the day header row.
+        lane_h: Height of one all-day lane.
+        chip_h: Height of one chip row.
+        hours: Hours on the time axis.
+
+    Returns:
+        ``True`` if the grid keeps ``_MIN_PX_PER_HOUR`` with every
+        strip lane and chip row in use.
+    """
+    worst_rows = _MAX_ALL_DAY_LANES * lane_h + 2 * _MAX_CHIPS * chip_h
+    return content_h >= header_h + worst_rows + _MIN_PX_PER_HOUR * hours
+
+
+def _agenda_boxes(
+    week: _WeekEvents,
+    geo: _Geometry,
+    top: int,
+    rows: int,
+    row_h: int,
+    fonts: _Fonts,
+    time_format: str,
+) -> list[dict[str, object]]:
+    """Return the event rows of the agenda layout.
+
+    Each day lists its all-day events, then its timed events by start
+    time, one row each.  If a day has more events than rows, the last
+    row reads "+N" for the ones that do not fit.
+
+    Args:
+        week: Events sorted for the whole day, as the agenda has no
+            time axis to cut them off.
+        geo: Column geometry.
+        top: Top of the first row.
+        rows: Rows that fit under the header.
+        row_h: Height of one row.
+        fonts: Text sizes and measuring fonts.
+        time_format: ``"12"`` for AM/PM, anything else for 24-hour.
+
+    Returns:
+        One box per row, for the template.
+    """
+    boxes: list[dict[str, object]] = []
+    if rows < 1:
+        return boxes
+    spans = sorted(week.all_day, key=lambda a: (a.first, -a.last))
+    for i in range(7):
+        items = [("", a.text) for a in spans if a.first <= i <= a.last]
+        items += [
+            (_fmt_hm(seg.label_sm, time_format), seg.text)
+            for seg in sorted(week.timed[i], key=lambda s: s.sm)
+        ]
+        if len(items) > rows:
+            extra = len(items) - rows + 1
+            items = [*items[: rows - 1], ("", f"+{extra}")]
+        bx, bw = geo.day_span(i, i)
+        for k, (label, text) in enumerate(items):
+            boxes.append(
+                _fit_title(
+                    fonts,
+                    text,
+                    bx,
+                    top + k * row_h + 1,
+                    bw,
+                    row_h - 2,
+                    label,
+                    pad=0,
+                    max_lines=1,
+                )
+            )
+    return boxes
+
+
 def _build_week_calendar_context(
     widget: WeekCalendarWidget,
     config: DisplayConfig,
@@ -1062,7 +1161,9 @@ def _build_week_calendar_context(
     start and end time; overlapping events share the column width.
     Events entirely before or after the grid are stacked as chips at
     the top or bottom of their day's column, and all-day events fill
-    a strip under the day headers.  Events are read from
+    a strip under the day headers.  A widget too short to give the
+    grid its minimum height switches, by size alone, to an agenda of
+    one row per event under each day.  Events are read from
     ``states[entity]["attributes"]["week_events"]``, injected by
     ``_fetch_week_calendar_events()``.
 
@@ -1107,7 +1208,6 @@ def _build_week_calendar_context(
     week_start = today - timedelta(days=(today.weekday() - fw) % 7)
     days: list[date] = [week_start + timedelta(days=i) for i in range(7)]
 
-    # Sort events into all-day spans, in-grid segments and chips.
     states = config.get("states", {})
     raw_events: list[dict[str, Any]] = []
     for entity_id in week_calendar_entity_ids(widget):
@@ -1116,8 +1216,6 @@ def _build_week_calendar_context(
         events = attrs.get("week_events") if isinstance(attrs, dict) else None
         if isinstance(events, list):
             raw_events.extend(events)
-    week = _collect_week_events(raw_events, days, gs, ge)
-    timed, before, after = week.timed, week.before, week.after
 
     # Font roles and vertical layout.
     title_font_sz, title_weight, content_y, content_h = _title_band(
@@ -1128,38 +1226,81 @@ def _build_week_calendar_context(
     # A larger day font makes the header row grow with it.
     header_h = max(header_h, fonts.day_size + 6)
     line_h = _ev_line_h(fonts.event_size)
-    gutter_w = round(fonts.hour_size * (3.4 if time_format == "12" else 2.2))
     lane_h = round(fonts.day_size * 1.3)
-
-    all_day_strip = _place_all_day(week.all_day)
-    strip_h = all_day_strip.lanes * lane_h
     chip_h = line_h + 2
-    top_chips = min(max(len(c) for c in before), _MAX_CHIPS)
-    bottom_chips = min(max(len(c) for c in after), _MAX_CHIPS)
 
-    grid_top = content_y + header_h + strip_h + top_chips * chip_h
-    grid_bottom = max(
-        grid_top + 1, content_y + content_h - bottom_chips * chip_h
+    # The layout depends on the widget's size and settings only, never
+    # on its events, so it does not change when events come and go.
+    agenda = not _grid_fits(
+        content_h, header_h, lane_h, chip_h, end_hour - start_hour
     )
-    layout = _Layout(
-        content_y=content_y,
-        content_h=content_h,
-        header_h=header_h,
-        lane_h=lane_h,
-        chip_h=chip_h,
-        strip_h=strip_h,
-        top_chips=top_chips,
-        bottom_chips=bottom_chips,
-        grid_top=grid_top,
-        grid_bottom=grid_bottom,
-        grid_start=gs,
-        px_per_min=(grid_bottom - grid_top) / (ge - gs),
-        # One line alone in a lane; time plus one title line (two
-        # lines) when sharing a column.
-        single_px=line_h + 2,
-        multi_px=2 * line_h + 2,
-    )
-    geo = _Geometry(gutter_w=gutter_w, col_w=(svg_w - gutter_w) / 7)
+    context: dict[str, object]
+    if agenda:
+        gutter_w = 0
+        # The agenda has no time axis, so no event is cut off.
+        week = _collect_week_events(raw_events, days, 0, 24 * 60)
+        geo = _Geometry(gutter_w=gutter_w, col_w=svg_w / 7)
+        grid_top = content_y + header_h
+        grid_bottom = content_y + content_h
+        context = {
+            "hours": [],
+            "all_day": [],
+            "chips": [],
+            "events": _agenda_boxes(
+                week,
+                geo,
+                grid_top,
+                (content_h - header_h) // chip_h,
+                chip_h,
+                fonts,
+                time_format,
+            ),
+        }
+    else:
+        gutter_w = round(
+            fonts.hour_size * (3.4 if time_format == "12" else 2.2)
+        )
+        week = _collect_week_events(raw_events, days, gs, ge)
+        timed, before, after = week.timed, week.before, week.after
+
+        all_day_strip = _place_all_day(week.all_day)
+        strip_h = all_day_strip.lanes * lane_h
+        top_chips = min(max(len(c) for c in before), _MAX_CHIPS)
+        bottom_chips = min(max(len(c) for c in after), _MAX_CHIPS)
+
+        grid_top = content_y + header_h + strip_h + top_chips * chip_h
+        grid_bottom = max(
+            grid_top + 1, content_y + content_h - bottom_chips * chip_h
+        )
+        layout = _Layout(
+            content_y=content_y,
+            content_h=content_h,
+            header_h=header_h,
+            lane_h=lane_h,
+            chip_h=chip_h,
+            strip_h=strip_h,
+            top_chips=top_chips,
+            bottom_chips=bottom_chips,
+            grid_top=grid_top,
+            grid_bottom=grid_bottom,
+            grid_start=gs,
+            px_per_min=(grid_bottom - grid_top) / (ge - gs),
+            # One line alone in a lane; time plus one title line (two
+            # lines) when sharing a column.
+            single_px=line_h + 2,
+            multi_px=2 * line_h + 2,
+        )
+        geo = _Geometry(gutter_w=gutter_w, col_w=(svg_w - gutter_w) / 7)
+        context = {
+            "hours": _hour_lines(
+                start_hour, end_hour, layout, fonts, time_format
+            ),
+            "all_day": _all_day_boxes(all_day_strip, geo, layout, fonts),
+            "chips": _chip_boxes(
+                before, after, geo, layout, fonts, time_format
+            ),
+            "events": _event_boxes(timed, geo, layout, fonts, time_format),
+        }
 
     return {
         "w": svg_w,
@@ -1176,10 +1317,8 @@ def _build_week_calendar_context(
         "grid_bottom": grid_bottom,
         "col_xs": [geo.col_x(i) for i in range(8)],
         "headers": _day_headers(days, today, geo, fonts, language),
-        "hours": _hour_lines(start_hour, end_hour, layout, fonts, time_format),
-        "all_day": _all_day_boxes(all_day_strip, geo, layout, fonts),
-        "chips": _chip_boxes(before, after, geo, layout, fonts, time_format),
-        "events": _event_boxes(timed, geo, layout, fonts, time_format),
+        "agenda": agenda,
+        **context,
         "grid_line_color": _snap_gray(COLOR_LIGHT_GRAY, display_levels),
         "corner_r": max(3, round(line_h * 0.33)),
         **_color_context(),

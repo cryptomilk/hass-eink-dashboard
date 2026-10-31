@@ -629,3 +629,129 @@ class TestAllDayOverflow:
         )
         markers = [t for t in self._texts(ctx) if t.startswith("+")]
         assert markers == ["+2", "+2", "+2"]
+
+
+class TestAgendaLayout:
+    """A short widget lists each day's events instead of a time grid."""
+
+    _SHORT = 130
+
+    @staticmethod
+    def _day(ctx: dict[str, Any], i: int) -> list[str]:
+        """Return the row texts of day column ``i``, top to bottom."""
+        left, right = ctx["col_xs"][i], ctx["col_xs"][i + 1]
+        rows = sorted(
+            (b for b in ctx["events"] if left <= b["x"] < right),
+            key=lambda b: b["y"],
+        )
+        return [
+            f"{b['lines'][0]['time']} {b['lines'][0]['text']}".strip()
+            for b in rows
+        ]
+
+    def test_layout_depends_on_size_only(self) -> None:
+        # The same widget size gives the same layout whatever the
+        # events are, so adding an event never flips the layout.
+        busy = [_ev("2026-10-19", "2026-10-20", f"Day {i}") for i in range(6)]
+        for h, agenda in ((440, False), (self._SHORT, True)):
+            widget = _widget(h=h)
+            assert _ctx([], widget=widget)["agenda"] is agenda
+            assert _ctx(busy, widget=widget)["agenda"] is agenda
+
+    def test_lists_all_day_then_timed_by_start(self) -> None:
+        # All-day events come first, then timed ones in time order,
+        # whatever order the calendar returned them in.
+        ctx = _ctx(
+            [
+                _ev("2026-10-19T14:00:00", "2026-10-19T15:00:00", "Late"),
+                _ev("2026-10-19", "2026-10-20", "Birthday"),
+                _ev("2026-10-19T09:30:00", "2026-10-19T10:00:00", "Early"),
+            ],
+            widget=_widget(h=self._SHORT),
+        )
+        assert self._day(ctx, 0) == ["Birthday", "9:30 Early", "14:00 Late"]
+
+    def test_events_outside_the_hours_are_listed(self) -> None:
+        # There is no time axis, so start_hour/end_hour do not hide
+        # anything.
+        ctx = _ctx(
+            [
+                _ev("2026-10-19T05:00:00", "2026-10-19T05:30:00", "Dawn"),
+                _ev("2026-10-19T22:00:00", "2026-10-19T23:00:00", "Night"),
+            ],
+            widget=_widget(h=self._SHORT),
+        )
+        assert self._day(ctx, 0) == ["5:00 Dawn", "22:00 Night"]
+
+    def test_multi_day_all_day_event_repeats_each_day(self) -> None:
+        # A three-day all-day event is listed under each of its days.
+        ctx = _ctx(
+            [_ev("2026-10-19", "2026-10-22", "Trip")],
+            widget=_widget(h=self._SHORT),
+        )
+        assert [self._day(ctx, i) for i in range(4)] == [
+            ["Trip"],
+            ["Trip"],
+            ["Trip"],
+            [],
+        ]
+
+    def test_overnight_event_continues_on_next_day(self) -> None:
+        # A continuation keeps the event's real start time.
+        ctx = _ctx(
+            [_ev("2026-10-19T22:00:00", "2026-10-20T01:00:00", "Party")],
+            widget=_widget(h=self._SHORT),
+        )
+        assert self._day(ctx, 0) == ["22:00 Party"]
+        assert self._day(ctx, 1) == ["22:00 Party"]
+
+    def test_overflow_is_counted(self) -> None:
+        # More events than rows: the last row counts what is left, so
+        # shown events plus the count add up to all of them.
+        total = 20
+        ctx = _ctx(
+            [
+                _ev(
+                    f"2026-10-19T{9 + i // 4:02d}:{15 * (i % 4):02d}:00",
+                    f"2026-10-19T{9 + i // 4:02d}:{15 * (i % 4) + 10:02d}:00",
+                    f"Ev {i}",
+                )
+                for i in range(total)
+            ],
+            widget=_widget(h=self._SHORT),
+        )
+        rows = self._day(ctx, 0)
+        assert rows[-1].startswith("+")
+        assert len(rows) - 1 + int(rows[-1][1:]) == total
+
+    def test_stays_inside_the_widget(self) -> None:
+        # No row is drawn below the widget, however many events.
+        h = self._SHORT
+        ctx = _ctx(
+            [_ev("2026-10-19", "2026-10-20", f"Day {i}") for i in range(30)],
+            widget=_widget(h=h),
+        )
+        assert ctx["events"]
+        for box in ctx["events"]:
+            assert box["y"] >= ctx["content_y"] + ctx["header_h"]
+            assert box["y"] + box["h"] <= h
+
+    def test_tiny_widget_shows_only_the_header(self) -> None:
+        # With no room for a row, nothing is listed and nothing breaks.
+        ctx = _ctx(
+            [_ev("2026-10-19", "2026-10-20", "Day")],
+            widget=_widget(h=24),
+        )
+        assert ctx["agenda"] is True
+        assert ctx["events"] == []
+        assert len(ctx["headers"]) == 7
+
+    def test_renders_to_svg(self) -> None:
+        # The template draws the agenda like the grid layout.
+        with patch(_NOW, return_value=_MONDAY):
+            img = render_to_image(
+                [_widget(h=self._SHORT)],
+                _config([_ev("2026-10-19", "2026-10-20", "Day")]),
+            )
+        assert_has_dark_pixels(img, 0, 0, 758, self._SHORT)
+        assert_all_white(img, 0, self._SHORT + 20, 758, 480)
