@@ -197,6 +197,22 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       card_style: DEFAULT_CARD_STYLE,
     },
   },
+  week_calendar: {
+    label: "Week calendar",
+    description: "Weekly grid of events from a calendar entity",
+    icon: "mdi:calendar-week",
+    defaults: {
+      type: "week_calendar",
+      x: 24,
+      y: 0,
+      // Fills the default 758 px display width; resize as needed.
+      w: 710,
+      h: 440,
+      entity: "",
+      start_hour: 8,
+      end_hour: 20,
+    },
+  },
   sensor: {
     label: "Sensor",
     description: "Single sensor with optional history sparkline graph",
@@ -1373,6 +1389,63 @@ export const SCHEMAS: Record<
       ],
     },
   ],
+  week_calendar: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:calendar-week",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: { domain: "calendar", multiple: true } },
+        },
+        { name: "title", selector: { text: {} } },
+        {
+          name: "start_hour",
+          default: 8,
+          selector: {
+            number: { min: 0, max: 23, mode: "box" },
+          },
+        },
+        {
+          name: "end_hour",
+          default: 20,
+          selector: {
+            number: { min: 1, max: 24, mode: "box" },
+          },
+        },
+      ],
+    },
+    {
+      name: "layout_pos",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [
+        fontsSection([
+          ["title", "Title"],
+          ["day", "Day"],
+          ["hour", "Hour"],
+          ["time", "Time"],
+          ["event", "Event"],
+        ]),
+      ],
+    },
+  ],
   calendar: (d) => [
     identitySection(),
     {
@@ -2054,6 +2127,8 @@ export const LABELS: Record<string, string> = {
   hide_fill: "Hide fill",
   max_events: "Max events",
   days_ahead: "Days ahead",
+  start_hour: "First hour",
+  end_hour: "Last hour",
   min: "Minimum",
   max: "Maximum",
   gauge_type: "Gauge type",
@@ -2155,9 +2230,11 @@ export function getSummary(widget: Widget): string {
   if (
     t === "weather" || t === "tile" || t === "entity"
     || t === "sensor" || t === "calendar" || t === "gauge"
-    || t === "meteogram"
+    || t === "meteogram" || t === "week_calendar"
   ) {
-    return widget.entity || "(no entity)";
+    const entity = widget.entity;
+    const label = Array.isArray(entity) ? entity.join(", ") : entity;
+    return label || "(no entity)";
   }
   if (t === "graph") {
     const primary = widget.entity || "";

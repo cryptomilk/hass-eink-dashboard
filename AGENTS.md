@@ -76,7 +76,8 @@ through these sources without copying files manually.
   applies rotation and e-ink optimisation, and returns PNG bytes
 
 **Widget types** (`WidgetType` in `const.py`): `ENTITY`, `HEADING`,
-`SEPARATOR`, `TILE`, `WEATHER`, `DEVICE_BATTERY`, `WASTE_SCHEDULE`.
+`SEPARATOR`, `TILE`, `WEATHER`, `DEVICE_BATTERY`, `WASTE_SCHEDULE`,
+`WEEK_CALENDAR`.
 Deprecated types (hidden from the widget picker but kept for existing
 configs): `TEXT` (superseded by `HEADING`), `SENSOR_ROWS`,
 `STATUS_ICONS`.

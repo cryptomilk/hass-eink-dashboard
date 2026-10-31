@@ -73,9 +73,10 @@ describe("WIDGET_TYPES", () => {
     "gauge",
     "graph",
     "meteogram",
+    "week_calendar",
   ];
 
-  it("has all 14 widget types", () => {
+  it("has all 15 widget types", () => {
     expect(Object.keys(WIDGET_TYPES).sort()).toEqual(
       ALL_TYPES.sort()
     );
@@ -133,9 +134,10 @@ describe("SCHEMAS", () => {
     "gauge",
     "graph",
     "meteogram",
+    "week_calendar",
   ];
 
-  it("has a schema builder for all 14 widget types", () => {
+  it("has a schema builder for all 15 widget types", () => {
     expect(Object.keys(SCHEMAS).sort()).toEqual(ALL_TYPES.sort());
   });
 
@@ -605,6 +607,7 @@ describe("SCHEMAS form grouping", () => {
       ["device_battery", ["label"], false],
       ["gauge", ["value", "unit", "name", "segment"], false],
       ["meteogram", ["day", "hour", "grid", "precip"], false],
+      ["week_calendar", ["title", "day", "hour", "time", "event"], false],
       // Weather's geometry is coupled to font_size, so it exposes
       // weight-only overrides and omits the per-role size selector.
       ["weather", ["temp", "detail", "precip"], true],

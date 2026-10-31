@@ -180,6 +180,7 @@ The component ships a WYSIWYG Lovelace card for editing the dashboard layout.
 | Gauge | Arc-style gauge for a single numeric entity |
 | Weather | Current conditions + N-day forecast with icons |
 | Calendar | Upcoming events from a Home Assistant calendar entity |
+| Week calendar | Weekly grid (one column per day, 8:00–20:00 by default) of a calendar entity's events for the current week; the first column follows the first-weekday setting. A widget too short for the grid lists each day's events instead |
 | Device Battery | Battery level indicator for a device |
 | Frame | Decorative rounded-corner box for visual grouping |
 | [Waste Schedule](docs/waste_schedule.md) | Upcoming waste collection dates (today, tomorrow, in N days) |

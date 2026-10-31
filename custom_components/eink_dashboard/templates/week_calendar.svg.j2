@@ -1,0 +1,96 @@
+{%- from "_macros.svg.j2" import widget_title with context -%}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}">
+{{ widget_title(title, title_font_sz, fill=hex_gray,
+    weight=title_weight) }}
+{#- Lines are offset by half a pixel so each 1px line lands on whole
+    pixels.  The inner lines (hour lines and day separators) share
+    grid_line_color, snapped to a gray the display can show exactly so
+    they stay solid after dithering.  The hour column border, the
+    header row borders and the outer frame are black. -#}
+{#- Day headers; today is inverted. -#}
+{%- for hd in headers -%}
+{%- if hd.is_today -%}
+<rect x="{{ hd.x }}" y="{{ content_y }}"
+      width="{{ hd.w }}" height="{{ header_h }}"
+      fill="{{ hex_black }}"/>
+{%- endif -%}
+<text x="{{ hd.cx }}" y="{{ content_y + header_h // 2 }}"
+  font-family="{{ day_font | font_family(font_family_name) }}"
+  font-weight="{{ day_weight }}"
+  font-size="{{ day_font | font_px }}"
+  text-anchor="middle" dominant-baseline="middle"
+  fill="{{ hex_white if hd.is_today else hex_black }}">{{ hd.label }}</text>
+{%- endfor -%}
+{#- Dashed hour lines run the full width, through the hour column.
+    Each label sits just under its line, right-aligned in the column.
+    A line that would fall right under the header (no all-day strip or
+    chips above the grid) is skipped, so it does not double up with
+    the header's border. -#}
+{%- for hr in hours -%}
+{%- if hr.y > content_y + header_h -%}
+<line x1="0" y1="{{ hr.y + 0.5 }}"
+      x2="{{ w }}" y2="{{ hr.y + 0.5 }}"
+      stroke="{{ grid_line_color }}" stroke-width="1"
+      stroke-dasharray="3,3"/>
+{%- endif -%}
+{%- if hr.label -%}
+<text x="{{ gutter_w - 4 }}" y="{{ hr.label_y }}"
+  font-family="{{ hour_font | font_family(font_family_name) }}"
+  font-weight="{{ hour_weight }}"
+  font-size="{{ hour_font | font_px }}"
+  text-anchor="end"
+  fill="{{ hex_gray }}">{{ hr.label }}</text>
+{%- endif -%}
+{%- endfor -%}
+{#- Day separators below the header row; the outer two are the hour
+    column border and the frame, drawn in black further down. -#}
+{%- for cx in col_xs[1:-1] -%}
+<line x1="{{ cx + 0.5 }}" y1="{{ content_y + header_h }}"
+      x2="{{ cx + 0.5 }}" y2="{{ content_bottom }}"
+      stroke="{{ grid_line_color }}" stroke-width="1"/>
+{%- endfor -%}
+{#- Black borders, drawn after the inner lines so those never
+    overwrite them where they cross: the hour column border, the day
+    separators inside the header row, and the header's bottom edge. -#}
+<line x1="{{ col_xs[0] + 0.5 }}" y1="{{ content_y }}"
+      x2="{{ col_xs[0] + 0.5 }}" y2="{{ content_bottom }}"
+      stroke="{{ hex_black }}" stroke-width="1"/>
+{%- for cx in col_xs[1:-1] -%}
+<line x1="{{ cx + 0.5 }}" y1="{{ content_y }}"
+      x2="{{ cx + 0.5 }}" y2="{{ content_y + header_h }}"
+      stroke="{{ hex_black }}" stroke-width="1"/>
+{%- endfor -%}
+<line x1="0" y1="{{ content_y + header_h - 0.5 }}"
+      x2="{{ w }}" y2="{{ content_y + header_h - 0.5 }}"
+      stroke="{{ hex_black }}" stroke-width="1"/>
+{#- All-day bars, timed events and out-of-grid chips share one style:
+    solid black with white text and rounded corners, because gray
+    fills dither into noise on few-level displays. -#}
+{%- for e in all_day + events + chips -%}
+<rect x="{{ e.x }}" y="{{ e.y }}"
+      width="{{ e.w }}" height="{{ e.h }}" rx="{{ corner_r }}"
+      fill="{{ hex_black }}"/>
+{%- for ln in e.lines -%}
+<text x="{{ ln.x }}" y="{{ ln.y }}"
+  font-family="{{ e.font_sz | font_family(font_family_name) }}"
+  font-weight="{{ event_weight }}"
+  font-size="{{ e.font_sz | font_px }}"
+  dominant-baseline="middle"
+  fill="{{ hex_white }}">
+{%- if ln.time -%}
+<tspan font-family="{{ time_font_sz | font_family(font_family_name) }}"
+  font-weight="{{ time_weight }}"
+  font-size="{{ time_font_sz | font_px }}">{{ ln.time }}</tspan>{% if ln.text %} {% endif %}
+{%- endif -%}
+{{ ln.text }}</text>
+{%- endfor -%}
+{%- endfor -%}
+{#- Outer frame, drawn last so it stays black and unbroken.  A filled
+    ring on whole pixels, because a stroked rect leaves the four
+    corner pixels partly gray. -#}
+{%- set frame_h = content_bottom - content_y -%}
+<path fill="{{ hex_black }}" fill-rule="evenodd"
+      d="M0 {{ content_y }}h{{ w }}v{{ frame_h }}h-{{ w }}z
+         M1 {{ content_y + 1 }}h{{ w - 2 }}v{{ frame_h - 2 }}h-{{ w - 2 }}z"/>
+</svg>

@@ -563,6 +563,35 @@ export interface CalendarWidget extends WidgetBase {
 }
 
 /**
+ * Weekly calendar grid with one column per day and a time axis,
+ * showing the events of one or more HA calendar entities for the
+ * current week. The first column follows the dashboard's first-weekday
+ * setting.
+ *
+ * `fonts` roles: `title`, `day`, `hour`, `time`, `event`.
+ */
+export interface WeekCalendarWidget extends WidgetBase {
+  type: "week_calendar";
+  /**
+   * HA calendar entity IDs (e.g. ["calendar.family"]). Events of all
+   * listed calendars are merged. A single ID string is also accepted.
+   */
+  entity?: string | string[];
+  /** Optional header text shown above the grid. */
+  title?: string;
+  /**
+   * First hour (0-23) shown on the time axis. Events that end before
+   * it are stacked at the top of their day's column. Defaults to 8.
+   */
+  start_hour?: number;
+  /**
+   * Hour (1-24) at which the time axis ends. Events that start after
+   * it are stacked at the bottom of their day's column. Defaults to 20.
+   */
+  end_hour?: number;
+}
+
+/**
  * Waste-collection schedule widget with relative dates.
  *
  * `fonts` roles: `title`, `primary`, `secondary`, `value`.
@@ -1450,6 +1479,7 @@ export type Widget =
   | DeviceBatteryWidget
   | WasteScheduleWidget
   | CalendarWidget
+  | WeekCalendarWidget
   | TileWidget
   | HeadingWidget
   | EntitiesWidget
