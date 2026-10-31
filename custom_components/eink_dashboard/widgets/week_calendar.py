@@ -885,6 +885,7 @@ def _all_day_boxes(
                 by,
                 bw,
                 layout.lane_h - 2,
+                pad=0,
                 max_lines=1,
             )
         )
@@ -900,6 +901,7 @@ def _all_day_boxes(
                     by,
                     bw,
                     layout.lane_h - 2,
+                    pad=0,
                     max_lines=1,
                 )
             )
@@ -1226,8 +1228,10 @@ def _build_week_calendar_context(
     # A larger day font makes the header row grow with it.
     header_h = max(header_h, fonts.day_size + 6)
     line_h = _ev_line_h(fonts.event_size)
-    lane_h = round(fonts.day_size * 1.3)
     chip_h = line_h + 2
+    # A lane is at least as tall as a chip row, so a bar always fits
+    # one line of event text however small the day font is.
+    lane_h = max(round(fonts.day_size * 1.3), chip_h)
 
     # The layout depends on the widget's size and settings only, never
     # on its events, so it does not change when events come and go.

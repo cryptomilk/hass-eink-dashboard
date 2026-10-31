@@ -755,3 +755,22 @@ class TestAgendaLayout:
             )
         assert_has_dark_pixels(img, 0, 0, 758, self._SHORT)
         assert_all_white(img, 0, self._SHORT + 20, 758, 480)
+
+
+class TestAllDayText:
+    """All-day bars show their text at every grid-mode height."""
+
+    def test_bars_and_markers_have_text(self) -> None:
+        # The lane is tall enough for one line of event text even when
+        # the day font, and so the header, is small.
+        events = [
+            _ev("2026-10-19", "2026-10-20", f"Day {i}") for i in range(5)
+        ]
+        for h in range(210, 481, 10):
+            ctx = _ctx(events, widget=_widget(h=h))
+            if ctx["agenda"]:
+                continue
+            texts = [b["lines"][0]["text"] for b in ctx["all_day"]]
+            assert len(texts) == 3
+            assert all(texts), f"empty all-day text at h={h}: {texts}"
+            assert any(t.startswith("+") for t in texts)
