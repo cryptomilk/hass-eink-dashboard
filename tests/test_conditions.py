@@ -147,6 +147,29 @@ class TestStateCondition:
         c = [{"entity": "sensor.x", "state": "active"}]
         assert check_conditions(c, _states(**{"sensor.x": "active"})) is True
 
+    def test_entity_id_key_is_accepted(self) -> None:
+        # HA's conditions editor routes state conditions with an
+        # attached entity through the core automation editor, which
+        # serialises the entity under "entity_id" instead of
+        # "entity". Issue #146: this key must resolve the same way.
+        c = [{"condition": "state", "entity_id": "light.x", "state": ["on"]}]
+        assert check_conditions(c, _states(**{"light.x": "on"})) is True
+        assert check_conditions(c, _states(**{"light.x": "off"})) is False
+
+    def test_entity_id_takes_precedence_over_entity(self) -> None:
+        # Matches HA's own frontend evaluator, which checks
+        # "entity_id" before "entity".
+        c = [
+            {
+                "condition": "state",
+                "entity_id": "light.x",
+                "entity": "light.y",
+                "state": "on",
+            }
+        ]
+        states = _states(**{"light.x": "on", "light.y": "off"})
+        assert check_conditions(c, states) is True
+
 
 # ── Numeric state condition ───────────────────────────────────────
 
@@ -213,6 +236,26 @@ class TestNumericStateCondition:
         c = [{"condition": "numeric_state", "entity": "s.x", "below": 5}]
         assert check_conditions(c, _states(**{"s.x": "5.1"})) is False
         assert check_conditions(c, _states(**{"s.x": "4.9"})) is True
+
+    def test_entity_id_key_is_accepted(self) -> None:
+        # Same "entity_id" vs "entity" key mismatch as the state
+        # condition (issue #146) applies to numeric_state too.
+        c = [{"condition": "numeric_state", "entity_id": "s.x", "above": 10}]
+        assert check_conditions(c, _states(**{"s.x": "15"})) is True
+
+    def test_entity_id_takes_precedence_over_entity(self) -> None:
+        # Matches HA's own frontend evaluator, which checks
+        # "entity_id" before "entity".
+        c = [
+            {
+                "condition": "numeric_state",
+                "entity_id": "s.x",
+                "entity": "s.y",
+                "above": 10,
+            }
+        ]
+        states = _states(**{"s.x": "15", "s.y": "5"})
+        assert check_conditions(c, states) is True
 
 
 # ── Time condition ────────────────────────────────────────────────
