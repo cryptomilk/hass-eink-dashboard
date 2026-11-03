@@ -95,6 +95,27 @@ def _resolve_entity_state(value: str, states: dict[str, Any]) -> str:
     return value
 
 
+def _condition_entity_id(condition: Condition) -> str | None:
+    """Return the entity ID a state/numeric_state condition targets.
+
+    HA's Lovelace conditions editor routes ``state`` and
+    ``numeric_state`` conditions through the core automation editor
+    whenever an entity is attached, which serialises the entity under
+    ``entity_id`` (the core automation key) rather than ``entity``
+    (the legacy Lovelace key) — nothing converts it back before the
+    condition is persisted.  ``entity_id`` is checked first to match
+    HA's own frontend evaluator (``validate-condition.ts``), which
+    uses the same precedence.
+
+    Args:
+        condition: Condition dict that may carry either key.
+
+    Returns:
+        The entity ID, or ``None`` if neither key is set.
+    """
+    return condition.get("entity_id") or condition.get("entity")
+
+
 def _check_state_condition(
     condition: Condition, states: dict[str, Any]
 ) -> bool:
@@ -120,7 +141,7 @@ def _check_state_condition(
     Returns:
         True when the condition is satisfied.
     """
-    entity_id = condition.get("entity")
+    entity_id = _condition_entity_id(condition)
     if entity_id and entity_id in states:
         entity_state = str(states[entity_id]["state"])
     else:
@@ -158,14 +179,14 @@ def _check_numeric_state_condition(
     value is an entity ID it is resolved to that entity's numeric state.
 
     Args:
-        condition: Condition dict with optional ``entity``, ``above``,
-            and ``below`` keys.
+        condition: Condition dict with optional ``entity``/
+            ``entity_id``, ``above``, and ``below`` keys.
         states: Entity states dict from ``DisplayConfig["states"]``.
 
     Returns:
         True when the entity's numeric state satisfies all bounds.
     """
-    entity_id = condition.get("entity")
+    entity_id = _condition_entity_id(condition)
     raw_state = states.get(entity_id, {}).get("state") if entity_id else None
     try:
         numeric_state = float(raw_state or "")
