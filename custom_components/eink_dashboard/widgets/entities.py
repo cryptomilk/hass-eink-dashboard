@@ -62,8 +62,10 @@ def _build_entities_context(
 
     - **Entity row** — a plain string entity ID, or a dict with an
       ``entity`` key (and optional ``name`` / ``icon`` overrides).
-      Rendered with icon circle, primary text, and right-aligned
-      state value.
+      ``name`` is the display name shown in place of the entity's
+      friendly name; a missing or blank value keeps the friendly
+      name.  Rendered with icon circle, primary text, and
+      right-aligned state value.
     - **Divider row** — ``{"type": "divider"}``.  Rendered as a
       thin gray horizontal line.
     - **Section row** — ``{"type": "section", "label": str}``.
@@ -173,11 +175,16 @@ def _build_entities_context(
             else:
                 eid: str = str(entry.get("entity", ""))
                 if eid and eid in states:
+                    # A blank display name is "use the friendly name",
+                    # including a text field the editor cleared.
+                    raw_name = entry.get("name")
+                    if isinstance(raw_name, str):
+                        raw_name = raw_name.strip()
                     classified.append(
                         {
                             "row_type": "entity",
                             "entity_id": eid,
-                            "name_override": entry.get("name"),
+                            "name_override": raw_name or None,
                             "icon_override": entry.get("icon"),
                         }
                     )

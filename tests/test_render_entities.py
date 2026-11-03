@@ -578,6 +578,20 @@ class TestRenderEntities:
         assert img_base.tobytes() != img_override.tobytes(), (
             "name override should change rendered text"
         )
+        ctx = _build_entities_context(override_widget, self._config())
+        assert ctx["rows"][0]["primary"] == "Kitchen Sensor"
+
+    def test_entities_blank_name_uses_friendly_name(self) -> None:
+        # An empty or whitespace display name keeps the friendly name.
+        for blank in ("", "  "):
+            widget = {
+                "type": "entities",
+                "entities": [
+                    {"entity": "sensor.temperature", "name": blank},
+                ],
+            }
+            ctx = _build_entities_context(widget, self._config())
+            assert ctx["rows"][0]["primary"] == "Living Room"
 
     def test_entities_ignores_widget_level_name_and_icon(self) -> None:
         # Stray widget-level ``name``/``icon`` keys in stored JSON must
