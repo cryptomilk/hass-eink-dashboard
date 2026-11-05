@@ -504,6 +504,13 @@ class WeatherWidget(WidgetBase, total=False):
     """Base font size in pixels."""
     forecast_days: int
     """Number of forecast days to draw."""
+    forecast_type: str
+    """``"daily"`` (default) or ``"hourly"``.  When ``"hourly"``, the
+    forecast shows hour labels and a single temperature per entry
+    instead of day labels with hi/lo temperatures."""
+    forecast_hours: int
+    """Number of hourly forecast entries to draw (default 12).
+    Only used when ``forecast_type`` is ``"hourly"``."""
     mode: str
     """``"full"``, ``"forecast"`` or ``"current"``."""
     temperature_entity: str

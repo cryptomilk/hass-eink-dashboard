@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import markupsafe
@@ -40,6 +40,7 @@ from ._helpers import (
     _color_context,
     _fmt,
     _metrics_context,
+    _resolve_tz,
     _temp_gradient_stops,
     _widget_dim,
 )
@@ -330,6 +331,7 @@ def _forecast_divider_extra(
     return 0
 
 
+# ruff: noqa: C901
 def _build_weather_context(
     widget: WeatherWidget,
     config: DisplayConfig,
@@ -342,9 +344,10 @@ def _build_weather_context(
     Args:
         widget: Widget config dict.  Recognised keys:
             ``entity``, ``x``, ``y``, ``w``, ``font_size``,
-            ``forecast_days``, ``card_style``, ``mode``,
-            ``temperature_entity``, ``humidity_entity``,
-            ``fonts`` (per-role font weight overrides — a mapping
+            ``forecast_days``, ``forecast_type``, ``forecast_hours``,
+            ``card_style``, ``mode``, ``temperature_entity``,
+            ``humidity_entity``, ``fonts`` (per-role font weight
+            overrides — a mapping
             of role name to ``{"size": int, "weight": str}``; roles
             are ``"temp"`` (default ``"bold"``), ``"detail"``
             (default ``"regular"``), and ``"precip"`` (default
@@ -398,7 +401,13 @@ def _build_weather_context(
         }
 
     font_size = widget.get("font_size", FONT_SIZE_WEATHER)
-    forecast_days = widget.get("forecast_days", 5)
+    forecast_type: str = widget.get("forecast_type", "daily")
+    if forecast_type not in ("daily", "hourly"):
+        forecast_type = "daily"
+    if forecast_type == "hourly":
+        forecast_days = widget.get("forecast_hours", 12)
+    else:
+        forecast_days = widget.get("forecast_days", 5)
     card_style = widget.get("card_style", DEFAULT_CARD_STYLE)
     mode = widget.get("mode", DEFAULT_WEATHER_MODE)
     # Unrecognised values intentionally fall back to full mode,
@@ -406,6 +415,9 @@ def _build_weather_context(
     show_current = mode != "forecast"
     show_forecast_section = mode != "current"
     display_levels = config.get("display_levels", 16)
+
+    # Timezone for converting UTC forecast times to local time.
+    tz = _resolve_tz(config)
 
     scale = font_size / FONT_SIZE_WEATHER
 
@@ -455,7 +467,34 @@ def _build_weather_context(
     pressure = attrs.get("pressure")
     pressure_unit = attrs.get("pressure_unit", "hPa")
     cloud_coverage = attrs.get("cloud_coverage")
-    forecast = attrs.get("forecast", [])
+    if forecast_type == "hourly":
+        forecast = attrs.get("forecast_hourly", [])
+        now = datetime.now(UTC)
+        threshold = now + timedelta(minutes=30)
+        filtered = []
+        for entry in forecast:
+            dt_str = entry.get("datetime", "")
+            if dt_str:
+                try:
+                    dt = datetime.fromisoformat(dt_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=UTC)
+                    # Store converted local time on entry for display
+
+                    entry["display_time"] = dt.astimezone(tz).strftime("%H:%M")
+
+                    if dt >= threshold:
+                        filtered.append(entry)
+                except ValueError:
+                    entry["display_time"] = dt_str[:5]
+                    filtered.append(entry)
+            else:
+                entry["display_time"] = ""
+                filtered.append(entry)
+        if show_current:
+            forecast = filtered
+    else:
+        forecast = attrs.get("forecast", [])
     has_forecast = (
         show_forecast_section and bool(forecast) and forecast_days > 0
     )
@@ -465,11 +504,13 @@ def _build_weather_context(
     # sliver.
     show_current = show_current or not has_forecast
 
-    # Today min/max gradient bar, "current" mode only.  Uses
-    # forecast[0] directly (not has_forecast, which reflects the
-    # forecast-strip's own visibility) so the bar still renders
-    # even though "current" mode always hides the strip.
-    today_forecast = forecast[0] if forecast else None
+    # Today min/max gradient bar, "current" mode only.  Uses the
+    # daily forecast (not the strip forecast, which may be hourly)
+    # so the bar still renders even though "current" mode always
+    # hides the strip.  The daily forecast is fetched for all
+    # weather widgets regardless of forecast_type.
+    daily_forecast = attrs.get("forecast", [])
+    today_forecast = daily_forecast[0] if daily_forecast else None
     bar_lo = _none_if_empty(
         today_forecast.get("templow") if today_forecast else None
     )
@@ -610,11 +651,10 @@ def _build_weather_context(
     lo_y = vis_top + round(temp_h * _WX_LO_Y_FRAC)
     precip_y = vis_top + round(temp_h * _WX_PRECIP_Y_FRAC)
     precip_unit_fc = attrs.get("precipitation_unit", "mm")
-    if forecast:
-        today = forecast[0]
-        hi_val = today.get("temperature")
-        lo_val = today.get("templow")
-        p_val = today.get("precipitation")
+    if today_forecast:
+        hi_val = today_forecast.get("temperature")
+        lo_val = today_forecast.get("templow")
+        p_val = today_forecast.get("precipitation")
         if hi_val is not None:
             today_hi = f"{_fmt_temp(hi_val, nf, lang)}°"
         if lo_val is not None:
@@ -711,8 +751,8 @@ def _build_weather_context(
             row_y += feels_like_h
 
         today_date = (
-            datetime.fromisoformat(forecast[0]["datetime"]).date()
-            if forecast
+            datetime.fromisoformat(today_forecast["datetime"]).date()
+            if today_forecast and today_forecast.get("datetime")
             else _get_today()
         )
         date_text = _babel_format_date(today_date, "EEEE, yyyy-MM-dd", lang)
@@ -794,9 +834,11 @@ def _build_weather_context(
             cx = content_left + col_width * col_i + col_width // 2
             dt_str = day.get("datetime")
             if dt_str:
-                day_label = _weekday_abbrev(
-                    datetime.fromisoformat(dt_str).date(), lang
-                )
+                dt = datetime.fromisoformat(dt_str)
+                if forecast_type == "hourly":
+                    day_label = day.get("display_time", dt_str[:5])
+                else:
+                    day_label = _weekday_abbrev(dt.date(), lang)
             else:
                 day_label = ""
 
@@ -809,7 +851,10 @@ def _build_weather_context(
                 fc_icon_svg = ""
 
             fc_hi_val = day.get("temperature", "")
-            fc_lo_val = day.get("templow", "")
+            if forecast_type == "hourly":
+                fc_lo_val = ""
+            else:
+                fc_lo_val = day.get("templow", "")
             fc_hi = (
                 f"{_fmt_temp(fc_hi_val, nf, lang)}°" if fc_hi_val != "" else ""
             )
@@ -823,6 +868,12 @@ def _build_weather_context(
                 else ""
             )
             icon_cy_fc = forecast_y + round(_WX_FC_ICON_CY * scale)
+            # In hourly mode, precipitation moves up to the
+            # position where the low temp would be (no lo temp).
+            if forecast_type == "hourly":
+                precip_y_offset = round(_WX_FC_LO_Y * scale)
+            else:
+                precip_y_offset = round(_WX_FC_PRECIP_Y * scale)
             forecast_entries.append(
                 {
                     "cx": cx,
@@ -836,7 +887,7 @@ def _build_weather_context(
                     "lo": fc_lo,
                     "lo_y": forecast_y + round(_WX_FC_LO_Y * scale),
                     "precip": fc_precip,
-                    "precip_y": forecast_y + round(_WX_FC_PRECIP_Y * scale),
+                    "precip_y": forecast_y + precip_y_offset,
                 }
             )
 
