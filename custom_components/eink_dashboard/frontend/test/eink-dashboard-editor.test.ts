@@ -26,6 +26,7 @@ import {
   LABELS,
   loadHaComponents,
   getSummary,
+  normalizeEntitiesRows,
 } from "../src/eink-dashboard-editor.js";
 import "../src/eink-dashboard-editor.js";
 import { ICON_FALLBACK } from "../src/eink-widget-picker.js";
@@ -689,6 +690,43 @@ describe("SCHEMAS form grouping", () => {
     expect(content).toBeDefined();
     const fields = flattenFields(content.schema!);
     expect(fields).toContain("entities");
+  });
+
+  it("entities schema offers a per-row display name", () => {
+    // Each row can replace the friendly name, as on HA's Entities card.
+    const field = findField(SCHEMAS.entities(DISPLAY), "entities");
+    const objectSel = field?.selector?.object as {
+      multiple?: boolean;
+      label_field?: string;
+      description_field?: string;
+      fields?: Record<string, {
+        label?: string;
+        required?: boolean;
+        selector?: object;
+      }>;
+    };
+    expect(objectSel.multiple).toBe(true);
+    expect(objectSel.label_field).toBe("entity");
+    expect(objectSel.description_field).toBe("name");
+    expect(objectSel.fields?.entity?.required).toBe(true);
+    expect(objectSel.fields?.entity?.selector).toEqual({ entity: {} });
+    expect(objectSel.fields?.name?.label).toBe("Display name");
+    expect(objectSel.fields?.name?.selector).toEqual({ text: {} });
+  });
+
+  it("normalizeEntitiesRows keeps ids editable and drops blank names", () => {
+    // Strings become entity rows; a cleared name must not stick.
+    expect(normalizeEntitiesRows([
+      "sensor.temperature",
+      { entity: "sensor.humidity", name: "  " },
+      { entity: "sensor.pressure", name: "Barometer" },
+      { type: "divider" },
+    ])).toEqual([
+      { entity: "sensor.temperature" },
+      { entity: "sensor.humidity" },
+      { entity: "sensor.pressure", name: "Barometer" },
+      { type: "divider" },
+    ]);
   });
 
   it("waste_schedule entity field is inside content section", () => {

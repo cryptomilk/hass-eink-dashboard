@@ -762,7 +762,8 @@ export interface HeadingWidget extends WidgetBase {
  *
  * Accepts three shapes:
  * - A plain entity ID string (shorthand for an entity row).
- * - ``{ entity, name?, icon? }`` — entity row with overrides.
+ * - ``{ entity, name?, icon? }`` — entity row. ``name`` is an
+ *   optional display name; omitted or blank keeps the friendly name.
  * - ``{ type: "divider" }`` — horizontal separator line.
  * - ``{ type: "section", label? }`` — sub-heading text row.
  */
@@ -789,9 +790,9 @@ export interface EntitiesWidget extends WidgetBase {
   /**
    * Ordered list of row configs (entity, divider, or section).
    *
-   * @remarks The editor UI uses a flat entity-ID picker that only
-   * supports plain entity rows.  Divider and section rows must be
-   * configured via YAML.
+   * The editor edits each entity row and an optional display name.
+   * A plain entity ID is accepted and shown as a row with no
+   * override. Divider and section rows are kept, but edited in YAML.
    */
   entities?: EntitiesRowConfig[];
   /** Optional label rendered above the card area. */
