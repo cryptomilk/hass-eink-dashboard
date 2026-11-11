@@ -14,9 +14,10 @@
 
 from __future__ import annotations
 
+import copy
 import re
 from datetime import date
-from typing import ClassVar
+from typing import Any, ClassVar
 from unittest.mock import patch
 
 from custom_components.eink_dashboard.const import (
@@ -1245,3 +1246,86 @@ class TestWeatherForecastLanguage:
         )
         labels = [e["label"] for e in ctx["forecast_entries"]]
         assert labels == ["Sa.", "So.", "Mo."]
+
+
+class TestWeatherPrecipitationProbability:
+    """Providers that report probability but no precipitation amount."""
+
+    _STATES: ClassVar[dict[str, Any]] = {
+        "weather.home": {
+            "state": "cloudy",
+            "attributes": {
+                "temperature": 12,
+                "temperature_unit": "°C",
+                "precipitation_unit": "mm",
+                "forecast": [
+                    {
+                        "datetime": "2026-05-02T12:00:00",
+                        "temperature": 14,
+                        "templow": 8,
+                        "condition": "cloudy",
+                        "precipitation": None,
+                        "precipitation_probability": 30,
+                    },
+                    {
+                        "datetime": "2026-05-03T12:00:00",
+                        "temperature": 15,
+                        "templow": 9,
+                        "condition": "sunny",
+                        "precipitation": None,
+                        "precipitation_probability": 0,
+                    },
+                    {
+                        "datetime": "2026-05-04T12:00:00",
+                        "temperature": 13,
+                        "templow": 7,
+                        "condition": "rainy",
+                        "precipitation": 2.5,
+                        "precipitation_probability": 80,
+                    },
+                ],
+            },
+        },
+    }
+
+    def _svg(self, states: dict[str, Any] | None = None) -> str:
+        widget = {
+            "type": "weather",
+            "entity": "weather.home",
+            "x": 0,
+            "y": 0,
+            "forecast_days": 3,
+        }
+        config = make_config(
+            {
+                "width": 600,
+                "height": 400,
+                "states": states or self._STATES,
+            }
+        )
+        return render_widget_svg(widget, config)
+
+    def test_probability_shown_when_amount_missing(self) -> None:
+        _text_element(self._svg(), "30%")
+
+    def test_zero_probability_left_out(self) -> None:
+        assert ">0%<" not in self._svg()
+
+    def test_amount_preferred_over_probability(self) -> None:
+        svg = self._svg()
+        _text_element(svg, "2.5mm")
+        assert ">80%<" not in svg
+
+    def test_invalid_amount_never_shown_in_today_row(self) -> None:
+        # Today's row shows a zero amount, but a negative or
+        # non-numeric amount from a provider glitch must not get
+        # through with it.
+        for bad in (-0.5, "n/a"):
+            state = copy.deepcopy(self._STATES)
+            state["weather.home"]["attributes"]["forecast"][0][
+                "precipitation"
+            ] = bad
+            svg = self._svg(state)
+            # Only the third day's 2.5mm remains.
+            amounts = re.findall(r">[^<]*mm</text>", svg)
+            assert amounts == [">2.5mm</text>"], (bad, amounts)

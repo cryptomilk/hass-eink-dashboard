@@ -330,6 +330,54 @@ def _forecast_divider_extra(
     return 0
 
 
+def _precip_text(
+    entry: dict[str, Any],
+    unit: str,
+    config: DisplayConfig,
+    *,
+    show_zero_amount: bool = False,
+) -> str:
+    """Return the precipitation text for one forecast entry.
+
+    Prefers the forecast amount.  Some providers give no amount at
+    all and report only ``precipitation_probability`` (the Met Office
+    daily forecast sends ``precipitation: null`` for every day), so
+    the probability is shown instead, as a percentage.  A probability
+    of zero is left out, as a zero amount is in the forecast row.
+
+    Args:
+        entry: One forecast entry.
+        unit: Precipitation unit from the entity attributes.
+        config: Display config, for locale number formatting.
+        show_zero_amount: Show an amount of exactly zero rather than
+            leaving it out; today's row has always shown ``0mm``.  A
+            negative or non-numeric amount is never shown, whatever
+            this flag says.
+
+    Returns:
+        ``"5mm"``, ``"40%"``, or ``""`` when there is nothing to show.
+    """
+    amount = entry.get("precipitation")
+    if amount is not None:
+        try:
+            value = float(amount)
+        except (TypeError, ValueError):
+            return ""
+        if value > 0 or (value == 0 and show_zero_amount):
+            return f"{_fmt(str(amount), config)}{unit}"
+        return ""
+    probability = entry.get("precipitation_probability")
+    if probability is None:
+        return ""
+    try:
+        percent = round(float(probability))
+    except (TypeError, ValueError):
+        return ""
+    if percent <= 0:
+        return ""
+    return f"{_fmt(str(percent), config)}%"
+
+
 def _build_weather_context(
     widget: WeatherWidget,
     config: DisplayConfig,
@@ -614,13 +662,13 @@ def _build_weather_context(
         today = forecast[0]
         hi_val = today.get("temperature")
         lo_val = today.get("templow")
-        p_val = today.get("precipitation")
         if hi_val is not None:
             today_hi = f"{_fmt_temp(hi_val, nf, lang)}°"
         if lo_val is not None:
             today_lo = f"{_fmt_temp(lo_val, nf, lang)}°"
-        if p_val is not None:
-            today_precip = f"{_fmt(str(p_val), config)}{precip_unit_fc}"
+        today_precip = _precip_text(
+            today, precip_unit_fc, config, show_zero_amount=True
+        )
 
     # Cap font_xl so temp text doesn't overlap the hi/lo column.
     font_xl_size = _cap_weather_font_xl(
@@ -816,12 +864,7 @@ def _build_weather_context(
             fc_lo = (
                 f"{_fmt_temp(fc_lo_val, nf, lang)}°" if fc_lo_val != "" else ""
             )
-            fc_p = day.get("precipitation")
-            fc_precip = (
-                f"{_fmt(str(fc_p), config)}{precip_unit_fc}"
-                if fc_p is not None and fc_p > 0
-                else ""
-            )
+            fc_precip = _precip_text(day, precip_unit_fc, config)
             icon_cy_fc = forecast_y + round(_WX_FC_ICON_CY * scale)
             forecast_entries.append(
                 {
