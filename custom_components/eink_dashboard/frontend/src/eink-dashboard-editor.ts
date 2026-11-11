@@ -290,19 +290,24 @@ const COLOR_OPTIONS = [
  * @returns Schema array with x and y number fields.
  */
 function posXY(d: DisplayConfig): HaFormSchema[] {
+  // Position and size fields take any whole pixel.  Dragging in the
+  // preview still snaps to the grid, but a typed value must reach
+  // the display's own edges, which need not fall on it (a Kindle
+  // Paperwhite is 758 px wide), and shift-drag edge snapping can
+  // produce off-grid values the form would otherwise reject.
   return [
     {
       name: "x",
       default: 24,
       selector: {
-        number: { min: 0, max: d.width, step: 8, mode: "box" },
+        number: { min: 0, max: d.width, step: 1, mode: "box" },
       },
     },
     {
       name: "y",
       default: 0,
       selector: {
-        number: { min: 0, max: d.height, step: 8, mode: "box" },
+        number: { min: 0, max: d.height, step: 1, mode: "box" },
       },
     },
   ];
@@ -320,7 +325,7 @@ function posXYW(d: DisplayConfig): HaFormSchema[] {
     {
       name: "w",
       selector: {
-        number: { min: 0, max: d.width, step: 8, mode: "box" },
+        number: { min: 0, max: d.width, step: 1, mode: "box" },
       },
     },
   ];
@@ -339,7 +344,7 @@ function posXYWH(d: DisplayConfig): HaFormSchema[] {
       name: "h",
       selector: {
         number: {
-          min: 20, max: d.height, step: 8, mode: "box",
+          min: 20, max: d.height, step: 1, mode: "box",
         },
       },
     },
@@ -841,7 +846,7 @@ export const SCHEMAS: Record<
               default: 24,
               selector: {
                 number: {
-                  min: 0, max: d.width, step: 8, mode: "box",
+                  min: 0, max: d.width, step: 1, mode: "box",
                 },
               },
             },
@@ -850,7 +855,7 @@ export const SCHEMAS: Record<
               default: 0,
               selector: {
                 number: {
-                  min: 0, max: d.height, step: 8, mode: "box",
+                  min: 0, max: d.height, step: 1, mode: "box",
                 },
               },
             },
@@ -860,7 +865,7 @@ export const SCHEMAS: Record<
                 number: {
                   min: 0,
                   max: Math.max(d.width, d.height),
-                  step: 8,
+                  step: 1,
                   mode: "box",
                 },
               },

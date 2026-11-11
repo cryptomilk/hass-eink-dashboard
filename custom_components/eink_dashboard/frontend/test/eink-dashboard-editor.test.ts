@@ -1219,3 +1219,44 @@ describe("Widget reorder", () => {
     ).toBe("first");
   });
 });
+
+describe("position fields", () => {
+  // A number input accepts only values in [min, max] that are a
+  // whole number of steps above min; anything else is flagged as
+  // invalid when the form opens.
+  function accepts(schema: HaFormSchema[], name: string, value: number) {
+    const number = findField(schema, name)?.selector?.number as
+      | { min?: number; max?: number; step?: number }
+      | undefined;
+    if (!number) return true;
+    const min = number.min ?? 0;
+    const step = number.step ?? 1;
+    return (
+      value >= min &&
+      value <= (number.max ?? Infinity) &&
+      (value - min) % step === 0
+    );
+  }
+
+  it("every default position and size is accepted", () => {
+    for (const [type, meta] of Object.entries(WIDGET_TYPES)) {
+      const schema = SCHEMAS[type](DISPLAY);
+      const defaults = meta.defaults as Record<string, unknown>;
+      for (const name of ["x", "y", "w", "h"]) {
+        const value = defaults[name];
+        if (typeof value !== "number") continue;
+        expect(accepts(schema, name, value), `${type}.${name}`).toBe(true);
+      }
+    }
+  });
+
+  it("a widget can fill a display whose size is off the grid", () => {
+    // Kindle Paperwhite 1-3: 758 x 1024.
+    const kindle = { width: 758, height: 1024 };
+    for (const type of Object.keys(SCHEMAS)) {
+      const schema = SCHEMAS[type](kindle);
+      expect(accepts(schema, "w", kindle.width), `${type}.w`).toBe(true);
+      expect(accepts(schema, "h", kindle.height), `${type}.h`).toBe(true);
+    }
+  });
+});
