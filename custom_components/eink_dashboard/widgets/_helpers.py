@@ -664,9 +664,10 @@ def _resolve_entity(
     # A blank or whitespace-only override is "use the friendly
     # name" — editors that bind ``name`` to a text field send ""
     # for a cleared field rather than omitting the key.
-    name_override = widget.get("name")
-    if isinstance(name_override, str):
-        name_override = name_override.strip() or None
+    raw_name = widget.get("name")
+    name_override = (
+        raw_name.strip() or None if isinstance(raw_name, str) else raw_name
+    )
     return ResolvedEntity(
         entity_id=entity_id,
         attrs=attrs,
