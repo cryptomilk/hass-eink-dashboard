@@ -27,7 +27,10 @@
   font-size="{{ font_sz | font_px }}" dominant-baseline="central"
   fill="{{ color_hex }}">{{ label }}</text>
 {%- else -%}
-<rect x="{{ body_x }}" y="{{ icon_y }}" width="{{ body_w }}" height="{{ body_h }}"
+{#- Inset the 1px outline by half a pixel so the stroke lands on the
+    body's edge pixels instead of blurring across two. -#}
+<rect x="{{ body_x + 0.5 }}" y="{{ icon_y + 0.5 }}"
+  width="{{ body_w - 1 }}" height="{{ body_h - 1 }}"
   fill="none" stroke="{{ hex_gray }}" stroke-width="1"/>
 <rect x="{{ nub_abs_x }}" y="{{ nub_y }}" width="{{ nub_w }}"
   height="{{ nub_h }}" fill="{{ hex_gray }}"/>
