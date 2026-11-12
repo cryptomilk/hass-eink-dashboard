@@ -60,6 +60,8 @@ class Condition(TypedDict, total=False):
     conditions editor writes this instead of ``entity`` for
     ``state``/``numeric_state`` conditions with an attached entity.
     Checked before ``entity`` by the resolvers."""
+    attribute: str
+    """Attribute name to check instead of the entity state."""
     state: str | list[str]
     """State(s) that satisfy the condition."""
     state_not: str | list[str]

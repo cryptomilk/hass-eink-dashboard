@@ -143,7 +143,16 @@ def _check_state_condition(
     """
     entity_id = _condition_entity_id(condition)
     if entity_id and entity_id in states:
-        entity_state = str(states[entity_id]["state"])
+        attribute = condition.get("attribute")
+        if attribute:
+            attr_value = (
+                states[entity_id]
+                .get("attributes", {})
+                .get(attribute, "unknown")
+            )
+            entity_state = str(attr_value)
+        else:
+            entity_state = str(states[entity_id]["state"])
     else:
         entity_state = "unknown"
 
@@ -187,7 +196,15 @@ def _check_numeric_state_condition(
         True when the entity's numeric state satisfies all bounds.
     """
     entity_id = _condition_entity_id(condition)
-    raw_state = states.get(entity_id, {}).get("state") if entity_id else None
+    attribute = condition.get("attribute")
+    if attribute and entity_id:
+        raw_state = (
+            states.get(entity_id, {}).get("attributes", {}).get(attribute)
+        )
+    else:
+        raw_state = (
+            states.get(entity_id, {}).get("state") if entity_id else None
+        )
     try:
         numeric_state = float(raw_state or "")
     except (TypeError, ValueError):
