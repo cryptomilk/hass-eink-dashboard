@@ -248,14 +248,16 @@ describe("SCHEMAS", () => {
     ]);
   });
 
-  it("graph tick count fields are clamped to 2-12 and default to 2", () => {
-    // Tick counts below 2 make no sense; 2 keeps min/max labels.
+  it("graph tick count fields are clamped to 2-12 and have correct defaults", () => {
+    // Tick counts below 2 make no sense; x defaults to 5 and y to 2.
     const schema = SCHEMAS.graph(DISPLAY);
-    for (const name of ["x_axis_ticks", "y_axis_ticks"]) {
-      const field = findField(schema, name);
-      expect(field?.default).toBe(2);
-      expect(field?.selector?.number).toMatchObject({ min: 2, max: 12 });
-    }
+    const xField = findField(schema, "x_axis_ticks");
+    expect(xField?.default).toBe(5);
+    expect(xField?.selector?.number).toMatchObject({ min: 2, max: 12 });
+
+    const yField = findField(schema, "y_axis_ticks");
+    expect(yField?.default).toBe(2);
+    expect(yField?.selector?.number).toMatchObject({ min: 2, max: 12 });
   });
 
   it("graph title field is a text field without a default", () => {

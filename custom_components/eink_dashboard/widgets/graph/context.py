@@ -65,9 +65,11 @@ if TYPE_CHECKING:
     from ...widget_config import GraphWidget
 
 # Allowed range for x_axis_ticks / y_axis_ticks; matches the editor's
-# number selector.  The minimum is also the default (min/max labels).
+# number selector.
 _MIN_AXIS_TICKS = 2
 _MAX_AXIS_TICKS = 12
+_DEFAULT_X_AXIS_TICKS = 5
+_DEFAULT_Y_AXIS_TICKS = 2
 
 
 def _fix_header_layout(
@@ -565,26 +567,31 @@ def _axis_unit(
 
 
 def _tick_count(
-    widget: GraphWidget, key: Literal["x_axis_ticks", "y_axis_ticks"]
+    widget: GraphWidget,
+    key: Literal["x_axis_ticks", "y_axis_ticks"],
+    default: int = _MIN_AXIS_TICKS,
 ) -> int:
     """Return a validated axis tick count from the widget config.
 
     The editor limits tick counts to 2-12, but stored configs may
-    hold anything; malformed values fall back to the default of 2
-    and out-of-range values are clamped.
+    hold anything; malformed values fall back to ``default`` and
+    out-of-range values are clamped.
 
     Args:
         widget: Widget configuration dict.
         key: ``"x_axis_ticks"`` or ``"y_axis_ticks"``.
+        default: Fallback tick count when the key is omitted or
+            malformed (default: ``_MIN_AXIS_TICKS``).
 
     Returns:
         Tick count between ``_MIN_AXIS_TICKS`` and
         ``_MAX_AXIS_TICKS``.
     """
     try:
-        count = int(float(widget.get(key, _MIN_AXIS_TICKS)))
+        raw = widget.get(key)
+        count = default if raw is None else int(float(str(raw)))
     except (TypeError, ValueError, OverflowError):
-        return _MIN_AXIS_TICKS
+        return default
     return min(max(count, _MIN_AXIS_TICKS), _MAX_AXIS_TICKS)
 
 
@@ -893,8 +900,12 @@ def _build_graph_context(
     primary_points = series_data.primary_points
 
     # --- Axis options ---
-    x_axis_ticks = _tick_count(widget, "x_axis_ticks")
-    y_axis_ticks = _tick_count(widget, "y_axis_ticks")
+    x_axis_ticks = _tick_count(
+        widget, "x_axis_ticks", default=_DEFAULT_X_AXIS_TICKS
+    )
+    y_axis_ticks = _tick_count(
+        widget, "y_axis_ticks", default=_DEFAULT_Y_AXIS_TICKS
+    )
     x_tick_marks = bool(widget.get("x_axis_tick_marks", False))
     y_tick_marks = bool(widget.get("y_axis_tick_marks", False))
     x_axis_grid = bool(widget.get("x_axis_grid", False))

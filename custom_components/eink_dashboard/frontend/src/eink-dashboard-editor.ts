@@ -255,6 +255,7 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       h: 280,
       entity: "",
       card_style: DEFAULT_CARD_STYLE,
+      x_axis_ticks: 5,
     },
   },
   meteogram: {
@@ -1961,7 +1962,7 @@ export const SCHEMAS: Record<
           schema: [
             {
               name: "x_axis_ticks",
-              default: 2,
+              default: 5,
               selector: { number: { min: 2, max: 12, mode: "box" } },
             },
             {
@@ -2125,8 +2126,8 @@ export const HELPERS: Record<string, string> = {
     "When off, the widget is empty if no collection falls "
     + "within the next 3 days.",
   x_axis_ticks:
-    "Maximum number of time labels. 2 shows only the oldest and "
-    + "newest time; more adds labels at round times (fewer are "
+    "Maximum number of time labels (default 5). 2 shows only the oldest "
+    + "and newest time; more adds labels at round times (fewer are "
     + "shown when they would overlap).",
   y_axis_ticks:
     "Maximum number of value labels. 2 shows only min and max; "

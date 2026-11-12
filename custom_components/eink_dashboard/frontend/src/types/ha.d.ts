@@ -1295,7 +1295,7 @@ export interface GraphWidget extends WidgetBase {
    * Maximum number of X-axis (time) labels.  ``2`` shows only the
    * oldest and newest time at the graph edges; larger values add
    * labels at round times (bar charts label evenly spaced bars),
-   * reduced automatically so labels never overlap.  Default: ``2``.
+   * reduced automatically so labels never overlap.  Default: ``5``.
    */
   x_axis_ticks?: number;
   /**

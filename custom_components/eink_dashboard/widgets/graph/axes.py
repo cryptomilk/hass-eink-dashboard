@@ -464,7 +464,8 @@ def _bar_axis_ticks(
         gx1: Plot left edge.
         gx2: Plot right edge.
         font: Loaded label font used to measure label widths.
-        config: Display config (``time_format``, ``time_zone``).
+        config: Display config (``time_format``, ``time_zone``,
+            ``language``).
 
     Returns:
         List of tick dicts like ``_time_axis_ticks``, or an empty
@@ -473,13 +474,17 @@ def _bar_axis_ticks(
     """
     tz = _resolve_tz(config)
     time_fmt = str(config.get("time_format", "24"))
+    language = str(config.get("language", "en"))
     n = min(len(bars), len(timestamps))
     if n < 2:
         return []
     centres = [
         round(float(str(b["x"])) + float(str(b["w"])) / 2) for b in bars[:n]
     ]
-    labels = [_format_timestamp(t, time_fmt, tz) for t in timestamps[:n]]
+    step = round((timestamps[-1] - timestamps[0]) / (n - 1)) if n > 1 else 0
+    labels = [
+        _time_label(t, step, time_fmt, tz, language) for t in timestamps[:n]
+    ]
     gap = font.size / 2 if hasattr(font, "size") else 4
     for k in range(min(count, n), 1, -1):
         idx = sorted({round(i * (n - 1) / (k - 1)) for i in range(k)})
