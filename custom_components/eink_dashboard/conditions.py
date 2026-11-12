@@ -123,7 +123,9 @@ def _check_state_condition(
 
     The entity's current state is looked up in ``states``; if the
     entity is absent its state is treated as ``"unknown"`` (matching
-    HA's behaviour).
+    HA's behaviour).  When ``attribute`` is set, the named attribute
+    value is used instead of the entity state, enabling conditions
+    on entity attributes.
 
     When ``state`` is provided the condition passes if the entity state
     is one of the given values.  When ``state_not`` is provided the
@@ -135,7 +137,9 @@ def _check_state_condition(
 
     Args:
         condition: Condition dict (may or may not have a ``condition``
-            key — legacy format without it is also accepted).
+            key — legacy format without it is also accepted).  May
+            carry an ``attribute`` key to check an entity attribute
+            instead of the entity state.
         states: Entity states dict from ``DisplayConfig["states"]``.
 
     Returns:
@@ -189,7 +193,9 @@ def _check_numeric_state_condition(
 
     Args:
         condition: Condition dict with optional ``entity``/
-            ``entity_id``, ``above``, and ``below`` keys.
+            ``entity_id``, ``attribute``, ``above``, and ``below``
+            keys.  When ``attribute`` is set, the named attribute
+            value is used instead of the entity state.
         states: Entity states dict from ``DisplayConfig["states"]``.
 
     Returns:
