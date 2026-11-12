@@ -17,6 +17,8 @@ from __future__ import annotations
 import re
 from typing import ClassVar
 
+import pytest
+
 from custom_components.eink_dashboard.const import (
     COLOR_GRAY,
     COLOR_LIGHT_GRAY,
@@ -581,17 +583,17 @@ class TestRenderEntities:
         ctx = _build_entities_context(override_widget, self._config())
         assert ctx["rows"][0]["primary"] == "Kitchen Sensor"
 
-    def test_entities_blank_name_uses_friendly_name(self) -> None:
+    @pytest.mark.parametrize("blank", ["", "  "])
+    def test_entities_blank_name_uses_friendly_name(self, blank: str) -> None:
         # An empty or whitespace display name keeps the friendly name.
-        for blank in ("", "  "):
-            widget = {
-                "type": "entities",
-                "entities": [
-                    {"entity": "sensor.temperature", "name": blank},
-                ],
-            }
-            ctx = _build_entities_context(widget, self._config())
-            assert ctx["rows"][0]["primary"] == "Living Room"
+        widget = {
+            "type": "entities",
+            "entities": [
+                {"entity": "sensor.temperature", "name": blank},
+            ],
+        }
+        ctx = _build_entities_context(widget, self._config())
+        assert ctx["rows"][0]["primary"] == "Living Room"
 
     def test_entities_ignores_widget_level_name_and_icon(self) -> None:
         # Stray widget-level ``name``/``icon`` keys in stored JSON must
