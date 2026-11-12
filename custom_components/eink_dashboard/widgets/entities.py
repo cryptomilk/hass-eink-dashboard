@@ -175,16 +175,11 @@ def _build_entities_context(
             else:
                 eid: str = str(entry.get("entity", ""))
                 if eid and eid in states:
-                    # A blank display name is "use the friendly name",
-                    # including a text field the editor cleared.
-                    raw_name = entry.get("name")
-                    if isinstance(raw_name, str):
-                        raw_name = raw_name.strip()
                     classified.append(
                         {
                             "row_type": "entity",
                             "entity_id": eid,
-                            "name_override": raw_name or None,
+                            "name_override": entry.get("name"),
                             "icon_override": entry.get("icon"),
                         }
                     )

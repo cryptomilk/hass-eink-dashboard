@@ -627,7 +627,8 @@ class ResolvedEntity:
         domain: Entity domain, e.g. ``"sensor"``.
         state_val: Raw state string, e.g. ``"21.5"`` or ``"on"``.
         name: Display name: the widget's ``name`` override, else the
-            entity's ``friendly_name``, else ``entity_id``.
+            entity's ``friendly_name``, else ``entity_id``.  A
+            blank or whitespace-only override is treated as unset.
         precision: Decimal places to show, or ``None`` for the
             default rule (see ``_resolve_precision``).
     """
@@ -660,7 +661,12 @@ def _resolve_entity(
     if state is None:
         return None
     attrs = state.get("attributes", {})
+    # A blank or whitespace-only override is "use the friendly
+    # name" — editors that bind ``name`` to a text field send ""
+    # for a cleared field rather than omitting the key.
     name_override = widget.get("name")
+    if isinstance(name_override, str):
+        name_override = name_override.strip() or None
     return ResolvedEntity(
         entity_id=entity_id,
         attrs=attrs,
