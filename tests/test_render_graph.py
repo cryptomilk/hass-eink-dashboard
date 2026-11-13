@@ -3326,10 +3326,20 @@ class TestRenderGraphAxes:
 
     # ── X-axis ticks ──────────────────────────────────────────────────
 
-    def test_default_x_ticks_are_oldest_and_newest(self) -> None:
-        # Without x_axis_ticks the axis keeps its two labels at the
-        # left and right edge of the plot.
+    def test_default_x_ticks_show_round_time_labels(self) -> None:
+        # Without an explicit x_axis_ticks the default (5) places
+        # round-time labels inside the plot, not just the two edge
+        # labels.
         ctx = self._ctx(self._single(), self._config())
+        ticks = ctx["x_ticks"]
+        assert len(ticks) >= 3
+        assert ticks[0]["x"] >= ctx["x_label_left"]
+        assert ticks[-1]["x"] <= ctx["x_label_right"]
+
+    def test_explicit_2_x_ticks_show_oldest_and_newest(self) -> None:
+        # Setting x_axis_ticks=2 explicitly shows only the two edge
+        # labels (oldest and newest).
+        ctx = self._ctx(self._single(x_axis_ticks=2), self._config())
         ticks = ctx["x_ticks"]
         assert len(ticks) == 2
         assert ticks[0]["x"] == ctx["x_label_left"]
@@ -3464,25 +3474,37 @@ class TestRenderGraphAxes:
 
     @pytest.mark.parametrize("value", ["abc", None, "nan", "inf", [3], ""])
     def test_malformed_tick_count_falls_back(self, value: object) -> None:
-        # A malformed stored tick count does not crash rendering and
-        # falls back to the default min/max labels.
+        # A malformed stored tick count does not crash rendering.
+        # X-axis falls back to its default of 5 (producing ≥3 labels
+        # after overlap thinning); Y-axis falls back to 2 (min/max).
         ctx = self._ctx(
             self._single(x_axis_ticks=value, y_axis_ticks=value),
             self._config(),
         )
-        assert len(ctx["x_ticks"]) == 2
+        assert len(ctx["x_ticks"]) >= 3
         assert len(ctx["y_ticks"]) == 2
 
     def test_out_of_range_tick_count_clamped(self) -> None:
         # Tick counts outside 2-12 are clamped instead of misbehaving.
         from custom_components.eink_dashboard.widgets.graph.context import (
+            _DEFAULT_X_AXIS_TICKS,
+            _DEFAULT_Y_AXIS_TICKS,
             _tick_count,
         )
 
         assert _tick_count({"y_axis_ticks": -5}, "y_axis_ticks") == 2
         assert _tick_count({"y_axis_ticks": 100}, "y_axis_ticks") == 12
         assert _tick_count({"y_axis_ticks": "7"}, "y_axis_ticks") == 7
+        # Omitted keys fall back to the function's own default.
         assert _tick_count({}, "y_axis_ticks") == 2
+        # When called with the per-axis defaults (as the renderer
+        # does), omitted keys produce the correct axis defaults.
+        assert (
+            _tick_count({}, "x_axis_ticks", default=_DEFAULT_X_AXIS_TICKS) == 5
+        )
+        assert (
+            _tick_count({}, "y_axis_ticks", default=_DEFAULT_Y_AXIS_TICKS) == 2
+        )
 
     def test_secondary_axis_ticks_and_unit(self) -> None:
         # The secondary axis follows y_axis_ticks and shows its own
@@ -3652,10 +3674,13 @@ class TestRenderGraphAxes:
 
     def test_time_labels_use_configured_time_zone(self) -> None:
         # Time labels are shown in HA's configured time zone instead
-        # of UTC (Berlin is UTC+2 in May).
-        utc = self._ctx(self._single(), self._config())
+        # of UTC (Berlin is UTC+2 in May).  Use x_axis_ticks=2 so
+        # the labels are the raw data-edge times rather than
+        # round-hour snapped ticks.
+        utc = self._ctx(self._single(x_axis_ticks=2), self._config())
         berlin = self._ctx(
-            self._single(), self._config(time_zone="Europe/Berlin")
+            self._single(x_axis_ticks=2),
+            self._config(time_zone="Europe/Berlin"),
         )
 
         def minutes(label: object) -> int:
@@ -3666,6 +3691,12 @@ class TestRenderGraphAxes:
             assert (minutes(b["label"]) - minutes(u["label"])) % 1440 == 120
 
     def test_invalid_time_zone_falls_back_to_utc(self) -> None:
-        # An unknown time zone name does not crash rendering.
-        ctx = self._ctx(self._single(), self._config(time_zone="Nowhere/X"))
-        assert len(ctx["x_ticks"]) == 2
+        # An unknown time zone name does not crash rendering and
+        # keeps the same labels as UTC.
+        utc = self._ctx(self._single(x_axis_ticks=2), self._config())
+        ctx = self._ctx(
+            self._single(x_axis_ticks=2),
+            self._config(time_zone="Nowhere/X"),
+        )
+        for u, c in zip(utc["x_ticks"], ctx["x_ticks"], strict=True):
+            assert u["label"] == c["label"]
