@@ -12,7 +12,23 @@ short window before going back to sleep. If nothing connects and pushes an
 image during that window, the display goes back to sleep with whatever was
 on screen before.
 
-So the setup has two parts:
+## Choose the wake-up handling for your integration
+
+The separately installed [OpenDisplay integration, version 3.2.0][od-3.2]
+queues images sent to sleeping devices and delivers them when the device
+wakes. With that integration, send the image using `opendisplay.upload_image`;
+you do not need the advertisement-event automation in steps 3 and 4 below.
+See its [installation guide][od-3.2]
+for setup and the queue options. Check which integration you have installed:
+the version bundled with Home Assistant Core and the separately installed
+integration can have different features.
+
+The external wake-up recipe below is a fallback for integrations without
+that queue handling. Do not combine it with the built-in wake-up handling:
+it emits a Home Assistant event for each matching advertisement, rather
+than once per wake-up.
+
+This fallback setup has two parts:
 
 1. Configure the device to wake up regularly (e.g. every 5 minutes).
 2. Have Home Assistant notice the moment it wakes up and push a new image
@@ -43,7 +59,7 @@ once using any of:
 - Home Assistant's Bluetooth integration device list.
 - The device's serial log, if you have a cable handy.
 
-## Step 3 — Detect the wake-up with an ESPHome Bluetooth proxy
+## Step 3 — Detect the wake-up with an ESPHome Bluetooth proxy (fallback)
 
 A nearby ESPHome Bluetooth proxy can watch for the display's Bluetooth
 advertisement and tell Home Assistant the instant it wakes up. This requires
@@ -62,14 +78,20 @@ esp32_ble_tracker:
         - homeassistant.event:
             event: esphome.opendisplay_awake
             data:
-              mac: !lambda 'return x.address_str();'
+              mac: !lambda |-
+                char address[esphome::MAC_ADDRESS_PRETTY_BUFFER_SIZE];
+                return std::string(x.address_str_to(address));
 ```
+
+The example uses `address_str_to()`, the replacement for the deprecated
+`address_str()` in ESPHome 2026.8 and newer. Returning a `std::string` copies
+the address before the local buffer goes out of scope.
 
 List every display's MAC address here. One block covers all of them — Home
 Assistant can tell which one fired the event by checking `mac` in the
 automation below.
 
-## Step 4 — Push the image when the display wakes up
+## Step 4 — Push the image when the display wakes up (fallback)
 
 Create an automation per device:
 
@@ -113,3 +135,6 @@ from the extra triggers being ignored while the delay runs.
 - **Automation doesn't fire at all**: double check the ESPHome proxy is in
   Bluetooth range of the display, and that the MAC address is listed
   correctly under `mac_address`.
+
+[od-3.2]:
+  https://github.com/OpenDisplay/Home_Assistant_Integration/tree/3.2.0
