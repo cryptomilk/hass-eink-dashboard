@@ -15,3 +15,5 @@ custom_components/eink_dashboard/frontend/eink-dashboard-editor.js
 custom_components/eink_dashboard/frontend/eink-widget-picker.js
 custom_components/eink_dashboard/frontend/resize-math.js
 custom_components/eink_dashboard/frontend/*.js.map
+# Weather wall climatology tables, built locally for one place
+climatology.json

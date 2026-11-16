@@ -580,3 +580,4 @@ class WidgetType(StrEnum):
     CALENDAR = "calendar"
     METEOGRAM = "meteogram"
     WEEK_CALENDAR = "week_calendar"
+    WEATHER_WALL = "weather_wall"

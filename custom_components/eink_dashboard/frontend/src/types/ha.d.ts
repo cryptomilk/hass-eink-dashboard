@@ -499,6 +499,26 @@ export interface WeatherWidget extends WidgetBase {
 }
 
 /**
+ * Full-panel weather layout for a wall-mounted e-ink display.
+ *
+ * `fonts` roles (weight-only): `headline`, `temperature`, `uv`, `text`.
+ */
+export interface WeatherWallWidget extends WidgetBase {
+  type: "weather_wall";
+  entity?: string;
+  forecast_days?: number;
+  moon_entity?: string;
+  temperature_entity?: string;
+  uv_hide_below?: number;
+  uv_warn_above?: number;
+  force_state?: "auto" | "morning" | "evening" | "night";
+  font_family?: string;
+  palette?: string;
+  /** Path to the table built by scripts/build_climatology.py. */
+  climatology_file?: string;
+}
+
+/**
  * Device battery level indicator in icon or chip layout.
  *
  * `fonts` roles: `label`.
@@ -1484,6 +1504,7 @@ export type Widget =
   | FrameWidget
   | SeparatorWidget
   | WeatherWidget
+  | WeatherWallWidget
   | DeviceBatteryWidget
   | WasteScheduleWidget
   | CalendarWidget

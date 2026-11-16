@@ -41,6 +41,7 @@ from .waste_schedule import (
     _build_waste_schedule_context,
 )
 from .weather import _build_weather_context
+from .weather_wall import _build_weather_wall_context
 from .week_calendar import _build_week_calendar_context
 
 __all__ = [
@@ -58,5 +59,6 @@ __all__ = [
     "_build_tile_context",
     "_build_waste_schedule_context",
     "_build_weather_context",
+    "_build_weather_wall_context",
     "_build_week_calendar_context",
 ]

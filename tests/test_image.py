@@ -31,7 +31,10 @@ from custom_components.eink_dashboard.const import (
     DOMAIN,
 )
 from custom_components.eink_dashboard.data import EinkDashboardRuntimeData
+from custom_components.eink_dashboard.exceptions import RenderNotReady
 from custom_components.eink_dashboard.image import (
+    NOT_READY_RETRY_DELAY,
+    NOT_READY_WARN_AFTER,
     PUSH_MAX_IMAGE_BYTES,
     EinkDashboardImage,
     async_setup_entry,
@@ -837,6 +840,89 @@ class TestEinkDashboardImage:
             await entity._async_refresh(None)
             config = mock_render.call_args[0][1]
             assert config["time_zone"] == "Europe/Berlin"
+
+
+_RENDER = "custom_components.eink_dashboard.image.render_dashboard"
+_CALL_LATER = "custom_components.eink_dashboard.image.async_call_later"
+
+
+class TestRenderNotReady:
+    """A widget whose data has not loaded yet keeps the last image."""
+
+    async def test_last_image_kept_and_retry_scheduled(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
+        await entity._async_refresh(None)
+        before = await entity.async_image()
+        assert before is not None
+
+        with (
+            patch(_RENDER, side_effect=RenderNotReady("not loaded")),
+            patch(_CALL_LATER) as call_later,
+        ):
+            await entity._async_refresh(None)
+
+        assert await entity.async_image() == before
+        call_later.assert_called_once()
+        assert call_later.call_args.args[1] == NOT_READY_RETRY_DELAY
+
+    async def test_one_retry_pending_at_a_time(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
+        with (
+            patch(_RENDER, side_effect=RenderNotReady("not loaded")),
+            patch(_CALL_LATER) as call_later,
+        ):
+            await entity._async_refresh(None)
+            await entity._async_refresh(None)
+
+        call_later.assert_called_once()
+
+    async def test_retries_stop_and_warn_after_the_limit(
+        self,
+        make_entity: Callable[..., Any],
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        entity, _entry = make_entity()
+        entity._not_ready_count = NOT_READY_WARN_AFTER - 1
+        with (
+            patch(_RENDER, side_effect=RenderNotReady("not loaded")),
+            patch(_CALL_LATER) as call_later,
+        ):
+            await entity._async_refresh(None)
+
+        call_later.assert_not_called()
+        assert "still not ready" in caplog.text
+
+    async def test_successful_render_resets_the_count(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
+        with (
+            patch(_RENDER, side_effect=RenderNotReady("not loaded")),
+            patch(_CALL_LATER),
+        ):
+            await entity._async_refresh(None)
+        assert entity._not_ready_count == 1
+
+        await entity._async_refresh(None)
+        assert entity._not_ready_count == 0
+
+    async def test_removal_cancels_a_pending_retry(
+        self, make_entity: Callable[..., Any]
+    ) -> None:
+        entity, _entry = make_entity()
+        unsub = MagicMock()
+        with (
+            patch(_RENDER, side_effect=RenderNotReady("not loaded")),
+            patch(_CALL_LATER, return_value=unsub),
+        ):
+            await entity._async_refresh(None)
+
+        await entity.async_will_remove_from_hass()
+        unsub.assert_called_once()
 
 
 class TestImagePlatformSetup:
