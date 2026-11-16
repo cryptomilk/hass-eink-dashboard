@@ -592,3 +592,28 @@ class MeteogramWidget(WidgetBase, total=False):
     """Temperature curve width in pixels."""
     day_label_format: str
     """``DayLabelFormat`` value for the day labels."""
+
+
+class WeatherWallWidget(WidgetBase, total=False):
+    """Weather wall widget config: a full-panel forecast layout."""
+
+    entity: str
+    """Weather entity ID; needs both daily and hourly forecasts."""
+    moon_entity: str
+    """Moon phase sensor, ``sensor.moon_phase`` by default."""
+    temperature_entity: str
+    """Sensor overriding the morning headline temperature."""
+    forecast_days: int | str
+    """Columns in the day strip, 3 to 6."""
+    uv_hide_below: float | str
+    """UV index below which the badge is hidden."""
+    uv_warn_above: float | str
+    """UV index above which the badge is drawn as a warning."""
+    force_state: str
+    """``"auto"``, ``"morning"``, ``"evening"`` or ``"night"``."""
+    font_family: str
+    """Typeface overriding the dashboard font, drawn unsnapped."""
+    palette: str
+    """Palette overriding the display colour scheme, or ``"auto"``."""
+    climatology_file: str
+    """Absolute path to the table built by build_climatology.py."""

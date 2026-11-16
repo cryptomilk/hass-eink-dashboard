@@ -105,6 +105,21 @@ export const WIDGET_TYPES: Record<string, WidgetTypeMeta> = {
       mode: DEFAULT_WEATHER_MODE,
     },
   },
+  weather_wall: {
+    label: "Weather Wall",
+    description: "Full-panel forecast for a wall display",
+    icon: "mdi:weather-partly-cloudy",
+    defaults: {
+      type: "weather_wall",
+      entity: "",
+      x: 0,
+      y: 0,
+      w: 800,
+      h: 480,
+      forecast_days: 7,
+      moon_entity: "sensor.moon_phase",
+    },
+  },
   entities: {
     label: "Entities",
     description: "Multi-entity list with icons and state values",
@@ -996,6 +1011,125 @@ export const SCHEMAS: Record<
           { weightOnly: true }
         ),
       ],
+    },
+  ],
+
+  weather_wall: (d) => [
+    identitySection(),
+    {
+      name: "content",
+      type: "expandable",
+      flatten: true,
+      expanded: true,
+      title: "Content",
+      icon: "mdi:weather-partly-cloudy",
+      schema: [
+        {
+          name: "entity",
+          required: true,
+          selector: { entity: { domain: "weather" } },
+        },
+        {
+          name: "forecast_days",
+          default: 7,
+          selector: { number: { min: 3, max: 7, mode: "box" } },
+        },
+        {
+          name: "moon_entity",
+          selector: { entity: { domain: "sensor" } },
+        },
+        {
+          name: "temperature_entity",
+          selector: { entity: { domain: "sensor" } },
+        },
+        {
+          name: "climatology_file",
+          selector: { text: {} },
+        },
+      ],
+    },
+    {
+      name: "appearance",
+      type: "expandable",
+      flatten: true,
+      title: "Appearance",
+      icon: "mdi:palette",
+      schema: [
+        {
+          name: "font_family",
+          selector: { text: {} },
+        },
+        {
+          name: "palette",
+          default: "auto",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "auto", label: "From the display" },
+                { value: "bwgbry", label: "Six colour" },
+                { value: "bwry", label: "Black, white, red, yellow" },
+                { value: "bwr", label: "Black, white, red" },
+                { value: "bwy", label: "Black, white, yellow" },
+                { value: "grey", label: "Greyscale" },
+              ],
+            },
+          },
+        },
+        fontsSection(
+          [
+            ["headline", "Headline"],
+            ["temperature", "Temperatures"],
+            ["uv", "UV index"],
+            ["text", "Text"],
+          ],
+          { weightOnly: true }
+        ),
+      ],
+    },
+    {
+      name: "behaviour",
+      type: "expandable",
+      flatten: true,
+      title: "Behaviour",
+      icon: "mdi:clock-outline",
+      schema: [
+        {
+          name: "uv_hide_below",
+          default: 4,
+          selector: { number: { min: 0, max: 11, mode: "box" } },
+        },
+        {
+          name: "uv_warn_above",
+          default: 5.5,
+          selector: {
+            number: { min: 0, max: 11, step: 0.5, mode: "box" },
+          },
+        },
+        {
+          name: "force_state",
+          default: "auto",
+          selector: {
+            select: {
+              mode: "dropdown",
+              options: [
+                { value: "auto", label: "Automatic" },
+                { value: "morning", label: "Morning" },
+                { value: "evening", label: "Evening" },
+                { value: "night", label: "Night" },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    {
+      name: "layout",
+      type: "expandable",
+      flatten: true,
+      title: "Layout",
+      icon: "mdi:move-resize",
+      schema: [{ type: "grid", name: "", schema: posXYWH(d) }],
     },
   ],
 
@@ -2114,6 +2248,15 @@ export const SCHEMAS: Record<
 };
 
 export const HELPERS: Record<string, string> = {
+  font_family:
+    "Leave empty to use the dashboard's font. A typeface named here "
+    + "(e.g. one in the custom font directory) is drawn at the "
+    + "widget's own sizes instead.",
+  climatology_file:
+    "Path to the table from scripts/build_climatology.py, kept "
+    + "outside custom_components (e.g. "
+    + "/config/eink_dashboard/climatology.json). Without it, notes on "
+    + "unusual weather are left out.",
   row_height:
     "Rows never grow taller than this; extra widget height stays "
     + "empty below the list.  Leave empty to use the display's "
@@ -2252,6 +2395,13 @@ export const LABELS: Record<string, string> = {
   hours: "Hours to show",
   show_cloud_cover: "Show cloud cover",
   show_precipitation: "Show precipitation",
+  moon_entity: "Moon phase sensor",
+  uv_hide_below: "Hide UV below",
+  uv_warn_above: "Warn on UV above",
+  force_state: "Force layout (preview)",
+  font_family: "Typeface",
+  palette: "Palette",
+  climatology_file: "Climatology file",
 };
 
 // ── HA component loader ──────────────────────────────────────────
@@ -2294,9 +2444,9 @@ export function getSummary(widget: Widget): string {
     return s.length > 30 ? s.slice(0, 30) + "…" : (s || "(empty)");
   }
   if (
-    t === "weather" || t === "tile" || t === "entity"
-    || t === "sensor" || t === "calendar" || t === "gauge"
-    || t === "meteogram" || t === "week_calendar"
+    t === "weather" || t === "weather_wall" || t === "tile"
+    || t === "entity" || t === "sensor" || t === "calendar"
+    || t === "gauge" || t === "meteogram" || t === "week_calendar"
   ) {
     const entity = widget.entity;
     const label = Array.isArray(entity) ? entity.join(", ") : entity;

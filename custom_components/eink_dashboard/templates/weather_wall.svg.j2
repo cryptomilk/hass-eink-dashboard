@@ -1,0 +1,473 @@
+{#- Weather wall: a full-panel layout for a six-colour e-ink
+    display.  All geometry arrives pre-computed from
+    _build_weather_wall_context(); this template only draws.
+
+    The palette is the panel's four usable native states: blue
+    ground, white, black and yellow.  Nothing here dithers.
+
+    The weather icons are defined inline rather than loaded from
+    icons/svg/, because _build_inline_svg() flattens every path to
+    a single colour and would lose the yellow sun and the black
+    rain-bearing cloud.  The cloud shape is repeated in full in
+    each icon rather than referenced, since resvg's handling of a
+    <use> that points at another <use> is not guaranteed. -#}
+
+{#- A viewBox turns the pixel coordinates below into a design
+    space.  Every constant in weather_wall.py is a coordinate in
+    an 800 by 480 field; resvg maps that field onto whatever the
+    panel actually is, so the layout and its typography keep their
+    proportions at any resolution.
+
+    It scales but does not reflow: the field is 5:3, so a panel of
+    a different aspect letterboxes rather than rearranging.  That
+    covers the usual landscape colour panels; portrait would want
+    a different widget, not a different number here. -#}
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="{{ w }}" height="{{ h }}"
+     viewBox="0 0 {{ design_w }} {{ design_h }}"
+     preserveAspectRatio="xMidYMid meet">
+<defs>
+<g id="ww-wind">
+  <path d="M -8 -3 h 9 a 3 3 0 1 0 -3 -3" fill="none"
+        stroke="{{ c_fg }}" stroke-width="1.5"
+        stroke-linecap="round"/>
+  <path d="M -8 1 h 12 a 3 3 0 1 1 -3 3" fill="none"
+        stroke="{{ c_fg }}" stroke-width="1.5"
+        stroke-linecap="round"/>
+</g>
+<g id="ww-horizon">
+  <path d="M -6.5 3 A 6.5 6.5 0 0 1 6.5 3 Z" fill="{{ c_sun }}"/>
+  <line x1="-9.5" y1="3.5" x2="9.5" y2="3.5"
+        stroke="{{ c_fg }}" stroke-width="1.5"/>
+  <line x1="0" y1="-6" x2="0" y2="-8.6"
+        stroke="{{ c_sun }}" stroke-width="1.5"/>
+  <line x1="-5.7" y1="-2.7" x2="-7.5" y2="-4.5"
+        stroke="{{ c_sun }}" stroke-width="1.5"/>
+  <line x1="5.7" y1="-2.7" x2="7.5" y2="-4.5"
+        stroke="{{ c_sun }}" stroke-width="1.5"/>
+</g>
+<g id="ww-arm" fill="none">
+  <line x1="0" y1="0" x2="0" y2="-7.5"/>
+  <line x1="0" y1="-4.3" x2="2.3" y2="-5.9"/>
+  <line x1="0" y1="-4.3" x2="-2.3" y2="-5.9"/>
+</g>
+<g id="ww-crystal" stroke="{{ c_fg }}" stroke-width="1.4"
+   stroke-linecap="butt">
+  <use href="#ww-arm"/>
+  <use href="#ww-arm" transform="rotate(60)"/>
+  <use href="#ww-arm" transform="rotate(120)"/>
+  <use href="#ww-arm" transform="rotate(180)"/>
+  <use href="#ww-arm" transform="rotate(240)"/>
+  <use href="#ww-arm" transform="rotate(300)"/>
+</g>
+{#- Moon phases.  The lit limb is on the right when waxing, as
+    seen from the northern hemisphere; the waning phases are the
+    same paths mirrored. -#}
+<g id="m-new"><circle cx="0" cy="0" r="9" fill="none"
+   stroke="{{ c_fg }}" stroke-width="1.3"/></g>
+<g id="m-crescent"><path
+   d="M 0 -9 A 9 9 0 0 1 0 9 A 4 9 0 0 0 0 -9 Z"
+   fill="{{ c_fg }}"/></g>
+<g id="m-quarter"><path d="M 0 -9 A 9 9 0 0 1 0 9 Z"
+   fill="{{ c_fg }}"/></g>
+<g id="m-gibbous"><path
+   d="M 0 -9 A 9 9 0 0 1 0 9 A 4 9 0 0 1 0 -9 Z"
+   fill="{{ c_fg }}"/></g>
+<g id="m-full"><circle cx="0" cy="0" r="9" fill="{{ c_fg }}"/></g>
+{#- Weather icons, drawn in a 24-unit box centred on the origin.
+    Every cloud sits at the same coordinates so precipitation
+    hangs below rather than displacing the cloud upward. -#}
+<g id="wx-sun">
+  <circle cx="0" cy="0" r="6" fill="{{ c_sun }}"/>
+  <g stroke="{{ c_sun }}" stroke-width="1.7">
+    <line x1="0" y1="-8" x2="0" y2="-10.5"/>
+    <line x1="0" y1="8" x2="0" y2="10.5"/>
+    <line x1="-8" y1="0" x2="-10.5" y2="0"/>
+    <line x1="8" y1="0" x2="10.5" y2="0"/>
+    <line x1="-5.7" y1="-5.7" x2="-7.4" y2="-7.4"/>
+    <line x1="5.7" y1="5.7" x2="7.4" y2="7.4"/>
+    <line x1="5.7" y1="-5.7" x2="7.4" y2="-7.4"/>
+    <line x1="-5.7" y1="5.7" x2="-7.4" y2="7.4"/>
+  </g>
+</g>
+{#- Clear night: stars rather than a moon.  A fixed gibbous would
+    be wrong on most nights, and the phase is drawn properly on the
+    hero where there is room for it.  Five points at this size will
+    lose definition to dithering, which is acceptable: the reading
+    is "clear sky", not "these particular stars". -#}
+<g id="wx-stars" fill="{{ c_fg }}">
+  <path d="M -3 -7.25 L -2.27 -5 L 0.09 -5 L -1.82 -3.62 L -1.09 -1.37
+           L -3 -2.76 L -4.91 -1.37 L -4.18 -3.62 L -6.09 -5 L -3.73 -5 Z"/>
+  <path d="M 6 -0.25 L 6.51 1.31 L 8.14 1.31 L 6.82 2.27 L 7.32 3.82
+           L 6 2.86 L 4.68 3.82 L 5.18 2.27 L 3.86 1.31 L 5.49 1.31 Z"/>
+  <path d="M -4 4.4 L -3.64 5.51 L -2.48 5.51 L -3.42 6.19 L -3.06 7.29
+           L -4 6.61 L -4.94 7.29 L -4.58 6.19 L -5.52 5.51 L -4.36 5.51 Z"/>
+</g>
+<g id="wx-cloud" fill="{{ c_fg }}">
+  <circle cx="-5" cy="1" r="5"/>
+  <circle cx="2" cy="-3" r="7"/>
+  <circle cx="8" cy="2" r="4.5"/>
+  <rect x="-5" y="2" width="13" height="4.5"/>
+</g>
+<g id="wx-cloud-dark">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5.2" cy="1" r="6.2"/>
+    <circle cx="2.1" cy="-3.2" r="8.2"/>
+    <circle cx="8.4" cy="2" r="5.7"/>
+    <rect x="-5.2" y="1.8" width="13.6" height="5.9"/>
+  </g>
+  <g fill="{{ c_dark }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+</g>
+<g id="wx-sun-cloud">
+  <circle cx="5" cy="-9" r="4.5" fill="{{ c_sun }}"/>
+  {#- Five rays rather than two: the sun is only half visible, so
+      the ones that would fall behind the cloud are omitted, but
+      everything clear of it is drawn.  Angles are the same 45
+      degree spacing as the full sun, measured about (5, -9). -#}
+  <g stroke="{{ c_sun }}" stroke-width="1.5" stroke-linecap="butt">
+    <line x1="5" y1="-15" x2="5" y2="-17.5"/>
+    <line x1="0.76" y1="-13.24" x2="-1" y2="-15"/>
+    <line x1="9.24" y1="-13.24" x2="11" y2="-15"/>
+    <line x1="-1" y1="-9" x2="-3.5" y2="-9"/>
+    <line x1="11" y1="-9" x2="13.5" y2="-9"/>
+  </g>
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+</g>
+<g id="wx-moon-cloud">
+  {#- A waning crescent, mirrored so the lit limb is on the left.
+      It does not track the real phase: at this size a true
+      crescent is barely five units wide and would dither away,
+      and the phase is drawn properly on the hero where there is
+      room for it. -#}
+  <g transform="translate(14,-12) scale(-0.78,0.78)">
+    <use href="#m-crescent"/>
+  </g>
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+</g>
+<g id="wx-rain1">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <line x1="2" y1="9" x2="0.5" y2="14"
+        stroke="{{ c_fg }}" stroke-width="1.9"/>
+</g>
+<g id="wx-rain2">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5.2" cy="1" r="6.2"/>
+    <circle cx="2.1" cy="-3.2" r="8.2"/>
+    <circle cx="8.4" cy="2" r="5.7"/>
+    <rect x="-5.2" y="1.8" width="13.6" height="5.9"/>
+  </g>
+  <g fill="{{ c_dark }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g stroke="{{ c_fg }}" stroke-width="1.9">
+    <line x1="-1" y1="9" x2="-2.5" y2="14"/>
+    <line x1="5" y1="9" x2="3.5" y2="14"/>
+  </g>
+</g>
+<g id="wx-rain3">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5.2" cy="1" r="6.2"/>
+    <circle cx="2.1" cy="-3.2" r="8.2"/>
+    <circle cx="8.4" cy="2" r="5.7"/>
+    <rect x="-5.2" y="1.8" width="13.6" height="5.9"/>
+  </g>
+  <g fill="{{ c_dark }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g stroke="{{ c_fg }}" stroke-width="1.9">
+    <line x1="-4" y1="9" x2="-5.5" y2="14"/>
+    <line x1="2" y1="9" x2="0.5" y2="14"/>
+    <line x1="8" y1="9" x2="6.5" y2="14"/>
+  </g>
+</g>
+<g id="wx-flake" stroke="{{ c_fg }}" stroke-width="1.3">
+  <line x1="-2.2" y1="0" x2="2.2" y2="0"/>
+  <line x1="-1.1" y1="-1.9" x2="1.1" y2="1.9"/>
+  <line x1="-1.1" y1="1.9" x2="1.1" y2="-1.9"/>
+</g>
+<g id="wx-snow1">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g transform="translate(2,11.5)"><use href="#wx-flake"/></g>
+</g>
+<g id="wx-snow2">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g transform="translate(-1,11.5)"><use href="#wx-flake"/></g>
+  <g transform="translate(5,11.5)"><use href="#wx-flake"/></g>
+</g>
+<g id="wx-snow3">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5.2" cy="1" r="6.2"/>
+    <circle cx="2.1" cy="-3.2" r="8.2"/>
+    <circle cx="8.4" cy="2" r="5.7"/>
+    <rect x="-5.2" y="1.8" width="13.6" height="5.9"/>
+  </g>
+  <g fill="{{ c_dark }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g transform="translate(-5,11.5)"><use href="#wx-flake"/></g>
+  <g transform="translate(1,11.5)"><use href="#wx-flake"/></g>
+  <g transform="translate(7,11.5)"><use href="#wx-flake"/></g>
+</g>
+<g id="wx-storm">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5.2" cy="1" r="6.2"/>
+    <circle cx="2.1" cy="-3.2" r="8.2"/>
+    <circle cx="8.4" cy="2" r="5.7"/>
+    <rect x="-5.2" y="1.8" width="13.6" height="5.9"/>
+  </g>
+  <g fill="{{ c_dark }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <path d="M 2.4 5.6 L -1.0 11.6 L 2.0 10.2 L -1.4 16.2"
+        fill="none" stroke="{{ c_sun }}" stroke-width="2.6"
+        stroke-linecap="butt" stroke-linejoin="bevel"/>
+</g>
+<g id="wx-fog">
+  <g fill="{{ c_fg }}">
+    <circle cx="-5" cy="1" r="5"/>
+    <circle cx="2" cy="-3" r="7"/>
+    <circle cx="8" cy="2" r="4.5"/>
+    <rect x="-5" y="2" width="13" height="4.5"/>
+  </g>
+  <g stroke="{{ c_fg }}" stroke-width="1.9" stroke-linecap="round">
+    <line x1="-8" y1="10" x2="6" y2="10"/>
+    <line x1="-5" y1="14" x2="9" y2="14"/>
+  </g>
+</g>
+</defs>
+{%- if font_override %}<g text-rendering="geometricPrecision">{% endif -%}
+{#- Painted in the design space, not the output space: with a
+    viewBox in play, w and h are the panel's pixels while every
+    coordinate here is a design unit. -#}
+<rect x="0" y="0" width="{{ design_w }}" height="{{ design_h }}"
+      fill="{{ c_bg }}"/>
+{%- if is_night -%}
+<rect x="0" y="0" width="{{ night_w }}" height="{{ night_h }}"
+      fill="{{ c_night }}"/>
+{%- endif -%}
+{%- if not has_state -%}
+<text x="{{ margin }}" y="{{ y_headline }}" font-size="{{ font_m }}" font-weight="{{ fw_text }}"
+      fill="{{ c_sun }}" font-family="{{ ff_m }}"
+  >No weather entity, or no forecast available</text>
+{%- else -%}
+<text x="{{ margin }}" y="{{ y_date }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_s }}">{{ date_text }}</text>
+{#- The header takes the right block's own edges, which are the
+    same edges the rain caption uses below it, so the block is
+    framed identically top and bottom. -#}
+{%- if header_left -%}
+<text x="{{ right_x }}" y="{{ y_date }}"
+      font-size="{{ font_s }}" font-weight="{{ fw_text }}" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ header_left }}</text>
+{%- endif -%}
+{%- if header_max -%}
+<text x="{{ right_right }}" y="{{ y_date }}"
+      font-size="{{ font_s }}" font-weight="{{ fw_text }}" text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ header_max }}</text>
+{%- endif -%}
+{%- if header_uv -%}
+<text x="{{ right_right }}" y="{{ y_date }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ header_uv }}</text>
+{%- endif -%}
+{#- The hero: a moon phase when the sky is clear enough to show
+    one, otherwise the weather condition. -#}
+{#- The moon is drawn first so a cloud, if there is one, covers its
+    lower left.  They are separate elements rather than a combined
+    glyph, which is what lets the real phase show on a half-clouded
+    night. -#}
+{%- if moon_phase -%}
+<g transform="translate({{ hero_cx + moon_dx }}, {{ hero_cy + moon_dy }})
+   scale({{ moon_scale }})">
+{%- if moon_phase == 'new' -%}
+<use href="#m-new"/>
+{%- elif moon_phase == 'wax_crescent' -%}
+<use href="#m-crescent"/>
+{%- elif moon_phase == 'wane_crescent' -%}
+<g transform="scale(-1,1)"><use href="#m-crescent"/></g>
+{%- elif moon_phase == 'first_quarter' -%}
+<use href="#m-quarter"/>
+{%- elif moon_phase == 'last_quarter' -%}
+<g transform="scale(-1,1)"><use href="#m-quarter"/></g>
+{%- elif moon_phase == 'wax_gibbous' -%}
+<use href="#m-gibbous"/>
+{%- elif moon_phase == 'wane_gibbous' -%}
+<g transform="scale(-1,1)"><use href="#m-gibbous"/></g>
+{%- else -%}
+<use href="#m-full"/>
+{%- endif -%}
+</g>
+{%- endif -%}
+{%- if hero_icon -%}
+<g transform="translate({{ hero_cx }}, {{ hero_cy }})
+   scale({{ hero_scale }})"><use href="#{{ hero_icon }}"/></g>
+{%- endif -%}
+{%- if headline.show -%}
+<text x="{{ temp_x }}" y="{{ y_headline }}" font-size="{{ font_xl }}"
+      font-weight="{{ fw_headline }}" fill="{{ c_fg }}" font-family="{{ ff_xl }}"
+  >{%- if headline.neg %}<tspan font-size="{{ minus_xl }}">&#8722;</tspan><tspan dx="{{ dx_xl }}">{{ headline.text }}</tspan>{% else %}{{ headline.text }}{% endif -%}</text>
+{%- endif -%}
+{%- if uv_show -%}
+{%- if uv_warn -%}
+{#- A high index gets a filled badge rather than red type: red on
+    blue has too little luminance separation on the panel, whereas
+    white on red is the strongest pairing either colour has. -#}
+<rect x="{{ left_right - uv_badge_w }}" y="{{ y_uv_badge }}"
+      width="{{ uv_badge_w }}" height="{{ uv_badge_h }}"
+      rx="10" ry="10" fill="{{ c_warn }}"
+      stroke="{{ c_warn_stroke }}" stroke-width="2"/>
+<text x="{{ left_right - uv_badge_w / 2 }}" y="{{ y_uv_label }}"
+      font-size="{{ font_s }}" font-weight="{{ fw_uv }}" text-anchor="middle"
+      fill="{{ c_warn_fg }}" font-family="{{ ff_s }}">{{ s_uv }}</text>
+<text x="{{ left_right - uv_badge_w / 2 }}" y="{{ y_headline }}"
+      font-size="{{ font_l }}" font-weight="{{ fw_uv }}" text-anchor="middle"
+      fill="{{ c_warn_fg }}" font-family="{{ ff_l }}">{{ uv_text }}</text>
+{%- else -%}
+<text x="{{ left_right }}" y="{{ y_uv_label }}" font-size="{{ font_s }}"
+      font-weight="{{ fw_uv }}" text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ s_uv }}</text>
+<text x="{{ left_right }}" y="{{ y_headline }}" font-size="{{ font_l }}"
+      font-weight="{{ fw_uv }}" text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_l }}">{{ uv_text }}</text>
+{%- endif -%}
+{%- endif -%}
+{%- if line2_kind == 'plain' -%}
+<text x="{{ temp_x }}" y="{{ y_line2 }}" font-size="{{ font_m }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_m }}">{{ line2_text }}</text>
+{%- elif line2_kind == 'solar' -%}
+<g transform="translate({{ line2_icon_x }}, {{ y_line2 - 9 }})
+   scale(1.5)"><use href="#ww-horizon"/></g>
+<text x="{{ line2_text_x }}" y="{{ y_line2 }}" font-size="{{ font_m }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_m }}">{{ line2_text }}</text>
+{%- elif line2_kind == 'warn' -%}
+<g transform="translate({{ line2_icon_x }}, {{ y_line2 - 9 }})
+   scale(1.5)"><use href="#ww-crystal"/></g>
+<text x="{{ line2_text_x }}" y="{{ y_line2 }}" font-size="{{ font_m }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_m }}">{{ line2_text }}</text>
+{%- endif -%}
+{%- if wind_text -%}
+<g transform="translate({{ wind_icon_x }}, {{ y_metrics - 6 }})
+   scale(1.15)"><use href="#ww-wind"/></g>
+<text x="{{ wind_text_x }}" y="{{ y_metrics }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_s }}">{{ wind_text }}</text>
+{%- endif -%}
+{%- if solar_text -%}
+<g transform="translate({{ solar_icon_x }}, {{ y_metrics - 7 }})
+   scale(1.15)"><use href="#ww-horizon"/></g>
+<text x="{{ left_right }}" y="{{ y_metrics }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ solar_text }}</text>
+{%- endif -%}
+{#- The two-hourly strip. -#}
+{%- for hr in hours -%}
+{%- if hr.dark -%}
+<rect x="{{ hr.cx + tile_dx }}" y="{{ hour_icon_cy + tile_dy }}"
+      width="{{ tile_w }}" height="{{ tile_h }}"
+      rx="{{ tile_r }}" ry="{{ tile_r }}" fill="{{ c_night }}"/>
+{%- endif -%}
+<text x="{{ hr.cx }}" y="{{ y_hour_label }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ hr.label }}</text>
+{%- if hr.icon -%}
+<g transform="translate({{ hr.cx }}, {{ hour_icon_cy }})
+   scale({{ hour_scale }})"><use href="#{{ hr.icon }}"/></g>
+{%- endif -%}
+{%- if hr.temp.show -%}
+<text x="{{ hr.cx + (0 if hr.temp.neg else deg_shift_m) }}" y="{{ y_hour_temp }}" font-size="{{ font_m }}"
+      font-weight="{{ fw_temperature }}" text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_m }}"
+  >{%- if hr.temp.neg %}<tspan font-size="{{ minus_m }}">&#8722;</tspan><tspan dx="{{ dx_m }}">{{ hr.temp.text }}</tspan>{% else %}{{ hr.temp.text }}{% endif -%}</text>
+{%- endif -%}
+{%- endfor -%}
+{%- if hours_note -%}
+<text x="{{ (right_x + right_right) / 2 }}" y="{{ y_no_hourly }}"
+      font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ hours_note }}</text>
+{%- endif -%}
+{%- if rain_d -%}
+<path d="{{ rain_d }}" fill="{{ c_fg }}"/>
+<line x1="{{ right_x }}" y1="{{ rain_mid }}"
+      x2="{{ right_right }}" y2="{{ rain_mid }}"
+      stroke="{{ c_fg }}" stroke-width="1" stroke-dasharray="4 4"/>
+<text x="{{ right_x }}" y="{{ y_caption }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      fill="{{ c_fg }}" font-family="{{ ff_s }}">{{ caption }}</text>
+{%- if rain_peak -%}
+<text x="{{ right_right }}" y="{{ y_caption }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="end" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ rain_peak }}</text>
+{%- endif -%}
+{%- endif -%}
+<line x1="{{ margin }}" y1="{{ y_rule }}" x2="{{ design_w - margin }}"
+      y2="{{ y_rule }}" stroke="{{ c_fg }}" stroke-width="1.5"/>
+{#- The day strip. -#}
+{%- for d in days -%}
+<text x="{{ d.cx }}" y="{{ y_day_label }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ d.label }}</text>
+{%- if d.icon -%}
+<g transform="translate({{ d.cx }}, {{ day_icon_cy }})
+   scale({{ day_scale }})"><use href="#{{ d.icon }}"/></g>
+{%- endif -%}
+{%- if d.temp.show -%}
+<text x="{{ d.cx + (0 if d.temp.neg else deg_shift_m) }}" y="{{ y_day_temp }}" font-size="{{ font_m }}"
+      font-weight="{{ fw_temperature }}" text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_m }}"
+  >{%- if d.temp.neg %}<tspan font-size="{{ minus_m }}">&#8722;</tspan><tspan dx="{{ dx_m }}">{{ d.temp.text }}</tspan>{% else %}{{ d.temp.text }}{% endif -%}</text>
+{%- endif -%}
+{%- if d.prob -%}
+<text x="{{ d.cx + pct_shift_s }}" y="{{ y_day_prob }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ d.prob }}</text>
+{%- endif -%}
+{%- if d.remark -%}
+<text x="{{ d.cx }}" y="{{ y_day_remark }}" font-size="{{ font_s }}" font-weight="{{ fw_text }}"
+      text-anchor="middle" fill="{{ c_fg }}"
+      font-family="{{ ff_s }}">{{ d.remark }}</text>
+{%- endif -%}
+{%- endfor -%}
+{%- endif -%}
+{%- if font_override %}</g>{% endif -%}
+</svg>
