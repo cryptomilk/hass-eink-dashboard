@@ -111,6 +111,32 @@ class TestRenderDeviceBattery:
             img, PADDING + 8, 30, PADDING + 9, 44, threshold=200
         )
 
+    def test_icon_outline_is_pixel_aligned(self) -> None:
+        # Verify the 1px outline covers one whole pixel per edge in
+        # solid gray instead of blurring at half strength across two,
+        # which fades out on e-ink displays (issue #153).
+        widget = {"type": "device_battery", "x": PADDING, "y": 20}
+        config = self._config(device_battery_level=0)
+        img = render_to_image([widget], config)
+        context = _build_device_battery_context(widget, config)
+        left = PADDING + context["body_x"]
+        top = 20 + context["icon_y"]
+        right = left + context["body_w"] - 1
+        bottom = top + context["body_h"] - 1
+        mid_x = (left + right) // 2
+        mid_y = (top + bottom) // 2
+
+        assert pixel(img, left, mid_y) == COLOR_GRAY
+        assert pixel(img, right, mid_y) == COLOR_GRAY
+        assert pixel(img, mid_x, top) == COLOR_GRAY
+        assert pixel(img, mid_x, bottom) == COLOR_GRAY
+        # Outside each edge stays white; right of the body is the gap
+        # before the nub.
+        assert pixel(img, left - 1, mid_y) == 255
+        assert pixel(img, right + 1, mid_y) == 255
+        assert pixel(img, mid_x, top - 1) == 255
+        assert pixel(img, mid_x, bottom + 1) == 255
+
     def test_icon_vertically_centers_with_text(self) -> None:
         # Verify the battery icon is vertically centred against
         # the text label.
