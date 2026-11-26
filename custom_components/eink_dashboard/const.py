@@ -171,10 +171,10 @@ class DevicePreset:
     color_scheme: str | None = None
     """Color palette for color e-ink displays (e.g. ``"bwgbry"`` for
     Spectra 6-color).  ``None`` means grayscale.  String values match
-    keys in ``optimize._COLOR_SCHEMES``."""
+    keys in ``optimize._COLOR_PALETTES``."""
     measured_palette: str = DEFAULT_MEASURED_PALETTE
     """Measured palette key for photographically calibrated dithering.
-    ``"auto"`` means use the idealized ``ColorScheme`` derived from
+    ``"auto"`` means use the idealized palette derived from
     ``color_scheme`` or ``display_levels``.  Non-auto values match
     keys in ``optimize._MEASURED_PALETTES``."""
     ppi: int | None = None
