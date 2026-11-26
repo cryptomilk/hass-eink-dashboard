@@ -19,9 +19,15 @@ from itertools import pairwise
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image
+from epaper_dithering import DitherOptions
+from PIL import Image, ImageDraw
 
-from custom_components.eink_dashboard.optimize import optimize_for_eink
+from custom_components.eink_dashboard.optimize import (
+    _COLOR_PALETTES,
+    _GRAYSCALE_PALETTES,
+    _MEASURED_PALETTES,
+    optimize_for_eink,
+)
 
 
 def _gradient(width: int = 256, height: int = 100) -> Image.Image:
@@ -30,6 +36,13 @@ def _gradient(width: int = 256, height: int = 100) -> Image.Image:
         for y in range(height):
             img.putpixel((x, y), x)
     return img
+
+
+def _dither_options(mock: MagicMock) -> DitherOptions:
+    """Return the DitherOptions passed to a mocked dither_image()."""
+    options = mock.call_args.args[2]
+    assert isinstance(options, DitherOptions)
+    return options
 
 
 class TestOptimizeDisabled:
@@ -136,8 +149,8 @@ class TestExposureSaturation:
         # When not configured, dither_image receives the defaults (1.0/1.0).
         mock = self._run_with_mock({"optimize": True, "display_levels": 16})
         mock.assert_called_once()
-        assert mock.call_args[1]["exposure"] == 1.0
-        assert mock.call_args[1]["saturation"] == 1.0
+        assert _dither_options(mock).exposure == 1.0
+        assert _dither_options(mock).saturation == 1.0
 
     def test_custom_exposure_passed(self) -> None:
         # A custom exposure value is forwarded to dither_image.
@@ -145,7 +158,7 @@ class TestExposureSaturation:
             {"optimize": True, "display_levels": 16, "exposure": 1.5}
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["exposure"] == 1.5
+        assert _dither_options(mock).exposure == 1.5
 
     def test_custom_saturation_passed(self) -> None:
         # A custom saturation value is forwarded to dither_image.
@@ -153,7 +166,7 @@ class TestExposureSaturation:
             {"optimize": True, "display_levels": 16, "saturation": 0.5}
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["saturation"] == 0.5
+        assert _dither_options(mock).saturation == 0.5
 
     def test_exposure_saturation_on_color_path(self) -> None:
         # exposure/saturation are forwarded on the color path too.
@@ -177,8 +190,8 @@ class TestExposureSaturation:
                 },
             )
         mock.assert_called_once()
-        assert mock.call_args[1]["exposure"] == 1.2
-        assert mock.call_args[1]["saturation"] == 0.8
+        assert _dither_options(mock).exposure == 1.2
+        assert _dither_options(mock).saturation == 0.8
 
     def test_grayscale_256_skips_dither_image(self) -> None:
         # display_levels=256 is the passthrough path: dither_image() is
@@ -223,7 +236,7 @@ class TestDitherAlgorithmSelection:
 
         mock = self._run_with_mock({"optimize": True, "display_levels": 16})
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+        assert _dither_options(mock).mode is DitherMode.FLOYD_STEINBERG
 
     def test_explicit_floyd_steinberg(self) -> None:
         # Explicit floyd_steinberg selects Floyd-Steinberg mode.
@@ -237,7 +250,7 @@ class TestDitherAlgorithmSelection:
             }
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+        assert _dither_options(mock).mode is DitherMode.FLOYD_STEINBERG
 
     def test_atkinson_selected(self) -> None:
         # Config with dither_algorithm='atkinson' uses Atkinson mode.
@@ -251,7 +264,7 @@ class TestDitherAlgorithmSelection:
             }
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.ATKINSON
+        assert _dither_options(mock).mode is DitherMode.ATKINSON
 
     def test_stucki_selected(self) -> None:
         # Config with dither_algorithm='stucki' uses Stucki mode.
@@ -265,7 +278,7 @@ class TestDitherAlgorithmSelection:
             }
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.STUCKI
+        assert _dither_options(mock).mode is DitherMode.STUCKI
 
     def test_burkes_selected(self) -> None:
         # Config with dither_algorithm='burkes' uses Burkes mode.
@@ -279,7 +292,7 @@ class TestDitherAlgorithmSelection:
             }
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.BURKES
+        assert _dither_options(mock).mode is DitherMode.BURKES
 
     def test_unknown_algorithm_falls_back_to_floyd_steinberg(
         self,
@@ -295,7 +308,7 @@ class TestDitherAlgorithmSelection:
             }
         )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+        assert _dither_options(mock).mode is DitherMode.FLOYD_STEINBERG
 
 
 class TestNoneAlgorithm:
@@ -317,7 +330,7 @@ class TestNoneAlgorithm:
                 },
             )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.NONE
+        assert _dither_options(mock).mode is DitherMode.NONE
 
     def test_none_maps_to_nearest_level_without_pattern(self) -> None:
         # Without error diffusion each row of a horizontal gradient
@@ -375,7 +388,7 @@ class TestNoneAlgorithm:
                 },
             )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.NONE
+        assert _dither_options(mock).mode is DitherMode.NONE
 
 
 class TestThresholdAlgorithm:
@@ -446,7 +459,7 @@ class TestThresholdAlgorithm:
                 },
             )
         mock.assert_called_once()
-        assert mock.call_args[1]["mode"] is DitherMode.FLOYD_STEINBERG
+        assert _dither_options(mock).mode is DitherMode.FLOYD_STEINBERG
 
 
 class TestColorSchemeDithering:
@@ -459,10 +472,8 @@ class TestColorSchemeDithering:
         )
         assert result.mode == "RGB"
 
-    def test_color_scheme_passes_correct_colorscheme(self) -> None:
-        # Verify that dither_image receives ColorScheme.BWR for "bwr".
-        from epaper_dithering import ColorScheme
-
+    def test_color_scheme_passes_correct_palette(self) -> None:
+        # Verify that dither_image receives the idealized BWR palette.
         img = _gradient()
         mock = MagicMock(
             return_value=img.convert("RGB").quantize(
@@ -478,7 +489,7 @@ class TestColorSchemeDithering:
                 {"optimize": True, "color_scheme": "bwr"},
             )
         mock.assert_called_once()
-        assert mock.call_args[0][1] is ColorScheme.BWR
+        assert mock.call_args.args[1] is _COLOR_PALETTES["bwr"]
 
     def test_unknown_color_scheme_raises(self) -> None:
         # An unrecognised color_scheme key must raise ValueError.
@@ -640,20 +651,16 @@ class TestMeasuredPaletteDithering:
         ],
         ids=["explicit-auto", "absent-key"],
     )
-    def test_auto_uses_idealized_scheme(self, config: dict) -> None:
-        # "auto" and absent measured_palette both pass a ColorScheme
-        # (not a ColorPalette) to dither_image.
-        from epaper_dithering import ColorScheme
-
+    def test_auto_uses_idealized_palette(self, config: dict) -> None:
+        # "auto" and absent measured_palette both pass the idealized
+        # gray palette (not a measured one) to dither_image.
         mock = self._run_with_mock(config)
         mock.assert_called_once()
-        assert isinstance(mock.call_args[0][1], ColorScheme)
+        assert mock.call_args.args[1] is _GRAYSCALE_PALETTES[16]
 
     def test_measured_palette_overrides_color_scheme(self) -> None:
-        # When measured_palette is set, dither_image receives a
-        # ColorPalette instead of a ColorScheme.
-        from epaper_dithering import SPECTRA_7_3_6COLOR, ColorPalette
-
+        # When measured_palette is set, dither_image receives the
+        # measured palette instead of the idealized one.
         img = _gradient().convert("RGB")
         mock = MagicMock(
             return_value=img.quantize(
@@ -673,14 +680,11 @@ class TestMeasuredPaletteDithering:
                 },
             )
         mock.assert_called_once()
-        palette_arg = mock.call_args[0][1]
-        assert isinstance(palette_arg, ColorPalette)
-        assert palette_arg is SPECTRA_7_3_6COLOR
+        palette_arg = mock.call_args.args[1]
+        assert palette_arg is _MEASURED_PALETTES["spectra_7_3_6color"]
 
     def test_measured_palette_with_grayscale(self) -> None:
         # Measured palette applies to the grayscale path too (e.g. mono_4_26).
-        from epaper_dithering import MONO_4_26, ColorPalette
-
         mock = self._run_with_mock(
             {
                 "optimize": True,
@@ -690,15 +694,12 @@ class TestMeasuredPaletteDithering:
             return_colors=2,
         )
         mock.assert_called_once()
-        palette_arg = mock.call_args[0][1]
-        assert isinstance(palette_arg, ColorPalette)
-        assert palette_arg is MONO_4_26
+        palette_arg = mock.call_args.args[1]
+        assert palette_arg is _MEASURED_PALETTES["mono_4_26"]
 
-    def test_unknown_measured_palette_falls_back_to_scheme(self) -> None:
+    def test_unknown_measured_palette_falls_back_to_ideal(self) -> None:
         # An unrecognised measured_palette key falls back to the idealized
-        # ColorScheme without raising.
-        from epaper_dithering import ColorScheme
-
+        # palette without raising.
         mock = self._run_with_mock(
             {
                 "optimize": True,
@@ -707,7 +708,7 @@ class TestMeasuredPaletteDithering:
             }
         )
         mock.assert_called_once()
-        assert isinstance(mock.call_args[0][1], ColorScheme)
+        assert mock.call_args.args[1] is _GRAYSCALE_PALETTES[16]
 
     def test_measured_palette_produces_rgb_output(self) -> None:
         # End-to-end: measured palette with a color scheme yields RGB output.
@@ -735,6 +736,67 @@ class TestMeasuredPaletteDithering:
             },
         )
         assert result.mode == "1"
+
+
+class TestPaletteDefinitions:
+    """Verify the palettes built for epaper-dithering 7."""
+
+    @pytest.mark.parametrize("levels", sorted(_GRAYSCALE_PALETTES))
+    def test_gray_palette_levels_are_evenly_spaced(self, levels: int) -> None:
+        # Each gray palette spans black to white in equal steps.
+        palette = _GRAYSCALE_PALETTES[levels]
+        expected = [round(i * 255 / (levels - 1)) for i in range(levels)]
+        assert [r for r, _, _ in palette.preview_rgb()] == expected
+
+    @pytest.mark.parametrize(
+        ("key", "inks"),
+        [
+            ("bwr", ["black", "white", "red"]),
+            ("bwy", ["black", "white", "yellow"]),
+            ("bwry", ["black", "white", "yellow", "red"]),
+            (
+                "bwgbry",
+                ["black", "white", "yellow", "red", "blue", "green"],
+            ),
+        ],
+    )
+    def test_color_palette_ink_order(self, key: str, inks: list[str]) -> None:
+        # Idealized color palettes keep the ink order of epaper-dithering 6.
+        palette = _COLOR_PALETTES[key]
+        assert [entry.name for entry in palette.entries] == inks
+
+    @pytest.mark.parametrize("key", sorted(_MEASURED_PALETTES))
+    def test_measured_palette_is_relative_to_paper_white(
+        self, key: str
+    ) -> None:
+        # Measured colors are normalised so the panel's own white
+        # previews as pure white instead of the measured paper gray.
+        palette = _MEASURED_PALETTES[key]
+        white = palette.index_of("white")
+        assert palette.measured
+        assert white is not None
+        assert palette.preview_rgb()[white] == (255, 255, 255)
+
+    def test_measured_palette_keeps_black_text_solid(self) -> None:
+        # Pure black snaps to the black ink without dither noise even
+        # though the measured black is lighter than #000000.
+        img = Image.new("RGB", (40, 20), (255, 255, 255))
+        ImageDraw.Draw(img).rectangle((5, 5, 34, 14), fill=(0, 0, 0))
+        result = optimize_for_eink(
+            img,
+            {
+                "optimize": True,
+                "color_scheme": "bwry",
+                "measured_palette": "bwry_3_97",
+            },
+        )
+        palette = _MEASURED_PALETTES["bwry_3_97"]
+        black = palette.preview_rgb()[palette.index_of("black") or 0]
+        rect = {
+            result.getpixel((x, y)) for x in range(5, 35) for y in range(5, 15)
+        }
+        assert rect == {black}
+        assert result.getpixel((0, 0)) == (255, 255, 255)
 
 
 def test_measured_palette_options_match_optimize_keys() -> None:

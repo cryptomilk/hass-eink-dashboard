@@ -19,17 +19,9 @@ from __future__ import annotations
 import logging
 
 from epaper_dithering import (
-    BWRY_3_97,
-    BWRY_4_2,
-    HANSHOW_BWR,
-    HANSHOW_BWY,
-    MONO_4_26,
-    SOLUM_BWR,
-    SPECTRA_7_3_6COLOR,
-    SPECTRA_7_3_6COLOR_V2,
-    ColorPalette,
-    ColorScheme,
     DitherMode,
+    DitherOptions,
+    Palette,
     dither_image,
 )
 from PIL import Image, ImageOps
@@ -44,21 +36,96 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Maps display_levels config values to epaper-dithering color schemes.
-_GRAYSCALE_SCHEMES: dict[int, ColorScheme] = {
-    2: ColorScheme.MONO,
-    4: ColorScheme.GRAYSCALE_4,
-    8: ColorScheme.GRAYSCALE_8,  # Reserved for future Inkplate support
-    16: ColorScheme.GRAYSCALE_16,
+type _RGB = tuple[int, int, int]
+
+# sRGB color that requests each named ink. epaper-dithering snaps a
+# pixel of exactly this color to the ink without dithering it, so pure
+# black text stays solid even on a measured palette whose black is
+# lighter than #000000.
+_INK_NOMINALS: dict[str, _RGB] = {
+    "black": (0, 0, 0),
+    "white": (255, 255, 255),
+    "yellow": (255, 255, 0),
+    "red": (255, 0, 0),
+    "blue": (0, 0, 255),
+    "green": (0, 255, 0),
 }
 
-# Maps color_scheme config strings to epaper-dithering color schemes
-# for color e-ink displays (BWR, BWY, Spectra, etc.).
-_COLOR_SCHEMES: dict[str, ColorScheme] = {
-    "bwr": ColorScheme.BWR,
-    "bwy": ColorScheme.BWY,
-    "bwry": ColorScheme.BWRY,
-    "bwgbry": ColorScheme.BWGBRY,
+
+def _ink_palette(inks: dict[str, _RGB], *, measured: bool = False) -> Palette:
+    """Build an epaper-dithering palette of named inks.
+
+    epaper-dithering 7 ships no built-in palettes, so every palette is
+    built here from sRGB values. ``Palette.from_srgb()`` normalises all
+    colors to the white ink, so a measured gray paper white becomes
+    the panel's reference white.
+
+    Args:
+        inks: Mapping of ink name to the sRGB color the panel shows for
+            that ink, in palette index order. Every name must be a key
+            of ``_INK_NOMINALS``.
+        measured: Whether the colors were measured on real hardware.
+            Metadata only; it does not change the dithering.
+
+    Returns:
+        The validated palette.
+    """
+    return Palette.from_srgb(
+        [(rgb, name, _INK_NOMINALS[name]) for name, rgb in inks.items()],
+        measured=measured,
+    )
+
+
+def _ideal_palette(*names: str) -> Palette:
+    """Build an idealized palette whose inks show their nominal color."""
+    return _ink_palette({name: _INK_NOMINALS[name] for name in names})
+
+
+def _gray_palette(levels: int) -> Palette:
+    """Build an idealized palette of evenly spaced gray levels.
+
+    Black and white keep their ink names. The levels in between are
+    named ``gray1``, ``gray2``, ... and requested by their own sRGB
+    value, so an exact gray level is kept without dithering.
+
+    Args:
+        levels: Number of gray levels including black and white.
+
+    Returns:
+        The validated palette, ordered from black to white.
+    """
+    entries: list[tuple[_RGB, str, _RGB]] = []
+    for i in range(levels):
+        value = round(i * 255 / (levels - 1))
+        gray = (value, value, value)
+        if i == 0:
+            name = "black"
+        elif i == levels - 1:
+            name = "white"
+        else:
+            name = f"gray{i}"
+        entries.append((gray, name, gray))
+    return Palette.from_srgb(entries)
+
+
+# Maps display_levels config values to idealized gray palettes.
+_GRAYSCALE_PALETTES: dict[int, Palette] = {
+    2: _gray_palette(2),
+    4: _gray_palette(4),
+    8: _gray_palette(8),  # Reserved for future Inkplate support
+    16: _gray_palette(16),
+}
+
+# Maps color_scheme config strings to idealized palettes for color
+# e-ink displays (BWR, BWY, Spectra, etc.). The ink order matches the
+# color schemes of epaper-dithering 6.
+_COLOR_PALETTES: dict[str, Palette] = {
+    "bwr": _ideal_palette("black", "white", "red"),
+    "bwy": _ideal_palette("black", "white", "yellow"),
+    "bwry": _ideal_palette("black", "white", "yellow", "red"),
+    "bwgbry": _ideal_palette(
+        "black", "white", "yellow", "red", "blue", "green"
+    ),
 }
 
 # Maps dither_algorithm config strings to epaper-dithering DitherMode.
@@ -78,18 +145,81 @@ _DITHER_MODES: dict[str, DitherMode] = {
 # becomes black, so gray text and light dividers stay visible.
 DITHER_THRESHOLD = "threshold"
 
-# Maps measured_palette config strings to epaper-dithering ColorPalette
-# objects. "auto" is NOT a key here; it means "use the idealized
-# ColorScheme" and is handled by the absence of a palette override.
-_MEASURED_PALETTES: dict[str, ColorPalette] = {
-    "spectra_7_3_6color": SPECTRA_7_3_6COLOR,
-    "spectra_7_3_6color_v2": SPECTRA_7_3_6COLOR_V2,
-    "mono_4_26": MONO_4_26,
-    "bwry_4_2": BWRY_4_2,
-    "bwry_3_97": BWRY_3_97,
-    "solum_bwr": SOLUM_BWR,
-    "hanshow_bwr": HANSHOW_BWR,
-    "hanshow_bwy": HANSHOW_BWY,
+# Maps measured_palette config strings to photographically calibrated
+# palettes. "auto" is NOT a key here; it means "use the idealized
+# palette" and is handled by the absence of a palette override.
+# The sRGB values are the measured palettes that epaper-dithering 6
+# shipped as built-in constants (e.g. BWRY_3_97); version 7 removed
+# them.
+_MEASURED_PALETTES: dict[str, Palette] = {
+    "spectra_7_3_6color": _ink_palette(
+        {
+            "black": (26, 13, 35),
+            "white": (185, 202, 205),
+            "yellow": (202, 184, 0),
+            "red": (121, 9, 0),
+            "blue": (0, 69, 139),
+            "green": (40, 82, 57),
+        },
+        measured=True,
+    ),
+    "spectra_7_3_6color_v2": _ink_palette(
+        {
+            "black": (31, 24, 41),
+            "white": (168, 180, 182),
+            "yellow": (180, 173, 0),
+            "red": (113, 24, 19),
+            "blue": (36, 70, 139),
+            "green": (50, 84, 60),
+        },
+        measured=True,
+    ),
+    "mono_4_26": _ink_palette(
+        {"black": (5, 5, 5), "white": (220, 220, 220)},
+        measured=True,
+    ),
+    "bwry_4_2": _ink_palette(
+        {
+            "black": (5, 5, 5),
+            "white": (200, 200, 200),
+            "yellow": (200, 180, 0),
+            "red": (120, 15, 5),
+        },
+        measured=True,
+    ),
+    "bwry_3_97": _ink_palette(
+        {
+            "black": (10, 7, 14),
+            "white": (173, 178, 174),
+            "yellow": (172, 128, 0),
+            "red": (85, 24, 14),
+        },
+        measured=True,
+    ),
+    "solum_bwr": _ink_palette(
+        {
+            "black": (5, 5, 5),
+            "white": (200, 200, 200),
+            "red": (120, 15, 5),
+        },
+        measured=True,
+    ),
+    "hanshow_bwr": _ink_palette(
+        {
+            "black": (5, 5, 5),
+            "white": (200, 200, 200),
+            "red": (120, 15, 5),
+        },
+        measured=True,
+    ),
+    "hanshow_bwy": _ink_palette(
+        {
+            "black": (5, 5, 5),
+            "white": (200, 200, 200),
+            "yellow": (200, 180, 0),
+        },
+        measured=True,
+    ),
 }
 
 
@@ -103,15 +233,15 @@ def optimize_for_eink(
 
     **Grayscale path** (``color_scheme`` absent or ``None``): the
     pipeline image is grayscale (``"L"`` mode). ``dither_image()``
-    requires RGB input, so the image is temporarily converted. OKLab
-    perceptual colour matching offered by epaper-dithering has no
-    effect on equal-channel RGB triples derived from a grayscale
-    source; quantisation is effectively luminance-only.
+    reads it as RGB. OKLab perceptual colour matching offered by
+    epaper-dithering has no effect on equal-channel RGB triples
+    derived from a grayscale source; quantisation is effectively
+    luminance-only.
 
     **Color path** (``color_scheme`` set): the pipeline image must
     be ``"RGB"`` before calling this function; ``render_dashboard()``
     creates an ``"RGB"`` canvas when ``color_scheme`` is set. The
-    color ``ColorScheme`` is passed directly to ``dither_image()``.
+    idealized color palette is passed directly to ``dither_image()``.
     Output is converted from palette mode (``"P"``) to ``"RGB"``.
     The caller is responsible for passing an ``"RGB"`` image on this
     path; no silent mode conversion is performed.
@@ -143,23 +273,21 @@ def optimize_for_eink(
             is below 256), ``measured_palette`` (str, one of
             the keys in ``_MEASURED_PALETTES`` or ``"auto"``; default
             ``"auto"``). When a non-auto measured palette is selected
-            its calibrated ``ColorPalette`` is passed to
+            its calibrated ``Palette`` is passed to
             ``dither_image()`` instead of the idealized
-            ``ColorScheme``. The output mode (``"1"`` / ``"L"`` /
+            palette. The output mode (``"1"`` / ``"L"`` /
             ``"RGB"``) is derived from ``display_levels`` /
             ``color_scheme`` regardless of palette type.
 
     Returns:
         Processed PIL image. Mode is ``"RGB"`` for color schemes,
-        ``"1"`` when ``display_levels`` maps to
-        ``ColorScheme.MONO`` or ``dither_algorithm`` is ``threshold``,
-        ``"L"`` for all other grayscale
-        schemes.
+        ``"1"`` when ``display_levels`` is 2 or ``dither_algorithm``
+        is ``threshold``, ``"L"`` for all other grayscale levels.
 
     Raises:
         ValueError: If ``color_scheme`` is set but not in
-            ``_COLOR_SCHEMES``, or if ``display_levels`` is less
-            than 256 but not in ``_GRAYSCALE_SCHEMES``.
+            ``_COLOR_PALETTES``, or if ``display_levels`` is less
+            than 256 but not in ``_GRAYSCALE_PALETTES``.
     """
     if not config.get("optimize", False):
         return img
@@ -191,10 +319,15 @@ def optimize_for_eink(
             algo,
         )
         algo = DEFAULT_DITHER_ALGORITHM
-    mode = _DITHER_MODES[algo]
+    # TODO: expose serpentine as a config option (DITHER.md Step 4)
+    options = DitherOptions(
+        mode=_DITHER_MODES[algo],
+        exposure=exposure,
+        saturation=saturation,
+    )
 
     # Resolve measured palette override. "auto" (the default) skips the
-    # lookup and uses the idealized ColorScheme. Unknown keys fall back
+    # lookup and uses the idealized palette. Unknown keys fall back
     # to "auto" with a warning.
     measured_palette_key = config.get(
         "measured_palette", DEFAULT_MEASURED_PALETTE
@@ -208,69 +341,48 @@ def optimize_for_eink(
 
     # Color e-ink path: dither to a specific color palette (BWR, etc.).
     if color_scheme_key:
-        scheme = _COLOR_SCHEMES.get(color_scheme_key)
-        if scheme is None:
+        palette = _COLOR_PALETTES.get(color_scheme_key)
+        if palette is None:
             raise ValueError(
                 f"Unsupported color_scheme value {color_scheme_key!r};"
-                f" expected one of {sorted(_COLOR_SCHEMES)}."
+                f" expected one of {sorted(_COLOR_PALETTES)}."
             )
-        if measured_palette is not None and len(measured_palette.colors) < 3:
+        if measured_palette is not None and len(measured_palette) < 3:
             _LOGGER.warning(
                 "Measured palette %r has only %d color(s); a mono "
                 "palette on a color display may produce unexpected "
                 "output",
                 measured_palette_key,
-                len(measured_palette.colors),
+                len(measured_palette),
             )
-        palette_or_scheme: ColorPalette | ColorScheme = (
-            measured_palette if measured_palette is not None else scheme
-        )
-        # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(
-            img,
-            palette_or_scheme,
-            mode=mode,
-            exposure=exposure,
-            saturation=saturation,
-        )
+        if measured_palette is not None:
+            palette = measured_palette
+        img = dither_image(img, palette, options)
         return img.convert("RGB")
 
     # Grayscale path: quantise to the configured number of levels.
     colors = config.get("display_levels", DEFAULT_DISPLAY_LEVELS)
     if colors < 256:
-        scheme = _GRAYSCALE_SCHEMES.get(colors)
-        if scheme is None:
+        palette = _GRAYSCALE_PALETTES.get(colors)
+        if palette is None:
             raise ValueError(
                 f"Unsupported display_levels value {colors!r}; "
-                f"expected one of {sorted(_GRAYSCALE_SCHEMES)}."
+                f"expected one of {sorted(_GRAYSCALE_PALETTES)}."
             )
-        if measured_palette is not None and len(measured_palette.colors) > 2:
+        if measured_palette is not None and len(measured_palette) > 2:
             _LOGGER.warning(
                 "Measured palette %r has %d colors but the grayscale "
                 "path is active; a color palette on a grayscale "
                 "display may produce unexpected output",
                 measured_palette_key,
-                len(measured_palette.colors),
+                len(measured_palette),
             )
-        palette_or_scheme = (
-            measured_palette if measured_palette is not None else scheme
-        )
-        # dither_image() expects RGB input; pipeline image is "L".
-        # TODO: expose serpentine as a config option (DITHER.md Step 4)
-        img = dither_image(
-            img.convert("RGB"),
-            palette_or_scheme,
-            mode=mode,
-            exposure=exposure,
-            saturation=saturation,
-        )
-        # Output mode is derived from display_levels, not the palette
-        # type, so MONO_4_26 (a measured palette for a 2-color display)
+        if measured_palette is not None:
+            palette = measured_palette
+        img = dither_image(img, palette, options)
+        # Output mode is derived from display_levels, not the palette,
+        # so mono_4_26 (a measured palette for a 2-color display)
         # still produces mode "1" when display_levels == 2.
-        img = (
-            img.convert("1")
-            if scheme is ColorScheme.MONO
-            else img.convert("L")
-        )
+        img = img.convert("1") if colors == 2 else img.convert("L")
 
     return img

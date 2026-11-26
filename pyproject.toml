@@ -7,7 +7,7 @@ license = "Apache-2.0"
 dependencies = [
     "Babel>=2.14",
     "defusedxml>=0.7.1",
-    "epaper-dithering>=5.0.7",
+    "epaper-dithering>=7.0.1",
     "Pillow>=12.3",
     "resvg-py>=0.3.2",
 ]
